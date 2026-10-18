@@ -10,6 +10,20 @@ Reading aloud (Read aloud menu) says the document one sentence at a time. *What*
 
 The port is small: `Available`, `Voices`, `Speak(utterance, handler)` returning a `Speech` that can be cancelled, paused and resumed. The handler reports `OnStart(kind)`, `OnWord(index, length)`, `OnEnd` and `OnError`. `read.Player` walks the sentences of a document over any engine (it starts the next, marks the sentence and the word, pauses, skips and stops); the page picks the engine and the voice. An engine that has voices to fetch also offers `read.Downloader` (`Catalogue`, `LoadCatalogue`, `Install`, `Installed`, `Remove`).
 
+## Where voices come from (the Reader voices tab)
+
+The tab has one button for each **source**; nothing is asked of any of them until a button says which host it contacts.
+
+| Source | What it is | Terms |
+|---|---|---|
+| **The hub** (`voice/read/hub`) | the project's own short list: four Piper voices, American and British, a woman's and a man's (Joe, Kristin, Cori, Northern English male), pinned by size and checksum so a changed file is refused | shown beside each voice: the licence of its recordings, as the voice's model card says (read on 2026-10-18: CC0, public domain from LibriVox, and CC BY-SA 4.0 with its credit line). Reading a card is not legal advice: whoever sells what they make with a voice reads the terms again |
+| **Piper's catalogue** | every voice of `rhasspy/piper-voices` for the document's language (or the operator's mirror, `reader-voices.json`) | each voice's model card, which the project has not read: the download waits for the person to say they read them |
+| **Repositories the person adds** (`piper.ParseRepository`) | the address of any catalogue in Piper's `voices.json` format (https only, up to eight, kept in this browser); its voices are listed under the repository's name, fetched from its own folder | the publisher's own model cards, not read by the project; a voice needs the person's word that they read them |
+| **My own files** (`piper.Engine.InstallFiles`) | a voice the person has: its `.onnx` model and `.onnx.json` configuration, kept in the browser's Cache Storage and never sent anywhere; the configuration must be a Piper one (sample rate and phoneme map) | the person's own: they say they made the voice or may use it as they mean to |
+| **This device's voices** | the operating system's and the browser's speech voices (the "Voices on this device" reader), listed with whether they run on the device or use the internet | the system's; a voice that uses the internet is used only when the person allowed those |
+
+Why these four: the hub is meant to hold voices that are safe to offer to anybody, so each has terms that allow commercial use with at most a credit. Left out for now: Amy and Alan (their model cards only say "see URL") and Lessac (a Blizzard 2013 licence page the project has not worked through), because the terms are not clear from the card; Ryan, the HFC voices and Semaine, which are non-commercial (CC BY-NC-SA); and Alba (CC BY 4.0, a Scottish accent), which could join the hub once there is a reason to prefer it to Cori. The list is a file (`voice/read/hub/hub.json`) and a test checks that each entry has its terms, its sources and pinned sizes and sums.
+
 ## The Piper adapter
 
 `voice/read/piper` is the adapter. It holds four small ports, which the page fills with the browser and a test fills with fakes:

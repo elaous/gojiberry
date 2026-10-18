@@ -172,6 +172,10 @@ The document's language, the language of a selection, detection from the text, h
 
 Words, characters, paragraphs, sentences, pages used and reading time, for the whole document and for the selection.
 
+## Where reader voices come from
+
+The Reader voices tab lists the sources: **the hub** (four voices, American and British, a woman's and a man's, each shown with the licence of its recordings, downloaded with their size and checksum checked), **Piper's catalogue** and **repositories you add** (their voices wait until you say you read the terms on the model card the publisher wrote), **your own files** (a Piper model and its configuration, kept in the browser and never sent), and **this device's voices** (the operating system's and the browser's). Nothing is asked of a server until you press a button that names it.
+
 ## Several people at one object
 
 In a shared document, when one person is changing a picture (its description or legend), an equation or a form field, the others see it **busy**: the object has an outline in the colour of the person at it and, for everybody else, a small badge in that colour saying *busy* at its top right corner; the page says in words who ("Busy: Ana is changing this equation.") and does not take another person's change to that object until the first has been quiet for about eight seconds or has left. The text itself still merges. Each person's colour is the `color` of their cursor.

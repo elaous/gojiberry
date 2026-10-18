@@ -52,6 +52,8 @@ func TestDownloadAReaderVoiceAndReadWithIt(t *testing.T) {
 	d.Eval(speechStub, nil)
 	d.Eval(piperStub, nil)
 	d.Click(`button[data-tab="voices"]`)
+	d.WaitSelector("#vsrc-piper")
+	d.Click("#vsrc-piper button")
 	d.WaitSelector("#voices-load")
 	d.OK(d.Int(`window.__asked.filter(u => u === 'https://voices.test/voices.json').length`) == 0, "the catalogue is not asked for before the person says so")
 	d.Click("#voices-load")
@@ -59,6 +61,8 @@ func TestDownloadAReaderVoiceAndReadWithIt(t *testing.T) {
 	text := d.Text("#voices-item-0")
 	d.OK(strings.Contains(text, "en-US") && strings.Contains(text, "medium") && strings.Contains(text, "MB"), "the voice is listed with its size: "+text)
 	d.OK(strings.HasSuffix(d.Str(`document.getElementById('voices-licence-0').href`), "/MODEL_CARD"), "and the page of its terms")
+	d.OK(d.Bool(`document.getElementById('voices-download-0').disabled`), "a voice of a catalogue whose terms the project has not read waits for the person to say they read them")
+	d.Click("#voices-read-0 input")
 	d.Click("#voices-download-0")
 	d.WaitSelector("#voices-has-0")
 	d.WaitSelector("#voices-have-0")
@@ -138,5 +142,82 @@ func TestReadWithVoicesOnAServer(t *testing.T) {
 	d.WaitFor("the next sentence", `window.__posts.length === 2`)
 	d.Click(`#read-bar button:has-text("Stop reading")`)
 	d.WaitFor("the bar goes", `!document.getElementById('read-bar')`)
+	d.NoErrors()
+}
+
+// The sources of voices: the hub shows four voices with their terms and pins their files (a download that does not match
+// is refused), a repository the person adds is asked for only when they say so and its voices wait for the person to say
+// they read the terms, and a voice from the person's own files is kept as it is.
+func TestVoiceSourcesHubRepositoryAndOwnFiles(t *testing.T) {
+	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.Eval(speechStub, nil)
+	d.Eval(piperStub, nil)
+	d.Eval(`(() => {
+		const repoFiles = {
+			'https://repo.test/pack/voices.json': JSON.stringify({"fr_FR-demo-medium": {key: "fr_FR-demo-medium", name: "demo", language: {code: "fr_FR"}, quality: "medium", num_speakers: 1,
+				files: {"fr/demo/medium/fr_FR-demo-medium.onnx": {size_bytes: 5}, "fr/demo/medium/fr_FR-demo-medium.onnx.json": {size_bytes: 2}, "fr/demo/medium/MODEL_CARD": {size_bytes: 9}}}}),
+			'https://repo.test/pack/fr/demo/medium/fr_FR-demo-medium.onnx': 'MODEL',
+			'https://repo.test/pack/fr/demo/medium/fr_FR-demo-medium.onnx.json': '{}',
+		};
+		const prev = window.fetch;
+		window.fetch = (u, o) => {
+			u = String(u);
+			if (u in repoFiles) { window.__asked.push(u); return Promise.resolve(new Response(repoFiles[u], {headers: {'content-length': String(repoFiles[u].length)}})); }
+			if (u.startsWith('https://huggingface.co/rhasspy/piper-voices/')) { window.__asked.push(u); return Promise.resolve(new Response('not the real file', {headers: {'content-length': '17'}})); }
+			return prev(u, o);
+		};
+	})()`, nil)
+	d.Click(`button[data-tab="voices"]`)
+
+	// the hub: four voices, their terms shown, nothing asked yet
+	d.WaitSelector("#voices-item-3")
+	hub := d.Text("#voices-list")
+	d.OK(strings.Contains(hub, "CC0") && strings.Contains(hub, "Public domain") && strings.Contains(hub, "CC BY-SA 4.0"), "the hub shows the terms of its voices: "+hub)
+	d.OK(strings.Contains(hub, "en-US") && strings.Contains(hub, "en-GB"), "American and British voices: "+hub)
+	d.OK(d.Int(`window.__asked.filter(u => u !== 'reader-voices.json').length`) == 0, "nothing is asked of any server before the person says so")
+	d.OK(!d.Bool(`document.getElementById('voices-download-0').disabled`), "a hub voice can be downloaded without a further confirmation")
+	d.Click("#voices-download-0")
+	d.WaitFor("a file that does not match what the hub pinned is refused", `(document.getElementById('voices-message')||{textContent: ''}).textContent.includes('could not be downloaded')`)
+	d.OK(!d.Has("#voices-has-0"), "and nothing is kept")
+
+	// a repository the person adds
+	d.Click("#vsrc-add button")
+	d.Fill("#vsrc-add-name", "Demo pack")
+	d.Fill("#vsrc-add-address", "http://repo.test/pack/voices.json")
+	d.Click("#vsrc-add-go")
+	d.WaitFor("a plain http address is refused", `(document.getElementById('voices-message')||{textContent: ''}).textContent.includes('not the address of a catalogue')`)
+	d.Fill("#vsrc-add-address", "https://repo.test/pack/voices.json")
+	d.Click("#vsrc-add-go")
+	d.WaitSelector("#vsrc-repo-load")
+	d.OK(d.Int(`window.__asked.filter(u => u.startsWith('https://repo.test/')).length`) == 0, "the repository is not asked before the person says so")
+	d.Click("#vsrc-repo-load")
+	d.WaitSelector("#voices-item-0")
+	d.OK(strings.HasPrefix(d.Str(`document.getElementById('voices-licence-0').href`), "https://repo.test/pack/") && strings.HasSuffix(d.Str(`document.getElementById('voices-licence-0').href`), "/MODEL_CARD"), "with its own model card")
+	d.OK(d.Bool(`document.getElementById('voices-download-0').disabled`), "its voice waits for the person to say they read the terms")
+	d.Click("#voices-read-0 input")
+	d.Click("#voices-download-0")
+	d.WaitSelector("#voices-has-0")
+	d.OK(d.Int(`window.__asked.filter(u => u === 'https://repo.test/pack/fr/demo/medium/fr_FR-demo-medium.onnx').length`) == 1, "the files came from the repository's own address")
+	d.Eval(`location.reload()`, nil)
+
+	// the repository is remembered in this browser; the person's own files
+	d.WaitSelector("canvas")
+	d.Eval(speechStub, nil)
+	d.Eval(piperStub, nil)
+	d.Click(`button[data-tab="voices"]`)
+	d.WaitSelector("#vsrc-repo-0")
+	d.Click("#vsrc-files button")
+	d.WaitSelector("#vsrc-files-model")
+	d.ChooseFile(func() { d.Click("#vsrc-files-model") }, "mine.onnx", []byte("MODEL"))
+	d.ChooseFile(func() { d.Click("#vsrc-files-config") }, "mine.onnx.json", []byte(`{"audio":{"sample_rate":22050},"language":{"code":"en_GB"},"phoneme_id_map":{"a":[1]}}`))
+	d.WaitFor("both are chosen", `document.getElementById('vsrc-files-model-name').textContent === 'mine.onnx' && document.getElementById('vsrc-files-config-name').textContent === 'mine.onnx.json'`)
+	d.OK(d.Bool(`document.getElementById('vsrc-files-go').disabled`), "keeping waits for the person's word that the voice is theirs to use")
+	d.Click("#vsrc-files-confirm input")
+	d.Click("#vsrc-files-go")
+	d.WaitFor("it is kept", `(document.getElementById('voices-message')||{textContent: ''}).textContent.includes('en_GB-mine-own is kept')`)
+	d.Click("#vsrc-device button")
+	d.WaitSelector("#vsrc-device-about")
 	d.NoErrors()
 }

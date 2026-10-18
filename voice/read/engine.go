@@ -92,6 +92,9 @@ type Installable struct {
 	Quality string
 	// Licence is where the terms of the voice's data are written (a link), "" when the catalogue does not say.
 	Licence string
+	// Terms is the name of those terms ("CC0 1.0") and Credit what they ask to be said, when the source says; Source is
+	// the id of the source that lists the voice ("" for the engine's own catalogue).
+	Terms, Credit, Source string
 	// Installed says it is on the device already.
 	Installed bool
 }
