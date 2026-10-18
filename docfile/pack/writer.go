@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
@@ -18,6 +19,7 @@ type builder struct {
 	entries []Entry
 	folders []Folder
 	closed  bool
+	more    []ed25519.PrivateKey // co-signers (CloseSigned)
 }
 
 func (b *builder) emit(p []byte) error {
@@ -107,7 +109,11 @@ func (b *builder) finish(key ed25519.PrivateKey) error {
 		return err
 	}
 	if key != nil {
-		sdata := sign(key, b.header, f.indexSum).marshal()
+		sg := sign(key, b.header, f.indexSum)
+		for _, k := range b.more {
+			sg.More = append(sg.More, sign(k, b.header, f.indexSum))
+		}
+		sdata := sg.marshal()
 		f.sigOffset, f.sigLen = uint64(b.off), uint64(len(sdata))
 		if err := b.emit(frame(kindSignature, sdata)); err != nil {
 			return err
@@ -149,6 +155,19 @@ func (w *Writer) AddEncrypted(e Entry, env []byte) error {
 
 // AddFolder lists a folder.
 func (w *Writer) AddFolder(f Folder) error { return w.b.addFolder(f) }
+
+// CloseSigned writes the index and the footer, signed by each of the keys (the first is the pack's signer, the others
+// co-sign it). With no key the pack is unsigned.
+func (w *Writer) CloseSigned(keys ...ed25519.PrivateKey) error {
+	if len(keys) > MaxSigners {
+		return fmt.Errorf("pack: %d signers (at most %d)", len(keys), MaxSigners)
+	}
+	if len(keys) == 0 {
+		return w.b.finish(nil)
+	}
+	w.b.more = keys[1:]
+	return w.b.finish(keys[0])
+}
 
 // Close writes the index and the footer, signing with key if it is not nil.
 func (w *Writer) Close(key ed25519.PrivateKey) error { return w.b.finish(key) }
@@ -282,4 +301,56 @@ func Compact(src io.ReaderAt, size int64, dst io.Writer, key ed25519.PrivateKey)
 		}
 	}
 	return w.Close(key)
+}
+
+// ErrBadSignature is returned by Cosign for a pack whose signature is not valid: nobody adds a name to it.
+var ErrBadSignature = errors.New("pack: the pack's signature is not valid, so it is not co-signed")
+
+// ErrNotSigned is returned by Cosign for a pack with no signature: the first signer signs it by Close or OpenAppend.
+var ErrNotSigned = errors.New("pack: the pack is not signed, so there is nothing to co-sign")
+
+// ErrAlreadySigned is returned by Cosign for a key that already signed the pack.
+var ErrAlreadySigned = errors.New("pack: that key already signed this pack")
+
+// Cosign adds the signature of key to a signed pack, in place: the signature record is rewritten with one more signer and
+// the footer after it. Nothing else is touched, so the other signatures stay valid (they cover the same digest). It
+// refuses a pack that is not signed, whose signatures are not all valid, or that the key signed already. Appending to
+// a pack changes it, and the signatures of the others are dropped by that: they sign again.
+func Cosign(f File, size int64, key ed25519.PrivateKey) error {
+	r, err := Open(f, size)
+	if err != nil {
+		return err
+	}
+	if r.sig == nil {
+		return ErrNotSigned
+	}
+	if len(r.sig.all()) >= MaxSigners {
+		return fmt.Errorf("pack: already %d signers", MaxSigners)
+	}
+	pub, _ := key.Public().(ed25519.PublicKey)
+	for _, s := range r.Signers() {
+		if !s.Valid {
+			return ErrBadSignature
+		}
+		if bytes.Equal(s.PublicKey, pub) {
+			return ErrAlreadySigned
+		}
+	}
+	sg := *r.sig
+	sg.More = append(append([]Signature(nil), sg.More...), sign(key, r.header, r.foot.indexSum))
+	data := sg.marshal()
+	fr := frame(kindSignature, data)
+	ft := r.foot
+	ft.sigLen = uint64(len(data))
+	off := int64(ft.sigOffset)
+	if _, err := f.WriteAt(fr, off); err != nil {
+		return err
+	}
+	if _, err := f.WriteAt(ft.marshal(), off+int64(len(fr))); err != nil {
+		return err
+	}
+	if err := f.Truncate(off + int64(len(fr)) + footerSize); err != nil {
+		return err
+	}
+	return f.Sync()
 }
