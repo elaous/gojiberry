@@ -521,6 +521,7 @@ func main() {
 			{Label: T("menu.read", "Read aloud"), Items: readMenu(u, flow, renderUI)},
 			{Label: "Help", Items: []components.MenuItem{
 				{Label: "Keyboard shortcuts", OnSelect: func() { u.tab = "keys"; renderUI() }},
+				{Label: T("menu.about", "About Gojiberry"), OnSelect: func() { u.tab = "about"; renderUI() }},
 			}},
 		}
 		menubar := components.MenuBar(components.MenuBarProps{Entries: menus, Open: u.menu, OnOpen: func(i int) { u.menu = i; renderUI() }})
@@ -535,7 +536,7 @@ func main() {
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), formsTab(u, "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI), tabButton(u, "scripts", "Scripts", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
-				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
+				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI), tabButton(u, "about", "About", renderUI)),
 		)
 
 		roleButtons := []xango.Node{xango.El("span", []xango.Attr{xango.A("style", "font-size:12px;color:#6b7280")}, xango.Text("Role:"))}
@@ -679,6 +680,8 @@ func main() {
 			panel = u.usage.panel(u)
 		case "prefs":
 			panel = prefsPanel(u, renderUI)
+		case "about":
+			panel = aboutPanel()
 		case "share":
 			if flow != nil {
 				panel = sharePanel(u, flow, origin, renderUI)

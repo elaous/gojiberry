@@ -1877,6 +1877,15 @@
   "vsrc.deviceAbout": "Le système d'exploitation et le navigateur ont leurs propres voix. Choisissez « Voix de cet appareil » ci-dessus pour lire avec elles ; ajoutez-en dans les réglages du système. Certaines envoient le texte à un service vocal ; la page ne les utilise que si vous autorisez les voix qui utilisent internet.",
   "vsrc.local": "sur cet appareil",
   "vsrc.cloud": "utilise internet",
-  "vsrc.deviceNone": "Ce navigateur n'offre aucune voix."
+  "vsrc.deviceNone": "Ce navigateur n'offre aucune voix.",
+  "menu.about": "À propos de Gojiberry",
+  "about.title": "À propos de Gojiberry",
+  "about.what": "Gojiberry est un éditeur de documents qui fonctionne dans votre navigateur. Vos documents restent sur cet appareil, sauf si vous choisissez de les partager.",
+  "about.licence": "C'est un logiciel libre sous la licence publique générale GNU Affero, version 3. Si vous exploitez une version modifiée pour d'autres personnes par un réseau, vous devez leur proposer son code source. Une licence commerciale existe pour les usages que l'AGPL ne permet pas.",
+  "about.credit": "Réalisé avec le projet Gojiberry, github.com/elaous/gojiberry. Conservez cette mention dans les copies et dans les versions modifiées.",
+  "about.source": "Code source",
+  "about.licenceText": "Licence (AGPL-3.0)",
+  "about.notice": "Mentions et crédits",
+  "about.commercial": "Licence commerciale"
  }
 }

@@ -125,7 +125,9 @@ Phase 1 (done): a sandbox with the commands of the registry, `text()` and `inser
 
 Decided 2026-10-18: **blur** the index of encrypted records now (an export option: sizes rounded to buckets, times blurred) and **encrypt the index as an option in phase 2** (this ticket, status design: nothing can be listed or verified without the key, so it is an option and not the default); **large attachments as their own record kind: yes, version 2**, written only when a pack has attachments over a size. The blur and version 2 are rows in [status.md](status.md) (open). Explained in [opendoc-format.md](opendoc-format.md), "Open points explained".
 
-### P2-9 Licence and credits — blocked (after the actionable items)
+### P2-9 Licence and credits — partial (applied; a lawyer has not read it)
+
+**Applied (2026-10-18, owner chose route B):** `LICENSE` (AGPL-3.0), `NOTICE` (with the section 7(b) credit terms), `COMMERCIAL.md`, `CONTRIBUTING.md` (contributor terms), the README section, the showcase About tab (credit, source link, licence links), and [licence.md](licence.md), which says what is settled and what is not. **Still needed:** a lawyer's reading of the notice, contributor terms and commercial description; a contact address for commercial licences; who holds the copyright (name or company). The text below is the earlier discussion.
 
 Decided: a licence that is **not commercial**, has a **clause for commercial use**, and **requires credit** to this project and repository; the owner prefers "open source non commercial, with a commercial licence". To be applied once every actionable item is done.
 

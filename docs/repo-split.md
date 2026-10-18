@@ -17,7 +17,7 @@ it imports nothing from the rest of the repository, or only things that would go
   README that can stand alone.
 - **Stay**: the piece only makes sense with the rest.
 
-Before any split: the repository has **no `LICENSE` file at its root** (opendocs has one, and a `COMMERCIAL-LICENSE.md`
+**Update (2026-10-18):** the root now has `LICENSE` (AGPL-3.0), `NOTICE`, `COMMERCIAL.md` and `CONTRIBUTING.md` ([licence.md](licence.md)); a split copies them into each new repository, or gives a library its own licence. Before that, the repository had **no `LICENSE` file at its root** (opendocs has one, and a `COMMERCIAL-LICENSE.md`
 that [opendocs-scan.md](opendocs-scan.md) already flags). A split needs one decision on licences first, because every new
 repository needs its own and the Hunspell dictionaries, the Google Fonts files and the SCOWL data carry theirs.
 
