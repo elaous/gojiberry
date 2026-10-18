@@ -400,7 +400,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 ## Typed text in colour
 
-**Try it.** Open the same shared document in two browsers with different names and colours; type in one. *You should see:* in the other, the new text in the typer's colour, back to normal after about 4 seconds. **Automated.** `TestTextOthersTypedIsInTheirColourForAMoment` (collab), `TestTypedRangesAreDrawnInThePeersColour` (canvas); not covered between two real browsers.
+**Try it.** Open the same shared document in two browsers with different names and colours; type in one. *You should see:* in the other, the new text in the typer's colour, back to normal after about 4 seconds. **Automated.** `TestTextOthersTypedIsInTheirColourForAMoment` (collab), `TestTypedRangesAreDrawnInThePeersColour` (canvas), `TestTextOthersTypeIsColouredForAMomentUnlessSwitchedOff` (two browser pages, and the preference).
 
 ## About and licence
 

@@ -266,7 +266,7 @@ The Scripts tab runs a small script in a sandbox that has nothing of the page: n
 
 ## Typed text in colour
 
-When several people work in one document, text somebody else just typed shows in their colour (the colour of their cursor) for a few seconds and then goes back to normal, so you can see who is writing where. Your own typing and the document you just opened are not coloured.
+When several people work in one document, text somebody else just typed shows in their colour (the colour of their cursor) for a few seconds and then goes back to normal, so you can see who is writing where. Your own typing and the document you just opened are not coloured. The preference "Show text others are typing in their colour for a moment" (Shared editing) turns it off.
 
 ## About and licence
 

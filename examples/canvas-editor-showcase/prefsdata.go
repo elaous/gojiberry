@@ -28,6 +28,7 @@ type prefs struct {
 	Theme       string `json:"theme,omitempty"`       // "dark": the page's chrome in the dark palette ("" the light one)
 	Typewriter  string `json:"typewriter,omitempty"`  // "on": the line being typed stays in the middle of the view and the page moves
 	TypewriterX string `json:"typewriterx,omitempty"` // "on": the page also slides sideways, the letter being typed stays in one place
+	Typed       string `json:"typed,omitempty"`       // "off": text other people type is not shown in their colour for a moment
 	Close       string `json:"close,omitempty"`       // "off": typing an opening bracket or quote does not add the closing one
 	Colours     string `json:"colours,omitempty"`     // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
 	Dwell       string `json:"dwell,omitempty"`       // click by resting the pointer: "fast", "medium", "slow" (the pause)
@@ -114,6 +115,9 @@ func (p prefs) sanitize() prefs {
 	}
 	if p.Close != "off" {
 		p.Close = ""
+	}
+	if p.Typed != "off" {
+		p.Typed = ""
 	}
 	if !validLang(p.Lang) {
 		p.Lang = ""

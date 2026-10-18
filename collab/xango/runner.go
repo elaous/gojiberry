@@ -82,6 +82,9 @@ func (r *runner) loop() {
 			// Tell the others where we are when the cursor moves, and also when
 			// the session becomes ready or reconnects (they know nothing of us
 			// until then, and the cursor may not move for a while).
+			if f := r.props.Load().TypedFor; f != nil {
+				s.TypedFor = f()
+			}
 			if h := r.props.Load().Holding; h != nil {
 				s.Holding = h()
 			}

@@ -128,6 +128,9 @@ type CollabProps struct {
 	// Holding, when set, is asked every tick for the object this person is changing ("" for none), which goes to the
 	// others with the cursor and is renewed while it is held.
 	Holding func() string
+	// TypedFor, when set, is asked every tick for how long the text others typed stays in their colour (zero is the
+	// default, collab.DefaultTypedFor; negative turns the colours off).
+	TypedFor func() time.Duration
 	// Sync, if set, runs f on the goroutine that owns the flow and the
 	// stage; the polling loop does all its work through it.
 	Sync func(f func())
