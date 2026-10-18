@@ -1886,6 +1886,7 @@
   "about.licenceText": "Licence (AGPL-3.0)",
   "about.notice": "Mentions et crédits",
   "about.commercial": "Licence commerciale",
-  "textfmt.readonly": "Ouvert en lecture : ceci est une copie d'un fichier %s. Changez de mode pour modifier la copie ; elle n'est pas enregistrée dans le fichier."
+  "textfmt.readonly": "Ouvert en lecture : ceci est une copie d'un fichier %s. Changez de mode pour modifier la copie ; elle n'est pas enregistrée dans le fichier.",
+  "lock.table": "tableau"
  }
 }
