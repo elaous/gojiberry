@@ -256,7 +256,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** On Bo's page the equation has a red outline with a *busy* badge in Ana's colour, and the announcer says "Busy: Ana is changing this equation."; Bo's text is put back. After about eight seconds without a change from Ana, Bo can change it.
 
-**Automated.** `TestAnObjectOnePersonIsChangingIsBusyForTheOther` (examples/canvas-editor-showcase), `TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName` (collab/hub), `TestABusyObjectHasAnOutlineAndABadge` (canvas)
+**Automated.** `TestAnObjectOnePersonIsChangingIsBusyForTheOther`, `TestATableOnePersonIsChangingIsBusyForTheOther` (examples/canvas-editor-showcase), `TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName` (collab/hub), `TestABusyObjectHasAnOutlineAndABadge` (canvas)
 
 ## Share
 

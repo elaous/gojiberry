@@ -1886,6 +1886,7 @@
     "about.licenceText": "Licença (AGPL-3.0)",
     "about.notice": "Aviso e crédito",
     "about.commercial": "Licença comercial",
-    "textfmt.readonly": "Aberto para leitura: esta é uma cópia de um ficheiro %s. Mude o modo para alterar a cópia; não é guardada de volta no ficheiro."
+    "textfmt.readonly": "Aberto para leitura: esta é uma cópia de um ficheiro %s. Mude o modo para alterar a cópia; não é guardada de volta no ficheiro.",
+    "lock.table": "tabela"
   }
 }

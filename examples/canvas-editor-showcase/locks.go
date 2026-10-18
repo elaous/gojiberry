@@ -23,6 +23,8 @@ const holdFor = 8 * time.Second
 // lockKeys: the keys of the objects (what Presence.Holding says): "image:2", "equation:0", "field:name".
 func imageKey(i int) string    { return "image:" + strconv.Itoa(i) }
 func equationKey(i int) string { return "equation:" + strconv.Itoa(i) }
+func tableKey(i int) string    { return "table:" + strconv.Itoa(i) }
+
 func fieldKey(name string) string {
 	return "field:" + name
 }
@@ -40,6 +42,7 @@ func objectKeys(fl *canvas.TextFlow) map[string]canvas.InlineObject {
 	for i, r := range documentEquations(fl) {
 		out[equationKey(i)] = r.eq
 	}
+	tableIndex := 0
 	for _, it := range fl.Items {
 		in, ok := it.(canvas.Inline)
 		if !ok {
@@ -49,6 +52,8 @@ func objectKeys(fl *canvas.TextFlow) map[string]canvas.InlineObject {
 		case *canvas.FormFieldObject:
 			out[fieldKey(o.Name)] = o
 		case *canvas.TableObject:
+			out[tableKey(tableIndex)] = o
+			tableIndex++
 			for _, f := range o.View.Table.FieldList() {
 				out[fieldKey(f.Name)] = o
 			}
@@ -152,4 +157,18 @@ func (u *ui) refreshBusy() {
 			u.redrawCanvas()
 		}
 	}
+}
+
+// tableKeyOf is the key of the table in the text that shows tv ("" for a table that is not in the text, which has no
+// hold: nobody else is shown it).
+func (u *ui) tableKeyOf(fl *canvas.TextFlow, tv *canvas.TableView) string {
+	if fl == nil {
+		return ""
+	}
+	for i, t := range fl.Tables() {
+		if t.View == tv {
+			return tableKey(i)
+		}
+	}
+	return ""
 }

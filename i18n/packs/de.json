@@ -1886,6 +1886,7 @@
   "about.licenceText": "Lizenz (AGPL-3.0)",
   "about.notice": "Hinweis und Namensnennung",
   "about.commercial": "Kommerzielle Lizenz",
-  "textfmt.readonly": "Zum Lesen geöffnet: Dies ist eine Kopie einer %s-Datei. Wechseln Sie den Modus, um die Kopie zu ändern; sie wird nicht in die Datei zurückgespeichert."
+  "textfmt.readonly": "Zum Lesen geöffnet: Dies ist eine Kopie einer %s-Datei. Wechseln Sie den Modus, um die Kopie zu ändern; sie wird nicht in die Datei zurückgespeichert.",
+  "lock.table": "Tabelle"
  }
 }

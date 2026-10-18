@@ -66,7 +66,7 @@ func tableTarget(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	f := &u.tableStyle
 	tv := tableTarget(root(), flow())
-	nodes := tableGripSection(flow(), redraw, renderUI)
+	nodes := u.tableGripSection(flow(), redraw, renderUI)
 	nodes = append(nodes, xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tstyle.title", "Table styles"))))
 	if tv == nil {
 		nodes = append(nodes, para("tstyle-hint", T("tstyle.hint", "Put the caret after a table (or click in a table on the page), then choose a style for it."), false))
@@ -88,6 +88,9 @@ func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextF
 			attrs = append(attrs, xango.A("disabled", "disabled"))
 		} else {
 			attrs = append(attrs, xango.On("click", func(xango.Event) {
+				if !u.claim(u.tableKeyOf(flow(), tv), T("lock.table", "table"), renderUI) {
+					return
+				}
 				tv.Dress(s)
 				redraw()
 				renderUI()
@@ -134,14 +137,15 @@ func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextF
 
 // tableGripSection acts on what a grip of a table in the text has selected: a column, a row or the table. Nothing is
 // shown when no grip is selected (press the letter above a column or the number beside a row, or the icon in the corner).
-func tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
+func (u *ui) tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	if fl == nil {
 		return nil
 	}
 	var o *canvas.TableObject
-	for _, t := range fl.Tables() {
+	key := ""
+	for i, t := range fl.Tables() {
 		if t.Selected().Kind != canvas.SelNone {
-			o = t
+			o, key = t, tableKey(i)
 			break
 		}
 	}
@@ -160,7 +164,13 @@ func tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node
 	var title string
 	var buttons []xango.Node
 	add := func(id, label string, act func(), disabled bool) {
-		buttons = append(buttons, btn("tgrip-"+id, label, act, disabled))
+		buttons = append(buttons, btn("tgrip-"+id, label, func() {
+			// Changing the table is its hold: somebody else's busy table is left alone (the grips choose, they do not hold).
+			if id != "done" && !u.claim(key, T("lock.table", "table"), renderUI) {
+				return
+			}
+			act()
+		}, disabled))
 	}
 	switch sel.Kind {
 	case canvas.SelColumn:
