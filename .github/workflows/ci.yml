@@ -13,11 +13,14 @@
 # the check that failed, not buried in a longer combined run.
 name: CI
 
-# Manual for now: run it from the Actions tab ("Run workflow", pick a branch). The checks run
+# Manual, plus the nightly browser run: run it from the Actions tab ("Run workflow", pick a branch). The checks run
 # locally before code is pushed (targeted tests for the change) and the full suite runs once
 # every ten merged PRs; see docs/testing-workflow.md. To turn the automatic runs back on,
 # restore `push:` and `pull_request:` under `on:`.
 on:
+  # nightly: the whole browser suite of the showcase (the e2e job), on the default branch; see docs/testing-workflow.md for the cost
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       run:
@@ -130,7 +133,7 @@ jobs:
         run: make a11y-test
 
   e2e:
-    if: ${{ inputs.run == 'all' || inputs.run == 'e2e' }}
+    if: ${{ github.event_name == 'schedule' || inputs.run == 'all' || inputs.run == 'e2e' }}
     name: The whole browser suite of the showcase (Chrome)
     runs-on: ubuntu-latest
     timeout-minutes: 90

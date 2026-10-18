@@ -20,6 +20,14 @@ remote check is wanted. The checks run here instead.
 4. The merge count since the last full run is kept at the top of
    [roadmap.md](roadmap.md#merges-since-the-last-full-test-run), updated with each merge.
 
+## The nightly browser run, and what it costs
+
+The `e2e` job (the whole browser suite of the showcase) runs by itself every night at 03:17 UTC, on the default branch (a scheduled workflow always does), and can still be started by hand. It is the only job that is scheduled.
+
+What it costs: hosted minutes. This repository is private, so its runs count against the account's monthly allowance of hosted minutes (as of 2026: 2,000 minutes on the Free plan, 3,000 on Pro and Team, more on Enterprise; a Linux minute counts as one, a Windows minute as two, a macOS minute as ten; check the current figures on GitHub's billing page, they change). The job takes about 25 minutes of tests plus about 5 for the checkout, Go and Chrome set-up, so **about 30 minutes a night, about 900 a month**: roughly 45% of the Free allowance and 30% of Pro or Team. Minutes beyond the allowance are billed per minute (about $0.006 to $0.008 for the standard Linux runner when this was written). For comparison, running the same suite on every push would cost about 30 minutes for each push, which at the pace of this project (several PRs a day) is several times the Free allowance. If the allowance is short, change the cron line to weekly (`17 3 * * 0`, about 130 minutes a month) or run `make e2e-test` here instead, as before. Repositories that are public have free minutes on standard runners.
+
+A scheduled run reports to the Actions tab and, if the account is set to be notified of failed workflows, by e-mail; it does not block anything, since nothing waits on it. A night that fails is read the next morning and fixed on a branch of its own, the same rule as for a full run.
+
 ## Running the CI steps locally
 
 No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow on this
