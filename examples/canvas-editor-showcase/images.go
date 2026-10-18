@@ -285,6 +285,7 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 		}
 	}
 	nodes = append(nodes, imageSearchSection(u, state, flow, redraw, renderUI)...)
+	nodes = append(nodes, mapSection(u, state, flow, redraw, renderUI)...)
 	nodes = append(nodes, mediaSections(u, state, flow, scroller, redraw, renderUI)...)
 	nodes = append(nodes, elementsSections(u, state, flow, redraw, renderUI)...)
 	nodes = append(nodes, diagramSection(u, state, flow, redraw, renderUI)...)

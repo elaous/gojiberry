@@ -1801,6 +1801,21 @@
   "forms.cellRow": "Zeile",
   "forms.cellColumn": "Spalte",
   "forms.seeAll": "Alles ansehen (Werte der Tabellen)",
-  "forms.editAll": "Alles bearbeiten (Formeln und Felder der Tabellen)"
+  "forms.editAll": "Alles bearbeiten (Formeln und Felder der Tabellen)",
+  "map.title": "Eine Karte einfügen",
+  "map.about": "Aus einer Adresse, Koordinaten (48.8584, 2.2945) oder einem Plus Code (8FVC9G8F+6W). Die Karte besteht aus OpenStreetMap-Kacheln; eine Adresse wird bei Nominatim von OpenStreetMap gesucht.",
+  "map.query": "Adresse, Koordinaten oder Plus Code",
+  "map.hint": "zum Beispiel: Eiffelturm, Paris",
+  "map.zoom": "Wie nah",
+  "map.zoomStreet": "Straße",
+  "map.zoomTown": "Viertel",
+  "map.zoomCity": "Stadt",
+  "map.go": "Karte einfügen",
+  "map.working": "Die Karte wird erstellt …",
+  "map.badCoords": "Der Breitengrad muss zwischen -90 und 90 liegen und der Längengrad zwischen -180 und 180.",
+  "map.notFound": "Dieser Ort wurde nicht gefunden. Versuchen Sie eine andere Adresse, Koordinaten oder einen Plus Code.",
+  "map.lookupFailed": "Die Adresse konnte nicht gesucht werden (der Dienst hat nicht geantwortet).",
+  "map.renderFailed": "Die Karte konnte nicht gezeichnet werden (der Kachelserver hat nicht geantwortet).",
+  "map.alt": "Karte von %s"
  }
 }

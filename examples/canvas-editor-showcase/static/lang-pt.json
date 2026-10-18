@@ -1801,6 +1801,21 @@
     "forms.cellRow": "Linha",
     "forms.cellColumn": "Coluna",
     "forms.seeAll": "Ver tudo (valores das tabelas)",
-    "forms.editAll": "Editar tudo (fórmulas e campos das tabelas)"
+    "forms.editAll": "Editar tudo (fórmulas e campos das tabelas)",
+    "map.title": "Inserir um mapa",
+    "map.about": "A partir de uma morada, coordenadas (48.8584, 2.2945) ou um Plus Code (8FVC9G8F+6W). O mapa é feito com mosaicos do OpenStreetMap; uma morada é procurada no Nominatim do OpenStreetMap.",
+    "map.query": "Morada, coordenadas ou Plus Code",
+    "map.hint": "por exemplo: Torre Eiffel, Paris",
+    "map.zoom": "A que distância",
+    "map.zoomStreet": "Rua",
+    "map.zoomTown": "Bairro",
+    "map.zoomCity": "Cidade",
+    "map.go": "Inserir o mapa",
+    "map.working": "A fazer o mapa…",
+    "map.badCoords": "A latitude tem de estar entre -90 e 90 e a longitude entre -180 e 180.",
+    "map.notFound": "Esse lugar não foi encontrado. Tente outra morada, coordenadas ou um Plus Code.",
+    "map.lookupFailed": "Não foi possível procurar a morada (o serviço não respondeu).",
+    "map.renderFailed": "Não foi possível desenhar o mapa (o servidor de mosaicos não respondeu).",
+    "map.alt": "Mapa de %s"
   }
 }
