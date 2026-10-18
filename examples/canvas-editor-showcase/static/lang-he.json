@@ -1683,7 +1683,6 @@
     "voices.download": "הורדה (%s)",
     "voices.engine": "קולות להקראה",
     "voices.failed": "לא ניתן היה להוריד את הקול: %s",
-    "voices.forLang": "קולות להורדה עבור %s",
     "voices.have": "קולות שהורדו למכשיר הזה",
     "voices.installed": "הורד.",
     "voices.licence": "של מי הקול ובאילו תנאים",

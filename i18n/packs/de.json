@@ -1643,7 +1643,6 @@
   "voices.download": "Herunterladen (%s)",
   "voices.engine": "Stimmen zum Vorlesen",
   "voices.failed": "Die Stimme konnte nicht heruntergeladen werden: %s",
-  "voices.forLang": "Stimmen zum Herunterladen für %s",
   "voices.have": "Heruntergeladene Stimmen auf diesem Gerät",
   "voices.installed": "Heruntergeladen.",
   "voices.licence": "Wessen Stimme und unter welchen Bedingungen",

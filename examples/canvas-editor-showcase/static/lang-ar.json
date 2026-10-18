@@ -1783,7 +1783,6 @@
     "voices.download": "تنزيل (%s)",
     "voices.engine": "الأصوات المستخدمة للقراءة",
     "voices.failed": "تعذّر تنزيل الصوت: %s",
-    "voices.forLang": "أصوات للتنزيل بلغة %s",
     "voices.have": "الأصوات المنزّلة على هذا الجهاز",
     "voices.installed": "منزّل.",
     "voices.licence": "لمن الصوت وبأي شروط",

@@ -1643,7 +1643,6 @@
   "voices.download": "Télécharger (%s)",
   "voices.engine": "Voix pour lire",
   "voices.failed": "La voix n’a pas pu être téléchargée : %s",
-  "voices.forLang": "Voix à télécharger pour %s",
   "voices.have": "Voix téléchargées sur cet appareil",
   "voices.installed": "Téléchargée.",
   "voices.licence": "À qui est la voix et à quelles conditions",

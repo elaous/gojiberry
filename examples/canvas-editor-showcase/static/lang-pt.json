@@ -1643,7 +1643,6 @@
     "voices.download": "Transferir (%s)",
     "voices.engine": "Vozes para ler",
     "voices.failed": "Não foi possível transferir a voz: %s",
-    "voices.forLang": "Vozes para transferir em %s",
     "voices.have": "Vozes transferidas neste dispositivo",
     "voices.installed": "Transferida.",
     "voices.licence": "De quem é a voz e com que condições",
