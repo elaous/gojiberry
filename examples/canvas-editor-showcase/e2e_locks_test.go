@@ -114,3 +114,54 @@ func TestATableOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	a.NoErrors()
 	b.NoErrors()
 }
+
+// Text another person typed is in their colour for a few seconds and then normal; with the preference off it is never
+// coloured.
+func TestTextOthersTypeIsColouredForAMomentUnlessSwitchedOff(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	defer func() {
+		if err := h.Close(); err != nil {
+			t.Errorf("closing the hub: %v", err)
+		}
+	}()
+	site := e2etest.NewSite(t)
+	q := func(name, token, color string) string {
+		return "/d/typed1?hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&transport=ws&flow=" + url.QueryEscape("*") + "&name=" + name + "&color=" + url.QueryEscape(color)
+	}
+	a := site.Open(t, q("Ana", "owner", "#e11d48"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	b := site.Open(t, q("Bo", "editor", "#2563eb"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.length > 100")
+	typed := func(d *e2etest.Tab) int {
+		return d.Int(`JSON.parse(document.getElementById("state").textContent).live.typed`)
+	}
+	if typed(a) != 0 || typed(b) != 0 {
+		t.Fatalf("the document that arrived is not somebody typing: %d %d", typed(a), typed(b))
+	}
+
+	b.ToggleMode()
+	b.CanvasClick(240, 164)
+	b.Focus("#input")
+	b.Type("hello there")
+	a.WaitFor("Ana sees what Bo typed in his colour", `JSON.parse(document.getElementById("state").textContent).live.typed > 0`)
+	a.WaitForTimeout("it goes back to normal", `JSON.parse(document.getElementById("state").textContent).live.typed === 0`, 15*time.Second)
+
+	a.Click(`button[data-tab="prefs"]`)
+	a.WaitSelector(".gj-prefs-search")
+	a.Fill(".gj-prefs-search", "in their colour")
+	a.Dispatch(".gj-prefs-search", "input")
+	a.WaitFor("the setting", `document.querySelector('.gj-prefs-count').textContent === '1 preference'`)
+	a.Click(`.gj-prefs .gj-checkbox-input`) // off
+	b.Type(" again")
+	b.Sleep(1500)
+	a.Wait("s.text.includes('again')")
+	a.OK(typed(a) == 0, "with the preference off nothing is coloured")
+	a.NoErrors()
+	b.NoErrors()
+}

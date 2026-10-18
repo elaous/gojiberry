@@ -60,6 +60,12 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		Name:      name,
 		Color:     u.liveColor,
 		Holding:   u.holding,
+		TypedFor: func() time.Duration {
+			if curPrefs.Typed == "off" {
+				return -1
+			}
+			return 0
+		},
 		OnState: func(st collabxango.State) {
 			u.live = &st
 			u.contend()
@@ -99,7 +105,7 @@ func liveState(u *ui, flow *canvas.TextFlow) any {
 		}
 	}
 	slices.Sort(held)
-	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "holding": held, "remote": len(flow.RemoteCursors),
+	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "holding": held, "remote": len(flow.RemoteCursors), "typed": len(flow.TypedRanges),
 		"pending": s.Pending, "repairs": s.Repairs, "error": errText}
 }
 
