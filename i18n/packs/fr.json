@@ -1801,6 +1801,21 @@
   "forms.cellRow": "Ligne",
   "forms.cellColumn": "Colonne",
   "forms.seeAll": "Tout voir (valeurs des tableaux)",
-  "forms.editAll": "Tout modifier (formules et champs des tableaux)"
+  "forms.editAll": "Tout modifier (formules et champs des tableaux)",
+  "map.title": "Insérer une carte",
+  "map.about": "À partir d'une adresse, de coordonnées (48.8584, 2.2945) ou d'un Plus Code (8FVC9G8F+6W). La carte est faite de tuiles OpenStreetMap ; une adresse est cherchée sur Nominatim d'OpenStreetMap.",
+  "map.query": "Adresse, coordonnées ou Plus Code",
+  "map.hint": "par exemple : tour Eiffel, Paris",
+  "map.zoom": "Jusqu'où zoomer",
+  "map.zoomStreet": "Rue",
+  "map.zoomTown": "Quartier",
+  "map.zoomCity": "Ville",
+  "map.go": "Insérer la carte",
+  "map.working": "Fabrication de la carte…",
+  "map.badCoords": "La latitude doit être comprise entre -90 et 90 et la longitude entre -180 et 180.",
+  "map.notFound": "Ce lieu est introuvable. Essayez une autre adresse, des coordonnées ou un Plus Code.",
+  "map.lookupFailed": "L'adresse n'a pas pu être cherchée (le service n'a pas répondu).",
+  "map.renderFailed": "La carte n'a pas pu être dessinée (le serveur de tuiles n'a pas répondu).",
+  "map.alt": "Carte de %s"
  }
 }

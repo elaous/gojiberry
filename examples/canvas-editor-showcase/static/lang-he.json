@@ -1841,6 +1841,21 @@
     "forms.cellRow": "שורה",
     "forms.cellColumn": "עמודה",
     "forms.seeAll": "הצג הכול (ערכי הטבלאות)",
-    "forms.editAll": "ערוך הכול (נוסחאות ושדות של הטבלאות)"
+    "forms.editAll": "ערוך הכול (נוסחאות ושדות של הטבלאות)",
+    "map.title": "הוספת מפה",
+    "map.about": "מכתובת, מקואורדינטות (48.8584, 2.2945) או מ-Plus Code ‏(8FVC9G8F+6W). המפה בנויה מאריחי OpenStreetMap; כתובת מחופשת ב-Nominatim של OpenStreetMap.",
+    "map.query": "כתובת, קואורדינטות או Plus Code",
+    "map.hint": "לדוגמה: מגדל אייפל, פריז",
+    "map.zoom": "כמה קרוב",
+    "map.zoomStreet": "רחוב",
+    "map.zoomTown": "שכונה",
+    "map.zoomCity": "עיר",
+    "map.go": "הוסף את המפה",
+    "map.working": "המפה נוצרת…",
+    "map.badCoords": "קו הרוחב חייב להיות בין -90 ל-90 וקו האורך בין -180 ל-180.",
+    "map.notFound": "המקום לא נמצא. נסו כתובת אחרת, קואורדינטות או Plus Code.",
+    "map.lookupFailed": "לא ניתן היה לחפש את הכתובת (השירות לא ענה).",
+    "map.renderFailed": "לא ניתן היה לצייר את המפה (שרת האריחים לא ענה).",
+    "map.alt": "מפה של %s"
   }
 }

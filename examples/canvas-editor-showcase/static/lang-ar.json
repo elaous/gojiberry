@@ -1941,6 +1941,21 @@
     "forms.cellRow": "الصف",
     "forms.cellColumn": "العمود",
     "forms.seeAll": "عرض الكل (قيم الجداول)",
-    "forms.editAll": "تحرير الكل (صيغ الجداول وحقولها)"
+    "forms.editAll": "تحرير الكل (صيغ الجداول وحقولها)",
+    "map.title": "إدراج خريطة",
+    "map.about": "من عنوان أو إحداثيات (48.8584, 2.2945) أو رمز Plus Code ‏(8FVC9G8F+6W). تتكوّن الخريطة من بلاطات OpenStreetMap، ويُبحث عن العنوان في Nominatim التابع لـ OpenStreetMap.",
+    "map.query": "عنوان أو إحداثيات أو Plus Code",
+    "map.hint": "مثلًا: برج إيفل، باريس",
+    "map.zoom": "مدى القرب",
+    "map.zoomStreet": "شارع",
+    "map.zoomTown": "حي",
+    "map.zoomCity": "مدينة",
+    "map.go": "إدراج الخريطة",
+    "map.working": "جارٍ إنشاء الخريطة…",
+    "map.badCoords": "يجب أن يكون خط العرض بين -90 و90 وخط الطول بين -180 و180.",
+    "map.notFound": "لم يُعثر على هذا المكان. جرّب عنوانًا آخر أو إحداثيات أو Plus Code.",
+    "map.lookupFailed": "تعذّر البحث عن العنوان (لم تردّ الخدمة).",
+    "map.renderFailed": "تعذّر رسم الخريطة (لم يردّ خادم البلاطات).",
+    "map.alt": "خريطة %s"
   }
 }

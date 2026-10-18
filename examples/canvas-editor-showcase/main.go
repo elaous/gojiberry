@@ -72,6 +72,7 @@ type ui struct {
 	tableStyle      tableStyleForm // the table style being defined (Styles tab)
 	refs            refsState      // the sources the document cites (References tab)
 	imgFind         imageFind      // the "find a picture online" form of the Pictures tab
+	mapHolder                      // the map form of the Pictures tab (map.go; nothing in a build without exp_map)
 	media           mediaForm      // the clip being typed in the Pictures tab and the caption drafts
 	formsHolder                    // the Forms tab's state (forms.go; nothing in a build without exp_forms)
 	elements        elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
