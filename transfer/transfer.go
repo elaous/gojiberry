@@ -150,9 +150,14 @@ func (r *Registry) Export(name string, doc docfile.Document) (filename string, d
 func Default() *Registry {
 	r := &Registry{}
 	for _, c := range docfile.Formats() {
-		r.AddImporter(codec{c})
+		if c.Ext() == ".json" {
+			r.AddImporter(wrapJSON(codec{c}))
+		} else {
+			r.AddImporter(codec{c})
+		}
 		r.AddExporter(codec{c})
 	}
+	registerTextFormats(r)
 	r.AddImporter(markdown{})
 	r.AddExporter(markdown{})
 	r.AddImporter(text{})
