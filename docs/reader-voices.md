@@ -37,14 +37,14 @@ window.addons.piper = {
 
 ### A phonemizer that needs no espeak-ng: openphonemizer (US English)
 
-The usual phonemizer for Piper voices is espeak-ng, which is GPL. The operator who wants a runtime without it can use [`nekwo/openphonemizer-en-us-onnx`](https://huggingface.co/nekwo/openphonemizer-en-us-onnx), a US English grapheme-to-phoneme model in ONNX (it runs on `onnxruntime-web` like the voices do). What its model card says, read on 2026-10-18 (it is the model's own description; this repository has not run it):
+The usual phonemizer for Piper voices is espeak-ng, which is GPL. The operator who wants a runtime without it can use [`nekwo/openphonemizer-en-us-onnx`](https://huggingface.co/nekwo/openphonemizer-en-us-onnx), a US English grapheme-to-phoneme model in ONNX (it runs on `onnxruntime-web` like the voices do). What its model card says, read on 2026-10-18 (it is the model's own description; the runtime in `examples/piper-runtime/` has been run against it):
 
 - **What it is.** A DeepPhonemizer forward transformer converted from OpenPhonemizer; output is espeak-style US English (en-us) phonemes, as logits over phoneme tokens. A word in its dictionary is looked up directly; the model is used for words that are not in it.
 - **Licence.** BSD-3-Clause-Clear for the model and the dictionary (OpenPhonemizer) and for the ONNX conversion. The card gives no full licence text: the operator should read the upstream licence before shipping it.
 - **Files** (about 102 MB in all; the page loads the one it needs): `openphonemizer-en_us-fp16.onnx` (30,977,712 bytes, the default, SHA-256 `a77b17647a02cb9ac42025cfc60c8e83c70f36785183a4388f17722fb1c7dc9b`), `openphonemizer-en_us-fp32.onnx` (61,437,915 bytes, `b0557ca5639d839d77d040c2610f2b1e95f584379cc1cdfa5c4984fb3d8f1b78`) and `openphonemizer-en_us.json` (9,223,033 bytes, `36dda6260c7e560a4d846528387fd07ababcd1012a52b530063fefadd5987db0`: the tokenizers and the dictionary). Compare the sums with the ones on the model page before use.
-- **What to know.** English (US) only. Voices trained on British "en" phonemes need the US phonemes mapped first (the card names a `rp_from_us` step in its runner). The card does not describe the model's input encoding or the symbol table, nor give onnxruntime code (it points to a runner in another repository), so the runtime script has to follow that runner; this repository does not.
+- **What to know.** English (US) only. Voices trained on British "en" phonemes need the US phonemes mapped first (the card names a `rp_from_us` step in its runner). The card does not describe the input encoding, but its runner (in another repository) and the export script do: the text goes in as lower-case letters, each repeated `char_repeats` (3) times between a start and an end token, as an int64 tensor `text` of shape `[1, T]`, and `logits` of shape `[1, T, vocab]` come back; the reference runtime follows that.
 
-What this means for the page: nothing changes in the contract above. `window.addons.piper.synthesize` still receives the text and returns samples; the phonemizer is the script's own business. Nothing is fetched from that model page by the page unless the operator's script does it, and the Add-ons tab would list the model like any other (`models()` in the add-on contract, with size and terms) once the script offers it. Other languages need another phonemizer; this one does not cover them.
+A runtime that uses it is in `examples/piper-runtime/` (see its README for the install and for what has been checked against the real models). What this means for the page: nothing changes in the contract above. `window.addons.piper.synthesize` still receives the text and returns samples; the phonemizer is the script's own business. Nothing is fetched from that model page by the page unless the operator's script does it, and the Add-ons tab would list the model like any other (`models()` in the add-on contract, with size and terms) once the script offers it. Other languages need another phonemizer; this one does not cover them.
 
 A script of that shape can be built on `onnxruntime-web` and a phonemizer such as espeak-ng compiled to WebAssembly. Next to the page, `reader-voices.json` (optional) says where things are; every address is https or relative to the page:
 
@@ -63,6 +63,30 @@ A script of that shape can be built on `onnxruntime-web` and a phonemizer such a
 ```
 
 The voices, their licences and who may use them are the operator's to decide; the page shows the address of a voice's terms when the server gives one (https only).
+
+### Running a voice server
+
+`cmd/voiceserver` execs a Piper binary for each request; it needs nothing but that and the voices. This is the setup it was run with on 2026-10-18, on Linux with Python 3.11 (the `piper` command comes with the `piper-tts` package, which brings its own espeak-ng data):
+
+```sh
+python3 -m venv piper && ./piper/bin/pip install piper-tts
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+cat > voices.json <<'EOF'
+[{"id": "en_US-lessac-medium", "name": "Lessac", "lang": "en-US",
+  "licence": "https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD",
+  "model": "/srv/voices/en_US-lessac-medium.onnx"}]
+EOF
+GOJIBERRY_VOICESERVER_ADDR=:8084 \
+GOJIBERRY_VOICESERVER_PIPER_BINARY=$PWD/piper/bin/piper \
+GOJIBERRY_VOICESERVER_VOICES=$PWD/voices.json \
+GOJIBERRY_VOICESERVER_ALLOW_ORIGINS=https://your-page.example \
+  go run ./cmd/voiceserver
+```
+
+`GET /voices` lists the voices (the `model` paths stay on the server); `POST /speak` with `{"text", "voice", "rate"}` answers a WAV; a voice that is not in the file is refused. The page sends no cookie and no token, so allow its origin (`ALLOW_ORIGINS`) rather than a token; leave the server without a guard and anyone can use it for speech. Each voice has its own licence: list only those the operator may offer, and give each its `licence` address (https only), which the page shows. Put the server behind TLS (the page refuses an address that is not https).
+
+Run against the real Piper with that voice, `/voices` and `/speak` answered as described, `rate` 1.25 gave a shorter sound (59,436 bytes against 62,508 at normal speed), an unknown voice was refused with 400, and the page's WAV decoder (`voice/read/hosted.DecodeWAV`) read the answer (22,050 Hz, 16-bit mono). **Not run:** the page against a running server in a browser (the browser test uses a stand-in), a container image (the Dockerfile does not install Piper), several voices at once, or load.
 
 ## What has been checked
 
