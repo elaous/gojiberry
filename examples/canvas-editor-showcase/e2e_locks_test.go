@@ -64,3 +64,53 @@ func TestAnObjectOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	a.NoErrors()
 	b.NoErrors()
 }
+
+// A table in the text is held by the person who is changing it (inserting, moving, sorting, resizing by the Styles tab,
+// dressing it): the other sees it busy and their change is refused.
+func TestATableOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
+	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
+		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}})
+	srv := httptest.NewServer(h.Handler())
+	defer srv.Close()
+	defer func() {
+		if err := h.Close(); err != nil {
+			t.Errorf("closing the hub: %v", err)
+		}
+	}()
+	site := e2etest.NewSite(t)
+	q := func(name, token, color string) string {
+		return "/d/locks2?hub=" + url.QueryEscape(srv.URL) + "&token=" + token + "&transport=ws&flow=" + url.QueryEscape("*") + "&name=" + name + "&color=" + url.QueryEscape(color)
+	}
+	a := site.Open(t, q("Ana", "owner", "#e11d48"))
+	a.Wait("s.live.status === 'online' && s.live.role === 'owner'")
+	a.Sleep(400)
+	b := site.Open(t, q("Bo", "editor", "#2563eb"))
+	b.Wait("s.live.status === 'online' && s.live.role === 'editor'")
+	b.Wait("s.text.length > 100")
+
+	a.ToggleMode()
+	a.CanvasClick(240, 164)
+	a.Focus("#input")
+	a.Press("Control+a")
+	a.Press("Delete")
+	for _, line := range []string{"| Item | Qty |", "|---|---|", "| Pens | 1 |"} {
+		a.Type(line)
+		a.Press("Enter")
+	}
+	a.Press("Enter")
+	b.ToggleMode()
+	b.Wait("s.text.length < 100")
+	b.Sleep(500)
+
+	a.CanvasClick(285, 35) // the grip of column A
+	a.WaitSelector("#tgrip-col-after")
+	a.Click("#tgrip-col-after") // Ana is at it
+	b.WaitFor("Bo sees Ana holding the table", `JSON.parse(document.getElementById("state").textContent).live.holding.includes('Ana=table:0')`)
+	b.CanvasClick(285, 113) // the same grip, lower on Bo's sheet (a line of text above it)
+	b.WaitSelector("#tgrip-col-after")
+	b.Click("#tgrip-col-after") // refused
+	b.WaitFor("Bo is told it is busy", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this table.')`)
+	a.NoErrors()
+	b.NoErrors()
+}
