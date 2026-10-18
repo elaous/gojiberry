@@ -53,7 +53,7 @@ var femaleNames = words("samantha victoria karen moira tessa fiona serena kate s
 	"emma amy joanna salli kimberly ivy kendra nicole olivia raveena aditi allison ava zoe paulina monica luciana helena sabina laura " +
 	"marie amelie lea vicki anna petra katja hedda female woman " +
 	// Piper's voices, named for the speaker of the recording.
-	"lessac alba jenny kathleen kristin ljspeech eva kerstin ramona siwis lisa")
+	"lessac alba jenny cori kathleen kristin ljspeech eva kerstin ramona siwis lisa")
 var maleNames = words("alex daniel fred oliver thomas george james david mark guy ryan brian eric liam russell geraint matthew joey justin " +
 	"kevin arthur jorge diego juan pablo enrique felipe luca hans stefan conrad male man " +
 	"ryan alan joe danny john norman bryce kusal thorsten karlsson pavoque gilles tom davefx carlfm claude faber edresson jeff cadu")

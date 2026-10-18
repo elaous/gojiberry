@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/gojiberry/voice/read/hub"
 	"github.com/elaous/gojiberry/voice/read/piper"
 )
 
@@ -73,6 +74,8 @@ func ensurePiper(renderUI func()) {
 			}
 		}
 		piperUI.engine = piper.New(cfg, jsFetcher{}, cacheStore{}, jsRuntime{}, &webAudio{})
+		piperUI.engine.AddVoices(hub.Voices())
+		loadVoiceRepos()
 		piperUI.engine.Refresh(func() {
 			piperUI.checked = true
 			if curPrefs.Reader == "hosted" && hostedAvailable() {

@@ -242,6 +242,14 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Automated.** e2e_test.go (`TestEndToEnd`)
 
+## Where reader voices come from
+
+**Try it.** Reader voices tab (a page with a Piper runtime, see docs/reader-voices.md): the hub is shown first with four voices and their terms; press *Add a repository…*, give an https address of a `voices.json`, then *Show its voices*; tick "I have read the terms" and download; *My own files* keeps a `.onnx` and `.onnx.json` you choose; *This device's voices* lists the system's.
+
+**You should see.** Terms beside each hub voice; a download whose file differs from the pinned checksum is refused and nothing is kept; a repository's voices disabled until you say you read them; your own voice listed under its language as `…-own`.
+
+**Automated.** `TestVoiceSourcesHubRepositoryAndOwnFiles` (examples/canvas-editor-showcase), packages `voice/read/hub` and `voice/read/piper` (`sources_test.go`)
+
 ## Several people at one object
 
 **Try it.** Open the same shared document as two people (`/d/name?hub=...&name=Ana&color=%23e11d48` and `...&name=Bo`), both in edit mode and the Pictures tab; as Ana insert an equation and type in its formula box; as Bo try the same equation's formula.
