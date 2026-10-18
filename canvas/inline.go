@@ -115,7 +115,32 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	o.View.Draw()
 }
 
+// ClickAt implements ClickObject: a press on a cell that is a form field fills it in (a checkbox is ticked). The table
+// is read-only in the text otherwise, so a press anywhere else is not used.
+func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
+	v := o.View
+	if v == nil || v.Table == nil || len(v.Table.Fields) == 0 || v.Painter == nil {
+		return false, false
+	}
+	oldX, oldY := v.X, v.Y
+	v.X, v.Y = 0, 0
+	g := v.layout()
+	v.X, v.Y = oldX, oldY
+	if x < 0 || y < 0 || x >= g.right() || y >= g.bottom() {
+		return false, false
+	}
+	row, col := v.Table.Owner(indexAt(g.rowY, y), indexAt(g.colX, x))
+	f := v.Table.Fields[CellPos{row, col}]
+	if f == nil {
+		return false, false
+	}
+	before := f.Value
+	v.pressField(row, col, f)
+	return true, f.Value != before
+}
+
 var (
+	_ ClickObject  = (*TableObject)(nil)
 	_ InlineObject = (*Rule)(nil)
 	_ InlineObject = (*TableObject)(nil)
 )

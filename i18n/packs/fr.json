@@ -1792,6 +1792,13 @@
   "push.noServer": "Le serveur de notifications est injoignable.",
   "push.noWorker": "Les notifications ont besoin du service worker de la page, qui ne tourne pas (il est désactivé quand la page est ouverte avec ?nosw).",
   "push.failed": "Le navigateur n'a pas pu s'abonner aux notifications.",
-  "push.refused": "Le serveur de notifications n'a pas accepté cet abonnement."
+  "push.refused": "Le serveur de notifications n'a pas accepté cet abonnement.",
+  "forms.addedCell": "La cellule du tableau est maintenant un champ de formulaire. Donnez-lui une étiquette qui dit ce qu'il demande.",
+  "forms.uncell": "Refaire de la cellule du texte simple",
+  "forms.cellOut": "Cette cellule de tableau n'existe pas : les tableaux, lignes et colonnes se comptent à partir de 1.",
+  "forms.inCell": "Mettre le champ suivant dans une cellule de tableau",
+  "forms.cellTable": "Tableau",
+  "forms.cellRow": "Ligne",
+  "forms.cellColumn": "Colonne"
  }
 }

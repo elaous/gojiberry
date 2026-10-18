@@ -1792,6 +1792,13 @@
   "push.noServer": "No se pudo contactar con el servidor de notificaciones.",
   "push.noWorker": "Las notificaciones necesitan el service worker de la página, que no está activo (se desactiva al abrir la página con ?nosw).",
   "push.failed": "El navegador no pudo suscribirse a las notificaciones.",
-  "push.refused": "El servidor de notificaciones no aceptó esta suscripción."
+  "push.refused": "El servidor de notificaciones no aceptó esta suscripción.",
+  "forms.addedCell": "La celda de la tabla es ahora un campo de formulario. Póngale una etiqueta que diga lo que pregunta.",
+  "forms.uncell": "Volver a hacer de la celda texto normal",
+  "forms.cellOut": "No existe esa celda de la tabla: las tablas, filas y columnas se cuentan desde 1.",
+  "forms.inCell": "Poner el siguiente campo en una celda de tabla",
+  "forms.cellTable": "Tabla",
+  "forms.cellRow": "Fila",
+  "forms.cellColumn": "Columna"
  }
 }

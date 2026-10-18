@@ -17,6 +17,8 @@ type Table struct {
 	// empty. Styles are per-cell formatting. See table_cells.go.
 	Merges []Merge
 	Styles map[CellPos]CellStyle
+	// Fields are the cells that are form fields (see table_fields.go); the text of such a cell is the field's words.
+	Fields map[CellPos]*FormFieldObject
 }
 
 // NewTable returns a table of rows x cols empty cells (minimum 1x1).
@@ -65,6 +67,9 @@ func (t *Table) Cell(row, col int) string {
 // SetCell sets the text at (row, col); out-of-range is a no-op.
 func (t *Table) SetCell(row, col int, text string) {
 	if t.InRange(row, col) {
+		if f := t.Fields[CellPos{row, col}]; f != nil && text != t.Cells[row][col] { // written over: an ordinary cell again
+			delete(t.Fields, CellPos{row, col})
+		}
 		t.Cells[row][col] = text
 	}
 }
@@ -111,7 +116,7 @@ func (t *Table) deleteRow(at int) {
 	}
 	if t.Rows() == 1 {
 		clear(t.Cells[0])
-		t.Merges, t.Styles = nil, nil
+		t.Merges, t.Styles, t.Fields = nil, nil, nil
 		return
 	}
 	t.removeRowOfMerges(at)
@@ -129,7 +134,7 @@ func (t *Table) deleteColumn(at int) {
 		for _, row := range t.Cells {
 			row[0] = ""
 		}
-		t.Merges, t.Styles = nil, nil
+		t.Merges, t.Styles, t.Fields = nil, nil, nil
 		return
 	}
 	t.removeColumnOfMerges(at)
@@ -183,6 +188,11 @@ func (t *Table) duplicateRow(at int) {
 		if st, ok := t.Styles[CellPos{at, c}]; ok {
 			t.SetCellStyle(at+1, c, st)
 		}
+		if f := t.Fields[CellPos{at, c}]; f != nil {
+			cp := cloneFields(map[CellPos]*FormFieldObject{{}: f})[CellPos{}]
+			cp.Value = ""
+			t.SetField(at+1, c, cp)
+		}
 	}
 }
 
@@ -235,6 +245,10 @@ func (t *Table) Clear() {
 	for _, row := range t.Cells {
 		clear(row)
 	}
+	for _, f := range t.Fields { // a field stays a field, emptied
+		f.Clear()
+	}
+	t.SyncFields()
 }
 
 // moved is where index i ends up when the element at from is moved to to.

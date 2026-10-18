@@ -111,6 +111,7 @@ func (t *Table) MergeRange(r0, c0, r1, c1 int) bool {
 	for r := r0; r <= r1; r++ { // covered cells have no style of their own
 		for c := c0; c <= c1; c++ {
 			if r != r0 || c != c0 {
+				delete(t.Fields, CellPos{r, c})
 				delete(t.Styles, CellPos{r, c})
 			}
 		}
@@ -204,6 +205,15 @@ func (t *Table) shift(atRow, atCol, dRow, dCol int) {
 // remapStyles gives every style the position f returns for it; a negative
 // position drops it.
 func (t *Table) remapStyles(f func(CellPos) CellPos) {
+	if len(t.Fields) > 0 { // the fields follow their cells
+		fields := make(map[CellPos]*FormFieldObject, len(t.Fields))
+		for p, fl := range t.Fields {
+			if q := f(p); q.Row >= 0 && q.Col >= 0 {
+				fields[q] = fl
+			}
+		}
+		t.Fields = fields
+	}
 	if len(t.Styles) == 0 {
 		return
 	}
