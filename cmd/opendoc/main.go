@@ -7,7 +7,8 @@
 //	                                              unless --force, and exit is 1 if any document was not written)
 //	opendoc list    pack.opendoc
 //	opendoc verify  [-pubkey hex] pack.opendoc  (reads every document; exit 1 if anything is wrong)
-//	opendoc sign    -key key pack.opendoc (signs, or signs again, in place)
+//	opendoc sign    -key key pack.opendoc (signs, or signs again, in place; the other signers' signatures are dropped)
+//	opendoc cosign  -key key pack.opendoc (adds one more signer to a signed pack, in place; the others stay valid)
 //	opendoc recover pack.opendoc out.opendoc  (what is intact in a cut or damaged pack)
 //
 //	opendoc keygen  [key-file]            (prints a seed; with a file, writes it there, mode 0600, and prints the public key)
@@ -52,7 +53,7 @@ func main() {
 
 func run(args []string, out outWriter) error {
 	if len(args) == 0 {
-		return errors.New("usage: opendoc pack|convert|unpack|list|verify|sign|recover|keygen ... (see the command's doc)")
+		return errors.New("usage: opendoc pack|convert|unpack|list|verify|sign|cosign|recover|keygen ... (see the command's doc)")
 	}
 	cmd, args := args[0], args[1:]
 	switch cmd {
@@ -66,6 +67,8 @@ func run(args []string, out outWriter) error {
 		return verifyCmd(args, out)
 	case "sign":
 		return signCmd(args, out)
+	case "cosign":
+		return cosignCmd(args, out)
 	case "recover":
 		return recoverCmd(args, out)
 	case "keygen":
@@ -491,8 +494,8 @@ func listCmd(args []string, out outWriter) error {
 	defer func() { _ = f.Close() }()
 	m, idx := r.Meta(), r.Index()
 	say(out, "%s (%s), %d documents, %d folders", esc(m.Name), esc(m.Producer), len(idx.Entries), len(idx.Folders))
-	if sig, ok := r.Signature(); sig != nil {
-		say(out, ", signed by %x (valid: %v; the key is not checked against anyone)", sig.PublicKey[:min(8, len(sig.PublicKey))], ok)
+	if signers := r.Signers(); len(signers) > 0 {
+		say(out, ", signed by %s (the keys are not checked against anyone)", signersText(signers))
 	}
 	say(out, "\n")
 	names := map[string]string{}
@@ -545,7 +548,7 @@ func verifyCmd(args []string, out outWriter) error {
 		say(out, ", %d records not in the index", rep.Unindexed)
 	}
 	if rep.Signed {
-		say(out, ", signed by %x (valid: %v)", rep.Signer[:min(8, len(rep.Signer))], rep.SignatureOK)
+		say(out, ", signed by %s", signersText(rep.Signers))
 		if want == nil {
 			say(out, " (not checked against anyone: use -pubkey)")
 		}
@@ -557,7 +560,11 @@ func verifyCmd(args []string, out outWriter) error {
 	if rep.Gap {
 		say(out, "%s\n", "BAD the records do not follow one another up to the index")
 	}
-	if want != nil && (!rep.Signed || !bytes.Equal(rep.Signer, want)) {
+	signedByWant := false
+	for _, sg := range rep.Signers {
+		signedByWant = signedByWant || sg.Valid && bytes.Equal(sg.PublicKey, want)
+	}
+	if want != nil && !signedByWant {
 		say(out, "BAD the pack is not signed by the key given\n")
 		return errors.New("the pack is not signed by the key given")
 	}
@@ -598,6 +605,44 @@ func signCmd(args []string, out outWriter) error {
 	}
 	say(out, "%s signed\n", fl.Arg(0))
 	return nil
+}
+
+func cosignCmd(args []string, out outWriter) error {
+	fl := flag.NewFlagSet("cosign", flag.ContinueOnError)
+	keyPath := fl.String("key", "", "the key file")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	if fl.NArg() != 1 || *keyPath == "" {
+		return errors.New("usage: opendoc cosign -key key pack.opendoc")
+	}
+	key, err := readKey(*keyPath)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(fl.Arg(0), os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if err := pack.Cosign(f, st.Size(), key); err != nil {
+		return err
+	}
+	say(out, "%s co-signed\n", fl.Arg(0))
+	return nil
+}
+
+// signersText lists the signers by the start of their keys, each with whether the signature holds.
+func signersText(signers []pack.Signer) string {
+	var parts []string
+	for _, s := range signers {
+		parts = append(parts, fmt.Sprintf("%x (valid: %v)", s.PublicKey[:min(8, len(s.PublicKey))], s.Valid))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func recoverCmd(args []string, out outWriter) error {

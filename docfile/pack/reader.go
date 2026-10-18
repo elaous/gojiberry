@@ -224,6 +224,19 @@ func (r *Reader) Signature() (sig *Signature, valid bool) {
 	return r.sig, r.sig.valid(r.header, r.foot.indexSum)
 }
 
+// Signers lists everyone who signed the pack, the first signer first, each with whether the signature is valid for
+// this pack. It is empty for an unsigned pack.
+func (r *Reader) Signers() []Signer {
+	if r.sig == nil {
+		return nil
+	}
+	var out []Signer
+	for _, s := range r.sig.all() {
+		out = append(out, Signer{PublicKey: s.PublicKey, Valid: s.valid(r.header, r.foot.indexSum)})
+	}
+	return out
+}
+
 // ReadRaw returns the stored bytes of a document, checked against its record's checksums
 // and the index's hash: a .open message, or for an Encrypted entry the envelope as stored
 // (no key is involved).
@@ -304,8 +317,10 @@ type Report struct {
 	Gap bool
 	// Signed says there is a signature record; SignatureOK that it is valid for this
 	// pack; Signer is the key it carries.
+	// With co-signers SignatureOK says every signature is valid; Signers lists them.
 	Signed, SignatureOK bool
 	Signer              []byte
+	Signers             []Signer
 }
 
 // OK says whether everything checked out.
@@ -349,8 +364,12 @@ func (r *Reader) Verify() Report {
 	if off != int64(r.foot.indexOffset) {
 		rep.Gap = true
 	}
-	if sig, valid := r.Signature(); sig != nil {
-		rep.Signed, rep.SignatureOK, rep.Signer = true, valid, sig.PublicKey
+	if sig, _ := r.Signature(); sig != nil {
+		rep.Signers = r.Signers()
+		rep.Signed, rep.SignatureOK, rep.Signer = true, true, sig.PublicKey
+		for _, s := range rep.Signers {
+			rep.SignatureOK = rep.SignatureOK && s.Valid
+		}
 	}
 	return rep
 }

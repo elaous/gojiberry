@@ -106,12 +106,14 @@ documents to do so.
 
 ### Signature record (kind 3, optional)
 
-`Signature { string alg = 1 /* "ed25519" */; bytes public_key = 2; bytes sig = 3; }`
+`Signature { string alg = 1 /* "ed25519" */; bytes public_key = 2; bytes sig = 3; repeated Signature more = 4; }`
 
 The signature is over `SHA-256("opendoc-v1" || SHA-256(header bytes) || index
 sha256)`. The index holds every document's hash, so one signature covers the header,
 the index and all documents. A reader reports the key; deciding whether to trust it
 is the application's.
+
+**Several signers.** Field 4 holds the signatures of further signers, each over the same digest (at most 16 in all, and a signer does not nest another). The first signer is the pack's signer as before: a reader that does not know field 4 reads it as an unknown field and sees that signature, valid as ever. `Cosign` adds a signer in place by rewriting the signature record and the footer after it (nothing else moves, so the other signatures stay valid); it refuses a pack that is unsigned, whose signatures do not all hold, or that the key signed already. Changing the pack (an append, an edit of the index) changes the digest, so the signatures of the others are dropped: the appender signs again with its own key and the others sign again with `Cosign`. A co-signature interrupted half way is repaired like an interrupted append, by `Recover`.
 
 ### Footer (80 bytes, last in the file)
 
@@ -209,7 +211,7 @@ Open:
 1. Hiding what the index shows about an encrypted record (its folder, size, update time and
    trash flag stay readable, like a store's catalog).
 2. Moving large attachments out of documents into their own record kind.
-3. Whether the signature should allow several signers.
+3. ~~Whether the signature should allow several signers~~ **done**: `Signature.More` (field 4), `Writer.CloseSigned`, `Cosign`, `Reader.Signers`, `opendoc cosign`.
 4. ~~A MIME type and a magic entry~~ **done**: `pack.MIME` (`application/vnd.opendocs.pack`), `docfile/pack/mime/opendoc.magic` for `file(1)` and `opendoc.xml` for shared-mime-info.
 
 ## 7. Plan

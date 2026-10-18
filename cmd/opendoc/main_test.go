@@ -306,3 +306,33 @@ func TestRecoverWarnsLoudlyAboutEncryptedRecordsItCannotAttribute(t *testing.T) 
 		t.Errorf("no warning: %s", out)
 	}
 }
+
+// cosign adds a second signer to a signed pack in place; verify names both and -pubkey accepts either.
+func TestCosignAddsASigner(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	_ = os.MkdirAll(src, 0o755)
+	_ = os.WriteFile(filepath.Join(src, "a.md"), []byte("# A"), 0o644)
+	newKey := func(name string) (path, pub string) {
+		path = filepath.Join(dir, name)
+		out := do(t, "keygen", path)
+		return path, strings.TrimSpace(strings.TrimPrefix(out, path+" written; public key"))
+	}
+	k1, pub1 := newKey("k1")
+	k2, pub2 := newKey("k2")
+	_, pub3 := newKey("k3")
+	pk := filepath.Join(dir, "p.opendoc")
+	do(t, "pack", "-sign", k1, pk, src)
+	do(t, "cosign", "-key", k2, pk)
+	out := do(t, "verify", pk)
+	if strings.Count(out, "valid: true") != 2 {
+		t.Errorf("both signers should be named:\n%s", out)
+	}
+	do(t, "verify", "-pubkey", pub1, pk)
+	do(t, "verify", "-pubkey", pub2, pk)
+	_ = fails(t, "verify", "-pubkey", pub3, pk)
+	_ = fails(t, "cosign", "-key", k2, pk) // the same key twice
+	unsigned := filepath.Join(dir, "u.opendoc")
+	do(t, "pack", unsigned, src)
+	_ = fails(t, "cosign", "-key", k2, unsigned)
+}

@@ -113,7 +113,25 @@ type Signature struct {
 	Alg       string // "ed25519"
 	PublicKey []byte
 	Sig       []byte
+	// More are the signatures of further signers over the same digest (field 4 of the record: a reader that does not
+	// know it sees the first signer only, whose signature is the same as ever).
+	More []Signature
 }
+
+// Signer is one signature of a pack and whether it is valid for the pack: the key it carries made it. Whether to trust
+// the key is the caller's to decide.
+type Signer struct {
+	PublicKey []byte
+	Valid     bool
+}
+
+// all lists the signature and the further ones.
+func (s Signature) all() []Signature {
+	return append([]Signature{{Alg: s.Alg, PublicKey: s.PublicKey, Sig: s.Sig}}, s.More...)
+}
+
+// MaxSigners bounds the signatures of one pack.
+const MaxSigners = 16
 
 // signedDigest is what a signature covers: the header, and through the index's hash, every
 // document.
@@ -422,6 +440,9 @@ func (s Signature) marshal() []byte {
 	b = appendString(b, 1, s.Alg)
 	b = appendBytes(b, 2, s.PublicKey)
 	b = appendBytes(b, 3, s.Sig)
+	for _, m := range s.More {
+		b = appendBytes(b, 4, m.marshal())
+	}
 	return b
 }
 
@@ -439,6 +460,18 @@ func unmarshalSignature(b []byte) (s Signature, err error) {
 			s.PublicKey = append([]byte(nil), f.bytes...)
 		case 3:
 			s.Sig = append([]byte(nil), f.bytes...)
+		case 4:
+			if len(s.More) >= MaxSigners {
+				return fmt.Errorf("%w: more than %d signers", ErrFormat, MaxSigners)
+			}
+			m, err := unmarshalSignature(f.bytes)
+			if err != nil {
+				return err
+			}
+			if len(m.More) > 0 {
+				return fmt.Errorf("%w: a signer inside a signer", ErrFormat)
+			}
+			s.More = append(s.More, m)
 		}
 		return nil
 	})
