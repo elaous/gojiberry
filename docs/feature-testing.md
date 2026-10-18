@@ -124,6 +124,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Push when the page is closed.** *Try it:* serve a push server (docs/web-push.md) and `push.json`, open the Comments tab, tick "Notify me of mentions when this page is closed", allow notifications, close the page, and have someone mention you. *You should see:* a notification naming who and the document; clicking it opens the page; unticking stops it (this last part with a real push service is not covered by an automated test). *Automated:* `TestMentionNotificationsWhenThePageIsClosed` (stand-ins for the push API), package `webpush` (encryption checked by an independent decryptor, VAPID, SSRF refusals, handler), package `mentionpush`, `wasmserve/sw-push.test.js` (`make sw-test`).
 
+## Text formats as they are
+
+**Try it.** Build with `GOFLAGS=-tags=exp_textformats` (or `experimental`), then on the Files tab open a `.csv`, a `.yaml` and a `.json` file that is data; or `opendoc pack out.opendoc folder` with such files in the folder.
+
+**You should see.** The CSV as a table with its first row as the header, the YAML and the JSON (indented) as code blocks; a file with binary content is left out with its reason.
+
+**Automated.** package `textimport` tests, `transfer/textformats_test.go`, `TestPackTakesTextFormats` (cmd/opendoc); `make test-experimental`
+
 ## Table grips and sizes
 
 **Try it.** In edit mode type three lines (`| Item | Qty |`, `|---|---|`, `| Pens | 1 |`) and Enter; drag the edge between the two column grips to the right, and the edge under the first row grip down.
