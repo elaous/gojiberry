@@ -398,6 +398,10 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Automated.** `TestScriptsRunInASandboxAndAskForWhatTheyMayHave` (examples/canvas-editor-showcase), package `script`.
 
+## Typed text in colour
+
+**Try it.** Open the same shared document in two browsers with different names and colours; type in one. *You should see:* in the other, the new text in the typer's colour, back to normal after about 4 seconds. **Automated.** `TestTextOthersTypedIsInTheirColourForAMoment` (collab), `TestTypedRangesAreDrawnInThePeersColour` (canvas); not covered between two real browsers.
+
 ## About and licence
 
 **Try it.** Open Help > About Gojiberry. *You should see:* the licence and credit text, and four links (source, licence, notice, commercial licence) that open the repository in a new tab. **Automated.** `TestAboutTabShowsTheCreditAndTheSourceLink` (examples/canvas-editor-showcase).

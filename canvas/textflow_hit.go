@@ -375,7 +375,7 @@ func (f *TextFlow) drawBody(lay Layout) {
 			if dp != nil && r.Level%2 == 1 {
 				dp.SetDirection("rtl")
 			}
-			f.fillRun(r, ln, x, y)
+			f.fillRunTyped(r, ln, x, y)
 			if dp != nil && r.Level%2 == 1 {
 				dp.SetDirection("ltr")
 			}

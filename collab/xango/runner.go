@@ -54,7 +54,7 @@ func (r *runner) loop() {
 	}
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
-	var lastCursor, lastCursors, lastState string
+	var lastCursor, lastCursors, lastTyped, lastState string
 	var lastPublish time.Time
 	for {
 		select {
@@ -90,6 +90,10 @@ func (r *runner) loop() {
 			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs, s.Holding); (c != lastCursor || renew) && s.Bridge.Ready() {
 				lastCursor, lastPublish = c, time.Now()
 				s.PublishCursor()
+			}
+			if typed := fmt.Sprint(r.flow.TypedRanges); typed != lastTyped {
+				lastTyped = typed
+				redraw = true
 			}
 			if cursors := fmt.Sprint(r.flow.RemoteCursors); cursors != lastCursors {
 				lastCursors = cursors

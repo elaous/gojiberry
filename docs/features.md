@@ -264,6 +264,10 @@ An optional mode (Preferences, off by default) in which the line you are typing 
 
 The Scripts tab runs a small script in a sandbox that has nothing of the page: no network, no storage, no document. The script can list the editor's commands, run any of them by name (so a command added later is reachable at once), say something in a log, and, if you allow it, read the text of the document or write text at the caret. It is stopped after ten seconds or on request. Run only scripts you wrote or trust: a script that may read the text could show it to its author (docs/scripting.md).
 
+## Typed text in colour
+
+When several people work in one document, text somebody else just typed shows in their colour (the colour of their cursor) for a few seconds and then goes back to normal, so you can see who is writing where. Your own typing and the document you just opened are not coloured.
+
 ## About and licence
 
 **Help > About Gojiberry** (and the About tab) shows what the program is, that it is free software under the GNU Affero General Public License version 3, the credit to keep ("Made with the Gojiberry project, github.com/elaous/gojiberry"), and links to the source code, the licence, the notice and the commercial licence. If you run a changed version for other people over a network, the AGPL asks you to offer them its source; a commercial licence is available for use the AGPL does not fit. See [licence.md](licence.md).
