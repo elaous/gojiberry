@@ -55,6 +55,7 @@ func (r *runner) loop() {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	var lastCursor, lastCursors, lastState string
+	var lastPublish time.Time
 	for {
 		select {
 		case <-r.quit:
@@ -81,8 +82,13 @@ func (r *runner) loop() {
 			// Tell the others where we are when the cursor moves, and also when
 			// the session becomes ready or reconnects (they know nothing of us
 			// until then, and the cursor may not move for a while).
-			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs); c != lastCursor && s.Bridge.Ready() {
-				lastCursor = c
+			if h := r.props.Load().Holding; h != nil {
+				s.Holding = h()
+			}
+			// A held object is renewed every few seconds, before the hub forgets the presence it came with.
+			renew := s.Holding != "" && time.Since(lastPublish) > holdRenew
+			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs, s.Holding); (c != lastCursor || renew) && s.Bridge.Ready() {
+				lastCursor, lastPublish = c, time.Now()
 				s.PublishCursor()
 			}
 			if cursors := fmt.Sprint(r.flow.RemoteCursors); cursors != lastCursors {
@@ -105,7 +111,7 @@ func (r *runner) loop() {
 // state summarises the session for OnState.
 func (r *runner) state() State {
 	s := r.sess
-	st := State{Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Merged: s.Merged, Rejected: s.Rejected, Conflicts: s.Conflicts, ConflictWith: slices.Clone(s.ConflictWith), Err: s.Err}
+	st := State{Replica: s.Replica(), Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Merged: s.Merged, Rejected: s.Rejected, Conflicts: s.Conflicts, ConflictWith: slices.Clone(s.ConflictWith), Err: s.Err}
 	if err := s.Bridge.Err(); err != nil && st.Err == nil {
 		st.Err = err
 	}
@@ -129,3 +135,6 @@ func (r *runner) state() State {
 	})
 	return st
 }
+
+// holdRenew is how often a held object is announced again.
+const holdRenew = 3 * time.Second

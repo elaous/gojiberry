@@ -82,6 +82,7 @@ var ErrNoFlow = errors.New("collab: no canvas.TextFlow inside the Collab element
 // State is what the wrapper tells OnState: the connection, who else is on the
 // document and what is waiting to be sent.
 type State struct {
+	Replica string // this session's own id: the others' Peers are the ones that are not it
 	Status  client.Status
 	Role    wire.Role
 	Peers   []wire.Presence // the other people, by name
@@ -124,6 +125,9 @@ type CollabProps struct {
 	// OnState is called when the connection, the people, the role or the
 	// waiting operations change; from the polling goroutine (or from Sync).
 	OnState func(State)
+	// Holding, when set, is asked every tick for the object this person is changing ("" for none), which goes to the
+	// others with the cursor and is renewed while it is held.
+	Holding func() string
 	// Sync, if set, runs f on the goroutine that owns the flow and the
 	// stage; the polling loop does all its work through it.
 	Sync func(f func())

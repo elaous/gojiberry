@@ -222,6 +222,7 @@ func (f *TextFlow) drawObject(o PlacedObject) {
 	ip, ok := f.Painter.(ImagePainter)
 	if !f.Vertical || !ok {
 		o.Object.DrawAt(f.Painter, o.X, o.Y)
+		f.drawBusy(o)
 		return
 	}
 	ip.Save()
