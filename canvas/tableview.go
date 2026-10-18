@@ -70,6 +70,10 @@ type TableView struct {
 	// rectangle (the background and the grid are already drawn, and the font and colour are those of the cell).
 	// Returning true says it drew the content; false lets the table write the text as usual. A cell being edited is
 	// always drawn by the table.
+	// penSwitch draws the formula switch as a pen instead of f(x): the tables in the text, which show fields as well as
+	// formulas (see table_fields.go).
+	penSwitch bool
+
 	// ShowFormulas shows the text of formula cells (=A1*B2) instead of their values; a view setting, like the
 	// edit mode. See formula.go.
 	ShowFormulas bool

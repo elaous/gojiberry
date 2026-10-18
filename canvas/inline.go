@@ -81,9 +81,9 @@ func (r *Rule) DrawAt(p Painter, x, y float64) {
 type TableObject struct {
 	View *TableView
 	w, h float64
-	// tableW is the width of the table itself; a table with a formula or a field has the grip of the eye/pen beside its top right corner,
-	// in a gutter that makes the object wider than the table (w).
-	tableW float64
+	// pad is the room around a table with a formula or a form field, above and at both sides, where the grips of its
+	// columns, rows and the eye/pen switch are drawn (the same grips as an editable table's); tableW is the table's own width.
+	pad, tableW float64
 }
 
 // NewTableObject wraps t for placing in a flow with Inline{Block: true}.
@@ -95,13 +95,14 @@ func NewTableObject(t *Table) *TableObject {
 func (o *TableObject) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	o.View.Painter = p
 	o.View.X, o.View.Y = 0, 0
-	edges, rows := o.View.ColumnEdges(), o.View.RowEdges()
-	o.tableW = min(edges[len(edges)-1], maxW)
-	o.w = o.tableW
+	o.pad = 0
 	if o.View.Table.HasFormulaOrField() {
-		o.w = min(edges[len(edges)-1]+o.View.Style.BarGap+o.View.Style.HandleSize, maxW)
+		o.pad = o.View.Style.HandleSize + o.View.Style.BarGap
 	}
-	o.h = min(rows[len(rows)-1]+6, maxH) // a little air below the table
+	edges, rows := o.View.ColumnEdges(), o.View.RowEdges()
+	o.tableW = min(edges[len(edges)-1], maxW-2*o.pad)
+	o.w = o.tableW + 2*o.pad
+	o.h = min(o.pad+rows[len(rows)-1]+6, maxH) // a little air below the table
 	return o.w, o.h
 }
 
@@ -118,25 +119,27 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 		c.ClipRect(x, y, o.w, o.h)
 		defer c.Restore()
 	}
-	o.View.X, o.View.Y = x, y
+	o.View.X, o.View.Y = x+o.pad, y+o.pad
 	o.View.Draw()
-	if o.View.Table.HasFormulaOrField() {
-		o.drawSwitch(p, x, y)
+	if o.pad > 0 {
+		o.View.penSwitch = true
+		o.View.drawHandles(o.View.layout())
 	}
 }
 
-// ClickAt implements ClickObject: a press on the switch at the top right changes the view, and a press on a cell that is
-// a form field fills it in (a checkbox is ticked) or, in the formula view, changes it. The table is read-only in the
-// text otherwise, so a press anywhere else is not used.
+// ClickAt implements ClickObject: a press on the switch beside the top right corner changes the view, and a press on a
+// cell that is a form field fills it in (a checkbox is ticked) or, in the formula view, changes it. The table is
+// read-only in the text otherwise, so a press anywhere else is not used.
 func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 	v := o.View
-	if v == nil || v.Table == nil || v.Painter == nil || !v.Table.HasFormulaOrField() {
+	if v == nil || v.Table == nil || v.Painter == nil || o.pad == 0 {
 		return false, false
 	}
 	if r := o.switchRect(); x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] {
 		v.SetShowFormulas(!v.ShowFormulas) // a view setting: nothing to save
 		return true, false
 	}
+	x, y = x-o.pad, y-o.pad
 	oldX, oldY := v.X, v.Y
 	v.X, v.Y = 0, 0
 	g := v.layout()

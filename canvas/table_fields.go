@@ -117,47 +117,11 @@ func (t *Table) HasFormulaOrField() bool {
 	return false
 }
 
-// The switch of a table in the text is a grip like the ones of an editable table (HitFormulaSwitch): beside its top right
-// corner, an eye while the values and what was filled in are shown ("see all"), a pen while the formulas and the
-// definitions of the fields are ("edit all"). Where the column leaves no room beside the table it overlaps the corner.
+// switchRect is where the switch of a table in the text is, relative to the object: the grip of an editable table's
+// HitFormulaSwitch, beside the top right corner, in the pad around the table.
 func (o *TableObject) switchRect() [4]float64 {
 	hs := o.View.Style.HandleSize
-	return [4]float64{min(o.tableW+o.View.Style.BarGap, o.w-hs), 0, hs, hs}
-}
-
-func (o *TableObject) drawSwitch(p Painter, x, y float64) {
-	v := o.View
-	r := o.switchRect()
-	px, py := x+r[0]+2, y+r[1]+2 // as the grips of an editable table: the pill is the grip less two pixels all round
-	pw, ph := r[2]-4, r[3]-4
-	v.fillPill(px, py, pw, ph, false, false)
-	ink := v.iconColor(false)
-	p.SetFillStyle(ink)
-	p.SetStrokeStyle(ink)
-	p.SetLineWidth(1.2)
-	cx, cy := px+pw/2, py+ph/2
-	p.BeginPath()
-	if v.ShowFormulas { // a pen
-		p.MoveTo(cx-5, cy+5)
-		p.LineTo(cx-5, cy+2)
-		p.LineTo(cx+3, cy-6)
-		p.LineTo(cx+6, cy-3)
-		p.LineTo(cx-2, cy+5)
-		p.LineTo(cx-5, cy+5)
-		p.Stroke()
-		return
-	}
-	p.MoveTo(cx-6, cy) // an eye
-	p.LineTo(cx-3.5, cy-2.5)
-	p.LineTo(cx, cy-3.8)
-	p.LineTo(cx+3.5, cy-2.5)
-	p.LineTo(cx+6, cy)
-	p.LineTo(cx+3.5, cy+2.5)
-	p.LineTo(cx, cy+3.8)
-	p.LineTo(cx-3.5, cy+2.5)
-	p.LineTo(cx-6, cy)
-	p.Stroke()
-	p.FillRect(cx-1.5, cy-1.5, 3, 3)
+	return [4]float64{o.pad + o.tableW + o.View.Style.BarGap, 0, hs, hs}
 }
 
 // ShowTableFormulas puts every table of the flow in the formula view ("edit all": formulas as typed, fields as what
