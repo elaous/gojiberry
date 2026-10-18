@@ -7,6 +7,12 @@
 .PHONY: check
 check: generate generate-check docs docs-check fmt-check vet test wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
 
+.PHONY: piper-runtime-test
+# The reference Piper runtime (examples/piper-runtime): the parts that need no model. With PIPER_RUNTIME_MODELS and onnxruntime-web
+# installed it runs the real models too (see that folder's README). Not part of check: it needs node.
+piper-runtime-test:
+	node --test examples/piper-runtime/piper-runtime.test.js
+
 .PHONY: generate
 generate:
 	go generate ./...
