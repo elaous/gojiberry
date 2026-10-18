@@ -29,6 +29,16 @@ type CatalogueVoice struct {
 	ModelMD5, ConfigMD5   string
 	// Card is the path of the model card, which says whose voice it is and under what terms its data is used.
 	Card string
+
+	// Base is the address the paths are below ("" is the engine's Config.Base): a voice of another repository has its own.
+	Base string
+	// Source says which source the voice is listed by ("hub", a repository's id), "" for the engine's own catalogue.
+	Source string
+	// Licence is the name of the terms of the voice's data ("CC0 1.0"), LicenceURL where they are written, Credit what the
+	// terms ask to be said, Dataset where the recordings come from; all "" for a voice whose source does not say (the
+	// model card then does). Gender and Accent are for a person to choose by when the name does not say.
+	Licence, LicenceURL, Credit, Dataset string
+	Gender                               string
 }
 
 // Size is what installing the voice downloads.
@@ -83,6 +93,11 @@ func ParseCatalogue(data []byte) ([]CatalogueVoice, error) {
 // ForLanguage lists the voices of a language tag: the same base language ("de" for "de-AT"), the exact tag first,
 // then by quality (high first), then by name.
 func ForLanguage(all []CatalogueVoice, lang string) []CatalogueVoice {
+	if lang == "*" { // every language
+		out := append([]CatalogueVoice(nil), all...)
+		sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+		return out
+	}
 	lang = strings.ToLower(strings.ReplaceAll(lang, "_", "-"))
 	base, _, _ := strings.Cut(lang, "-")
 	var out []CatalogueVoice
@@ -112,4 +127,12 @@ func ForLanguage(all []CatalogueVoice, lang string) []CatalogueVoice {
 // asVoice describes a catalogue voice for the player's lists.
 func (c CatalogueVoice) asVoice() read.Voice {
 	return read.Voice{ID: c.ID, Name: strings.ToUpper(c.Name[:min(1, len(c.Name))]) + c.Name[min(1, len(c.Name)):], Lang: c.Lang, Local: true}
+}
+
+// base is the address the voice's paths are below, the given default when it has none of its own.
+func (c CatalogueVoice) base(def string) string {
+	if c.Base != "" {
+		return c.Base
+	}
+	return def
 }

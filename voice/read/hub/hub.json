@@ -1,0 +1,31 @@
+{
+  "about": "A short list of voices the project has read the terms of. Each is a Piper voice from the rhasspy/piper-voices repository; the licence is the one on the voice's model card on the day named below, copied here so it is shown before anything is downloaded. Reading a model card is not legal advice: the terms of the recordings are the dataset owner's, and a person who uses a voice for something they sell should read them again.",
+  "read": "2026-10-18",
+  "base": "https://huggingface.co/rhasspy/piper-voices/resolve/main/",
+  "voices": [
+    {"id": "en_US-joe-medium", "name": "Joe", "lang": "en-US", "gender": "male", "quality": "medium",
+     "model": "en/en_US/joe/medium/en_US-joe-medium.onnx", "modelSize": 63201294, "modelMD5": "74fd6a4dc39e0aa9dce145d7f5acd4f6",
+     "config": "en/en_US/joe/medium/en_US-joe-medium.onnx.json", "configSize": 4794, "configMD5": "811036b9c1451545f9495fdc1baa0754",
+     "card": "en/en_US/joe/medium/MODEL_CARD",
+     "licence": "CC0 1.0 (public domain dedication)", "licenceURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+     "credit": "", "dataset": "https://github.com/OHF-Voice/voice-datasets"},
+    {"id": "en_US-kristin-medium", "name": "Kristin", "lang": "en-US", "gender": "female", "quality": "medium",
+     "model": "en/en_US/kristin/medium/en_US-kristin-medium.onnx", "modelSize": 63531379, "modelMD5": "5fed42d2296baca042e2bf74785db725",
+     "config": "en/en_US/kristin/medium/en_US-kristin-medium.onnx.json", "configSize": 4968, "configMD5": "70bc97d350c796c64ea5e4d08241afac",
+     "card": "en/en_US/kristin/medium/MODEL_CARD",
+     "licence": "Public domain (LibriVox recordings)", "licenceURL": "https://librivox.org/pages/public-domain/",
+     "credit": "", "dataset": "https://librivox.org"},
+    {"id": "en_GB-cori-medium", "name": "Cori", "lang": "en-GB", "gender": "female", "quality": "medium",
+     "model": "en/en_GB/cori/medium/en_GB-cori-medium.onnx", "modelSize": 63531379, "modelMD5": "f143307611eccea9d976235d0895f57c",
+     "config": "en/en_GB/cori/medium/en_GB-cori-medium.onnx.json", "configSize": 4966, "configMD5": "12b1dc45d8919f3475cf296d5f16a4c6",
+     "card": "en/en_GB/cori/medium/MODEL_CARD",
+     "licence": "Public domain (LibriVox recordings)", "licenceURL": "https://librivox.org/pages/public-domain/",
+     "credit": "", "dataset": "https://librivox.org"},
+    {"id": "en_GB-northern_english_male-medium", "name": "Northern English male", "lang": "en-GB", "gender": "male", "quality": "medium",
+     "model": "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx", "modelSize": 63201294, "modelMD5": "4c9a9735bfb76ad67c8b31b23d6840a0",
+     "config": "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json", "configSize": 4847, "configMD5": "0ce3f61a9604616ed475c921fdeedb1a",
+     "card": "en/en_GB/northern_english_male/medium/MODEL_CARD",
+     "licence": "CC BY-SA 4.0 (credit, and the same terms for what is made from the data)", "licenceURL": "https://creativecommons.org/licenses/by-sa/4.0/",
+     "credit": "Recordings: Google, Crowdsourced high-quality UK and Ireland English dialect speech data set (OpenSLR 83), CC BY-SA 4.0", "dataset": "http://www.openslr.org/83/"}
+  ]
+}

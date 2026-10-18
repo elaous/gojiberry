@@ -122,11 +122,44 @@ func (e *Engine) Catalogue(lang string) []read.Installable {
 	for _, c := range ForLanguage(e.catalogue, lang) {
 		card := ""
 		if c.Card != "" {
-			card = e.Config.Base + c.Card
+			card = c.base(e.Config.Base) + c.Card
 		}
-		out = append(out, read.Installable{Voice: c.asVoice(), Size: c.Size(), Quality: c.Quality, Licence: card, Installed: e.installed[c.ID]})
+		if c.LicenceURL != "" {
+			card = c.LicenceURL
+		}
+		out = append(out, read.Installable{Voice: c.asVoice(), Size: c.Size(), Quality: c.Quality, Licence: card, Terms: c.Licence, Credit: c.Credit, Source: c.Source, Installed: e.installed[c.ID]})
 	}
 	return out
+}
+
+// AddVoices adds voices of another source (the hub, a repository the person added) to the catalogue, replacing the ones
+// with the same ID. Nothing is fetched.
+func (e *Engine) AddVoices(list []CatalogueVoice) {
+	for _, v := range list {
+		replaced := false
+		for i := range e.catalogue {
+			if e.catalogue[i].ID == v.ID {
+				e.catalogue[i], replaced = v, true
+			}
+		}
+		if !replaced {
+			e.catalogue = append(e.catalogue, v)
+		}
+	}
+}
+
+// SourceVoices is the voices of one source for a language ("" lists every source's own: the engine's catalogue).
+func (e *Engine) SourceVoices(source, lang string) []read.Installable {
+	var own []CatalogueVoice
+	for _, c := range e.catalogue {
+		if c.Source == source {
+			own = append(own, c)
+		}
+	}
+	saved := e.catalogue
+	e.catalogue = own
+	defer func() { e.catalogue = saved }()
+	return e.Catalogue(lang)
 }
 
 func (e *Engine) find(id string) (CatalogueVoice, bool) {
@@ -166,7 +199,7 @@ func (e *Engine) Install(ctx context.Context, id string, progress func(done, tot
 		}
 		return nil
 	}
-	e.Fetcher.Fetch(ctx, e.Config.Base+v.Config, report(0), func(cfg []byte, err error) {
+	e.Fetcher.Fetch(ctx, v.base(e.Config.Base)+v.Config, report(0), func(cfg []byte, err error) {
 		if err == nil {
 			err = check(cfg, v.ConfigSize, v.ConfigMD5)
 		}
@@ -174,7 +207,7 @@ func (e *Engine) Install(ctx context.Context, id string, progress func(done, tot
 			done(err)
 			return
 		}
-		e.Fetcher.Fetch(ctx, e.Config.Base+v.Model, report(int64(len(cfg))), func(model []byte, err error) {
+		e.Fetcher.Fetch(ctx, v.base(e.Config.Base)+v.Model, report(int64(len(cfg))), func(model []byte, err error) {
 			if err == nil {
 				err = check(model, v.ModelSize, v.ModelMD5)
 			}
