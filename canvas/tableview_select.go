@@ -146,7 +146,17 @@ func (v *TableView) drawHandles(g geometry) {
 		p.SetFillStyle(v.iconColor(false))
 		p.SetStrokeStyle(v.iconColor(false))
 		cx, cy := px+pw/2, py+ph/2
-		if v.ShowFormulas {
+		if v.ShowFormulas && v.penSwitch {
+			p.SetLineWidth(1.2)
+			p.BeginPath() // a pen
+			p.MoveTo(cx-4, cy+4)
+			p.LineTo(cx-4, cy+1.5)
+			p.LineTo(cx+2.5, cy-5)
+			p.LineTo(cx+5, cy-2.5)
+			p.LineTo(cx-1.5, cy+4)
+			p.LineTo(cx-4, cy+4)
+			p.Stroke()
+		} else if v.ShowFormulas {
 			p.SetFont("italic 600 10px serif")
 			p.SetTextAlign("center")
 			p.SetTextBaseline("middle")

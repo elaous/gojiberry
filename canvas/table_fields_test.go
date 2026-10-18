@@ -125,21 +125,25 @@ func TestPressingAFieldInATableInTheText(t *testing.T) {
 	tb.SetField(1, 1, f)
 	o := NewTableObject(tb)
 	o.Measure(&fakePainter{}, 1000, 1000)
+	pad := o.pad
+	if pad == 0 {
+		t.Fatal("a table with a field has room around it for its grips")
+	}
 	filled := 0
 	o.View.OnFieldFill = func(r, c int, _ *FormFieldObject) {
 		if r == 1 && c == 1 {
 			filled++
 		}
 	}
-	if used, _ := o.ClickAt(10, 10); used {
+	if used, _ := o.ClickAt(pad+10, pad+10); used {
 		t.Fatal("an ordinary cell takes no press")
 	}
-	if used, changed := o.ClickAt(100, 40); !used || changed || filled != 1 {
+	if used, changed := o.ClickAt(pad+100, pad+40); !used || changed || filled != 1 {
 		t.Fatalf("field cell: used %v changed %v filled %d", used, changed, filled)
 	}
 	cb := NewFormField(FormCheckbox, "Agree")
 	tb.SetField(1, 0, cb)
-	if used, changed := o.ClickAt(10, 40); !used || !changed || cb.Value != "true" {
+	if used, changed := o.ClickAt(pad+10, pad+40); !used || !changed || cb.Value != "true" {
 		t.Fatalf("checkbox: used %v changed %v value %q", used, changed, cb.Value)
 	}
 }
@@ -163,14 +167,15 @@ func TestTheSwitchOfATableInTheText(t *testing.T) {
 		t.Fatal("a table with no formula or field has no switch")
 	}
 	// in the formula view a field cell is changed, not filled in
+	pad2 := o.pad
 	f := NewFormField(FormText, "Name")
 	tb.SetField(1, 0, f)
 	var filled, edited int
 	o.View.OnFieldFill = func(int, int, *FormFieldObject) { filled++ }
 	o.View.OnFieldEdit = func(int, int, *FormFieldObject) { edited++ }
-	o.ClickAt(10, 40)
+	o.ClickAt(pad2+10, pad2+40)
 	o.ClickAt(r[0]+2, r[1]+2)
-	o.ClickAt(10, 40)
+	o.ClickAt(pad2+10, pad2+40)
 	if filled != 1 || edited != 1 {
 		t.Fatalf("filled %d edited %d", filled, edited)
 	}
