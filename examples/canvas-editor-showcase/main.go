@@ -68,14 +68,20 @@ type ui struct {
 	docLang                      string             // the document's language (a BCP 47 tag), "" for none
 	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
 	// the Images tab: the last message, and whether the first undescribed picture takes the focus
-	imageMsg        string
-	tableStyle      tableStyleForm // the table style being defined (Styles tab)
-	refs            refsState      // the sources the document cites (References tab)
-	imgFind         imageFind      // the "find a picture online" form of the Pictures tab
-	mapHolder                      // the map form of the Pictures tab (map.go; nothing in a build without exp_map)
-	media           mediaForm      // the clip being typed in the Pictures tab and the caption drafts
-	formsHolder                    // the Forms tab's state (forms.go; nothing in a build without exp_forms)
-	elements        elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
+	imageMsg   string
+	tableStyle tableStyleForm // the table style being defined (Styles tab)
+	refs       refsState      // the sources the document cites (References tab)
+	imgFind    imageFind      // the "find a picture online" form of the Pictures tab
+	mapHolder                 // the map form of the Pictures tab (map.go; nothing in a build without exp_map)
+	hold       struct {
+		key   string
+		until time.Time
+	} // the object this person is changing, shown to the others as busy (locks.go)
+	flowNow         func() *canvas.TextFlow
+	redrawCanvas    func()
+	media           mediaForm    // the clip being typed in the Pictures tab and the caption drafts
+	formsHolder                  // the Forms tab's state (forms.go; nothing in a build without exp_forms)
+	elements        elementsForm // the equation being typed and the last message of the equation and code parts of the tab
 	sugg            suggestState
 	ghost           ghostUI
 	stateRef        *State                 // the document state, for what the announcer needs of it
@@ -253,6 +259,7 @@ func main() {
 		}
 		flow = root.Find(cxango.TagTextFlow, 0).(*canvas.TextFlow)
 		u.wireForms(flow, redraw, renderUI)
+		u.refreshBusy()
 		stage.Draw()
 	}
 
@@ -1087,6 +1094,7 @@ func main() {
 		},
 	}
 	u.stateRef = &state
+	u.flowNow, u.redrawCanvas = func() *canvas.TextFlow { return flow }, func() { redraw() }
 	state.CompleteFeature = canvas.CompleteFeature{OnOpen: func() { u.openSuggestions(flow, stage, canvasEl.Element, false, renderUI) }}
 	state.Review = canvas.Review{
 		OnMode: func(on bool) {

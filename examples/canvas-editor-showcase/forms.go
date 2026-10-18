@@ -103,7 +103,9 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 	}
 	for _, o := range fl.Tables() { // a field in a table cell: the press that lands on the cell
 		o.View.OnFieldFill = func(_, _ int, ff *canvas.FormFieldObject) {
-			u.forms = formsState{target: ff, focus: true}
+			if !u.openField(ff, false, renderUI) {
+				return
+			}
 			u.tab = "forms"
 			renderUI()
 		}
@@ -111,7 +113,9 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 			if !u.canEditFormProps(ff) {
 				return
 			}
-			u.forms = formsState{target: ff, edit: true, focus: true}
+			if !u.openField(ff, true, renderUI) {
+				return
+			}
 			u.tab = "forms"
 			renderUI()
 		}
@@ -119,7 +123,9 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 	for _, ff := range fl.FormFields() {
 		ff := ff
 		ff.OnFill = func(*canvas.FormFieldObject) {
-			u.forms = formsState{target: ff, focus: true}
+			if !u.openField(ff, false, renderUI) {
+				return
+			}
 			u.tab = "forms"
 			renderUI()
 		}
@@ -127,7 +133,9 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 			if !u.canEditFormProps(ff) {
 				return
 			}
-			u.forms = formsState{target: ff, edit: true, focus: true}
+			if !u.openField(ff, true, renderUI) {
+				return
+			}
 			u.tab = "forms"
 			renderUI()
 		}
@@ -248,7 +256,14 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "forms-message"), xango.A("role", "status")}, xango.Text(u.forms.msg)))
 	}
 
-	// the field being filled in or changed
+	// the field being filled in or changed: held while it is (renewed at each change), let go when it is closed
+	if t := u.forms.target; t != nil && !u.claim(fieldKey(t.Name), T("lock.field", "form field"), renderUI) {
+		u.forms.target = nil
+	} else if t == nil {
+		if k := u.hold.key; strings.HasPrefix(k, "field:") {
+			u.release(k)
+		}
+	}
 	if t := u.forms.target; t != nil {
 		if u.forms.edit && u.canEditFormProps(t) {
 			nodes = append(nodes, formPropsEditor(u, fl, t, redraw, renderUI))
@@ -296,11 +311,16 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 			}
 		}
 		kids = append(kids,
-			btn(fmt.Sprintf("forms-fill-%d", i), T("forms.fill", "Fill in"), func() { u.forms = formsState{target: ff, focus: true}; renderUI() }, false))
+			btn(fmt.Sprintf("forms-fill-%d", i), T("forms.fill", "Fill in"), func() {
+				if u.openField(ff, false, renderUI) {
+					renderUI()
+				}
+			}, false))
 		if !ff.Locked {
 			kids = append(kids, btn(fmt.Sprintf("forms-edit-%d", i), T("forms.edit", "Change the field"), func() {
-				u.forms = formsState{target: ff, edit: true, focus: true}
-				renderUI()
+				if u.openField(ff, true, renderUI) {
+					renderUI()
+				}
 			}, !canEdit))
 		}
 		lockLabel := T("forms.lock", "Lock")
@@ -556,4 +576,21 @@ func (u *ui) cellTargetNodes(fl *canvas.TextFlow, redraw, renderUI func()) []xan
 		nodes = append(nodes, num("forms-cell-table", T("forms.cellTable", "Table"), &c.table), num("forms-cell-row", T("forms.cellRow", "Row"), &c.row), num("forms-cell-column", T("forms.cellColumn", "Column"), &c.column))
 	}
 	return nodes
+}
+
+// openField opens a field to fill in or to change, unless somebody else is at it.
+func (u *ui) openField(ff *canvas.FormFieldObject, edit bool, renderUI func()) bool {
+	if !u.claim(fieldKey(ff.Name), T("lock.field", "form field"), renderUI) {
+		return false
+	}
+	u.forms = formsState{target: ff, edit: edit, focus: true}
+	return true
+}
+
+// release lets the object go.
+func (u *ui) release(key string) {
+	if u.hold.key == key {
+		u.hold.key = ""
+		u.refreshBusy()
+	}
 }

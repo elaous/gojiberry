@@ -1817,6 +1817,12 @@
   "map.lookupFailed": "No se pudo buscar la dirección (el servicio no respondió).",
   "map.renderFailed": "No se pudo dibujar el mapa (el servidor de teselas no respondió).",
   "map.alt": "Mapa de %s",
-  "scripts.allowChange": "Puede cambiar el documento: formato, estilos, descripciones de imágenes, título, idioma, o todo desde Markdown"
+  "scripts.allowChange": "Puede cambiar el documento: formato, estilos, descripciones de imágenes, título, idioma, o todo desde Markdown",
+  "lock.busy": "Ocupado: %s está cambiando este elemento (%s).",
+  "lock.lost": "Ocupado: %s llegó primero.",
+  "lock.someone": "alguien",
+  "lock.picture": "imagen",
+  "lock.equation": "ecuación",
+  "lock.field": "campo de formulario"
  }
 }

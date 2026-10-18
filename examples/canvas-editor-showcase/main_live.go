@@ -59,8 +59,11 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		Replica:   fmt.Sprintf("%s-%d", name, int(js.Global().Get("Math").Call("random").Float()*1e9)),
 		Name:      name,
 		Color:     u.liveColor,
+		Holding:   u.holding,
 		OnState: func(st collabxango.State) {
 			u.live = &st
+			u.contend()
+			u.refreshBusy()
 			u.noteCollab(renderUI)
 			if role := canvas.ParseRole(string(st.Role)); st.Role != "" && role != state.Role {
 				state.Role = role
@@ -89,7 +92,14 @@ func liveState(u *ui, flow *canvas.TextFlow) any {
 	if s.Err != nil {
 		errText = s.Err.Error()
 	}
-	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "remote": len(flow.RemoteCursors),
+	held := []string{}
+	for _, p := range s.Peers {
+		if p.Holding != "" {
+			held = append(held, p.Name+"="+p.Holding)
+		}
+	}
+	slices.Sort(held)
+	return map[string]any{"role": string(s.Role), "status": s.Status.String(), "peers": names, "holding": held, "remote": len(flow.RemoteCursors),
 		"pending": s.Pending, "repairs": s.Repairs, "error": errText}
 }
 

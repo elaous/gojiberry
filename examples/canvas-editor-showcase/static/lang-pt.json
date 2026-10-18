@@ -1817,6 +1817,12 @@
     "map.lookupFailed": "Não foi possível procurar a morada (o serviço não respondeu).",
     "map.renderFailed": "Não foi possível desenhar o mapa (o servidor de mosaicos não respondeu).",
     "map.alt": "Mapa de %s",
-    "scripts.allowChange": "Pode alterar o documento: formatação, estilos, descrições de imagens, título, idioma, ou tudo a partir de Markdown"
+    "scripts.allowChange": "Pode alterar o documento: formatação, estilos, descrições de imagens, título, idioma, ou tudo a partir de Markdown",
+    "lock.busy": "Ocupado: %s está a alterar este elemento (%s).",
+    "lock.lost": "Ocupado: %s chegou primeiro.",
+    "lock.someone": "alguém",
+    "lock.picture": "imagem",
+    "lock.equation": "equação",
+    "lock.field": "campo de formulário"
   }
 }

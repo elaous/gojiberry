@@ -43,6 +43,8 @@ type Session struct {
 	ConflictWith []string
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
+	// Holding is the object this person is changing, sent with the cursor (see wire.Presence.Holding); the host sets it.
+	Holding string
 
 	replica   string
 	names     map[string]string // the name each replica gave, kept after it leaves, for saying who did something
@@ -128,6 +130,9 @@ func (s *Session) noteConflict(c Conflict) {
 		s.ConflictWith = append(s.ConflictWith, name)
 	}
 }
+
+// Replica is this session's replica id, as the others see it in their presence lists.
+func (s *Session) Replica() string { return s.replica }
 
 // Close ends the connection.
 func (s *Session) Close() { s.Conn.Close() }
@@ -247,7 +252,7 @@ func (s *Session) PublishCursor() {
 	atoms, ids := b.read(), b.Doc.VisibleIDs(block)
 	c := b.Flow.Cursors()[0]
 	a, p := b.anchorOf(atoms, ids, c.Anchor), b.anchorOf(atoms, ids, c.Caret)
-	s.Conn.SetPresence(wire.Presence{Name: s.Name, Color: s.Color, Has: true, Anchor: a.id, Caret: p.id})
+	s.Conn.SetPresence(wire.Presence{Name: s.Name, Color: s.Color, Has: true, Anchor: a.id, Caret: p.id, Holding: s.Holding})
 }
 
 // PeerCursor is another person's cursor placed in your flow.

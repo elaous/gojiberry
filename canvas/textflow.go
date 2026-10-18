@@ -240,6 +240,8 @@ type TextFlow struct {
 	Comments *CommentSet
 	// RemoteCursors are other people's cursors, drawn with a name flag.
 	RemoteCursors []RemoteCursor
+	// ObjectBusy marks inline objects somebody is changing (see Busy); the host keeps it up to date.
+	ObjectBusy map[InlineObject]Busy
 	// UndoHook, if set, handles Undo and Redo (redo says which) instead of
 	// the flow's own snapshot history: the collab bridge uses it to undo only
 	// your own changes while others edit too.
