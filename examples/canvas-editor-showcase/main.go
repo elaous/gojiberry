@@ -73,7 +73,7 @@ type ui struct {
 	refs            refsState      // the sources the document cites (References tab)
 	imgFind         imageFind      // the "find a picture online" form of the Pictures tab
 	media           mediaForm      // the clip being typed in the Pictures tab and the caption drafts
-	forms           formsState     // the Forms tab: the field being filled in or changed
+	formsHolder                    // the Forms tab's state (forms.go; nothing in a build without exp_forms)
 	elements        elementsForm   // the equation being typed and the last message of the equation and code parts of the tab
 	sugg            suggestState
 	ghost           ghostUI
@@ -474,7 +474,7 @@ func main() {
 				{Label: T("menu.public", "Share with a public link…"), OnSelect: func() { u.tab = "public"; renderUI() }},
 			}},
 			{Label: T("menu.edit", "Edit"), Items: components.CommandMenu(stage.Features.Commands(), keymap, mac, run)},
-			{Label: T("menu.insert", "Insert"), Items: []components.MenuItem{
+			{Label: T("menu.insert", "Insert"), Items: withoutBlank([]components.MenuItem{
 				{Label: "Word count…", OnSelect: func() { u.tab = "stats"; renderUI() }},
 				{Label: "Share selection…", OnSelect: func() { u.tab = "share"; renderUI() }},
 				{Label: T("menu.privacy", "Usage statistics…"), OnSelect: func() { u.tab = "privacy"; renderUI() }},
@@ -487,11 +487,11 @@ func main() {
 				{Label: "Index", OnSelect: func() { run(canvas.CmdIndexInsert) }},
 				{Label: "Link…", Shortcut: components.FormatChord("Mod+K", mac), OnSelect: func() { run(canvas.CmdEditLink) }},
 				{Label: T("menu.picture", "Picture…"), OnSelect: func() { u.tab = "images"; renderUI() }},
-				{Label: T("menu.forms", "Form fields"), Items: formsMenu(u, func() *canvas.TextFlow { return flow }, redraw, renderUI)},
+				formsMenuItem(u, func() *canvas.TextFlow { return flow }, redraw, renderUI),
 				{Separator: true},
 				{Label: "Page break", Shortcut: components.FormatChord("Mod+Enter", mac), OnSelect: func() { run(canvas.CmdPageBreak) }},
 				{Label: "Column break", Shortcut: components.FormatChord("Mod+Shift+Enter", mac), OnSelect: func() { run(canvas.CmdColumnBreak) }},
-			}},
+			})},
 			{Label: "Format", Items: []components.MenuItem{
 				{Label: "Bold", Shortcut: components.FormatChord("Mod+B", mac), OnSelect: func() { run(canvas.CmdBold) }},
 				{Label: "Italic", Shortcut: components.FormatChord("Mod+I", mac), OnSelect: func() { run(canvas.CmdItalic) }},
@@ -524,7 +524,7 @@ func main() {
 			// along it), laid out as before (display:contents)
 			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
-				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), tabButton(u, "forms", "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI), tabButton(u, "scripts", "Scripts", renderUI),
+				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), formsTab(u, "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI), tabButton(u, "scripts", "Scripts", renderUI),
 				tabButton(u, "find", "Find", renderUI), tabButton(u, "spell", "Spelling", renderUI), tabButton(u, "language", "Language", renderUI), tabButton(u, "stats", "Stats", renderUI), tabButton(u, "share", "Share", renderUI), tabButton(u, "people", "People", renderUI),
 				tabButton(u, "migrate", "Migrate", renderUI), tabButton(u, "console", "Console", renderUI), tabButton(u, "public", "Public link", renderUI), tabButton(u, "page", "Page", renderUI), tabButton(u, "save", "Save", renderUI), tabButton(u, "transfer", "Files", renderUI), tabButton(u, "speech", "Speech", renderUI), tabButton(u, "privacy", "Privacy", renderUI), tabButton(u, "prefs", "Preferences", renderUI)),
 		)
