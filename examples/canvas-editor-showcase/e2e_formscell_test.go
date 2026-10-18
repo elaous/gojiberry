@@ -37,18 +37,18 @@ func TestAFormFieldInATableCell(t *testing.T) {
 	d.OK(d.Has("#forms-uncell-0"), "the field is in a table cell")
 
 	// a press on the cell in the text opens it for filling in
-	d.CanvasClick(340, 75) // the cell of the table (the canvas is scrolled sideways in the test window)
+	d.CanvasClick(360, 93) // the cell of the table (the canvas is scrolled sideways in the test window)
 	d.WaitSelector("#forms-input")
 	d.Fill("#forms-input", "7")
 	d.Click("#forms-fill-done")
 
 	// the pen at the top right of the table: formulas and fields as they are defined, and a press changes the field
-	d.CanvasClick(412, 38) // the grip of the eye/pen beside the top right corner of the table (wider once filled in)
-	d.CanvasClick(340, 75)
+	d.CanvasClick(429, 35) // the grip of the eye/pen beside the top right corner of the table (wider once filled in)
+	d.CanvasClick(360, 93)
 	d.WaitSelector("#forms-editor")
 	d.Click("#forms-edit-done")
 	d.Click("#forms-see-all")
-	d.CanvasClick(340, 75)
+	d.CanvasClick(360, 93)
 	d.WaitSelector("#forms-input")
 	d.Click("#forms-fill-done")
 
