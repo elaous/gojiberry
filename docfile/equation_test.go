@@ -198,3 +198,31 @@ func TestTableCellFieldRoundTrips(t *testing.T) {
 		t.Fatalf("cleared %d, cell %q", n, f.Tables()[0].View.Table.Cell(1, 1))
 	}
 }
+
+// Sizes set by dragging a grip are saved with the table and come back.
+func TestTableSizesRoundTrip(t *testing.T) {
+	d := Document{Title: "T", Content: []Item{
+		{Table: &TableItem{Rows: []TableRow{{Cells: []string{"a", "b"}}, {Cells: []string{"c", "d"}}}, ColWidths: []float64{0, 140}, RowHeights: []float64{0, 48}}},
+		{Chars: &Chars{Text: "\n"}},
+	}}
+	for _, c := range Formats() {
+		b, err := c.Marshal(d)
+		if err != nil {
+			t.Fatalf("%s: %v", c.Name(), err)
+		}
+		got, err := c.Unmarshal(b)
+		if err != nil || !reflect.DeepEqual(got, d) {
+			t.Errorf("%s: read back %+v, %v", c.Name(), got, err)
+		}
+	}
+	f := &canvas.TextFlow{}
+	d.Apply(f)
+	tb := f.Tables()[0].View.Table
+	if tb.ColumnWidth(1) != 140 || tb.RowHeightSet(1) != 48 || tb.ColumnWidth(0) != 0 {
+		t.Fatalf("sizes %v %v", tb.ColWidths, tb.RowHeights)
+	}
+	back := FromFlow("T", f).Content
+	if got := back[0].Table; got == nil || got.ColWidths[1] != 140 || got.RowHeights[1] != 48 {
+		t.Fatalf("back %+v", got)
+	}
+}

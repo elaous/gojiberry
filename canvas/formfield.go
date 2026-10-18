@@ -372,6 +372,14 @@ func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	return false, false
 }
 
+// DragObject is an InlineObject that can be dragged (a table's column or row grip resizes it): (x, y) are relative to
+// the object's top-left corner. DragStart says whether the press began a drag; DragMove reports whether the content changed.
+type DragObject interface {
+	DragStart(x, y float64) bool
+	DragMove(x, y float64) (changed bool)
+	DragEnd()
+}
+
 var _ ClickObject = (*FormFieldObject)(nil)
 
 // FormFields lists the form fields in the flow's content, in reading order, those in table cells included.
@@ -421,6 +429,22 @@ func (f *TextFlow) ClearFormFields() int {
 		f.changed()
 	}
 	return n
+}
+
+// objectDragStart gives a press to the inline object under (x, y) that can be dragged, and remembers it.
+func (f *TextFlow) objectDragStart(x, y float64) bool {
+	for _, ln := range f.Layout().Lines {
+		for _, o := range ln.Objects {
+			if x < o.X || x >= o.X+o.W || y < o.Y || y >= o.Y+o.H {
+				continue
+			}
+			if do, ok := o.Object.(DragObject); ok && do.DragStart(x-o.X, y-o.Y) {
+				f.objDrag, f.objDragX, f.objDragY = do, o.X, o.Y
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // objectClickAt gives a press to the inline object under (x, y) that takes presses.

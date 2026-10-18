@@ -267,6 +267,9 @@ type TextFlow struct {
 	derived    []Item
 	derivedSrc string
 	derivedOK  bool
+	// objDrag is the inline object being dragged (a table's grip), with where its top-left corner is.
+	objDrag            DragObject
+	objDragX, objDragY float64
 
 	sel     flowSel
 	formats *FormatClipboard

@@ -90,6 +90,10 @@ A table cell that starts with `=` is a formula: `=B2*C2`, `=SUM(B2:B9)`, `=ROUND
 
 Formulas are written in a small notation (`x^2 + y_1`, `frac{a}{b}`, `sqrt{x}`, `sum_{i=1}^{n}`, Greek names like `pi`) and drawn the way mathematics is written: fractions over a rule, roots under a radical sign, raised and lowered scripts. A formula can be on a line of its own or in the middle of a sentence, on the baseline of the words round it. Every formula carries a text alternative, which is what the exports write for it (the HTML export also writes MathML, for a formula on its own line and for one in a sentence; Word gets Office Math for a formula on its own line and in a sentence, and reads it back). In a formula on its own line, the limits of a sum or `lim` sit above and below it, and a bracket round a fraction grows with it. `matrix{a & b \\ c & d}` draws a matrix between brackets and `aligned{x &= 1 \\ y &= 2}` lines equations up at the `&`. Typing `$pi r^2$` in the text makes an inline formula when the closing `$` is typed (a price like "$5 and $6" stays text); it has no text alternative yet, so the accessibility check asks for words.
 
+## Table grips and sizes
+
+Every table in the text has the grips of an editable table around it: column letters above, row numbers at the left (the names formulas use), and the table icon. In edit mode, drag the edge of a column grip to make that column wider or narrower, or the edge of a row grip to change that row's height (at least 24 x 18 pixels). The sizes are saved with the document. The exports lay tables out on their own and do not carry them yet.
+
 ## Markdown tables
 
 Type a header row, the row of dashes under it and one row of cells with the same number of columns, then press Enter, and the three lines become a table:
