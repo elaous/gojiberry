@@ -76,6 +76,9 @@ func htmlFormWrap(snap Snapshot, body string) string {
 
 func hasFormField(snap Snapshot) bool {
 	for _, b := range snap.Blocks {
+		if b.TableField != nil {
+			return true
+		}
 		for _, sg := range b.Segments {
 			if sg.Format.Field != nil {
 				return true

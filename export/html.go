@@ -242,7 +242,11 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 					if css != "" {
 						attrs += ` style="` + css + `"`
 					}
-					body.WriteString("<" + tag + attrs + ">" + htmlInline(b.Segments, br) + "</" + tag + ">")
+					content := htmlInline(b.Segments, br)
+					if b.TableField != nil {
+						content = htmlFormControl(*b.TableField) // a field in the cell is a control, as one in the text is
+					}
+					body.WriteString("<" + tag + attrs + ">" + content + "</" + tag + ">")
 				}
 				if b.TableCol == b.TableCols-1 {
 					body.WriteString("</tr>\n")

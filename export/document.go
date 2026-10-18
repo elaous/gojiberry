@@ -290,10 +290,17 @@ func tableLines(t *docfile.TableItem, start int) []line {
 				f.FontWeight = 700
 			}
 			runs := []docfile.Chars{{Text: text, Format: f}}
+			var field *docfile.FormFieldItem
+			for _, tf := range t.Fields {
+				if tf.Row == r && tf.Col == c && tf.Field != nil {
+					ff := *tf.Field
+					field = &ff
+				}
+			}
 			out = append(out, line{
 				runs:  runs,
 				start: start,
-				after: []Block{{Start: start, Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align, TableColW: sizeOf(t.ColWidths, c), TableRowH: sizeOf(t.RowHeights, r),
+				after: []Block{{Start: start, Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align, TableColW: sizeOf(t.ColWidths, c), TableRowH: sizeOf(t.RowHeights, r), TableField: field,
 					Segments: segmentsOf(runs)}},
 			})
 		}
