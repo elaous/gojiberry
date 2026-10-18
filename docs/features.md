@@ -78,7 +78,7 @@ In the Pictures tab, **Find a picture online** searches repositories of public-d
 
 ## Mentions
 
-Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read (a mention marked as read stays read when the page is opened again, in this browser). Comments name people by handle, never by an address. A host can deliver the same notices by its own channel; package `mentionmail` mails each person what is new (one mail per person, never twice, no addresses of others in it) when the host calls it on a changed document.
+Write @name in a comment or a reply and that person is told: the screen reader announcer says who mentioned them, and the Comments tab shows **Mentions of you** with a way to go to the comment and to mark it as read (a mention marked as read stays read when the page is opened again, in this browser). Comments name people by handle, never by an address. A host can deliver the same notices by its own channel; package `mentionmail` mails each person what is new (one mail per person, never twice, no addresses of others in it) when the host calls it on a changed document. When the page is closed, **Web push** can tell the person instead: if the host names a push server in `push.json`, the Comments tab offers "Notify me of mentions when this page is closed" (the browser asks permission); the notification says who and where, never what, and travels encrypted. See `docs/web-push.md`.
 
 ## Table formulas
 

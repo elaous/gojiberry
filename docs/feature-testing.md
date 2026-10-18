@@ -122,6 +122,8 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas), package `mentionmail` (mail once, retry a failure, cap a mail)
 
+**Push when the page is closed.** *Try it:* serve a push server (docs/web-push.md) and `push.json`, open the Comments tab, tick "Notify me of mentions when this page is closed", allow notifications, close the page, and have someone mention you. *You should see:* a notification naming who and the document; clicking it opens the page; unticking stops it (this last part with a real push service is not covered by an automated test). *Automated:* `TestMentionNotificationsWhenThePageIsClosed` (stand-ins for the push API), package `webpush` (encryption checked by an independent decryptor, VAPID, SSRF refusals, handler), package `mentionpush`, `wasmserve/sw-push.test.js` (`make sw-test`).
+
 ## Table formulas
 
 **Try it.** In the table demo or a table in the editor, edit a cell and type `=6*7`; type `=SUM(B2:B3)` in another; make two cells refer to each other; export to Word.

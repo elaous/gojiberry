@@ -1783,6 +1783,15 @@
   "diagram.replaced": "Le diagramme du document a été redessiné.",
   "diagram.replace": "Remplacer le diagramme dans le document",
   "diagram.cancelEdit": "Laisser l’image telle quelle",
-  "diagram.edit": "Modifier le diagramme"
+  "diagram.edit": "Modifier le diagramme",
+  "push.label": "Me prévenir des mentions quand cette page est fermée",
+  "push.about": "Une notification dit qui vous a mentionné et dans quel document, jamais ce qui a été écrit. Elle passe, chiffrée, par le service push de votre navigateur.",
+  "push.on": "Vous serez prévenu des mentions quand cette page est fermée.",
+  "push.off": "Vous ne serez plus prévenu quand cette page est fermée.",
+  "push.denied": "Les notifications ne sont pas autorisées pour ce site : autorisez-les dans les réglages du navigateur pour ce site et réessayez.",
+  "push.noServer": "Le serveur de notifications est injoignable.",
+  "push.noWorker": "Les notifications ont besoin du service worker de la page, qui ne tourne pas (il est désactivé quand la page est ouverte avec ?nosw).",
+  "push.failed": "Le navigateur n'a pas pu s'abonner aux notifications.",
+  "push.refused": "Le serveur de notifications n'a pas accepté cet abonnement."
  }
 }

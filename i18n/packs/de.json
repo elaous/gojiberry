@@ -1783,6 +1783,15 @@
   "diagram.replaced": "Das Diagramm im Dokument wurde neu gezeichnet.",
   "diagram.replace": "Diagramm im Dokument ersetzen",
   "diagram.cancelEdit": "Das Bild lassen, wie es ist",
-  "diagram.edit": "Diagramm ändern"
+  "diagram.edit": "Diagramm ändern",
+  "push.label": "Bei Erwähnungen benachrichtigen, wenn diese Seite geschlossen ist",
+  "push.about": "Eine Benachrichtigung nennt, wer Sie erwähnt hat und in welchem Dokument, nie was geschrieben wurde. Sie läuft verschlüsselt über den Push-Dienst Ihres Browsers.",
+  "push.on": "Sie werden bei Erwähnungen benachrichtigt, wenn diese Seite geschlossen ist.",
+  "push.off": "Sie werden nicht mehr benachrichtigt, wenn diese Seite geschlossen ist.",
+  "push.denied": "Benachrichtigungen sind für diese Seite nicht erlaubt: erlauben Sie sie in den Browsereinstellungen für diese Seite und versuchen Sie es erneut.",
+  "push.noServer": "Der Benachrichtigungsserver war nicht erreichbar.",
+  "push.noWorker": "Benachrichtigungen brauchen den Service Worker der Seite, der nicht läuft (er ist aus, wenn die Seite mit ?nosw geöffnet wird).",
+  "push.failed": "Der Browser konnte Benachrichtigungen nicht abonnieren.",
+  "push.refused": "Der Benachrichtigungsserver hat dieses Abonnement nicht akzeptiert."
  }
 }

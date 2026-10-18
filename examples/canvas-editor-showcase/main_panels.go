@@ -91,7 +91,7 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 			fl.Touch() // tell a shared document about it
 		}
 	}
-	return xango.Frag(mentionsSection(u, state, renderUI), add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
+	return xango.Frag(mentionsSection(u, state, renderUI), pushSection(u, renderUI), add, xango.El("div", []xango.Attr{xango.A("style", "margin-top:0.8em")}, components.CommentList(components.CommentListProps{
 		Comments: set.Visible(), Excerpts: excerpts, ReplyNotes: u.replyNotes, Filter: u.commentFilter, Selected: u.selComment,
 		CanEdit: state.Role.CanEdit(), CanReply: state.Role.CanComment(), Drafts: u.drafts,
 		OnSelect: func(id string) {
