@@ -23,7 +23,9 @@ const (
 	// stream: memory is the index bytes plus the entries kept, never one slot per field.
 	MaxIndex = MaxEntries * 128
 	MaxName  = 256
-	MaxDepth = 16
+	// MaxAttachments bounds the attachments of a pack.
+	MaxAttachments = 100_000
+	MaxDepth       = 16
 	// MaxTags is the most tags one entry may have, and maxEntryBytes the size of one
 	// entry or folder message in the index.
 	MaxTags       = 64
@@ -35,6 +37,10 @@ const (
 	magic       = "OPENDOC\x00"
 	footerMagic = "OPENDEND"
 	version     = 1
+	// version2 is a pack that may hold attachments (kindAttachment records, listed in field 3 of the index). Only a
+	// pack written with them has it, so a pack without any stays version 1 and readable by every reader; a version 1
+	// reader refuses a version 2 pack rather than show documents without their pictures.
+	version2    = 2
 	headerFixed = 24
 	frameHead   = 16
 	footerSize  = 80
@@ -42,6 +48,9 @@ const (
 	kindDocument  = 1
 	kindIndex     = 2
 	kindSignature = 3
+	// kindAttachment is a record of bytes a document refers to by the hash (an image shared by several documents,
+	// stored once); only in a version 2 pack.
+	kindAttachment = 4
 
 	// flagEncrypted is bit 0 of the record's flags byte (the first of the three bytes
 	// after the kind, which older writers leave zero): the data is an opaque envelope.
@@ -102,10 +111,20 @@ type Folder struct {
 	ID, Name, Parent string
 }
 
+// Attachment is bytes kept once in a version 2 pack and referred to by the documents through the hash (the SHA-256 of the
+// bytes), such as an image that is large or used by several documents or versions.
+type Attachment struct {
+	SHA256 [32]byte
+	Offset uint64 // of the record, from the start of the file
+	Length uint64 // of the record's data
+	MIME   string
+}
+
 // Index lists what a pack holds.
 type Index struct {
-	Entries []Entry
-	Folders []Folder
+	Entries     []Entry
+	Folders     []Folder
+	Attachments []Attachment
 }
 
 // Signature is the optional signature record.
@@ -384,6 +403,38 @@ func unmarshalFolder(b []byte) (fo Folder, err error) {
 	return fo, err
 }
 
+func (a Attachment) marshal() []byte {
+	var b []byte
+	b = appendBytes(b, 1, a.SHA256[:])
+	b = appendInt(b, 2, a.Offset)
+	b = appendInt(b, 3, a.Length)
+	return appendString(b, 4, a.MIME)
+}
+
+func unmarshalAttachment(b []byte) (a Attachment, err error) {
+	err = walk(b, func(f field) error {
+		switch {
+		case f.wire == 2 && f.num == 1:
+			if len(f.bytes) != 32 {
+				return fmt.Errorf("%w: a hash of %d bytes", ErrFormat, len(f.bytes))
+			}
+			copy(a.SHA256[:], f.bytes)
+		case f.wire == 0 && f.num == 2:
+			a.Offset = f.varint
+		case f.wire == 0 && f.num == 3:
+			a.Length = f.varint
+		case f.wire == 2 && f.num == 4:
+			s, err := utf8String(f)
+			if err != nil {
+				return err
+			}
+			a.MIME = s
+		}
+		return nil
+	})
+	return a, err
+}
+
 func (x Index) marshal() []byte {
 	var b []byte
 	for _, e := range x.Entries {
@@ -398,6 +449,12 @@ func (x Index) marshal() []byte {
 		b = appendVarint(b, uint64(len(m)))
 		b = append(b, m...)
 	}
+	for _, a := range x.Attachments {
+		m := a.marshal()
+		b = appendTag(b, 3, 2)
+		b = appendVarint(b, uint64(len(m)))
+		b = append(b, m...)
+	}
 	return b
 }
 
@@ -405,11 +462,22 @@ func (x Index) marshal() []byte {
 // read, so a hostile index is refused at MaxEntries without being held in memory.
 func unmarshalIndex(b []byte) (x Index, err error) {
 	err = walk(b, func(f field) error {
-		if f.wire != 2 || (f.num != 1 && f.num != 2) {
+		if f.wire != 2 || f.num < 1 || f.num > 3 {
 			return nil
 		}
 		if len(f.bytes) > maxEntryBytes {
 			return fmt.Errorf("%w: an entry of %d bytes", ErrFormat, len(f.bytes))
+		}
+		if f.num == 3 {
+			if len(x.Attachments) >= MaxAttachments {
+				return fmt.Errorf("%w: more than %d attachments", ErrFormat, MaxAttachments)
+			}
+			a, err := unmarshalAttachment(f.bytes)
+			if err != nil {
+				return err
+			}
+			x.Attachments = append(x.Attachments, a)
+			return nil
 		}
 		if f.num == 1 {
 			if len(x.Entries) >= MaxEntries {
@@ -481,11 +549,13 @@ func unmarshalSignature(b []byte) (s Signature, err error) {
 // ---- layout ----
 
 // headerBytes is the file's header: the fixed part, the meta message, padding.
-func headerBytes(m Meta) []byte {
+func headerBytes(m Meta) []byte { return headerBytesV(m, version) }
+
+func headerBytesV(m Meta, ver uint32) []byte {
 	meta := m.marshal()
 	b := make([]byte, headerFixed, headerFixed+len(meta)+8)
 	copy(b, magic)
-	binary.LittleEndian.PutUint32(b[8:], version)
+	binary.LittleEndian.PutUint32(b[8:], ver)
 	binary.LittleEndian.PutUint32(b[12:], 0)
 	binary.LittleEndian.PutUint32(b[16:], uint32(len(meta)))
 	b = append(b, meta...)

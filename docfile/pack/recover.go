@@ -26,8 +26,16 @@ type Recovered struct {
 	// from a copy of the pack whose index is intact first, if there is one. It cannot count
 	// the records after the first bad frame, which the walk never reaches.
 	SealedLost int
+	// Attachments are the intact attachment records found (version 2); Repack writes them as a version 2 pack.
+	Attachments []RecoveredAttachment
 	// Complete says the walk ended exactly at a valid index: nothing was lost.
 	Complete bool
+}
+
+// RecoveredAttachment is an attachment found by Recover.
+type RecoveredAttachment struct {
+	MIME string
+	Data []byte
 }
 
 // Sealed is an encrypted record carried through recovery without being opened.
@@ -47,7 +55,7 @@ type Sealed struct {
 // ID being a newer version of it, the last record with an ID wins. A document removed
 // with Appender.Remove cannot be told from a live one without an index, so it comes back.
 func Recover(r io.ReaderAt, size int64) (Recovered, error) {
-	meta, hdr, err := readHeader(r, size)
+	meta, hdr, ver, err := readHeaderV(r, size)
 	var rec Recovered
 	if err != nil {
 		return rec, err
@@ -71,6 +79,10 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 		}
 		next := off + int64(recordSize(uint64(len(data))))
 		switch kind {
+		case kindAttachment:
+			if ver >= version2 {
+				rec.Attachments = append(rec.Attachments, RecoveredAttachment{Data: data})
+			}
 		case kindDocument:
 			if flags&flagEncrypted != 0 {
 				// Opaque: only an intact index can say which document it is.
@@ -92,6 +104,24 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	}
 	rd, openErr := Open(r, size)
 	rec.Complete = openErr == nil
+	if rd != nil {
+		// The index knows each attachment's type; the walk found the bytes (the same bytes once).
+		mime := map[[32]byte]string{}
+		for _, a := range rd.index.Attachments {
+			mime[a.SHA256] = a.MIME
+		}
+		seen := map[[32]byte]bool{}
+		kept := rec.Attachments[:0]
+		for _, a := range rec.Attachments {
+			sum := sha256.Sum256(a.Data)
+			if !seen[sum] {
+				seen[sum] = true
+				a.MIME = mime[sum]
+				kept = append(kept, a)
+			}
+		}
+		rec.Attachments = kept
+	}
 	if rd == nil {
 		rec.SealedLost = len(sealed) // nothing says whose they are
 	}
@@ -126,9 +156,14 @@ func Repack(rec Recovered, dst io.Writer) error {
 		meta.Description += "\n"
 	}
 	meta.Description += "recovered"
-	w, err := NewWriter(dst, meta)
+	w, err := newWriter(dst, meta, len(rec.Attachments) > 0)
 	if err != nil {
 		return err
+	}
+	for _, a := range rec.Attachments {
+		if _, err := w.AddAttachment(a.MIME, a.Data); err != nil {
+			return err
+		}
 	}
 	// A recovered document names its folder by ID only: list those folders, under a name
 	// made from the ID, so the index has no dangling reference; an ID that is not a

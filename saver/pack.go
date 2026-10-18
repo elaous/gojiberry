@@ -47,6 +47,19 @@ type PackOptions struct {
 	// clear. A Seal that fails stops the export: a pack that quietly lacks the document
 	// would pass for a backup.
 	Seal func(ctx context.Context, docID string, plain []byte) ([]byte, error)
+	// Blur hides a little more about the sealed records the index lists in the clear: their time is
+	// rounded down to the day, and what is sealed is padded to a size bucket (1 KiB, then doubling), so
+	// the size shows only which bucket the document is in. The padding is a field a reader skips, inside
+	// what Seal encrypts, so it is not seen and costs less than the document's size again.
+	Blur bool
+	// Attachments, when above zero, keeps each image of an ordinary (not sealed) document that is at
+	// least this many bytes out of the document: the pack stores it once, by its hash, in a version 2
+	// pack, and the document refers to it. A picture used by several documents or versions is stored
+	// once. A pack with no such image stays version 1, which every reader opens; a version 2 pack is
+	// refused by a version 1 reader rather than shown without its pictures. It costs a second read of
+	// the documents before the first is written, to know which version the pack is. DefaultAttachmentSize
+	// is a good value.
+	Attachments int
 	// Warn is told of each document left out (PackNeedsKey) when not nil. They are not
 	// counted in the number ExportPack returns.
 	Warn func(PackIssue)
@@ -103,7 +116,28 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 			o.Warn(i)
 		}
 	}
-	pw, err := pack.NewWriter(w, pack.Meta{ID: docfile.NewID(), Name: name, Created: time.Now().UnixNano(), Producer: "gojiberry"})
+	meta := pack.Meta{ID: docfile.NewID(), Name: name, Created: time.Now().UnixNano(), Producer: "gojiberry"}
+	var pw *pack.Writer
+	var ordinaryIDs []string
+	for _, it := range items {
+		if !it.e.confidential() {
+			ordinaryIDs = append(ordinaryIDs, it.id)
+		}
+	}
+	if o.Attachments > 0 {
+		large, lerr := s.anyLargeImage(ctx, target, ordinaryIDs, o)
+		if lerr != nil {
+			return 0, lerr
+		}
+		if large {
+			if pw, err = pack.NewWriterV2(w, meta); err != nil {
+				return 0, err
+			}
+		}
+	}
+	if pw == nil {
+		pw, err = pack.NewWriter(w, meta)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -127,11 +161,18 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		}
 		doc.SetTrashed(it.e.Trashed)
 		if secret {
-			if err := packSealed(ctx, pw, o.Seal, it.id, it.e, doc); err != nil {
+			if err := packSealed(ctx, pw, o, it.id, it.e, doc); err != nil {
 				return n, err
 			}
-		} else if err := pw.Add(doc); err != nil {
-			return n, fmt.Errorf("saver: %q: %w", it.name, err)
+		} else {
+			if o.Attachments > 0 && pw.Version2() {
+				if doc, err = apartImages(pw, doc, o.Attachments); err != nil {
+					return n, fmt.Errorf("saver: %q: %w", it.name, err)
+				}
+			}
+			if err := pw.Add(doc); err != nil {
+				return n, fmt.Errorf("saver: %q: %w", it.name, err)
+			}
 		}
 		n++
 	}
@@ -162,12 +203,17 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 // packSealed writes an end-to-end document as an encrypted record. The index shows the
 // placeholder name and no tags (the catalog holds none for it either); the folder, the times
 // and the trash flag are not secret.
-func packSealed(ctx context.Context, pw *pack.Writer, seal func(context.Context, string, []byte) ([]byte, error), id string, e catalogEntry, doc docfile.Document) error {
+func packSealed(ctx context.Context, pw *pack.Writer, o PackOptions, id string, e catalogEntry, doc docfile.Document) error {
+	seal := o.Seal
 	doc.SetID(id)
 	e.withCatalog(&doc) // marks it end to end, and the real name and tags are the file's
 	plain, err := docfile.Open.Marshal(doc)
 	if err != nil {
 		return err
+	}
+	updated := doc.Updated
+	if o.Blur {
+		plain, updated = blurPlain(plain), blurTime(updated)
 	}
 	env, err := seal(ctx, id, plain)
 	if err != nil {
@@ -176,7 +222,7 @@ func packSealed(ctx context.Context, pw *pack.Writer, seal func(context.Context,
 	if len(env) == 0 {
 		return fmt.Errorf("saver: sealing %s gave nothing", id)
 	}
-	return pw.AddEncrypted(pack.Entry{ID: id, Name: ConfidentialName, Folder: e.Folder, Updated: doc.Updated, Trashed: e.Trashed != 0}, env)
+	return pw.AddEncrypted(pack.Entry{ID: id, Name: ConfidentialName, Folder: e.Folder, Updated: updated, Trashed: e.Trashed != 0}, env)
 }
 
 // packSealedFolderName writes a confidential folder's real name as an encrypted record whose
@@ -200,6 +246,9 @@ func packSealedFolderName(ctx context.Context, pw *pack.Writer, t Target, o Pack
 	plain, err := docfile.Open.Marshal(doc)
 	if err != nil {
 		return err
+	}
+	if o.Blur {
+		plain = blurPlain(plain)
 	}
 	env, err := o.Seal(ctx, f.ID, plain)
 	if err != nil {
@@ -440,6 +489,12 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		case err != nil:
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
 			continue
+		}
+		if rd.Version() >= 2 {
+			var missing int
+			if doc, missing = resolveImages(rd, doc); missing > 0 {
+				rep.Warnings = append(rep.Warnings, fmt.Sprintf("%s: %d pictures the pack should hold are missing", e.Name, missing))
+			}
 		}
 		secret := e.Encrypted
 		if secret {

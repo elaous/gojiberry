@@ -18,6 +18,8 @@ type builder struct {
 	header  []byte
 	entries []Entry
 	folders []Folder
+	atts    []Attachment
+	v2      bool // the header says version 2: attachments are allowed
 	closed  bool
 	more    []ed25519.PrivateKey // co-signers (CloseSigned)
 }
@@ -65,6 +67,41 @@ func (b *builder) addRaw(e Entry, data []byte) error {
 	return nil
 }
 
+// ErrNoAttachments is returned when adding an attachment to a pack that is not version 2.
+var ErrNoAttachments = errors.New("pack: only a version 2 pack holds attachments")
+
+// addAttachment writes data as an attachment record, once: the same bytes twice are one record. It returns the hash the
+// documents refer to it by.
+func (b *builder) addAttachment(mime string, data []byte) ([32]byte, error) {
+	sum := sha256.Sum256(data)
+	if b.closed {
+		return sum, errors.New("pack: closed")
+	}
+	if !b.v2 {
+		return sum, ErrNoAttachments
+	}
+	if len(data) > MaxRecord {
+		return sum, fmt.Errorf("pack: an attachment of %d bytes (at most %d)", len(data), MaxRecord)
+	}
+	if len(mime) > MaxName {
+		return sum, errors.New("pack: an attachment type that is too long")
+	}
+	for _, a := range b.atts {
+		if a.SHA256 == sum {
+			return sum, nil
+		}
+	}
+	if len(b.atts) >= MaxAttachments {
+		return sum, fmt.Errorf("pack: more than %d attachments", MaxAttachments)
+	}
+	off := b.off
+	if err := b.emit(frame(kindAttachment, data)); err != nil {
+		return sum, err
+	}
+	b.atts = append(b.atts, Attachment{SHA256: sum, Offset: uint64(off), Length: uint64(len(data)), MIME: mime})
+	return sum, nil
+}
+
 func entryOf(doc docfile.Document) (Entry, []byte, error) {
 	data, err := docfile.Open.Marshal(doc)
 	if err != nil {
@@ -96,7 +133,7 @@ func (b *builder) addFolder(f Folder) error {
 
 // finish writes the index, the signature if there is a key, and the footer, in that order.
 func (b *builder) finish(key ed25519.PrivateKey) error {
-	idx := Index{Entries: b.entries, Folders: b.folders}
+	idx := Index{Entries: b.entries, Folders: b.folders, Attachments: b.atts}
 	if err := idx.validate(int64(len(b.header)), b.off); err != nil {
 		return err
 	}
@@ -127,8 +164,18 @@ func (b *builder) finish(key ed25519.PrivateKey) error {
 type Writer struct{ b builder }
 
 // NewWriter starts a pack: the header is written at once.
-func NewWriter(w io.Writer, meta Meta) (*Writer, error) {
-	wr := &Writer{b: builder{write: func(p []byte, _ int64) error { _, err := w.Write(p); return err }, header: headerBytes(meta)}}
+func NewWriter(w io.Writer, meta Meta) (*Writer, error) { return newWriter(w, meta, false) }
+
+// NewWriterV2 starts a version 2 pack, which may hold attachments (AddAttachment). Use it only for a pack that has some:
+// a version 1 reader refuses a version 2 pack, so one without attachments should stay version 1.
+func NewWriterV2(w io.Writer, meta Meta) (*Writer, error) { return newWriter(w, meta, true) }
+
+func newWriter(w io.Writer, meta Meta, v2 bool) (*Writer, error) {
+	ver := uint32(version)
+	if v2 {
+		ver = version2
+	}
+	wr := &Writer{b: builder{v2: v2, write: func(p []byte, _ int64) error { _, err := w.Write(p); return err }, header: headerBytesV(meta, ver)}}
 	if err := wr.b.emit(wr.b.header); err != nil {
 		return nil, err
 	}
@@ -152,6 +199,15 @@ func (w *Writer) AddEncrypted(e Entry, env []byte) error {
 	e.Encrypted = true
 	return w.b.addRaw(e, env)
 }
+
+// AddAttachment writes bytes the documents refer to by their SHA-256 (returned) and lists them with their MIME type; the
+// same bytes added twice are written once. Only a version 2 pack (NewWriterV2) takes them.
+func (w *Writer) AddAttachment(mime string, data []byte) ([32]byte, error) {
+	return w.b.addAttachment(mime, data)
+}
+
+// Version2 says the pack being written is version 2 (NewWriterV2): it takes attachments.
+func (w *Writer) Version2() bool { return w.b.v2 }
 
 // AddFolder lists a folder.
 func (w *Writer) AddFolder(f Folder) error { return w.b.addFolder(f) }
@@ -217,6 +273,8 @@ func openAppend(f File, size int64, key ed25519.PrivateKey, drop bool) (*Appende
 		header:  r.header,
 		entries: append([]Entry(nil), r.index.Entries...),
 		folders: append([]Folder(nil), r.index.Folders...),
+		atts:    append([]Attachment(nil), r.index.Attachments...),
+		v2:      r.version >= version2,
 	}
 	return a, nil
 }
@@ -232,6 +290,11 @@ func (a *Appender) AddRaw(e Entry, data []byte) error { return a.b.addRaw(e, dat
 func (a *Appender) AddEncrypted(e Entry, env []byte) error {
 	e.Encrypted = true
 	return a.b.addRaw(e, env)
+}
+
+// AddAttachment appends an attachment (see Writer.AddAttachment); a version 1 pack is ErrNoAttachments.
+func (a *Appender) AddAttachment(mime string, data []byte) ([32]byte, error) {
+	return a.b.addAttachment(mime, data)
 }
 
 // AddFolder lists a folder.
@@ -282,9 +345,18 @@ func Compact(src io.ReaderAt, size int64, dst io.Writer, key ed25519.PrivateKey)
 	if err != nil {
 		return err
 	}
-	w, err := NewWriter(dst, r.meta)
+	w, err := newWriter(dst, r.meta, r.version >= version2)
 	if err != nil {
 		return err
+	}
+	for _, a := range r.index.Attachments {
+		data, mime, err := r.Attachment(a.SHA256)
+		if err != nil {
+			return fmt.Errorf("pack: an attachment: %w", err)
+		}
+		if _, err := w.AddAttachment(mime, data); err != nil {
+			return err
+		}
 	}
 	for _, e := range r.index.Entries {
 		data, err := r.ReadRaw(e.ID)
