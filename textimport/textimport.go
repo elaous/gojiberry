@@ -83,8 +83,17 @@ func clean(s string) (string, error) {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n"), nil
 }
 
-// Import reads data as kind (one of the constants above).
+// Import reads data as kind (one of the constants above). The document says which format it is a reading copy of
+// (docfile.SourceFormatKey), so the editor can open it for reading.
 func Import(kind string, data []byte) (docfile.Document, error) {
+	d, err := read(kind, data)
+	if err == nil {
+		d.Set(docfile.SourceFormatKey, kind)
+	}
+	return d, err
+}
+
+func read(kind string, data []byte) (docfile.Document, error) {
 	src, err := Decode(data)
 	if err != nil {
 		return docfile.Document{}, err
