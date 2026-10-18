@@ -84,6 +84,7 @@ type TableObject struct {
 	// pad is the room around a table with a formula or a form field, above and at both sides, where the grips of its
 	// columns, rows and the eye/pen switch are drawn (the same grips as an editable table's); tableW is the table's own width.
 	pad, tableW float64
+	resize      *tableResize
 }
 
 // NewTableObject wraps t for placing in a flow with Inline{Block: true}.
@@ -95,10 +96,7 @@ func NewTableObject(t *Table) *TableObject {
 func (o *TableObject) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	o.View.Painter = p
 	o.View.X, o.View.Y = 0, 0
-	o.pad = 0
-	if o.View.Table.HasFormulaOrField() {
-		o.pad = o.View.Style.HandleSize + o.View.Style.BarGap
-	}
+	o.pad = o.View.Style.HandleSize + o.View.Style.BarGap // room for the grips, on every table
 	edges, rows := o.View.ColumnEdges(), o.View.RowEdges()
 	o.tableW = min(edges[len(edges)-1], maxW-2*o.pad)
 	o.w = o.tableW + 2*o.pad
@@ -121,10 +119,70 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	}
 	o.View.X, o.View.Y = x+o.pad, y+o.pad
 	o.View.Draw()
-	if o.pad > 0 {
-		o.View.penSwitch = true
-		o.View.drawHandles(o.View.layout())
+	o.View.penSwitch = true
+	o.View.showSwitch = o.View.Table.HasFormulaOrField() // the eye/pen only where there is something to see or edit
+	o.View.drawHandles(o.View.layout())
+}
+
+// DragStart implements DragObject: a press on a column grip near the edge between two columns (or at the right edge of
+// the last), or on a row grip near the edge under a row, starts a resize of that column or row.
+func (o *TableObject) DragStart(x, y float64) bool {
+	v := o.View
+	if v == nil || v.Table == nil || v.Painter == nil {
+		return false
 	}
+	x, y = x-o.pad, y-o.pad
+	hs, gap := v.Style.HandleSize, v.Style.BarGap
+	oldX, oldY := v.X, v.Y
+	v.X, v.Y = 0, 0
+	g := v.layout()
+	v.X, v.Y = oldX, oldY
+	const near = 4.0
+	o.resize = nil
+	if y >= -gap-hs && y < -gap+near { // the grips above the columns
+		for c := 0; c < v.Table.Cols(); c++ {
+			if abs(x-g.colX[c+1]) <= near {
+				o.resize = &tableResize{col: true, index: c, start: x, size: g.colX[c+1] - g.colX[c]}
+			}
+		}
+	}
+	if o.resize == nil && x >= -gap-hs && x < -gap+near { // the grips left of the rows
+		for r := 0; r < v.Table.Rows(); r++ {
+			if abs(y-g.rowY[r+1]) <= near {
+				o.resize = &tableResize{index: r, start: y, size: g.rowY[r+1] - g.rowY[r]}
+			}
+		}
+	}
+	return o.resize != nil
+}
+
+// DragMove implements DragObject.
+func (o *TableObject) DragMove(x, y float64) bool {
+	d := o.resize
+	if d == nil {
+		return false
+	}
+	t := o.View.Table
+	if d.col {
+		w := d.size + (x - o.pad) - d.start
+		before := t.ColumnWidth(d.index)
+		t.SetColumnWidth(d.index, w)
+		return t.ColumnWidth(d.index) != before
+	}
+	h := d.size + (y - o.pad) - d.start
+	before := t.RowHeightSet(d.index)
+	t.SetRowHeight(d.index, h)
+	return t.RowHeightSet(d.index) != before
+}
+
+// DragEnd implements DragObject.
+func (o *TableObject) DragEnd() { o.resize = nil }
+
+// tableResize is a column or row being resized: where the press was and how big it was then.
+type tableResize struct {
+	col         bool
+	index       int
+	start, size float64
 }
 
 // ClickAt implements ClickObject: a press on the switch beside the top right corner changes the view, and a press on a
@@ -132,10 +190,10 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 // read-only in the text otherwise, so a press anywhere else is not used.
 func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 	v := o.View
-	if v == nil || v.Table == nil || v.Painter == nil || o.pad == 0 {
+	if v == nil || v.Table == nil || v.Painter == nil {
 		return false, false
 	}
-	if r := o.switchRect(); x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] {
+	if r := o.switchRect(); o.View.Table.HasFormulaOrField() && x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] {
 		v.SetShowFormulas(!v.ShowFormulas) // a view setting: nothing to save
 		return true, false
 	}
@@ -159,6 +217,7 @@ func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 
 var (
 	_ ClickObject  = (*TableObject)(nil)
+	_ DragObject   = (*TableObject)(nil)
 	_ InlineObject = (*Rule)(nil)
 	_ InlineObject = (*TableObject)(nil)
 )

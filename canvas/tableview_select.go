@@ -137,7 +137,7 @@ func (v *TableView) drawHandles(g geometry) {
 	}
 
 	// Formula switch, top right: an eye while the values are shown, f(x) while the formulas are.
-	{
+	if v.showSwitch || !v.penSwitch {
 		p := v.Painter
 		x, y := g.right()+gap, v.Y-gap-hs
 		px, py, pw, ph := x+2, y+2, hs-4, hs-4

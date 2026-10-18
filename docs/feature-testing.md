@@ -124,6 +124,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Push when the page is closed.** *Try it:* serve a push server (docs/web-push.md) and `push.json`, open the Comments tab, tick "Notify me of mentions when this page is closed", allow notifications, close the page, and have someone mention you. *You should see:* a notification naming who and the document; clicking it opens the page; unticking stops it (this last part with a real push service is not covered by an automated test). *Automated:* `TestMentionNotificationsWhenThePageIsClosed` (stand-ins for the push API), package `webpush` (encryption checked by an independent decryptor, VAPID, SSRF refusals, handler), package `mentionpush`, `wasmserve/sw-push.test.js` (`make sw-test`).
 
+## Table grips and sizes
+
+**Try it.** In edit mode type three lines (`| Item | Qty |`, `|---|---|`, `| Pens | 1 |`) and Enter; drag the edge between the two column grips to the right, and the edge under the first row grip down.
+
+**You should see.** The column and the row grow as you drag, and stay that way after the document is saved and opened again. Outside edit mode nothing is resized.
+
+**Automated.** `TestDraggingATableGripResizesAColumnAndARow` (examples/canvas-editor-showcase), canvas `table_sizes_test.go`, `TestTableSizesRoundTrip` (docfile)
+
 ## Table formulas
 
 **Try it.** In the table demo or a table in the editor, edit a cell and type `=6*7`; type `=SUM(B2:B3)` in another; make two cells refer to each other; export to Word.

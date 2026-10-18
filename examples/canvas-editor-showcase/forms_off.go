@@ -18,7 +18,8 @@ type formsHolder struct{}
 
 func init() { sideTabs = slices.DeleteFunc(sideTabs, func(t string) bool { return t == "forms" }) }
 
-func formsTab(*ui, string, func()) xango.Node { return xango.Frag() }
+// An empty text, not an empty Frag: a Frag with nothing in it upset the diff of the row of tabs and the focus on a tab was lost.
+func formsTab(*ui, string, func()) xango.Node { return xango.Text("") }
 
 // formsMenuItem is an item with nothing in it: withoutBlank drops it.
 func formsMenuItem(*ui, func() *canvas.TextFlow, func(), func()) components.MenuItem {
