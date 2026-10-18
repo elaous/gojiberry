@@ -158,3 +158,43 @@ func TestVerticalWritingModeIsRead(t *testing.T) {
 		}
 	}
 }
+
+// A control in a table cell is the cell's form field, with the label that wraps it; the cell's text is the field's words.
+func TestControlsInTableCellsAreCellFields(t *testing.T) {
+	d, err := Import([]byte(`<table>
+<tr><th>Item</th><th>Qty</th><th>Ok</th></tr>
+<tr><td>Pens</td><td><label>Qty <input type="number" name="qty" value="3"></label></td><td><input type="checkbox" name="ok" checked></td></tr>
+<tr><td>Ink</td><td><input type="password" name="pw"></td><td><select name="s"><option>A</option><option selected>B</option></select></td></tr>
+</table>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tb *docfile.TableItem
+	for _, it := range d.Content {
+		if it.Table != nil {
+			tb = it.Table
+		}
+	}
+	if tb == nil || len(tb.Fields) != 3 {
+		t.Fatalf("fields: %+v", tb)
+	}
+	got := map[[2]int]docfile.FormFieldItem{}
+	for _, f := range tb.Fields {
+		got[[2]int{f.Row, f.Col}] = *f.Field
+	}
+	if q := got[[2]int{1, 1}]; q.Kind != "number" || q.Label != "Qty" || q.Value != "3" || q.Name != "qty" {
+		t.Errorf("the number field: %+v", q)
+	}
+	if c := got[[2]int{1, 2}]; c.Kind != "checkbox" || c.Value != "true" {
+		t.Errorf("the checkbox: %+v", c)
+	}
+	if s := got[[2]int{2, 2}]; s.Kind != "select" || s.Value != "B" || len(s.Options) != 2 {
+		t.Errorf("the list: %+v", s)
+	}
+	if _, ok := got[[2]int{2, 1}]; ok {
+		t.Error("a password is never a field")
+	}
+	if tb.Rows[1].Cells[1] != "Qty: 3" || tb.Rows[1].Cells[2] != "[x]" || tb.Rows[1].Cells[0] != "Pens" {
+		t.Errorf("the cells' text: %q", tb.Rows[1].Cells)
+	}
+}

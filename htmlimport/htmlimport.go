@@ -565,6 +565,7 @@ type tcell struct {
 	text    string
 	colSpan int
 	rowSpan int
+	field   *docfile.FormFieldItem // a control in the cell, read as the cell's form field
 }
 
 func (r *reader) table(tbl *html.Node) {
@@ -583,7 +584,11 @@ func (r *reader) table(tbl *html.Node) {
 				for d := c.FirstChild; d != nil; d = d.NextSibling {
 					if d.Type == html.ElementNode && (d.DataAtom == atom.Td || d.DataAtom == atom.Th) && r.cells < maxCells {
 						r.cells++
-						row = append(row, tcell{text: strings.TrimSpace(collapse(text(d))), colSpan: atoi(attr(d, "colspan")), rowSpan: atoi(attr(d, "rowspan"))})
+						tc := tcell{text: strings.TrimSpace(collapse(text(d))), colSpan: atoi(attr(d, "colspan")), rowSpan: atoi(attr(d, "rowspan"))}
+						if tc.field = r.cellField(d); tc.field != nil {
+							tc.text = tc.field.Words() // the cell's text is the field's words, as in the editor
+						}
+						row = append(row, tc)
 					}
 				}
 				rows = append(rows, row)
@@ -620,6 +625,9 @@ func (r *reader) table(tbl *html.Node) {
 			cs := min(c.colSpan, cols-col)
 			rs := min(c.rowSpan, len(rows)-ri)
 			cells[ri][col] = c.text
+			if c.field != nil {
+				out.Fields = append(out.Fields, docfile.TableCellField{Row: ri, Col: col, Field: c.field})
+			}
 			for dr := 0; dr < rs; dr++ {
 				for dc := 0; dc < cs; dc++ {
 					taken[ri+dr][col+dc] = true
@@ -719,6 +727,13 @@ func clip(s string) string {
 // formField reads an input, select or textarea as a form field of the document, with what is written in it. Passwords,
 // hidden values, files and the other kinds a document has no field for are left out and counted.
 func (r *reader) formField(c *html.Node, label string) {
+	if ff, ok := r.fieldOf(c, label); ok {
+		r.add(docfile.Item{Form: &ff})
+	}
+}
+
+// fieldOf reads the control as a field; false (counted) for one a document has no field for.
+func (r *reader) fieldOf(c *html.Node, label string) (docfile.FormFieldItem, bool) {
 	ff := docfile.FormFieldItem{
 		Name:        clip(attr(c, "name")),
 		Label:       clip(label),
@@ -751,7 +766,7 @@ func (r *reader) formField(c *html.Node, label string) {
 		kind := map[string]string{"": "text", "text": "text", "email": "email", "number": "number", "tel": "phone", "url": "url", "date": "date", "checkbox": "checkbox"}[typ]
 		if kind == "" {
 			r.skipped.Forms++
-			return
+			return ff, false
 		}
 		ff.Kind = kind
 		if kind == "checkbox" {
@@ -766,7 +781,38 @@ func (r *reader) formField(c *html.Node, label string) {
 	if ff.Kind == "checkbox" || ff.Kind == "select" {
 		ff.Placeholder = ""
 	}
-	r.add(docfile.Item{Form: &ff})
+	return ff, true
+}
+
+// cellField reads the first control in a table cell as the cell's field, with the label of the <label> that wraps it.
+func (r *reader) cellField(d *html.Node) *docfile.FormFieldItem {
+	c := control(d)
+	if c == nil {
+		return nil
+	}
+	label := ""
+	var find func(*html.Node) bool
+	find = func(n *html.Node) bool {
+		for m := n.FirstChild; m != nil; m = m.NextSibling {
+			if m.Type != html.ElementNode {
+				continue
+			}
+			if m.DataAtom == atom.Label && control(m) == c {
+				label = ownText(m, c)
+				return true
+			}
+			if find(m) {
+				return true
+			}
+		}
+		return false
+	}
+	find(d)
+	ff, ok := r.fieldOf(c, label)
+	if !ok {
+		return nil
+	}
+	return &ff
 }
 
 func hasAttr(n *html.Node, k string) bool {
