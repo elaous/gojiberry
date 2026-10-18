@@ -78,10 +78,18 @@ a11y-test:
 .PHONY: e2e-test
 e2e-test:
 	@if [ -n "$$GOJIBERRY_E2E_JSON" ]; then \
-		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m -json ./examples/canvas-editor-showcase/ > "$$GOJIBERRY_E2E_JSON"; \
+		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m -json ./examples/canvas-editor-showcase/ > "$$GOJIBERRY_E2E_JSON"; status=$$?; \
+		GOJIBERRY_REQUIRE_BROWSER=1 GOFLAGS=-tags=experimental go test -count=1 -timeout 30m -json -run '$(E2E_EXPERIMENTAL_RUN)' ./examples/canvas-editor-showcase/ >> "$$GOJIBERRY_E2E_JSON" || status=$$?; \
+		exit $$status; \
 	else \
-		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/; \
+		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/ && $(MAKE) e2e-test-experimental; \
 	fi
+
+# The experimental features (build tags, docs/phase-2.md) are off in the run above; their tests run with -tags experimental.
+E2E_EXPERIMENTAL_RUN ?= TestFormFields
+.PHONY: e2e-test-experimental
+e2e-test-experimental:
+	GOJIBERRY_REQUIRE_BROWSER=1 GOFLAGS=-tags=experimental go test -count=1 -timeout 30m -run '$(E2E_EXPERIMENTAL_RUN)' ./examples/canvas-editor-showcase/
 
 # pdfa11y-test checks the tagged PDF the exporter writes with pdfa11y (github.com/speedata/pdfa11y, a Go
 # checker for the machine-checkable part of PDF/UA). It installs the tool into .pdfa11y/ (ignored by git) and
@@ -148,7 +156,7 @@ lint:
 .PHONY: wasm-lint
 wasm-lint:
 	@bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
-	(cd tools && go build -o "$$bin" $(LINT_PKG)) && GOOS=js GOARCH=wasm "$$bin" run ./...
+	(cd tools && go build -o "$$bin" $(LINT_PKG)) && GOOS=js GOARCH=wasm "$$bin" run ./... && GOOS=js GOARCH=wasm "$$bin" run --build-tags experimental ./examples/canvas-editor-showcase/...
 
 # lint-modules runs the same pinned golangci-lint (built once from tools/go.mod,
 # as lint and wasm-lint do) inside each nested module, since golangci-lint does not cross

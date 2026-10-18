@@ -290,3 +290,8 @@ func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
 			renderUI()
 		}, false))
 }
+
+// withoutBlank drops the items that have neither a label nor a separator (the place of a feature this build leaves out).
+func withoutBlank(items []components.MenuItem) []components.MenuItem {
+	return slices.DeleteFunc(items, func(it components.MenuItem) bool { return it.Label == "" && !it.Separator })
+}
