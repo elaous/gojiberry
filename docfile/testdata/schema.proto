@@ -99,10 +99,31 @@ message TableCellStyle {
   int64 align = 7;
 }
 
+message FormFieldItem {
+  string kind = 1;
+  string name = 2;
+  string label = 3;
+  string placeholder = 4;
+  string pattern = 5;
+  bool required = 6;
+  repeated string options = 7;
+  string value = 8;
+  bool locked = 9;
+  string lock_key = 10;
+  string lock_sig = 11;
+}
+
+message TableCellField {
+  int64 row = 1;
+  int64 col = 2;
+  FormFieldItem field = 3;
+}
+
 message TableItem {
   repeated TableRow rows = 1;
   repeated TableMerge merges = 2;
   repeated TableCellStyle styles = 3;
+  repeated TableCellField fields = 4;
 }
 
 message ImageItem {
@@ -138,20 +159,6 @@ message EquationItem {
   string formula = 1;
   string alt = 2;
   bool inline = 3;
-}
-
-message FormFieldItem {
-  string kind = 1;
-  string name = 2;
-  string label = 3;
-  string placeholder = 4;
-  string pattern = 5;
-  bool required = 6;
-  repeated string options = 7;
-  string value = 8;
-  bool locked = 9;
-  string lock_key = 10;
-  string lock_sig = 11;
 }
 
 message Item {

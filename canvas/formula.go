@@ -35,15 +35,29 @@ func Values(cells [][]string) [][]string {
 }
 
 // Values is the table's cells as a reader sees them (see Values).
-func (t *Table) Values() [][]string { return Values(t.Cells) }
+func (t *Table) Values() [][]string {
+	if len(t.Fields) == 0 {
+		return Values(t.Cells)
+	}
+	out := Values(t.valueCells())
+	for p, f := range t.Fields { // a field cell is its words for a reader; formulas read its value
+		if t.InRange(p.Row, p.Col) {
+			out[p.Row][p.Col] = f.Words()
+		}
+	}
+	return out
+}
 
 // Display is one cell as a reader sees it: the value of a formula, else the text.
 func (t *Table) Display(row, col int) string {
 	text := t.Cell(row, col)
+	if f := t.FieldAt(row, col); f != nil {
+		return f.Words()
+	}
 	if !isFormula(text) {
 		return plainText(text)
 	}
-	ev := &formulaEval{cells: t.Cells, done: map[[2]int]fval{}, busy: map[[2]int]bool{}}
+	ev := &formulaEval{cells: t.valueCells(), done: map[[2]int]fval{}, busy: map[[2]int]bool{}}
 	return ev.cell(row, col).show()
 }
 

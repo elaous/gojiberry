@@ -158,3 +158,43 @@ func TestFormFieldRoundTripsThroughTheFlow(t *testing.T) {
 		t.Fatalf("back: %+v", item)
 	}
 }
+
+// A form field in a table cell is saved with the table, comes back as a field, and its cell text is its words.
+func TestTableCellFieldRoundTrips(t *testing.T) {
+	d := Document{Title: "T", Content: []Item{
+		{Table: &TableItem{Rows: []TableRow{{Cells: []string{"Item", "Qty"}}, {Cells: []string{"Pens", "Qty: 4"}}},
+			Fields: []TableCellField{{Row: 1, Col: 1, Field: &FormFieldItem{Kind: "number", Label: "Qty", Value: "4"}}}}},
+		{Chars: &Chars{Text: "\n"}},
+	}}
+	for _, c := range Formats() {
+		b, err := c.Marshal(d)
+		if err != nil {
+			t.Fatalf("%s: %v", c.Name(), err)
+		}
+		got, err := c.Unmarshal(b)
+		if err != nil || !reflect.DeepEqual(got, d) {
+			t.Errorf("%s: read back %+v, %v", c.Name(), got, err)
+		}
+	}
+	f := &canvas.TextFlow{}
+	d.Apply(f)
+	ffs := f.FormFields()
+	if len(ffs) != 1 || ffs[0].Label != "Qty" || ffs[0].Value != "4" {
+		t.Fatalf("fields: %+v", ffs)
+	}
+	ffs[0].Value = "5"
+	f.Tables()[0].View.Table.SyncFields()
+	back := FromFlow("T", f).Content
+	var tab *TableItem
+	for _, it := range back {
+		if it.Table != nil {
+			tab = it.Table
+		}
+	}
+	if tab == nil || len(tab.Fields) != 1 || tab.Fields[0].Field.Value != "5" || tab.Rows[1].Cells[1] != "Qty: 5" {
+		t.Fatalf("back: %+v", tab)
+	}
+	if n := f.ClearFormFields(); n != 1 || f.Tables()[0].View.Table.Cell(1, 1) != "Qty: " {
+		t.Fatalf("cleared %d, cell %q", n, f.Tables()[0].View.Table.Cell(1, 1))
+	}
+}
