@@ -1816,6 +1816,7 @@
   "map.notFound": "No se encontró ese lugar. Pruebe otra dirección, coordenadas o un Plus Code.",
   "map.lookupFailed": "No se pudo buscar la dirección (el servicio no respondió).",
   "map.renderFailed": "No se pudo dibujar el mapa (el servidor de teselas no respondió).",
-  "map.alt": "Mapa de %s"
+  "map.alt": "Mapa de %s",
+  "scripts.allowChange": "Puede cambiar el documento: formato, estilos, descripciones de imágenes, título, idioma, o todo desde Markdown"
  }
 }

@@ -372,6 +372,8 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 ## Scripts
 
+(Get and set, below the first test: tick "May read the text of the document" and "May change the document", then run `await editor.setMarkdown("# Heading\n\nSome **bold** words.\n"); await editor.setSelection(0, 7); await editor.setFormat({italic: true, color: "#c01c28"}); await editor.setStyle("Heading 2"); editor.log(JSON.stringify(await editor.format()))` in edit mode; the first line of the document becomes an italic red heading and the log shows the format. `TestScriptsGetAndSetTheDocument` and package `script` `getset_test.go` cover it.)
+
 **Try it.** Scripts tab: press Run (the sample lists the commands and makes the selection bold); replace the script with `try { await editor.text() } catch (e) { editor.log(e.message) }` and run it (refused); tick "May read the text of the document" (a warning appears) and run `editor.log((await editor.text()).length)`; run `editor.log(typeof fetch)` (undefined); run `await new Promise(() => {})` and press Stop.
 
 **You should see.** Each result in the log under the script; reading refused until allowed; no network in the sandbox; Stop ends a script that never finishes.

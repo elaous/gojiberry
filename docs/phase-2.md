@@ -97,7 +97,7 @@ Next step: a small test of D2 (it is Go) and Mermaid as `diagram` add-ons, and a
 
 ### P2-7 Scripting, phase 2 — design
 
-Phase 1 (now): a sandbox with the commands of the registry, `text()` and `insert()`. Next (ready): **get/set** over what extended Markdown, text formatting, text styles, images and document metadata cover. Lift of the further features, for phase 2 (S small, M medium, L large):
+Phase 1 (done): a sandbox with the commands of the registry, `text()` and `insert()`, and **get/set** over what extended Markdown, text formatting, the selection, paragraph styles, pictures' descriptions and the title and language cover ([scripting.md](scripting.md)). Lift of the further features, for phase 2 (S small, M medium, L large); the metadata row below is what is left of the metadata (tags, folder, page size, margins, header and footer text):
 
 | Feature | Lift | Why |
 |---|---|---|

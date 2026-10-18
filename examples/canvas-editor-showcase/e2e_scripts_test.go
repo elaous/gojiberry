@@ -67,3 +67,51 @@ try { await fetch("/"); } catch (e) { editor.log("no network"); }`)
 	d.OK(d.Int(`document.querySelectorAll('iframe[sandbox]').length`) == 0, "the sandbox is gone")
 	d.NoErrors()
 }
+
+// The get/set requests: reading needs the read permission, changing needs its own; a script reads and changes the title,
+// the language, a selection's format and the paragraph style, and sets a document from Markdown, and what it sets is checked.
+func TestScriptsGetAndSetTheDocument(t *testing.T) {
+	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
+	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
+	d.WaitSelector("canvas")
+	d.ToggleMode()
+	d.CanvasClick(240, 164)
+	d.Click(`button[data-tab="scripts"]`)
+	d.WaitSelector("#scripts-source")
+	log := func() string {
+		return d.Str(`Array.from(document.querySelectorAll('#scripts-log li')).map(l => l.textContent).join('|')`)
+	}
+	run := func(src string) {
+		d.Fill("#scripts-source", src)
+		d.Click("#scripts-run")
+		d.WaitFor("the script finished", `(document.getElementById('scripts-message')||{}).textContent === 'The script finished.'`)
+	}
+	// nothing without the permissions
+	run(`for (const f of [() => editor.meta(), () => editor.setMeta({title: "x"})]) { try { await f(); editor.log("done"); } catch (e) { editor.log("refused"); } }`)
+	d.OK(log() == "refused|refused", "refused until allowed: "+log())
+	d.Click("#scripts-allow-read input")
+	d.Click("#scripts-allow-change input")
+	run(`const m = await editor.meta(); editor.log(m.title);
+await editor.setMeta({title: "Scripted", language: "fr"});
+const m2 = await editor.meta(); editor.log(m2.title + " " + m2.language);
+try { await editor.setMeta({language: "not a tag"}); } catch (e) { editor.log("refused: " + e.message); }
+try { await editor.setFormat({color: "red; background:url(x)"}); } catch (e) { editor.log("refused: " + e.message); }
+editor.log((await editor.styles()).includes("Heading 1"));`)
+	d.OK(strings.Contains(log(), "Scripted fr") && strings.Count(log(), "refused:") == 2 && strings.HasSuffix(log(), "true"), "meta and checks: "+log())
+	d.WaitFor("the title is set", `JSON.parse(document.getElementById("state").textContent).title === "Scripted"`)
+
+	// Markdown in and out, then formatting and style of a selection
+	run(`await editor.setMarkdown("# Heading\n\nSome **bold** words here.\n");
+const md = await editor.markdown();
+editor.log(md.includes("Heading") && md.includes("bold"));
+await editor.setSelection(0, 7);
+const sel = await editor.selection();
+editor.log(sel.text);
+await editor.setFormat({italic: true, color: "#c01c28"});
+const f = await editor.format();
+editor.log(f.italic + " " + f.color);
+await editor.setStyle("Heading 2");
+editor.log(await editor.style());`)
+	d.OK(log() == "true|Heading|true #c01c28|Heading 2", "Markdown, selection, format and style: "+log())
+	d.NoErrors()
+}
