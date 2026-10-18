@@ -101,3 +101,71 @@ func cloneFields(in map[CellPos]*FormFieldObject) map[CellPos]*FormFieldObject {
 	}
 	return out
 }
+
+// HasFormulaOrField says the table has something the switch changes the view of: a formula or a form field.
+func (t *Table) HasFormulaOrField() bool {
+	if len(t.Fields) > 0 {
+		return true
+	}
+	for _, row := range t.Cells {
+		for _, c := range row {
+			if isFormula(c) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// The switch of a table in the text sits inside its top right corner (an editable table has it outside, see
+// HitFormulaSwitch): an eye while the values and what was filled in are shown ("see all"), a pen while the formulas and
+// the definitions of the fields are ("edit all").
+const (
+	switchW, switchH, switchInset = 20.0, 16.0, 3.0
+)
+
+func (o *TableObject) switchRect() [4]float64 {
+	return [4]float64{o.w - switchW - switchInset, switchInset, switchW, switchH}
+}
+
+func (o *TableObject) drawSwitch(p Painter, x, y float64) {
+	v := o.View
+	r := o.switchRect()
+	px, py := x+r[0], y+r[1]
+	v.fillPill(px, py, r[2], r[3], false, false)
+	ink := v.iconColor(false)
+	p.SetFillStyle(ink)
+	p.SetStrokeStyle(ink)
+	p.SetLineWidth(1.2)
+	cx, cy := px+r[2]/2, py+r[3]/2
+	p.BeginPath()
+	if v.ShowFormulas { // a pen
+		p.MoveTo(cx-5, cy+5)
+		p.LineTo(cx-5, cy+2)
+		p.LineTo(cx+3, cy-6)
+		p.LineTo(cx+6, cy-3)
+		p.LineTo(cx-2, cy+5)
+		p.LineTo(cx-5, cy+5)
+		p.Stroke()
+		return
+	}
+	p.MoveTo(cx-6, cy) // an eye
+	p.LineTo(cx-3.5, cy-2.5)
+	p.LineTo(cx, cy-3.8)
+	p.LineTo(cx+3.5, cy-2.5)
+	p.LineTo(cx+6, cy)
+	p.LineTo(cx+3.5, cy+2.5)
+	p.LineTo(cx, cy+3.8)
+	p.LineTo(cx-3.5, cy+2.5)
+	p.LineTo(cx-6, cy)
+	p.Stroke()
+	p.FillRect(cx-1.5, cy-1.5, 3, 3)
+}
+
+// ShowTableFormulas puts every table of the flow in the formula view ("edit all": formulas as typed, fields as what
+// they are, a press on a field changes it) or the calculated view ("see all"). It is a view setting and is not saved.
+func (f *TextFlow) ShowTableFormulas(on bool) {
+	for _, o := range f.Tables() {
+		o.View.SetShowFormulas(on)
+	}
+}
