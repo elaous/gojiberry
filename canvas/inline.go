@@ -113,14 +113,22 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	}
 	o.View.X, o.View.Y = x, y
 	o.View.Draw()
+	if o.View.Table.HasFormulaOrField() {
+		o.drawSwitch(p, x, y)
+	}
 }
 
-// ClickAt implements ClickObject: a press on a cell that is a form field fills it in (a checkbox is ticked). The table
-// is read-only in the text otherwise, so a press anywhere else is not used.
+// ClickAt implements ClickObject: a press on the switch at the top right changes the view, and a press on a cell that is
+// a form field fills it in (a checkbox is ticked) or, in the formula view, changes it. The table is read-only in the
+// text otherwise, so a press anywhere else is not used.
 func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 	v := o.View
-	if v == nil || v.Table == nil || len(v.Table.Fields) == 0 || v.Painter == nil {
+	if v == nil || v.Table == nil || v.Painter == nil || !v.Table.HasFormulaOrField() {
 		return false, false
+	}
+	if r := o.switchRect(); x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] {
+		v.SetShowFormulas(!v.ShowFormulas) // a view setting: nothing to save
+		return true, false
 	}
 	oldX, oldY := v.X, v.Y
 	v.X, v.Y = 0, 0

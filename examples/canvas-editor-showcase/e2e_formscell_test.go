@@ -42,6 +42,16 @@ func TestAFormFieldInATableCell(t *testing.T) {
 	d.Fill("#forms-input", "7")
 	d.Click("#forms-fill-done")
 
+	// the pen at the top right of the table: formulas and fields as they are defined, and a press changes the field
+	d.CanvasClick(384, 38) // the pen/eye at the table's top right (the table is wider once filled in)
+	d.CanvasClick(340, 75)
+	d.WaitSelector("#forms-editor")
+	d.Click("#forms-edit-done")
+	d.Click("#forms-see-all")
+	d.CanvasClick(340, 75)
+	d.WaitSelector("#forms-input")
+	d.Click("#forms-fill-done")
+
 	d.Click(`button[data-tab="transfer"]`)
 	_, md := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="markdown"]`) })
 	d.OK(strings.Contains(string(md), "Quantity: 7"), "the export has the words: "+string(md))

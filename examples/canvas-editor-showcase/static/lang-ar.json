@@ -1939,6 +1939,8 @@
     "forms.inCell": "ضع الحقل التالي في خلية جدول",
     "forms.cellTable": "الجدول",
     "forms.cellRow": "الصف",
-    "forms.cellColumn": "العمود"
+    "forms.cellColumn": "العمود",
+    "forms.seeAll": "عرض الكل (قيم الجداول)",
+    "forms.editAll": "تحرير الكل (صيغ الجداول وحقولها)"
   }
 }

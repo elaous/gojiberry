@@ -1799,6 +1799,8 @@
   "forms.inCell": "Mettre le champ suivant dans une cellule de tableau",
   "forms.cellTable": "Tableau",
   "forms.cellRow": "Ligne",
-  "forms.cellColumn": "Colonne"
+  "forms.cellColumn": "Colonne",
+  "forms.seeAll": "Tout voir (valeurs des tableaux)",
+  "forms.editAll": "Tout modifier (formules et champs des tableaux)"
  }
 }

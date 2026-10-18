@@ -143,3 +143,45 @@ func TestPressingAFieldInATableInTheText(t *testing.T) {
 		t.Fatalf("checkbox: used %v changed %v value %q", used, changed, cb.Value)
 	}
 }
+
+func TestTheSwitchOfATableInTheText(t *testing.T) {
+	tb := NewTableFrom([][]string{{"A", "B"}, {"c", "=1+1"}})
+	o := NewTableObject(tb)
+	p := &fakePainter{}
+	o.Measure(p, 1000, 1000)
+	r := o.switchRect()
+	if used, changed := o.ClickAt(r[0]+2, r[1]+2); !used || changed || !o.View.ShowFormulas {
+		t.Fatalf("first press: used %v changed %v showing %v", used, changed, o.View.ShowFormulas)
+	}
+	o.ClickAt(r[0]+2, r[1]+2)
+	if o.View.ShowFormulas {
+		t.Fatal("second press goes back to the values")
+	}
+	plain := NewTableObject(NewTableFrom([][]string{{"A"}, {"b"}}))
+	plain.Measure(p, 1000, 1000)
+	if used, _ := plain.ClickAt(plain.switchRect()[0]+2, 5); used {
+		t.Fatal("a table with no formula or field has no switch")
+	}
+	// in the formula view a field cell is changed, not filled in
+	f := NewFormField(FormText, "Name")
+	tb.SetField(1, 0, f)
+	var filled, edited int
+	o.View.OnFieldFill = func(int, int, *FormFieldObject) { filled++ }
+	o.View.OnFieldEdit = func(int, int, *FormFieldObject) { edited++ }
+	o.ClickAt(10, 40)
+	o.ClickAt(r[0]+2, r[1]+2)
+	o.ClickAt(10, 40)
+	if filled != 1 || edited != 1 {
+		t.Fatalf("filled %d edited %d", filled, edited)
+	}
+	flow := &TextFlow{}
+	flow.Items = []Item{Inline{Object: o, Block: true}}
+	flow.ShowTableFormulas(false)
+	if o.View.ShowFormulas {
+		t.Fatal("see all")
+	}
+	flow.ShowTableFormulas(true)
+	if !o.View.ShowFormulas {
+		t.Fatal("edit all")
+	}
+}

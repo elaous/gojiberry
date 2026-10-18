@@ -1799,6 +1799,8 @@
   "forms.inCell": "Das nächste Feld in eine Tabellenzelle setzen",
   "forms.cellTable": "Tabelle",
   "forms.cellRow": "Zeile",
-  "forms.cellColumn": "Spalte"
+  "forms.cellColumn": "Spalte",
+  "forms.seeAll": "Alles ansehen (Werte der Tabellen)",
+  "forms.editAll": "Alles bearbeiten (Formeln und Felder der Tabellen)"
  }
 }
