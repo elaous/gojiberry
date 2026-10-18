@@ -35,6 +35,17 @@ window.addons.piper = {
 };
 ```
 
+### A phonemizer that needs no espeak-ng: openphonemizer (US English)
+
+The usual phonemizer for Piper voices is espeak-ng, which is GPL. The operator who wants a runtime without it can use [`nekwo/openphonemizer-en-us-onnx`](https://huggingface.co/nekwo/openphonemizer-en-us-onnx), a US English grapheme-to-phoneme model in ONNX (it runs on `onnxruntime-web` like the voices do). What its model card says, read on 2026-10-18 (it is the model's own description; this repository has not run it):
+
+- **What it is.** A DeepPhonemizer forward transformer converted from OpenPhonemizer; output is espeak-style US English (en-us) phonemes, as logits over phoneme tokens. A word in its dictionary is looked up directly; the model is used for words that are not in it.
+- **Licence.** BSD-3-Clause-Clear for the model and the dictionary (OpenPhonemizer) and for the ONNX conversion. The card gives no full licence text: the operator should read the upstream licence before shipping it.
+- **Files** (about 102 MB in all; the page loads the one it needs): `openphonemizer-en_us-fp16.onnx` (30,977,712 bytes, the default, SHA-256 `a77b17647a02cb9ac42025cfc60c8e83c70f36785183a4388f17722fb1c7dc9b`), `openphonemizer-en_us-fp32.onnx` (61,437,915 bytes, `b0557ca5639d839d77d040c2610f2b1e95f584379cc1cdfa5c4984fb3d8f1b78`) and `openphonemizer-en_us.json` (9,223,033 bytes, `36dda6260c7e560a4d846528387fd07ababcd1012a52b530063fefadd5987db0`: the tokenizers and the dictionary). Compare the sums with the ones on the model page before use.
+- **What to know.** English (US) only. Voices trained on British "en" phonemes need the US phonemes mapped first (the card names a `rp_from_us` step in its runner). The card does not describe the model's input encoding or the symbol table, nor give onnxruntime code (it points to a runner in another repository), so the runtime script has to follow that runner; this repository does not.
+
+What this means for the page: nothing changes in the contract above. `window.addons.piper.synthesize` still receives the text and returns samples; the phonemizer is the script's own business. Nothing is fetched from that model page by the page unless the operator's script does it, and the Add-ons tab would list the model like any other (`models()` in the add-on contract, with size and terms) once the script offers it. Other languages need another phonemizer; this one does not cover them.
+
 A script of that shape can be built on `onnxruntime-web` and a phonemizer such as espeak-ng compiled to WebAssembly. Next to the page, `reader-voices.json` (optional) says where things are; every address is https or relative to the page:
 
 ```json
