@@ -242,16 +242,19 @@ func rtfPxToTwips(px float64) int {
 func renderRTFTable(cells []Block, contentWidthTwips int) string {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	info := tableMergeGrid(cells)
-	colWidth := contentWidthTwips / cols
+	colWidths := tableColumnWidths(cells, float64(contentWidthTwips), 15) // a CSS pixel is 15 twips
 
 	var sb strings.Builder
 	for r := 0; r < rows; r++ {
 		sb.WriteString(`\trowd\trgaph108\trleft0\trkeep`) // \trkeep: the row is not split across pages
+		if h := cells[r*cols].TableRowH; h > 0 {
+			sb.WriteString(`\trrh` + strconv.Itoa(int(h*15))) // at least this high
+		}
 		keep := ""
 		if keepRowWithNext(r, rows) {
 			keep = `\keepn` // the paragraphs of the row stay with the next row
 		}
-		x := 0
+		x := 0.0
 		for c := 0; c < cols; c++ {
 			m := info[r*cols+c]
 			if m.colSpan > 1 {
@@ -268,8 +271,8 @@ func renderRTFTable(cells []Block, contentWidthTwips int) string {
 					sb.WriteString(`\clvmrg`)
 				}
 			}
-			x += colWidth
-			sb.WriteString(`\cellx` + strconv.Itoa(x))
+			x += colWidths[c]
+			sb.WriteString(`\cellx` + strconv.Itoa(int(x)))
 		}
 		sb.WriteString("\n")
 		for c := 0; c < cols; c++ {

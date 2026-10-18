@@ -527,13 +527,21 @@ func (b *docxBuilder) table(cells []Block) {
 	w := &b.body
 	w.WriteString(`<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/></w:tblPr><w:tblGrid>`)
 	for c := 0; c < cols; c++ {
-		w.WriteString(`<w:gridCol w:w="2000"/>`)
+		if px := cells[c].TableColW; px > 0 {
+			w.WriteString(`<w:gridCol w:w="` + strconv.Itoa(int(px*15)) + `"/>`) // a CSS pixel is 15 twips
+		} else {
+			w.WriteString(`<w:gridCol w:w="2000"/>`)
+		}
 	}
 	w.WriteString(`</w:tblGrid>`)
 	// A cell a merge covers from above continues its vertical merge; one it
 	// covers from the left is not written at all (the owner's gridSpan holds it).
 	for r := 0; r < rows; r++ {
-		w.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr>`)
+		height := ""
+		if px := cells[r*cols].TableRowH; px > 0 {
+			height = `<w:trHeight w:val="` + strconv.Itoa(int(px*15)) + `" w:hRule="atLeast"/>`
+		}
+		w.WriteString(`<w:tr><w:trPr><w:cantSplit/>` + height + `</w:trPr>`)
 		keep := ""
 		if keepRowWithNext(r, rows) {
 			keep = `<w:keepNext/>`
@@ -553,6 +561,9 @@ func (b *docxBuilder) table(cells []Block) {
 			}
 			// tcPr children in schema order: tcW, gridSpan, vMerge, shd.
 			props := `<w:tcW w:w="0" w:type="auto"/>` + gridSpan(cell.TableColSpan)
+			if px := cell.TableColW; px > 0 && cell.TableColSpan <= 1 {
+				props = `<w:tcW w:w="` + strconv.Itoa(int(px*15)) + `" w:type="dxa"/>` + gridSpan(cell.TableColSpan)
+			}
 			if cell.TableRowSpan > 1 {
 				props += `<w:vMerge w:val="restart"/>`
 			}

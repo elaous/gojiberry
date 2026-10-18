@@ -293,7 +293,7 @@ func tableLines(t *docfile.TableItem, start int) []line {
 			out = append(out, line{
 				runs:  runs,
 				start: start,
-				after: []Block{{Start: start, Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align,
+				after: []Block{{Start: start, Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, TableColSpan: cs, TableRowSpan: rs, TableCovered: covered, TableBackground: st.Background, TableAlign: st.Align, TableColW: sizeOf(t.ColWidths, c), TableRowH: sizeOf(t.RowHeights, r),
 					Segments: segmentsOf(runs)}},
 			})
 		}
@@ -506,4 +506,12 @@ func imageCredit(b Block) string {
 		return b.ImageCredit
 	}
 	return b.ImageSourceURL
+}
+
+// sizeOf is the size set at i, 0 when there is none.
+func sizeOf(sizes []float64, i int) float64 {
+	if i < 0 || i >= len(sizes) || sizes[i] != sizes[i] || sizes[i] < 0 {
+		return 0
+	}
+	return sizes[i]
 }

@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-5 of 10 since the last full run (full run on the branch of the 10th merge, on main plus web push for mentions, form fields behind build tags and in table cells, the table grips and sizes, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` failed the first time on three keyboard e2e tests (the side tabs lost focus in a build without form fields, a regression from the build-tag change) and passed in full after the fix; coverage score 88.9%).
+6 of 10 since the last full run (full run on the branch of the 10th merge, on main plus web push for mentions, form fields behind build tags and in table cells, the table grips and sizes, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` failed the first time on three keyboard e2e tests (the side tabs lost focus in a build without form fields, a regression from the build-tag change) and passed in full after the fix; coverage score 88.9%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders

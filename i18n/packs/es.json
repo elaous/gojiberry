@@ -1823,6 +1823,27 @@
   "lock.someone": "alguien",
   "lock.picture": "imagen",
   "lock.equation": "ecuación",
-  "lock.field": "campo de formulario"
+  "lock.field": "campo de formulario",
+  "tgrip.title": "Tabla: %s",
+  "tgrip.column": "Columna %s",
+  "tgrip.row": "Fila %d",
+  "tgrip.table": "Toda la tabla",
+  "tgrip.colBefore": "Insertar una columna antes",
+  "tgrip.colAfter": "Insertar una columna después",
+  "tgrip.colLeft": "Mover a la izquierda",
+  "tgrip.colRight": "Mover a la derecha",
+  "tgrip.sortAsc": "Ordenar las filas por esta columna, de A a Z",
+  "tgrip.sortDesc": "Ordenar las filas por esta columna, de Z a A",
+  "tgrip.resetWidth": "Restablecer el ancho",
+  "tgrip.colDelete": "Eliminar la columna",
+  "tgrip.rowAbove": "Insertar una fila encima",
+  "tgrip.rowBelow": "Insertar una fila debajo",
+  "tgrip.rowUp": "Mover hacia arriba",
+  "tgrip.rowDown": "Mover hacia abajo",
+  "tgrip.rowDuplicate": "Duplicar la fila",
+  "tgrip.resetHeight": "Restablecer la altura",
+  "tgrip.rowDelete": "Eliminar la fila",
+  "tgrip.resetSizes": "Restablecer todos los anchos de columna y alturas de fila",
+  "tgrip.done": "Hecho"
  }
 }

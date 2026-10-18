@@ -259,6 +259,7 @@ func main() {
 		}
 		flow = root.Find(cxango.TagTextFlow, 0).(*canvas.TextFlow)
 		u.wireForms(flow, redraw, renderUI)
+		u.wireTables(flow, renderUI)
 		u.refreshBusy()
 		stage.Draw()
 	}

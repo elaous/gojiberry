@@ -66,7 +66,8 @@ func tableTarget(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	f := &u.tableStyle
 	tv := tableTarget(root(), flow())
-	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tstyle.title", "Table styles")))}
+	nodes := tableGripSection(flow(), redraw, renderUI)
+	nodes = append(nodes, xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tstyle.title", "Table styles"))))
 	if tv == nil {
 		nodes = append(nodes, para("tstyle-hint", T("tstyle.hint", "Put the caret after a table (or click in a table on the page), then choose a style for it."), false))
 	}
@@ -129,4 +130,86 @@ func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextF
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "tstyle-message"), xango.A("role", "status")}, xango.Text(f.msg)))
 	}
 	return xango.El("div", []xango.Attr{xango.A("id", "tstyle-panel")}, nodes...)
+}
+
+// tableGripSection acts on what a grip of a table in the text has selected: a column, a row or the table. Nothing is
+// shown when no grip is selected (press the letter above a column or the number beside a row, or the icon in the corner).
+func tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
+	if fl == nil {
+		return nil
+	}
+	var o *canvas.TableObject
+	for _, t := range fl.Tables() {
+		if t.Selected().Kind != canvas.SelNone {
+			o = t
+			break
+		}
+	}
+	if o == nil {
+		return nil
+	}
+	sel, tb := o.Selected(), o.View.Table
+	done := func(keep canvas.Selection) func() {
+		return func() {
+			o.Select(keep)
+			fl.Touch()
+			redraw()
+			renderUI()
+		}
+	}
+	var title string
+	var buttons []xango.Node
+	add := func(id, label string, act func(), disabled bool) {
+		buttons = append(buttons, btn("tgrip-"+id, label, act, disabled))
+	}
+	switch sel.Kind {
+	case canvas.SelColumn:
+		c := sel.Index
+		title = T("tgrip.column", "Column %s", canvas.ColumnName(c))
+		add("col-before", T("tgrip.colBefore", "Insert a column before"), func() { tb.InsertColumn(c); done(canvas.Selection{})() }, false)
+		add("col-after", T("tgrip.colAfter", "Insert a column after"), func() { tb.InsertColumn(c + 1); done(canvas.Selection{})() }, false)
+		add("col-left", T("tgrip.colLeft", "Move left"), func() { tb.MoveColumn(c, c-1); done(canvas.Selection{Kind: canvas.SelColumn, Index: c - 1})() }, c == 0)
+		add("col-right", T("tgrip.colRight", "Move right"), func() { tb.MoveColumn(c, c+1); done(canvas.Selection{Kind: canvas.SelColumn, Index: c + 1})() }, c >= tb.Cols()-1)
+		add("col-sort", T("tgrip.sortAsc", "Sort the rows by this column, A to Z"), func() { tb.SortByColumn(c, false); done(sel)() }, tb.Rows() < 3)
+		add("col-sort-desc", T("tgrip.sortDesc", "Sort the rows by this column, Z to A"), func() { tb.SortByColumn(c, true); done(sel)() }, tb.Rows() < 3)
+		add("col-reset", T("tgrip.resetWidth", "Reset the width"), func() { tb.SetColumnWidth(c, 0); done(sel)() }, tb.ColumnWidth(c) == 0)
+		add("col-delete", T("tgrip.colDelete", "Delete the column"), func() { tb.DeleteColumn(c); done(canvas.Selection{})() }, tb.Cols() < 2)
+	case canvas.SelRow:
+		r := sel.Index
+		title = T("tgrip.row", "Row %d", r+1)
+		add("row-above", T("tgrip.rowAbove", "Insert a row above"), func() { tb.InsertRow(r); done(canvas.Selection{})() }, false)
+		add("row-below", T("tgrip.rowBelow", "Insert a row below"), func() { tb.InsertRow(r + 1); done(canvas.Selection{})() }, false)
+		add("row-up", T("tgrip.rowUp", "Move up"), func() { tb.MoveRow(r, r-1); done(canvas.Selection{Kind: canvas.SelRow, Index: r - 1})() }, r == 0)
+		add("row-down", T("tgrip.rowDown", "Move down"), func() { tb.MoveRow(r, r+1); done(canvas.Selection{Kind: canvas.SelRow, Index: r + 1})() }, r >= tb.Rows()-1)
+		add("row-dup", T("tgrip.rowDuplicate", "Duplicate the row"), func() { tb.DuplicateRow(r); done(canvas.Selection{})() }, false)
+		add("row-reset", T("tgrip.resetHeight", "Reset the height"), func() { tb.SetRowHeight(r, 0); done(sel)() }, tb.RowHeightSet(r) == 0)
+		add("row-delete", T("tgrip.rowDelete", "Delete the row"), func() { tb.DeleteRow(r); done(canvas.Selection{})() }, tb.Rows() < 2)
+	default:
+		title = T("tgrip.table", "The whole table")
+		add("table-reset", T("tgrip.resetSizes", "Reset every column width and row height"), func() {
+			for c := 0; c < tb.Cols(); c++ {
+				tb.SetColumnWidth(c, 0)
+			}
+			for r := 0; r < tb.Rows(); r++ {
+				tb.SetRowHeight(r, 0)
+			}
+			done(sel)()
+		}, len(tb.ColWidths) == 0 && len(tb.RowHeights) == 0)
+	}
+	add("done", T("tgrip.done", "Done"), done(canvas.Selection{}), false)
+	return []xango.Node{
+		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("tgrip.title", "Table: %s", title))),
+		xango.El("div", []xango.Attr{xango.A("id", "tgrip-actions"), xango.A("role", "group"), xango.A("aria-label", title), xango.A("style", "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.8em")}, buttons...),
+	}
+}
+
+// wireTables makes pressing a grip of a table in the text open the Styles tab, where what the grip selected is acted on.
+func (u *ui) wireTables(fl *canvas.TextFlow, renderUI func()) {
+	if fl == nil {
+		return
+	}
+	fl.OnTableSelect = func(*canvas.TableObject, canvas.Selection) {
+		u.tab = "styles"
+		renderUI()
+	}
 }
