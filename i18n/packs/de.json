@@ -1816,6 +1816,7 @@
   "map.notFound": "Dieser Ort wurde nicht gefunden. Versuchen Sie eine andere Adresse, Koordinaten oder einen Plus Code.",
   "map.lookupFailed": "Die Adresse konnte nicht gesucht werden (der Dienst hat nicht geantwortet).",
   "map.renderFailed": "Die Karte konnte nicht gezeichnet werden (der Kachelserver hat nicht geantwortet).",
-  "map.alt": "Karte von %s"
+  "map.alt": "Karte von %s",
+  "scripts.allowChange": "Darf das Dokument ändern: Formatierung, Formatvorlagen, Bildbeschreibungen, Titel, Sprache oder alles über Markdown"
  }
 }

@@ -14,6 +14,26 @@ A person can write (or paste) a small script and run it from the **Scripts** tab
 | `await editor.insert(text)` | puts text at the caret, replacing the selection, as one change the undo history has | **May write text into the document** (off by default) |
 | `editor.log(...)` | a line shown under the script | nothing |
 
+### Get and set
+
+With **May read the text of the document** a script can also read more of the document, and with **May change the document** (off by default) it can change it. All of it is checked by the host and nothing of the page is reachable.
+
+| Call | Does | Needs |
+|---|---|---|
+| `await editor.markdown()` | the document as extended Markdown | read |
+| `await editor.setMarkdown(text)` | replaces the whole document with the Markdown (one change the undo history has) | change |
+| `await editor.selection()` | `{from, to, text}`: rune offsets and the selected text | read |
+| `await editor.setSelection(from, to)` | selects a range | change |
+| `await editor.format()` | `{bold, italic, underline, strike, color, background, family, size}` of the first selected character (or the one before the caret) | read |
+| `await editor.setFormat({bold, italic, underline, strike, color, background, family, size})` | changes the selection (or what is typed next); what is not given stays; `""` takes a colour, background or family off | change |
+| `await editor.styles()`, `await editor.style()` | the names of the paragraph styles, and the style of the paragraph at the caret | read |
+| `await editor.setStyle(name)` | applies a style to the selected paragraphs | change |
+| `await editor.images()` | `[{index, alt, legend, credit, decorative, width, height}]`, never the picture | read |
+| `await editor.setImage(index, {alt, legend, decorative})` | describes a picture | change |
+| `await editor.meta()`, `await editor.setMeta({title, language})` | the document's title and language | read, change |
+
+What a script may set is limited: a colour is `#rgb`, `#rrggbb` or a name; a family is letters, digits, spaces and dashes (60 characters); a size is 4 to 400; a description or legend 1000 characters; a title 200; a language a tag like `fr` or `pt-BR`. Changes need edit mode and a person who may edit. Later features that are a small lift are listed in [phase-2.md](phase-2.md) (P2-7).
+
 A refused call rejects with a message the script can read. A script that makes more than 2000 requests, or runs longer than 10 seconds, is stopped; so is one the person stops. A script is not kept: it is a text box, and the page does not store it or run it again by itself.
 
 ## The sandbox, and what it does not promise
@@ -24,7 +44,7 @@ What is *not* promised: a browser's policy and sandbox are strong, not perfect, 
 
 ## The host
 
-Package `script` is the host side: `Session.Handle` takes one request as JSON and answers with JSON, checks the permission, caps a request at 64 KiB, a log line at 1000 characters, the text handed over at 4 MiB and the number of requests at 2000. It knows nothing of the page, so it is tested with a stand-in host. The page's part is `scripts.go` in the showcase.
+Package `script` is the host side: `Session.Handle` (its get/set requests are `getset.go`: a host that is also a `script.Document` answers them) takes one request as JSON and answers with JSON, checks the permission, caps a request at 64 KiB, a log line at 1000 characters, the text handed over at 4 MiB and the number of requests at 2000. It knows nothing of the page, so it is tested with a stand-in host. The page's part is `scripts.go` in the showcase.
 
 ## What is not here
 

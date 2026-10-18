@@ -26,27 +26,29 @@ await editor.run("bold");
 `
 
 var scriptsUI struct {
-	source     string
-	started    bool // source was set
-	noRun      bool // the person turned "run commands" off
-	allowRead  bool
-	allowWrite bool
-	running    bool
-	log        []string
-	msg        string
-	frame      js.Value
-	sess       *script.Session
-	listener   js.Func
-	listening  bool
-	timer      js.Value
-	renderUI   func()
+	source      string
+	started     bool // source was set
+	noRun       bool // the person turned "run commands" off
+	allowRead   bool
+	allowWrite  bool
+	allowChange bool // may change the document by the get/set requests (format, style, descriptions, title, Markdown)
+	running     bool
+	log         []string
+	msg         string
+	frame       js.Value
+	sess        *script.Session
+	listener    js.Func
+	listening   bool
+	timer       js.Value
+	renderUI    func()
 }
 
 type scriptHost struct {
-	commands func() []canvas.CommandInfo
-	run      func(canvas.Command)
-	text     func() string
-	insert   func(string) bool
+	script.Document // the get/set requests
+	commands        func() []canvas.CommandInfo
+	run             func(canvas.Command)
+	text            func() string
+	insert          func(string) bool
 }
 
 func (h scriptHost) Commands() []script.Command {
@@ -71,7 +73,10 @@ func sandboxPage(source string) string {
 const send=o=>new Promise((res,rej)=>{const id=++n;pending.set(id,{res,rej});parent.postMessage(JSON.stringify(Object.assign({id},o)),"*")});
 addEventListener("message",e=>{if(e.source!==parent)return;let r;try{r=JSON.parse(e.data)}catch(x){return}const p=pending.get(r.id);if(!p)return;pending.delete(r.id);r.ok?p.res(r.value):p.rej(new Error(r.error))});
 for(const k of ["fetch","XMLHttpRequest","WebSocket","EventSource","Worker","SharedWorker","RTCPeerConnection","webkitRTCPeerConnection","indexedDB","caches","localStorage","sessionStorage","navigator"]){try{Object.defineProperty(window,k,{value:undefined})}catch(x){}}
-window.editor=Object.freeze({commands:()=>send({op:"commands"}),run:name=>send({op:"run",name}),text:()=>send({op:"text"}),insert:text=>send({op:"insert",text:String(text)}),log:(...a)=>send({op:"log",message:a.join(" ")})});
+window.editor=Object.freeze({commands:()=>send({op:"commands"}),run:name=>send({op:"run",name}),text:()=>send({op:"text"}),insert:text=>send({op:"insert",text:String(text)}),log:(...a)=>send({op:"log",message:a.join(" ")}),
+markdown:()=>send({op:"markdown"}),setMarkdown:text=>send({op:"setMarkdown",text:String(text)}),selection:()=>send({op:"selection"}),setSelection:(from,to)=>send({op:"setSelection",data:{from,to}}),
+format:()=>send({op:"format"}),setFormat:f=>send({op:"setFormat",data:f}),styles:()=>send({op:"styles"}),style:()=>send({op:"style"}),setStyle:name=>send({op:"setStyle",name:String(name)}),
+images:()=>send({op:"images"}),setImage:(index,d)=>send({op:"setImage",index,data:d}),meta:()=>send({op:"meta"}),setMeta:d=>send({op:"setMeta",data:d})});
 window.__done=()=>send({op:"done"});
 window.addEventListener("error",e=>{send({op:"log",message:"Error: "+e.message}).then(window.__done)});
 })()</script>` +
@@ -98,13 +103,13 @@ func stopScript(reason string) {
 }
 
 // runScript starts the script in a new sandbox.
-func runScript(commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) {
+func runScript(docAPI script.Document, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) {
 	stopScript("")
 	scriptsUI.renderUI = renderUI
 	scriptsUI.log, scriptsUI.msg, scriptsUI.running = nil, "", true
 	scriptsUI.sess = &script.Session{
-		Host:  scriptHost{commands, run, text, insert},
-		Allow: map[script.Permission]bool{script.Run: !scriptsUI.noRun, script.Read: scriptsUI.allowRead, script.Insert: scriptsUI.allowWrite},
+		Host:  scriptHost{docAPI, commands, run, text, insert},
+		Allow: map[script.Permission]bool{script.Run: !scriptsUI.noRun, script.Read: scriptsUI.allowRead, script.Insert: scriptsUI.allowWrite, script.Write: scriptsUI.allowChange},
 		Log:   func(l string) { scriptsUI.log = append(scriptsUI.log, l); renderUI() },
 		Done:  func() { go stopScript(T("scripts.finished", "The script finished.")) },
 	}
@@ -141,7 +146,7 @@ func runScript(commands func() []canvas.CommandInfo, run func(canvas.Command), t
 }
 
 // scriptsPanel is the Scripts tab.
-func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) xango.Node {
+func scriptsPanel(state *State, doc script.Document, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) xango.Node {
 	if !scriptsUI.started {
 		scriptsUI.started, scriptsUI.source = true, scriptSample
 	}
@@ -157,6 +162,8 @@ func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(c
 		xango.El("div", []xango.Attr{xango.A("id", "scripts-allow-write")}, components.Checkbox(components.CheckboxProps{Label: T("scripts.allowWrite", "May write text into the document, at the caret"), Checked: scriptsUI.allowWrite,
 			OnChange: func(on bool) { scriptsUI.allowWrite = on; renderUI() }})),
 	}
+	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("id", "scripts-allow-change")}, components.Checkbox(components.CheckboxProps{Label: T("scripts.allowChange", "May change the document: formatting, styles, picture descriptions, title, language, or all of it from Markdown"), Checked: scriptsUI.allowChange,
+		OnChange: func(on bool) { scriptsUI.allowChange = on; renderUI() }})))
 	if scriptsUI.allowRead {
 		nodes = append(nodes, para("scripts-read-warning", T("scripts.readWarning", "A script that may read the text can show it to whoever wrote the script, for example in a line it asks you to copy. Allow it only for a script you trust."), true))
 	}
@@ -164,7 +171,7 @@ func scriptsPanel(state *State, commands func() []canvas.CommandInfo, run func(c
 		nodes = append(nodes, para("scripts-needs-edit", T("scripts.needEdit", "Switch to edit mode: commands that change the document do nothing otherwise."), false))
 	}
 	nodes = append(nodes, xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px;flex-wrap:wrap")},
-		btn("scripts-run", T("scripts.run", "Run the script"), func() { runScript(commands, run, text, insert, renderUI) }, scriptsUI.running || strings.TrimSpace(scriptsUI.source) == ""),
+		btn("scripts-run", T("scripts.run", "Run the script"), func() { runScript(doc, commands, run, text, insert, renderUI) }, scriptsUI.running || strings.TrimSpace(scriptsUI.source) == ""),
 		btn("scripts-stop", T("scripts.stop", "Stop"), func() { stopScript(T("scripts.stopped", "The script was stopped.")) }, !scriptsUI.running),
 	))
 	if scriptsUI.msg != "" {

@@ -559,7 +559,7 @@ func main() {
 		case "addons":
 			panel = addonsPanel(u, renderUI)
 		case "scripts":
-			panel = scriptsPanel(&state, func() []canvas.CommandInfo { return append(stage.Features.Commands(), builtinCommands()...) }, run, func() string { return flow.EditText() }, func(text string) bool { return insertAtCaret(stage, text, redraw) }, renderUI)
+			panel = scriptsPanel(&state, flowDoc{u, func() *canvas.TextFlow { return flow }, redraw}, func() []canvas.CommandInfo { return append(stage.Features.Commands(), builtinCommands()...) }, run, func() string { return flow.EditText() }, func(text string) bool { return insertAtCaret(stage, text, redraw) }, renderUI)
 		case "forms":
 			panel = formsPanel(u, &state, func() *canvas.TextFlow { return flow }, redraw, renderUI)
 		case "refs":
