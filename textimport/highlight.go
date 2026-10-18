@@ -126,7 +126,7 @@ func jsonSpans(s string, json5 bool) []span {
 			i = j
 		case json5 && r == '/' && i+1 < len(rs) && rs[i+1] == '*':
 			j := i + 2
-			for j+1 < len(rs) && !(rs[j] == '*' && rs[j+1] == '/') {
+			for j+1 < len(rs) && (rs[j] != '*' || rs[j+1] != '/') {
 				j++
 			}
 			j = min(j+2, len(rs))
@@ -138,7 +138,7 @@ func jsonSpans(s string, json5 bool) []span {
 				j++
 			}
 			if r == '-' || r == '+' || r == '.' {
-				if j == i+1 || !(unicode.IsDigit(rs[i+1]) || rs[i+1] == '.') {
+				if j == i+1 || (!unicode.IsDigit(rs[i+1]) && rs[i+1] != '.') {
 					emit(i, i+1, normal)
 					i++
 					break
