@@ -157,7 +157,10 @@ type Block struct {
 	// horizontal alignment (0 left, 1 centre, 2 right).
 	TableBackground string
 	TableAlign      int
-	NumberedIndex   int
+	// TableColW and TableRowH are the width of this cell's column and the height of its row, in CSS pixels, when a
+	// person set them by dragging a grip (0: the format's own layout).
+	TableColW, TableRowH float64
+	NumberedIndex        int
 	// Note is the number of the footnote a list item is the text of (0 for none).
 	Note int
 	// CodeLang is the programming language of a Code block as a short lower-case name ("go", "python"),

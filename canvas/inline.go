@@ -1,5 +1,7 @@
 package canvas
 
+import "time"
+
 // InlineObject is a canvas object that sits in a TextFlow's line of
 // text like a (very large) character: an Image in inline mode, a table
 // from the Markdown transform, a horizontal rule.
@@ -85,6 +87,8 @@ type TableObject struct {
 	// columns, rows and the eye/pen switch are drawn (the same grips as an editable table's); tableW is the table's own width.
 	pad, tableW float64
 	resize      *tableResize
+	lastEdge    *tableResize // the edge pressed last, and when, to tell a double press
+	lastAt      time.Time
 }
 
 // NewTableObject wraps t for placing in a flow with Inline{Block: true}.
@@ -121,7 +125,9 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	o.View.Draw()
 	o.View.penSwitch = true
 	o.View.showSwitch = o.View.Table.HasFormulaOrField() // the eye/pen only where there is something to see or edit
-	o.View.drawHandles(o.View.layout())
+	g := o.View.layout()
+	o.View.drawSelection(g)
+	o.View.drawHandles(g)
 }
 
 // DragStart implements DragObject: a press on a column grip near the edge between two columns (or at the right edge of
@@ -153,7 +159,52 @@ func (o *TableObject) DragStart(x, y float64) bool {
 			}
 		}
 	}
+	if d := o.resize; d != nil { // pressing the same edge twice in a row gives the size back to the table
+		now := time.Now()
+		if o.lastEdge != nil && o.lastEdge.col == d.col && o.lastEdge.index == d.index && now.Sub(o.lastAt) < 500*time.Millisecond {
+			if d.col {
+				v.Table.SetColumnWidth(d.index, 0)
+			} else {
+				v.Table.SetRowHeight(d.index, 0)
+			}
+			o.lastEdge, o.resize = nil, nil
+			return true
+		}
+		o.lastEdge, o.lastAt = d, now
+	}
 	return o.resize != nil
+}
+
+// Select selects a column, a row or the whole table (the grips do it when pressed; the host acts on the selection).
+func (o *TableObject) Select(sel Selection) {
+	if sel.Kind == SelColumn && (sel.Index < 0 || sel.Index >= o.View.Table.Cols()) || sel.Kind == SelRow && (sel.Index < 0 || sel.Index >= o.View.Table.Rows()) {
+		sel = Selection{}
+	}
+	o.View.sel = sel
+}
+
+// Selected is what is selected in the table: a column, a row, the table, or nothing (Kind SelNone).
+func (o *TableObject) Selected() Selection { return o.View.sel }
+
+// gripAt says which grip the point is on, relative to the object (the column grips above, the row grips at the left, the
+// table icon in the corner), or SelNone.
+func (o *TableObject) gripAt(x, y float64) Selection {
+	v := o.View
+	hs, gap := v.Style.HandleSize, v.Style.BarGap
+	oldX, oldY := v.X, v.Y
+	v.X, v.Y = 0, 0
+	g := v.layout()
+	v.X, v.Y = oldX, oldY
+	x, y = x-o.pad, y-o.pad
+	switch {
+	case x >= -gap-hs && x < -gap && y >= -gap-hs && y < -gap: // the icon in the corner
+		return Selection{Kind: SelTable}
+	case y >= -gap-hs && y < -gap && x >= 0 && x < g.right():
+		return Selection{SelColumn, indexAt(g.colX, x)}
+	case x >= -gap-hs && x < -gap && y >= 0 && y < g.bottom():
+		return Selection{SelRow, indexAt(g.rowY, y)}
+	}
+	return Selection{}
 }
 
 // DragMove implements DragObject.
@@ -197,6 +248,10 @@ func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 		v.SetShowFormulas(!v.ShowFormulas) // a view setting: nothing to save
 		return true, false
 	}
+	if sel := o.gripAt(x, y); sel.Kind != SelNone { // a grip: select what it stands for
+		o.Select(sel)
+		return true, false
+	}
 	x, y = x-o.pad, y-o.pad
 	oldX, oldY := v.X, v.Y
 	v.X, v.Y = 0, 0
@@ -205,6 +260,7 @@ func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 	if x < 0 || y < 0 || x >= g.right() || y >= g.bottom() {
 		return false, false
 	}
+	v.sel = Selection{} // a press in the cells ends the selection
 	row, col := v.Table.Owner(indexAt(g.rowY, y), indexAt(g.colX, x))
 	f := v.Table.Fields[CellPos{row, col}]
 	if f == nil {

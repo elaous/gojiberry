@@ -762,7 +762,11 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, contentWidth, x0 float64) error {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	owners := tableMergeGrid(cells)
-	colWidth := contentWidth / float64(cols)
+	colWidths := tableColumnWidths(cells, contentWidth, 0.75) // a CSS pixel is 0.75 points
+	colX := make([]float64, cols+1)
+	for c, w := range colWidths {
+		colX[c+1] = colX[c] + w
+	}
 	lineHeight := pdfBaseFontSize * pdfLineHeightMult
 
 	type cellDraw struct {
@@ -774,7 +778,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 	heights := make([]float64, rows)
 	for r := 0; r < rows; r++ {
 		draws := make([]cellDraw, cols)
-		rowHeight := lineHeight + 2*pdfTableCellPadding
+		rowHeight := max(lineHeight+2*pdfTableCellPadding, cells[r*cols].TableRowH*0.75)
 		for c := 0; c < cols; c++ {
 			i := r*cols + c
 			cell := cells[i]
@@ -783,9 +787,9 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 			if skipCell {
 				continue
 			}
-			w := colWidth
+			w := colWidths[c]
 			if !cell.TableCovered && own.colSpan > 1 {
-				w = colWidth * float64(own.colSpan)
+				w = colX[min(c+own.colSpan, cols)] - colX[c]
 			}
 			var tokens []pdfToken
 			if !cell.TableCovered {
@@ -798,7 +802,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 			if h := float64(len(wrapped))*lineHeight + 2*pdfTableCellPadding; h > rowHeight {
 				rowHeight = h
 			}
-			draws[c] = cellDraw{x: x0 + float64(c)*colWidth, w: w, wrapped: wrapped}
+			draws[c] = cellDraw{x: x0 + colX[c], w: w, wrapped: wrapped}
 		}
 
 		allDraws[r], heights[r] = draws, rowHeight

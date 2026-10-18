@@ -1863,6 +1863,27 @@
     "lock.someone": "מישהו",
     "lock.picture": "תמונה",
     "lock.equation": "משוואה",
-    "lock.field": "שדה טופס"
+    "lock.field": "שדה טופס",
+    "tgrip.title": "טבלה: %s",
+    "tgrip.column": "עמודה %s",
+    "tgrip.row": "שורה %d",
+    "tgrip.table": "כל הטבלה",
+    "tgrip.colBefore": "הוספת עמודה לפניה",
+    "tgrip.colAfter": "הוספת עמודה אחריה",
+    "tgrip.colLeft": "הזזה שמאלה",
+    "tgrip.colRight": "הזזה ימינה",
+    "tgrip.sortAsc": "מיון השורות לפי העמודה, א עד ת",
+    "tgrip.sortDesc": "מיון השורות לפי העמודה, ת עד א",
+    "tgrip.resetWidth": "איפוס הרוחב",
+    "tgrip.colDelete": "מחיקת העמודה",
+    "tgrip.rowAbove": "הוספת שורה מעליה",
+    "tgrip.rowBelow": "הוספת שורה מתחתיה",
+    "tgrip.rowUp": "הזזה למעלה",
+    "tgrip.rowDown": "הזזה למטה",
+    "tgrip.rowDuplicate": "שכפול השורה",
+    "tgrip.resetHeight": "איפוס הגובה",
+    "tgrip.rowDelete": "מחיקת השורה",
+    "tgrip.resetSizes": "איפוס כל רוחבי העמודות וגובהי השורות",
+    "tgrip.done": "סיום"
   }
 }

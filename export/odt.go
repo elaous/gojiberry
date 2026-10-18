@@ -26,9 +26,11 @@ type odtBuilder struct {
 	order  []string          // the keys in the order they were made
 	cells  map[string]string // table cell and paragraph styles by key
 	corder []string
-	media  map[string][]byte
-	imgs   int
-	notes  map[int]string // footnote text by number
+	// sizes are the automatic styles of table columns and rows a person sized (see table).
+	sizes []string
+	media map[string][]byte
+	imgs  int
+	notes map[int]string // footnote text by number
 	// open lists, outermost first: true is a numbered list
 	open []bool
 	// cur is the index of the block being written; marks names the bookmark of each heading the table of
@@ -275,9 +277,30 @@ func (b *odtBuilder) table(cells []Block, id int) {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	w := &b.body
 	n := strconv.Itoa(id)
-	w.WriteString(`<table:table table:name="Table` + n + `" table:style-name="Table"><table:table-column table:style-name="TableCol" table:number-columns-repeated="` + strconv.Itoa(cols) + `"/>`)
+	w.WriteString(`<table:table table:name="Table` + n + `" table:style-name="Table">`)
+	sized := false
+	for c := 0; c < cols; c++ {
+		sized = sized || cells[c].TableColW > 0
+	}
+	if !sized {
+		w.WriteString(`<table:table-column table:style-name="TableCol" table:number-columns-repeated="` + strconv.Itoa(cols) + `"/>`)
+	}
+	for c := 0; sized && c < cols; c++ {
+		if px := cells[c].TableColW; px > 0 { // a column a person sized
+			name := "TCol" + strconv.Itoa(len(b.sizes)+1)
+			b.sizes = append(b.sizes, `<style:style style:name="`+name+`" style:family="table-column"><style:table-column-properties style:column-width="`+strconv.FormatFloat(px/96, 'f', 4, 64)+`in"/></style:style>`)
+			w.WriteString(`<table:table-column table:style-name="` + name + `"/>`)
+		} else {
+			w.WriteString(`<table:table-column table:style-name="TableCol"/>`)
+		}
+	}
 	for r := 0; r < rows; r++ {
-		w.WriteString(`<table:table-row table:style-name="TableRow">`)
+		rowStyle := "TableRow"
+		if px := cells[r*cols].TableRowH; px > 0 {
+			rowStyle = "TRow" + strconv.Itoa(len(b.sizes)+1)
+			b.sizes = append(b.sizes, `<style:style style:name="`+rowStyle+`" style:family="table-row"><style:table-row-properties fo:keep-together="always" style:min-row-height="`+strconv.FormatFloat(px/96, 'f', 4, 64)+`in"/></style:style>`)
+		}
+		w.WriteString(`<table:table-row table:style-name="` + rowStyle + `">`)
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
 			if cell.TableCovered {
@@ -473,6 +496,9 @@ func (b *odtBuilder) automaticStyles() string {
 	}
 	sb.WriteString(`<style:style style:name="Table" style:family="table"><style:table-properties style:width="6.5in" table:align="margins"/></style:style>`)
 	sb.WriteString(`<style:style style:name="TableCol" style:family="table-column"/>`)
+	for _, x := range b.sizes {
+		sb.WriteString(x)
+	}
 	sb.WriteString(`<style:style style:name="TableRow" style:family="table-row"><style:table-row-properties fo:keep-together="always"/></style:style>`)
 	sb.WriteString(`<style:style style:name="TableCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.04in" fo:border="0.5pt solid #000000"/></style:style>`)
 	sb.WriteString(`<style:style style:name="Placeholder" style:family="text"><style:text-properties fo:font-style="italic"/></style:style>`)
