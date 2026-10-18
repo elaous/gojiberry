@@ -1801,6 +1801,21 @@
   "forms.cellRow": "Fila",
   "forms.cellColumn": "Columna",
   "forms.seeAll": "Ver todo (valores de las tablas)",
-  "forms.editAll": "Editar todo (fórmulas y campos de las tablas)"
+  "forms.editAll": "Editar todo (fórmulas y campos de las tablas)",
+  "map.title": "Insertar un mapa",
+  "map.about": "A partir de una dirección, coordenadas (48.8584, 2.2945) o un Plus Code (8FVC9G8F+6W). El mapa se hace con teselas de OpenStreetMap; una dirección se busca en Nominatim de OpenStreetMap.",
+  "map.query": "Dirección, coordenadas o Plus Code",
+  "map.hint": "por ejemplo: Torre Eiffel, París",
+  "map.zoom": "Qué cerca",
+  "map.zoomStreet": "Calle",
+  "map.zoomTown": "Barrio",
+  "map.zoomCity": "Ciudad",
+  "map.go": "Insertar el mapa",
+  "map.working": "Haciendo el mapa…",
+  "map.badCoords": "La latitud debe estar entre -90 y 90 y la longitud entre -180 y 180.",
+  "map.notFound": "No se encontró ese lugar. Pruebe otra dirección, coordenadas o un Plus Code.",
+  "map.lookupFailed": "No se pudo buscar la dirección (el servicio no respondió).",
+  "map.renderFailed": "No se pudo dibujar el mapa (el servidor de teselas no respondió).",
+  "map.alt": "Mapa de %s"
  }
 }

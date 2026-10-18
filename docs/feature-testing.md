@@ -124,6 +124,14 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Push when the page is closed.** *Try it:* serve a push server (docs/web-push.md) and `push.json`, open the Comments tab, tick "Notify me of mentions when this page is closed", allow notifications, close the page, and have someone mention you. *You should see:* a notification naming who and the document; clicking it opens the page; unticking stops it (this last part with a real push service is not covered by an automated test). *Automated:* `TestMentionNotificationsWhenThePageIsClosed` (stand-ins for the push API), package `webpush` (encryption checked by an independent decryptor, VAPID, SSRF refusals, handler), package `mentionpush`, `wasmserve/sw-push.test.js` (`make sw-test`).
 
+## Maps
+
+**Try it.** Build with `GOFLAGS=-tags=exp_map` (or `experimental`), open the Pictures tab in edit mode, type `8FVC9G8F+6W` (or an address, or `48.8584, 2.2945`), pick a zoom and press *Insert the map*.
+
+**You should see.** A map picture at the caret with a red marker at the centre, *Map data © OpenStreetMap contributors (ODbL)* under it, and the alt text *Map of ...* in the picture's list. A latitude over 90 is refused in words.
+
+**Automated.** `TestInsertAMapFromAPlusCodeAndFromAnAddress`, `TestMapsAreNotInADefaultBuild` (examples/canvas-editor-showcase), package `osmmap` tests (Plus Code vectors of the specification, round trip, coordinates, Nominatim and tile stand-ins, rendering)
+
 ## Text formats as they are
 
 **Try it.** Build with `GOFLAGS=-tags=exp_textformats` (or `experimental`), then on the Files tab open a `.csv`, a `.yaml` and a `.json` file that is data; or `opendoc pack out.opendoc folder` with such files in the folder.
