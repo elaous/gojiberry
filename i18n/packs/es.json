@@ -1885,6 +1885,7 @@
   "about.source": "Código fuente",
   "about.licenceText": "Licencia (AGPL-3.0)",
   "about.notice": "Aviso y crédito",
-  "about.commercial": "Licencia comercial"
+  "about.commercial": "Licencia comercial",
+  "textfmt.readonly": "Abierto para leer: esto es una copia de un archivo %s. Cambie el modo para modificar la copia; no se guarda de vuelta en el archivo."
  }
 }

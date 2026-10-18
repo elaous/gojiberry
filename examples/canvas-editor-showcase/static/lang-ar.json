@@ -2025,6 +2025,7 @@
     "about.source": "الشيفرة المصدرية",
     "about.licenceText": "الرخصة (AGPL-3.0)",
     "about.notice": "الإشعار والإقرار",
-    "about.commercial": "الرخصة التجارية"
+    "about.commercial": "الرخصة التجارية",
+    "textfmt.readonly": "فُتح للقراءة: هذه نسخة من ملف %s. غيّر الوضع لتعديل النسخة؛ لا تُحفظ في الملف."
   }
 }
