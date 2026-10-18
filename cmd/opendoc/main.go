@@ -544,6 +544,9 @@ func verifyCmd(args []string, out outWriter) error {
 	defer func() { _ = f.Close() }()
 	rep := r.Verify()
 	say(out, "%d documents checked", rep.Checked)
+	if n := len(r.Index().Attachments); n > 0 {
+		say(out, ", %d attachments", n)
+	}
 	if rep.Unindexed > 0 {
 		say(out, ", %d records not in the index", rep.Unindexed)
 	}

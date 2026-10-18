@@ -37,7 +37,7 @@ header | record* | index record | signature record? | footer
 | bytes | |
 |---|---|
 | 8 | magic `OPENDOC\0` |
-| 4 | version (1) |
+| 4 | version: 1, or 2 for a pack that holds attachments (below) |
 | 4 | flags (0; unknown bits mean "do not read") |
 | 4 | length of the meta message |
 | 4 | zero |
@@ -51,7 +51,7 @@ string producer = 4; string description = 5; }`.
 | bytes | |
 |---|---|
 | 8 | length of the data (n) |
-| 1 | kind: 1 document, 2 index, 3 signature; others are skipped |
+| 1 | kind: 1 document, 2 index, 3 signature, 4 attachment (version 2); others are skipped |
 | 1 | flags: bit 0 = the data is an envelope (an encrypted record, below); other bits mean "do not read this record" |
 | 2 | zero |
 | 4 | CRC-32C of the 12 bytes above |
@@ -103,6 +103,10 @@ index is covered by the footer's hash and the signature, the flag by the frame's
 Folders are virtual, as in a store: a document names its folder, a folder names its
 parent. The index is what a store imports or lists; nothing is parsed from the
 documents to do so.
+
+### Attachment record (kind 4, version 2 only)
+
+Bytes a document refers to by their SHA-256, stored once: a large picture, or one used by several documents or by the versions of one. The index lists them in field 3: `Attachment { bytes sha256 = 1; uint64 offset = 2; uint64 length = 3; string mime = 4; }`, repeated, with the same rules as for documents (inside the records, aligned, no overlap, hash checked by `Verify`, covered by the index hash and so by the signature). A document in the pack names one by the image URL `opendoc-att:<64 hexadecimal characters>` (`docfile.AttachmentURL`); the importer puts the `data:` URL back. A pack is written as version 2 only when it holds one (`pack.NewWriterV2`; the saver's `PackOptions.Attachments` sets the size from which an image is kept apart, 64 KiB by default in the showcase), so a pack without attachments stays version 1 and every reader opens it. **A version 1 reader refuses a version 2 pack** (its version is not one it knows) instead of showing documents without their pictures. A version 1 pack cannot get attachments by appending (`ErrNoAttachments`); `Compact`, `Recover` and `Repack` keep them. Sealed (encrypted) documents keep their pictures inside the envelope, since the pack cannot see into it.
 
 ### Signature record (kind 3, optional)
 
@@ -208,9 +212,8 @@ Decided for this draft:
 
 Open:
 
-1. Hiding what the index shows about an encrypted record (its folder, size, update time and
-   trash flag stay readable, like a store's catalog).
-2. Moving large attachments out of documents into their own record kind.
+1. ~~Hiding what the index shows about an encrypted record~~ **partly done**: `PackOptions.Blur` rounds the time of a sealed record down to the day and pads what is sealed to a size bucket (1 KiB, doubling); the folder and the trash flag stay readable, like a store's catalog. Encrypting the whole index is phase 2 ([P2-14](phase-2.md)).
+2. ~~Moving large attachments out of documents into their own record kind~~ **done** as version 2 (see Attachment record).
 3. ~~Whether the signature should allow several signers~~ **done**: `Signature.More` (field 4), `Writer.CloseSigned`, `Cosign`, `Reader.Signers`, `opendoc cosign`.
 4. ~~A MIME type and a magic entry~~ **done**: `pack.MIME` (`application/vnd.opendocs.pack`), `docfile/pack/mime/opendoc.magic` for `file(1)` and `opendoc.xml` for shared-mime-info.
 
@@ -218,9 +221,9 @@ Open:
 
 A pack is one file with many documents in it: a backup, an export, something to hand to somebody. It has an *index* (a list of every document with its name, folder, size, time and trash flag) and each document is a *record*. Two things are left open.
 
-**1. What the index shows about an encrypted record.** An encrypted document's content is unreadable without its key, but the index entry beside it is plain: someone holding the file can see "a record of 3.2 MB in the folder *Medical*, changed on Tuesday, in the trash". That is the same as a store's catalogue, and it is there on purpose: the pack can be listed, verified and recovered **without any key** (`opendoc verify` checks every hash and the signature with no key). The choices: (a) leave it, say so (what is done now); (b) round the sizes up to buckets and blur the times, which hides a little and costs a little space; (c) encrypt the index too, which hides the structure but means nothing can be listed, verified or repaired without the key, and loses the keyless check. *Recommendation:* (a) for now, and (b) as an option when a pack is exported with confidential documents; (c) only if somebody needs it, since a pack you cannot verify without a key cannot be checked by whoever stores it for you.
+**1. What the index shows about an encrypted record.** An encrypted document's content is unreadable without its key, but the index entry beside it is plain: someone holding the file can see "a record of 3.2 MB in the folder *Medical*, changed on Tuesday, in the trash". That is the same as a store's catalogue, and it is there on purpose: the pack can be listed, verified and recovered **without any key** (`opendoc verify` checks every hash and the signature with no key). The choices: (a) leave it, say so (what is done now); (b) round the sizes up to buckets and blur the times, which hides a little and costs a little space; (c) encrypt the index too, which hides the structure but means nothing can be listed, verified or repaired without the key, and loses the keyless check. *Recommendation:* (a) for now, and (b) as an option when a pack is exported with confidential documents; (c) only if somebody needs it, since a pack you cannot verify without a key cannot be checked by whoever stores it for you. **Decided (owner, 2026-10-18):** blur now (done: the times are rounded to the day and the sizes fall in buckets, on by default in the showcase's pack download), encrypting the index is a phase 2 option ([P2-14](phase-2.md)).
 
-**2. Large attachments as their own record kind.** Today a picture is inside the document that uses it (a `data:` address). A document with one large picture is large, and the same picture in two documents, or in the document's history, is stored again each time; appending to a pack that holds such a document rewrites nothing, but verifying and reading it moves all that data. A record kind for attachments would store each picture once (by its hash), and the documents would refer to it. The cost: a format change. A reader that does not know the new kind skips it (the format says unknown kinds are skipped) but then cannot show the pictures, so it needs version 2 of the format and a note that version 1 readers will see documents without their large pictures. *Recommendation:* yes, as version 2, written only when a pack has attachments over a size (so small packs stay readable by every reader); not urgent.
+**2. Large attachments as their own record kind.** Today a picture is inside the document that uses it (a `data:` address). A document with one large picture is large, and the same picture in two documents, or in the document's history, is stored again each time; appending to a pack that holds such a document rewrites nothing, but verifying and reading it moves all that data. A record kind for attachments would store each picture once (by its hash), and the documents would refer to it. The cost: a format change. A reader that does not know the new kind skips it (the format says unknown kinds are skipped) but then cannot show the pictures, so it needs version 2 of the format and a note that version 1 readers will see documents without their large pictures. *Recommendation:* yes, as version 2, written only when a pack has attachments over a size (so small packs stay readable by every reader); not urgent. **Decided (owner, 2026-10-18) and done:** version 2, as above; a version 1 reader refuses such a pack, which is plainer than showing it without its pictures.
 
 ## 7. Plan
 
@@ -244,8 +247,8 @@ A pack is one file with many documents in it: a backup, an export, something to 
    in; an imported one is saved confidential again, subject to `Saver.ConfidentialCheck`. The
    UI: "As .opendoc" on a folder and "Import .opendoc" in the document list
    (`Session.DownloadPack`, `Session.Pick`), and "One .opendoc pack" in Migrate's format menu
-   (`migrate.PackSink`). *Left:* the UI has no keys yet, so it leaves confidential documents
-   out and says so.
+   (`migrate.PackSink`). The showcase's pack download and import use the keys of the unlocked
+   store (`Session.PackKeys`); a locked store leaves confidential documents out and says how many.
 3. **Done:** `cmd/opendoc`: `pack` and `convert` (a file or a folder tree; `.docx`, `.pdf`,
    Markdown, text, `.open`, JSON and protobuf are read through the importers, subfolders
    become folders), `unpack`, `list`, `verify`, `sign`, `recover`, `keygen`. Its
