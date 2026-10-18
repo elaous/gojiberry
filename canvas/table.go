@@ -2,6 +2,7 @@ package canvas
 
 import (
 	"cmp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ type Table struct {
 	Styles map[CellPos]CellStyle
 	// Fields are the cells that are form fields (see table_fields.go); the text of such a cell is the field's words.
 	Fields map[CellPos]*FormFieldObject
+	// ColWidths and RowHeights are sizes set by dragging a grip (0 or missing: the table's own, see table_sizes.go).
+	ColWidths, RowHeights []float64
 }
 
 // NewTable returns a table of rows x cols empty cells (minimum 1x1).
@@ -92,6 +95,7 @@ func (t *Table) insertRow(at int) {
 	t.Cells = append(t.Cells, nil)
 	copy(t.Cells[at+1:], t.Cells[at:])
 	t.Cells[at] = make([]string, t.Cols())
+	t.RowHeights = insertSize(t.RowHeights, at)
 	t.shift(at, 0, 1, 0)
 }
 
@@ -105,6 +109,7 @@ func (t *Table) insertColumn(at int) {
 		row[at] = ""
 		t.Cells[r] = row
 	}
+	t.ColWidths = insertSize(t.ColWidths, at)
 	t.shift(0, at, 0, 1)
 }
 
@@ -116,11 +121,12 @@ func (t *Table) deleteRow(at int) {
 	}
 	if t.Rows() == 1 {
 		clear(t.Cells[0])
-		t.Merges, t.Styles, t.Fields = nil, nil, nil
+		t.Merges, t.Styles, t.Fields, t.RowHeights = nil, nil, nil, nil
 		return
 	}
 	t.removeRowOfMerges(at)
 	t.Cells = append(t.Cells[:at], t.Cells[at+1:]...)
+	t.RowHeights = deleteSize(t.RowHeights, at)
 	t.shift(at, 0, -1, 0)
 }
 
@@ -134,13 +140,14 @@ func (t *Table) deleteColumn(at int) {
 		for _, row := range t.Cells {
 			row[0] = ""
 		}
-		t.Merges, t.Styles, t.Fields = nil, nil, nil
+		t.Merges, t.Styles, t.Fields, t.ColWidths = nil, nil, nil, nil
 		return
 	}
 	t.removeColumnOfMerges(at)
 	for r, row := range t.Cells {
 		t.Cells[r] = append(row[:at], row[at+1:]...)
 	}
+	t.ColWidths = deleteSize(t.ColWidths, at)
 	t.shift(0, at, 0, -1)
 }
 
@@ -151,6 +158,7 @@ func (t *Table) moveRow(from, to int) {
 		return
 	}
 	t.remapStyles(func(p CellPos) CellPos { p.Row = moved(p.Row, from, to); return p })
+	t.RowHeights = moveSize(t.RowHeights, from, to)
 	t.Merges = nil // a moved row would tear a merged block apart
 	row := t.Cells[from]
 	t.Cells = append(t.Cells[:from], t.Cells[from+1:]...)
@@ -166,6 +174,7 @@ func (t *Table) moveColumn(from, to int) {
 		return
 	}
 	t.remapStyles(func(p CellPos) CellPos { p.Col = moved(p.Col, from, to); return p })
+	t.ColWidths = moveSize(t.ColWidths, from, to)
 	t.Merges = nil
 	for r, row := range t.Cells {
 		v := row[from]
@@ -184,6 +193,9 @@ func (t *Table) duplicateRow(at int) {
 	}
 	t.insertRow(at + 1)
 	copy(t.Cells[at+1], t.Cells[at])
+	if h := t.RowHeightSet(at); h > 0 {
+		t.SetRowHeight(at+1, h)
+	}
 	for c := 0; c < t.Cols(); c++ { // the copy looks like the original
 		if st, ok := t.Styles[CellPos{at, c}]; ok {
 			t.SetCellStyle(at+1, c, st)
@@ -223,6 +235,15 @@ func (t *Table) sortByColumn(col int, desc bool) {
 		newRow[o] = i
 	}
 	copy(t.Cells[1:], body)
+	if len(t.RowHeights) > 0 { // a row keeps its height when it moves
+		heights := slices.Clone(t.RowHeights)
+		for old, nw := range newRow {
+			if 1+old < len(heights) && 1+nw < len(heights) {
+				heights[1+nw] = t.RowHeights[1+old]
+			}
+		}
+		t.RowHeights = heights
+	}
 	t.remapStyles(func(p CellPos) CellPos {
 		if p.Row >= 1 {
 			p.Row = 1 + newRow[p.Row-1]

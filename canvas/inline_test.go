@@ -200,8 +200,8 @@ func TestRuleObject(t *testing.T) {
 func TestTableObjectMeasureAndClip(t *testing.T) {
 	tbl := NewTableObject(NewTableFrom([][]string{{"a", "b"}, {"c", "d"}}))
 	p := &fakePainter{}
-	// Two 80px columns (MinColWidth), two 32px rows, +6 air.
-	if w, h := tbl.Measure(p, 500, 500); w != 160 || h != 70 {
+	// Two 80px columns (MinColWidth), two 32px rows, +6 air, and the room for the grips (20px above and at both sides).
+	if w, h := tbl.Measure(p, 500, 500); w != 200 || h != 90 {
 		t.Fatalf("natural size = %gx%g", w, h)
 	}
 	if w, h := tbl.Measure(p, 100, 50); w != 100 || h != 50 {
@@ -211,7 +211,7 @@ func TestTableObjectMeasureAndClip(t *testing.T) {
 	if !p.has("clipRect 20 30 100 50") || !p.has("save") || !p.has("restore") {
 		t.Fatalf("table must draw clipped: %v", p.calls)
 	}
-	if !p.has(`fillText "a" 30 `) {
+	if !p.has(`fillText "a" 50 `) { // 20 for the origin, 20 for the grips, 10 of padding
 		t.Fatalf("cells drawn at the given origin: %v", p.calls)
 	}
 	if p.has(`fillText "+"`) {

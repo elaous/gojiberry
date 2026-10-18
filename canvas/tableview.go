@@ -73,6 +73,8 @@ type TableView struct {
 	// penSwitch draws the formula switch as a pen instead of f(x): the tables in the text, which show fields as well as
 	// formulas (see table_fields.go).
 	penSwitch bool
+	// showSwitch draws the formula switch at all (a table in the text draws it only when it has a formula or a field).
+	showSwitch bool
 
 	// ShowFormulas shows the text of formula cells (=A1*B2) instead of their values; a view setting, like the
 	// edit mode. See formula.go.
@@ -255,12 +257,21 @@ func (v *TableView) layout() geometry {
 			widths[m.Col+m.Cols-1] += need - have
 		}
 	}
+	for c := range widths {
+		if w := t.ColumnWidth(c); w > 0 {
+			widths[c] = w
+		}
+	}
 	g.colX[0], g.rowY[0] = v.X, v.Y
 	for c, w := range widths {
 		g.colX[c+1] = g.colX[c] + w
 	}
 	for r := range t.Cells {
-		g.rowY[r+1] = g.rowY[r] + s.RowHeight
+		h := s.RowHeight
+		if set := t.RowHeightSet(r); set > 0 {
+			h = set
+		}
+		g.rowY[r+1] = g.rowY[r] + h
 	}
 	return g
 }

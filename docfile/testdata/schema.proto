@@ -124,6 +124,8 @@ message TableItem {
   repeated TableMerge merges = 2;
   repeated TableCellStyle styles = 3;
   repeated TableCellField fields = 4;
+  repeated double col_widths = 5;
+  repeated double row_heights = 6;
 }
 
 message ImageItem {

@@ -179,6 +179,9 @@ func (f *TextFlow) mouseDown(x, y float64) bool {
 		}
 		f.closeSuggestions()
 	}
+	if f.mode == ModeEdit && f.objectDragStart(x, y) {
+		return true // a grip of a table: its column or row is being resized
+	}
 	if f.objectClickAt(x, y) {
 		return true // a form field's icon or box
 	}
@@ -229,6 +232,13 @@ func (f *TextFlow) mouseMove(x, y float64) bool {
 	if f.mode != ModeEdit {
 		return false
 	}
+	if f.objDrag != nil {
+		if f.objDrag.DragMove(x-f.objDragX, y-f.objDragY) {
+			f.notify()
+			return true
+		}
+		return false
+	}
 	if d := f.drag; d != nil {
 		total := d.startL + d.startR
 		left := min(max(d.startL+x-d.startX, f.minColumn()), total-f.minColumn())
@@ -250,6 +260,12 @@ func (f *TextFlow) mouseMove(x, y float64) bool {
 func (f *TextFlow) MouseUp(x, y float64) bool {
 	if f.sel.dragging {
 		f.sel.dragging = false
+		return true
+	}
+	if f.objDrag != nil {
+		f.objDrag.DragEnd()
+		f.objDrag = nil
+		f.changed() // one step of history for the whole drag
 		return true
 	}
 	if f.drag == nil {

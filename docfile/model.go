@@ -161,6 +161,9 @@ type TableItem struct {
 	// Fields are the cells that are form fields (build tag exp_forms in the showcase); the cell's row text is the
 	// field's words, so a reader that does not know fields still sees them.
 	Fields []TableCellField `json:"fields,omitempty" pb:"4"`
+	// ColWidths and RowHeights are the sizes set by dragging a grip (0: the table's own).
+	ColWidths  []float64 `json:"colWidths,omitempty" pb:"5"`
+	RowHeights []float64 `json:"rowHeights,omitempty" pb:"6"`
 }
 
 // TableCellField is the form field in the cell at (Row, Col).
@@ -461,7 +464,7 @@ func FromItems(items []canvas.Item) []Item {
 					continue // nothing to save
 				}
 				o.View.Table.SyncFields()
-				t := &TableItem{}
+				t := &TableItem{ColWidths: slices.Clone(o.View.Table.ColWidths), RowHeights: slices.Clone(o.View.Table.RowHeights)}
 				for _, row := range o.View.Table.Cells {
 					t.Rows = append(t.Rows, TableRow{Cells: append([]string(nil), row...)})
 				}
@@ -557,6 +560,12 @@ func ToItems(items []Item) []canvas.Item {
 			}
 			for _, st := range it.Table.Styles {
 				table.SetCellStyle(st.Row, st.Col, canvas.CellStyle{Background: st.Background, Color: st.Color, Bold: st.Bold, Italic: st.Italic, Align: canvas.Align(st.Align)})
+			}
+			for c, w := range it.Table.ColWidths { // sizes set by hand; ones for columns or rows that are not there are dropped
+				table.SetColumnWidth(c, w)
+			}
+			for r, h := range it.Table.RowHeights {
+				table.SetRowHeight(r, h)
 			}
 			for _, cf := range it.Table.Fields { // a field whose cell is not in the grid is dropped
 				if cf.Field != nil && table.InRange(cf.Row, cf.Col) && !table.Covered(cf.Row, cf.Col) && canvas.FormKind(cf.Field.Kind).Valid() {
