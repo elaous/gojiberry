@@ -107,7 +107,7 @@ func read(kind string, data []byte) (docfile.Document, error) {
 		if d, ok := table(src, delim); ok {
 			return d, nil
 		}
-		return code(src, ""), nil // not a table after all: the text as it is
+		return code(src, "", ""), nil // not a table after all: the text as it is
 	case JSON:
 		var out bytes.Buffer
 		if json.Valid([]byte(src)) && json.Indent(&out, []byte(strings.TrimSpace(src)), "", "  ") == nil {
@@ -117,18 +117,38 @@ func read(kind string, data []byte) (docfile.Document, error) {
 	default:
 		return docfile.Document{}, fmt.Errorf("textimport: unknown kind %q", kind)
 	}
-	return code(src, Language[kind]), nil
+	paint := Language[kind]
+	if kind == Log {
+		paint = "log"
+	}
+	return code(src, Language[kind], paint), nil
 }
+
+// MaxPaint is the largest text that is painted (a piece of formatting for each change of colour: a larger file is shown
+// in one colour).
+const MaxPaint = 256 << 10
 
 // code is the text as a code block: a paragraph of the Code style with the language, in a monospace font on the usual
 // background (so a document that does not carry the style still looks like code).
-func code(src, lang string) docfile.Document {
-	src = strings.TrimRight(src, "\n")
+func code(src, lang, paint string) docfile.Document {
+	src = strings.TrimRight(src, "\n") + "\n"
 	mono := canvas.Format{FontFamily: "monospace", Background: "#eceef1"}
-	return docfile.Document{Content: docfile.FromItems([]canvas.Item{
-		canvas.ParaFormat{Style: "Code", CodeLang: lang},
-		canvas.Chars{Text: src + "\n", Format: mono},
-	})}
+	items := []canvas.Item{canvas.ParaFormat{Style: "Code", CodeLang: lang}}
+	pieces := []span{{src, normal}}
+	if len(src) <= MaxPaint {
+		pieces = highlight(paint, src)
+	}
+	for _, s := range pieces {
+		f := mono
+		if c := classColour[s.c]; c != "" {
+			f.Color = c
+			if classBold[s.c] {
+				f.FontWeight = 700
+			}
+		}
+		items = append(items, canvas.Chars{Text: s.text, Format: f})
+	}
+	return docfile.Document{Content: docfile.FromItems(items)}
 }
 
 // table is a CSV or TSV file as a table (the first row is the header), at most MaxRows x MaxCols.

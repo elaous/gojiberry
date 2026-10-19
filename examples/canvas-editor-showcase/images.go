@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"syscall/js"
+	"time"
 	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
@@ -173,7 +174,7 @@ func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func(),
 		f.Replace([]canvas.Edit{{From: pos, To: pos, Items: []canvas.Item{canvas.Inline{Object: im}}}})
 		f.SetCursors([]canvas.Cursor{canvas.At(pos + 1)})
 		u.imageMsg = T("img.inserted", "Picture inserted. Describe it for people who cannot see it, or say it is decorative.")
-		u.imageFocus = true
+		u.imageFocus, u.imageFocusAt = true, time.Now()
 		u.tab = "images"
 		redraw()
 		renderUI()
@@ -259,11 +260,15 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 	if len(items) > 0 {
 		nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list")}, items...))
 	}
+	if u.imageFocus && time.Since(u.imageFocusAt) > 20*time.Second {
+		u.imageFocus = false // nothing needed the focus in all that time
+	}
 	if u.imageFocus {
-		u.imageFocus = false
-		// the first picture without a description takes the focus, once the panel is drawn
+		// the first picture without a description takes the focus, once the panel is drawn; the wish stays until there is
+		// such a picture in the panel (a render that comes before the picture is in the list must not use it up)
 		for i, r := range imgs {
 			if r.img.Alt == "" && !r.img.Decorative {
+				u.imageFocus = false
 				id := fmt.Sprintf("img-alt-%d", i)
 				// The field may not be in the page yet when the timer fires (a slow machine, a render still
 				// going): look again every 50 ms for up to fifteen seconds, until it has the focus.
