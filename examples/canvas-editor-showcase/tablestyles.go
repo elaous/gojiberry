@@ -218,6 +218,12 @@ func (u *ui) wireTables(fl *canvas.TextFlow, renderUI func()) {
 	if fl == nil {
 		return
 	}
+	// Resizing by dragging a grip's edge is changing the table: it takes the table's hold, or is refused when somebody
+	// else has it.
+	for i, t := range fl.Tables() {
+		key := tableKey(i)
+		t.Allow = func() bool { return u.claim(key, T("lock.table", "table"), renderUI) }
+	}
 	fl.OnTableSelect = func(*canvas.TableObject, canvas.Selection) {
 		u.tab = "styles"
 		renderUI()
