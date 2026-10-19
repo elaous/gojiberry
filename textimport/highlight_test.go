@@ -56,6 +56,12 @@ func TestHighlightPaintsKeysStringsNumbersAndWords(t *testing.T) {
 			t.Errorf("ini %s is class %v, want %v", k, ini[k], c)
 		}
 	}
+	xml := classes(highlight("xml", "<?xml version=\"1.0\"?>\n<!-- c -->\n<a id=\"1\" flag><b/>text &amp; more</a>\n<![CDATA[raw]]>"))
+	for k, c := range map[string]class{"<?xml version=\"1.0\"?>": quiet, "<!-- c -->": comment, "a": key, "id": word, "\"1\"": str, "flag": word, "b": key, "<![CDATA[raw]]>": str} {
+		if xml[k] != c {
+			t.Errorf("xml %s is class %v, want %v", k, xml[k], c)
+		}
+	}
 	log := classes(highlight("log", "2026-10-18 10:00:01,123 ERROR boom\n[2026-10-18T10:00:02Z] WARN slow\nOct 18 10:00:03 INFO ok\n10:00:04 DEBUG d\n"))
 	for k, c := range map[string]class{"ERROR": bad, "WARN": warn, "INFO": good, "DEBUG": quiet, "2026-10-18 10:00:01,123": quiet, "[2026-10-18T10:00:02Z]": quiet} {
 		if log[k] != c {
@@ -66,8 +72,8 @@ func TestHighlightPaintsKeysStringsNumbersAndWords(t *testing.T) {
 
 // Painting never changes the text: the pieces add up to the file, whatever it is.
 func TestHighlightKeepsEveryCharacter(t *testing.T) {
-	langs := []string{"json", "json5", "yaml", "toml", "ini", "log", "", "go"}
-	alphabet := []rune("{}[]:,\"'#;=-+. \n\t\f\u00a0\\/*aZ09éあ_$&!~<>@")
+	langs := []string{"json", "json5", "yaml", "toml", "ini", "log", "xml", "", "go"}
+	alphabet := []rune("<>/!?{}[]:,\"'#;=-+. \n\t\f\u00a0\\/*aZ09éあ_$&!~<>@")
 	rng := rand.New(rand.NewSource(7))
 	for n := 0; n < 3000; n++ {
 		rs := make([]rune, rng.Intn(60))
@@ -120,5 +126,37 @@ func TestAnImportedFileIsPaintedAndStillTheSameText(t *testing.T) {
 	}
 	if pieces != 1 {
 		t.Errorf("a large file is %d pieces", pieces)
+	}
+}
+
+func TestProblemSaysWhatIsWrongWithTheFile(t *testing.T) {
+	for kind, c := range map[string]struct{ good, bad, want string }{
+		JSON:  {`{"a": [1, 2]}`, "{\n  \"a\": 1,\n  \"b\" 2\n}", "line 3"},
+		JSONL: {"{\"a\":1}\n{\"b\":2}\n", "{\"a\":1}\n{oops\n", "line 2"},
+		YAML:  {"a: 1\nb:\n  - x\n  - y\n---\nc: 2\n", "a: 1\n b: [unclosed\n", "line"},
+		XML:   {"<a><b x=\"1\"/></a>", "<a><b></a>", "element"},
+	} {
+		if p := Problem(kind, c.good); p != "" {
+			t.Errorf("%s: a good file has the problem %q", kind, p)
+		}
+		if p := Problem(kind, c.bad); p == "" || !strings.Contains(p, c.want) {
+			t.Errorf("%s: the problem is %q, want it to say %q", kind, p, c.want)
+		}
+	}
+	for _, kind := range []string{TOML, INI, Log, JSON5, CSV} {
+		if Problem(kind, "[ not checked\n{") != "" {
+			t.Errorf("%s has no parser here", kind)
+		}
+	}
+	d, err := Import(YAML, []byte("a: [unclosed\n"))
+	if err != nil || d.SourceProblem() == "" {
+		t.Errorf("an invalid file still opens, with its problem: %v %q", err, d.SourceProblem())
+	}
+	if d, _ := Import(YAML, []byte("a: 1\n")); d.SourceProblem() != "" {
+		t.Error("a good file has no problem")
+	}
+	long := Problem(JSONL, strings.Repeat("x", 100))
+	if long == "" {
+		t.Error("a line of x is not JSON")
 	}
 }

@@ -39,10 +39,11 @@ const (
 	TOML  = "toml"
 	INI   = "ini"
 	Log   = "log"
+	XML   = "xml"
 )
 
 // Language is the code language a kind is shown with ("" for none).
-var Language = map[string]string{JSON: "json", JSONL: "json", JSON5: "json5", YAML: "yaml", TOML: "toml", INI: "ini", Log: ""}
+var Language = map[string]string{JSON: "json", JSONL: "json", JSON5: "json5", YAML: "yaml", TOML: "toml", INI: "ini", Log: "", XML: "xml"}
 
 // Decode is the text of a file: UTF-8 (a byte order mark is dropped), UTF-16 with a byte order mark, or, when it is
 // neither, Latin-1 if it has no control characters other than line breaks and tabs.
@@ -89,6 +90,11 @@ func Import(kind string, data []byte) (docfile.Document, error) {
 	d, err := read(kind, data)
 	if err == nil {
 		d.Set(docfile.SourceFormatKey, kind)
+		if src, derr := Decode(data); derr == nil {
+			if msg := Problem(kind, src); msg != "" {
+				d.Set(docfile.SourceProblemKey, msg)
+			}
+		}
 	}
 	return d, err
 }
@@ -113,7 +119,7 @@ func read(kind string, data []byte) (docfile.Document, error) {
 		if json.Valid([]byte(src)) && json.Indent(&out, []byte(strings.TrimSpace(src)), "", "  ") == nil {
 			src = out.String()
 		}
-	case JSONL, JSON5, YAML, TOML, INI, Log:
+	case JSONL, JSON5, YAML, TOML, INI, Log, XML:
 	default:
 		return docfile.Document{}, fmt.Errorf("textimport: unknown kind %q", kind)
 	}

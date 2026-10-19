@@ -71,6 +71,8 @@ func highlight(lang, src string) []span {
 		out = lines(src, iniLine)
 	case "log":
 		out = lines(src, logLine)
+	case "xml":
+		out = xmlSpans(src)
 	default:
 		return []span{{src, normal}}
 	}
@@ -324,6 +326,96 @@ func iniLine(l string) []span {
 		return []span{{m[1], normal}, {m[2], key}, {m[3], normal}, {m[4], c}, {nl, normal}}
 	}
 	return []span{{body, normal}, {nl, normal}}
+}
+
+// ---- XML ----
+
+func xmlSpans(s string) []span {
+	var out []span
+	for len(s) > 0 {
+		i := strings.IndexByte(s, '<')
+		if i < 0 {
+			out = append(out, span{s, normal})
+			break
+		}
+		out = append(out, span{s[:i], normal})
+		s = s[i:]
+		switch {
+		case strings.HasPrefix(s, "<!--"):
+			j := strings.Index(s[4:], "-->")
+			end := len(s)
+			if j >= 0 {
+				end = 4 + j + 3
+			}
+			out = append(out, span{s[:end], comment})
+			s = s[end:]
+		case strings.HasPrefix(s, "<![CDATA["):
+			j := strings.Index(s, "]]>")
+			end := len(s)
+			if j >= 0 {
+				end = j + 3
+			}
+			out = append(out, span{s[:end], str})
+			s = s[end:]
+		case strings.HasPrefix(s, "<?") || strings.HasPrefix(s, "<!"):
+			j := strings.IndexByte(s, '>')
+			end := len(s)
+			if j >= 0 {
+				end = j + 1
+			}
+			out = append(out, span{s[:end], quiet})
+			s = s[end:]
+		default:
+			var tag []span
+			tag, s = xmlTag(s)
+			out = append(out, tag...)
+		}
+	}
+	return out
+}
+
+// xmlTag paints one start or end tag with its attributes, and returns what follows it.
+func xmlTag(s string) ([]span, string) {
+	var out []span
+	n := 1
+	if n < len(s) && s[n] == '/' {
+		n++
+	}
+	out = append(out, span{s[:n], normal})
+	s = s[n:]
+	name := 0
+	for name < len(s) && !strings.ContainsRune(" \t\n\r/>=\"'", rune(s[name])) {
+		name++
+	}
+	out = append(out, span{s[:name], key})
+	s = s[name:]
+	for len(s) > 0 {
+		switch c := s[0]; c {
+		case '>':
+			return append(out, span{">", normal}), s[1:]
+		case '/', '=', ' ', '\t', '\n', '\r':
+			out = append(out, span{s[:1], normal})
+			s = s[1:]
+		case '"', '\'':
+			j := strings.IndexByte(s[1:], c)
+			end := len(s)
+			if j >= 0 {
+				end = j + 2
+			}
+			out = append(out, span{s[:end], str})
+			s = s[end:]
+		case '<': // a tag that was never closed: the next one starts here
+			return out, s
+		default:
+			j := 0
+			for j < len(s) && !strings.ContainsRune(" \t\n\r/>=\"'<", rune(s[j])) {
+				j++
+			}
+			out = append(out, span{s[:j], word})
+			s = s[j:]
+		}
+	}
+	return out, ""
 }
 
 // ---- logs ----
