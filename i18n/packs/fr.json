@@ -1889,6 +1889,7 @@
   "textfmt.readonly": "Ouvert en lecture : ceci est une copie d'un fichier %s. Changez de mode pour modifier la copie ; elle n'est pas enregistrée dans le fichier.",
   "lock.table": "tableau",
   "push.lost": "Les notifications de mentions se sont arrêtées : le navigateur n'a pas pu les renouveler. Réactivez-les.",
-  "prefs.typed": "Montrer un instant dans sa couleur le texte que les autres tapent"
+  "prefs.typed": "Montrer un instant dans sa couleur le texte que les autres tapent",
+  "textfmt.problem": "Il ne se lit pas comme du %s valide : %s"
  }
 }
