@@ -40,10 +40,14 @@ const (
 	INI   = "ini"
 	Log   = "log"
 	XML   = "xml"
+	// Text is any text file as it is (a code block, not painted); HTMLSource is an HTML file shown as its source, not
+	// rendered (the HTML importer reads a page as a document).
+	Text       = "anytext"
+	HTMLSource = "htmlsource"
 )
 
 // Language is the code language a kind is shown with ("" for none).
-var Language = map[string]string{JSON: "json", JSONL: "json", JSON5: "json5", YAML: "yaml", TOML: "toml", INI: "ini", Log: "", XML: "xml"}
+var Language = map[string]string{JSON: "json", JSONL: "json", JSON5: "json5", YAML: "yaml", TOML: "toml", INI: "ini", Log: "", XML: "xml", Text: "", HTMLSource: "html"}
 
 // Decode is the text of a file: UTF-8 (a byte order mark is dropped), UTF-16 with a byte order mark, or, when it is
 // neither, Latin-1 if it has no control characters other than line breaks and tabs.
@@ -119,13 +123,16 @@ func read(kind string, data []byte) (docfile.Document, error) {
 		if json.Valid([]byte(src)) && json.Indent(&out, []byte(strings.TrimSpace(src)), "", "  ") == nil {
 			src = out.String()
 		}
-	case JSONL, JSON5, YAML, TOML, INI, Log, XML:
+	case JSONL, JSON5, YAML, TOML, INI, Log, XML, Text, HTMLSource:
 	default:
 		return docfile.Document{}, fmt.Errorf("textimport: unknown kind %q", kind)
 	}
 	paint := Language[kind]
-	if kind == Log {
+	switch kind {
+	case Log:
 		paint = "log"
+	case HTMLSource:
+		paint = "xml" // tags, attributes and comments are painted as in XML
 	}
 	return code(src, Language[kind], paint), nil
 }
