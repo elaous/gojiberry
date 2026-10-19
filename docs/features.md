@@ -178,7 +178,7 @@ The Reader voices tab lists the sources: **the hub** (four voices, American and 
 
 ## Several people at one object
 
-In a shared document, when one person is changing a picture (its description or legend), an equation, a form field or a table (inserting, moving, sorting or dressing it), the others see it **busy**: the object has an outline in the colour of the person at it and, for everybody else, a small badge in that colour saying *busy* at its top right corner; the page says in words who ("Busy: Ana is changing this equation.") and does not take another person's change to that object until the first has been quiet for about eight seconds or has left. The text itself still merges. Each person's colour is the `color` of their cursor.
+In a shared document, when one person is changing a picture (its description or legend), an equation, a form field or a table (inserting, moving, sorting, resizing or dressing it), the others see it **busy**: the object has an outline in the colour of the person at it and, for everybody else, a small badge in that colour saying *busy* at its top right corner; the page says in words who ("Busy: Ana is changing this equation.") and does not take another person's change to that object until the first has been quiet for about eight seconds or has left. The text itself still merges. Each person's colour is the `color` of their cursor.
 
 ## Share
 
