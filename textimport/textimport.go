@@ -42,7 +42,7 @@ const (
 	XML   = "xml"
 	// Text is any text file as it is (a code block, not painted); HTMLSource is an HTML file shown as its source, not
 	// rendered (the HTML importer reads a page as a document).
-	Text       = "text"
+	Text       = "anytext"
 	HTMLSource = "htmlsource"
 )
 

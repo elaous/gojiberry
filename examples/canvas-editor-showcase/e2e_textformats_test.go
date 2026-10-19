@@ -23,10 +23,8 @@ func TestATextFileOpensForReading(t *testing.T) {
 	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="yaml"]`) }, "bad.yaml", []byte("a: 1\nb: [unclosed\n"))
 	d.WaitFor("the problem is said", `document.body.innerText.includes('does not read as valid yaml')`)
 	// Any text file by name, whatever it is called, and an HTML file as its source.
-	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="text"]`) }, "notes.weird", []byte("just some words\n"))
-	d.Sleep(1500)
-	t.Log("message: " + d.Text("#transfer-message"))
-	d.WaitFor("any text file", `document.body.innerText.includes('copy of a text file')`)
+	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="anytext"]`) }, "notes.weird", []byte("just some words\n"))
+	d.WaitFor("any text file", `document.body.innerText.includes('copy of a anytext file')`)
 	d.ChooseFile(func() { d.Click(`.gj-transfer-button[data-kind="import"][data-format="htmlsource"]`) }, "page.html", []byte("<p class=\"a\">hi</p>\n"))
 	d.WaitFor("the HTML source", `document.body.innerText.includes('copy of a htmlsource file')`)
 	d.NoErrors()

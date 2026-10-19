@@ -738,7 +738,7 @@ func main() {
 					},
 					OnImport: func(name string) {
 						accept := u.transfer.Accept()
-						if name == "text" || name == "htmlsource" {
+						if name == "anytext" || name == "htmlsource" {
 							accept = "" // chosen by name, whatever the file is called (experimental text formats)
 						}
 						transfer.PickFile(accept, func(file string, data []byte, err error) {
