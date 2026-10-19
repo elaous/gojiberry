@@ -28,32 +28,55 @@ func (f *TextFlow) typedOverlaps(from, to int) bool {
 	return false
 }
 
-// fillRunTyped draws a run, in pieces when part of it was just typed by somebody else, each piece in its own colour. A
-// run whose text does not match its offsets (or that is right to left, or vertical) is drawn whole.
+// typedColour is the colour of the character at index i of the run when somebody just typed it, and whether somebody did.
+// A run whose text does not match its offsets is never tinted.
+func (f *TextFlow) typedColour(r Run, rs []rune, i int) (string, bool) {
+	if len(f.TypedRanges) == 0 || len(rs) != r.End-r.Start {
+		return "", false
+	}
+	if t, ok := f.typedAt(r.Start + i); ok {
+		return f.peerColour(RemoteCursor{Name: t.Name, Color: t.Color}), true
+	}
+	return "", false
+}
+
+// fillRunTyped draws a run, in pieces when part of it was just typed by somebody else, each piece in its own colour: left
+// to right, right to left (the first characters are at the right end of the run) or, in vertical text, along the line.
 func (f *TextFlow) fillRunTyped(r Run, ln Line, x, y float64) {
 	rs := []rune(r.Text)
-	if len(f.TypedRanges) == 0 || f.Vertical || r.Level%2 == 1 || len(rs) != r.End-r.Start || !f.typedOverlaps(r.Start, r.End) {
+	if len(f.TypedRanges) == 0 || len(rs) != r.End-r.Start || !f.typedOverlaps(r.Start, r.End) {
 		f.fillRun(r, ln, x, y)
 		return
 	}
+	if f.Vertical { // fillRun colours the characters itself
+		f.fillRun(r, ln, x, y)
+		f.Painter.SetFillStyle(r.Color)
+		return
+	}
 	p := f.Painter
+	rtl := r.Level%2 == 1
 	for i := 0; i < len(rs); {
-		t, tinted := f.typedAt(r.Start + i)
+		c0, tinted := f.typedColour(r, rs, i)
+		t0, _ := f.typedAt(r.Start + i)
 		j := i + 1
 		for j < len(rs) {
 			u, in := f.typedAt(r.Start + j)
-			if in != tinted || (in && u != t) {
+			if in != tinted || (in && u != t0) {
 				break
 			}
 			j++
 		}
 		if tinted {
-			p.SetFillStyle(f.peerColour(RemoteCursor{Name: t.Name, Color: t.Color}))
+			p.SetFillStyle(c0)
 		} else {
 			p.SetFillStyle(r.Color)
 		}
 		seg := string(rs[i:j])
-		p.FillText(seg, x+p.MeasureTextWidth(string(rs[:i])), y)
+		at := x + p.MeasureTextWidth(string(rs[:i]))
+		if rtl { // the characters before i are to the right of this piece
+			at = x + r.W - p.MeasureTextWidth(string(rs[:j]))
+		}
+		p.FillText(seg, at, y)
 		i = j
 	}
 	p.SetFillStyle(r.Color)
