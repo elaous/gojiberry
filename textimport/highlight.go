@@ -390,13 +390,13 @@ func xmlTag(s string) ([]span, string) {
 	out = append(out, span{s[:name], key})
 	s = s[name:]
 	for len(s) > 0 {
-		switch c := s[0]; {
-		case c == '>':
+		switch c := s[0]; c {
+		case '>':
 			return append(out, span{">", normal}), s[1:]
-		case c == '/' || c == '=' || c == ' ' || c == '\t' || c == '\n' || c == '\r':
+		case '/', '=', ' ', '\t', '\n', '\r':
 			out = append(out, span{s[:1], normal})
 			s = s[1:]
-		case c == '"' || c == '\'':
+		case '"', '\'':
 			j := strings.IndexByte(s[1:], c)
 			end := len(s)
 			if j >= 0 {
@@ -404,7 +404,7 @@ func xmlTag(s string) ([]span, string) {
 			}
 			out = append(out, span{s[:end], str})
 			s = s[end:]
-		case c == '<': // a tag that was never closed: the next one starts here
+		case '<': // a tag that was never closed: the next one starts here
 			return out, s
 		default:
 			j := 0
