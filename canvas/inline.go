@@ -87,8 +87,12 @@ type TableObject struct {
 	// columns, rows and the eye/pen switch are drawn (the same grips as an editable table's); tableW is the table's own width.
 	pad, tableW float64
 	resize      *tableResize
-	lastEdge    *tableResize // the edge pressed last, and when, to tell a double press
-	lastAt      time.Time
+	// Allow, if set, is asked before the table's column or row is resized (by dragging a grip's edge, or a double press
+	// that gives the size back): false leaves it as it is. A host that shares the document uses it to say the table is
+	// busy with somebody else.
+	Allow    func() bool
+	lastEdge *tableResize // the edge pressed last, and when, to tell a double press
+	lastAt   time.Time
 }
 
 // NewTableObject wraps t for placing in a flow with Inline{Block: true}.
@@ -158,6 +162,10 @@ func (o *TableObject) DragStart(x, y float64) bool {
 				o.resize = &tableResize{index: r, start: y, size: g.rowY[r+1] - g.rowY[r]}
 			}
 		}
+	}
+	if o.resize != nil && o.Allow != nil && !o.Allow() {
+		o.resize, o.lastEdge = nil, nil
+		return true // the press is taken (nothing else happens with it), and nothing is resized
 	}
 	if d := o.resize; d != nil { // pressing the same edge twice in a row gives the size back to the table
 		now := time.Now()

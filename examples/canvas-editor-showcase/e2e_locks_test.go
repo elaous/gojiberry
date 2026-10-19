@@ -111,6 +111,10 @@ func TestATableOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	b.WaitSelector("#tgrip-col-after")
 	b.Click("#tgrip-col-after") // refused
 	b.WaitFor("Bo is told it is busy", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this table.')`)
+	// Dragging a grip's edge to resize is changing the table too: Bo is told, and nothing is resized.
+	b.Eval(`document.querySelector('.gj-announcer').textContent = ''`, nil)
+	b.CanvasDrag(325, 111, 365, 111) // the edge between the first two columns, on the column grips
+	b.WaitFor("Bo is told it is busy when he drags an edge", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this table.')`)
 	a.NoErrors()
 	b.NoErrors()
 }
