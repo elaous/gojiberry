@@ -131,3 +131,35 @@ func TestPressingAGripSelectsAColumnARowOrTheTable(t *testing.T) {
 		t.Fatal("a column that is not there is not selected")
 	}
 }
+
+// A host that shares the document can refuse a resize (the table is busy with somebody else): nothing is resized, neither
+// by dragging an edge nor by the double press that gives the size back.
+func TestAResizeTheHostRefusesDoesNotHappen(t *testing.T) {
+	tb := NewTableFrom([][]string{{"a", "b"}, {"c", "d"}})
+	o := NewTableObject(tb)
+	o.Measure(&fakePainter{}, 1000, 1000)
+	tb.SetColumnWidth(0, 150)
+	asked := 0
+	allow := false
+	o.Allow = func() bool { asked++; return allow }
+	edgeX := o.pad + 150
+	if !o.DragStart(edgeX, 3) || o.resize != nil || asked != 1 {
+		t.Fatalf("a refused press is taken and starts nothing: resize %v, asked %d", o.resize, asked)
+	}
+	o.DragEnd()
+	o.DragStart(edgeX, 3) // the double press
+	if tb.ColumnWidth(0) != 150 {
+		t.Fatalf("the size was given back although refused: %v", tb.ColumnWidth(0))
+	}
+	allow = true
+	if !o.DragStart(edgeX, 3) || o.resize == nil {
+		t.Fatal("allowed, the press begins a resize")
+	}
+	// a press that is not on an edge is not asked about
+	asked = 0
+	o.DragEnd()
+	o.DragStart(o.pad+40, o.pad+10)
+	if asked != 0 {
+		t.Errorf("asked %d times for a press on a cell", asked)
+	}
+}
