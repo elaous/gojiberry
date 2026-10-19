@@ -81,3 +81,17 @@ func (f *TextFlow) fillRunTyped(r Run, ln Line, x, y float64) {
 	}
 	p.SetFillStyle(r.Color)
 }
+
+// drawTypedObject outlines an inline object that somebody just put in or changed (a picture, a table, a field), in
+// their colour: an object has no text to colour. It is the same range that colours typed text, over the object's
+// character.
+func (f *TextFlow) drawTypedObject(o PlacedObject) {
+	t, ok := f.typedAt(o.Offset)
+	if !ok {
+		return
+	}
+	p := f.Painter
+	p.SetStrokeStyle(safeColor(f.peerColour(RemoteCursor{Name: t.Name, Color: t.Color})))
+	p.SetLineWidth(2)
+	p.StrokeRect(o.X+1, o.Y+1, o.W-2, o.H-2)
+}

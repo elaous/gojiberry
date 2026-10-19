@@ -58,3 +58,37 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 		t.Fatal("colours are off")
 	}
 }
+
+// An object (a picture here) that somebody else changes is shown in their colour for the moment, over the character it is.
+func TestAnObjectOthersChangedIsInTheirColourForAMoment(t *testing.T) {
+	r := newRig(t, hub.Config{})
+	img := canvas.NewImage(urlSource{"https://img.example/cat.png"}, 0, 0)
+	img.Placement, img.W, img.H = canvas.PlaceInline, 80, 60
+	a := r.connect("a", "", newFlow(canvas.Chars{Text: "see "}, canvas.Inline{Object: img}, canvas.Chars{Text: " here"}))
+	waitFor(t, "a ready", func() bool { return a.Bridge.Ready() }, a)
+	b := r.connect("b", "", newFlow())
+	waitFor(t, "b has the document", func() bool { return text(b.Bridge.Flow) == "see # here" }, a, b)
+	clock := time.Now()
+	b.now = func() time.Time { return clock }
+	a.Name, a.Color = "Ana", "#f00"
+	a.PublishCursor()
+	waitFor(t, "b to know Ana", func() bool { return len(b.Peers) == 1 }, a, b)
+	if len(b.Bridge.Flow.TypedRanges) != 0 {
+		t.Fatalf("the document that arrived: %+v", b.Bridge.Flow.TypedRanges)
+	}
+	img.W = 120 // Ana changes the picture
+	a.Bridge.Flow.Touch()
+	waitFor(t, "the change to reach b", func() bool {
+		b.RefreshPeers()
+		return len(b.Bridge.Flow.TypedRanges) > 0
+	}, a, b)
+	got := b.Bridge.Flow.TypedRanges
+	if len(got) != 1 || got[0].From != 4 || got[0].To != 5 || got[0].Name != "Ana" || got[0].Color != "#f00" {
+		t.Fatalf("the picture is character 4: %+v", got)
+	}
+	clock = clock.Add(DefaultTypedFor + time.Second)
+	b.RefreshPeers()
+	if len(b.Bridge.Flow.TypedRanges) != 0 {
+		t.Errorf("still outlined: %+v", b.Bridge.Flow.TypedRanges)
+	}
+}
