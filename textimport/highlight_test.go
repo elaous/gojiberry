@@ -160,3 +160,36 @@ func TestProblemSaysWhatIsWrongWithTheFile(t *testing.T) {
 		t.Error("a line of x is not JSON")
 	}
 }
+
+func TestAnyTextAndHTMLSourceOpenAsTheyAre(t *testing.T) {
+	src := "<!doctype html>\n<p class=\"a\">hi &amp; bye</p>\n<!-- c -->\n"
+	d, err := Import(HTMLSource, []byte(src))
+	if err != nil || d.SourceFormat() != HTMLSource {
+		t.Fatalf("%v %q", err, d.SourceFormat())
+	}
+	var text string
+	coloured := 0
+	for _, it := range d.Content {
+		if it.Chars != nil {
+			text += it.Chars.Text
+			if it.Chars.Format.Color != "" {
+				coloured++
+			}
+		}
+	}
+	if text != src || coloured < 2 {
+		t.Errorf("the HTML source is shown as it is, painted: %q %d", text, coloured)
+	}
+	d, err = Import(Text, []byte("a line\nand another, with {braces} and <tags>\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range d.Content {
+		if it.Chars != nil && it.Chars.Format.Color != "" {
+			t.Error("a plain text file is not painted")
+		}
+	}
+	if _, err := Import(Text, []byte{'a', 0, 'b'}); err == nil {
+		t.Error("a file with NUL bytes is not text")
+	}
+}

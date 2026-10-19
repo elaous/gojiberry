@@ -32,6 +32,10 @@ var TextFormats = []Importer{
 	textFormat{textimport.INI, "Settings file (.ini, .cfg, .conf, .properties)", "text/plain", []string{".ini", ".cfg", ".conf", ".properties"}},
 	textFormat{textimport.Log, "Log file (.log)", "text/plain", []string{".log"}},
 	textFormat{textimport.XML, "XML (.xml)", "application/xml", []string{".xml"}},
+	// These two are chosen by name, never by extension (a .html file is a page to read as a document): HTML as its source
+	// text, and any other text file as it is.
+	textFormat{textimport.HTMLSource, "HTML as text (its source, not rendered)", "text/html", nil},
+	textFormat{textimport.Text, "Any text file, as it is", "text/plain", nil},
 }
 
 // jsonFile reads a .json file as one of the editor's own documents when it is one (it has the keys of a document), and as
