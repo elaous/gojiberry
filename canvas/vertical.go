@@ -188,10 +188,21 @@ func (f *TextFlow) fillRun(r Run, ln Line, x, y float64) {
 	rs := []rune(r.Text)
 	at := x
 	for i := 0; i < len(rs); {
+		// a piece is characters of one kind that are drawn in one colour (what somebody just typed is in theirs)
+		colour, tinted := f.typedColour(r, rs, i)
+		same := func(k int) bool {
+			c, in := f.typedColour(r, rs, k)
+			return uprightRune(rs[k]) == uprightRune(rs[i]) && in == tinted && c == colour
+		}
 		j := i + 1
-		up := uprightRune(rs[i])
-		for j < len(rs) && uprightRune(rs[j]) == up {
+		for j < len(rs) && same(j) {
 			j++
+		}
+		up := uprightRune(rs[i])
+		if tinted {
+			p.SetFillStyle(colour)
+		} else {
+			p.SetFillStyle(r.Color)
 		}
 		seg := string(rs[i:j])
 		if !up {
@@ -214,6 +225,7 @@ func (f *TextFlow) fillRun(r Run, ln Line, x, y float64) {
 		}
 		i = j
 	}
+	p.SetFillStyle(r.Color)
 }
 
 // drawObject draws an inline object. In vertical text the object stands upright: the plane reserved its size

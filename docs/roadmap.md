@@ -8,7 +8,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
 
 ## Merges since the last full test run
 
-2 of 10 since the last full run (full run on the branch of the 10th merge, 2026-10-19, on main plus the pack options, the licence, typed-text colours, table holds, short Plus Codes, push renewal and painted text formats, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed (exit 0); `make coverage-badge` failed once on `TestInsertAPictureAndDescribeIt` (the description field did not take the focus, under the load of the coverage run; it passed alone four times and in `make check`), the cause was a render using up the wish to focus before the picture was in the list (fixed in this branch), and the second run passed: badge 89.0%).
+3 of 10 since the last full run (full run on the branch of the 10th merge, 2026-10-19, on main plus the pack options, the licence, typed-text colours, table holds, short Plus Codes, push renewal and painted text formats, with GOJIBERRY_REQUIRE_BROWSER=1, nginx and Caddy required: `make check` passed (exit 0); `make coverage-badge` failed once on `TestInsertAPictureAndDescribeIt` (the description field did not take the focus, under the load of the coverage run; it passed alone four times and in `make check`), the cause was a render using up the wish to focus before the picture was in the list (fixed in this branch), and the second run passed: badge 89.0%).
 10th merge from here and the counter resets to 0 after it. PRs A, B and C are done (#99, #100, #101).
 
 ## Notes for upgraders
