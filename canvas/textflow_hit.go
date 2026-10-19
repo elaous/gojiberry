@@ -394,6 +394,7 @@ func (f *TextFlow) drawBody(lay Layout) {
 		}
 		for _, o := range ln.Objects {
 			f.drawObject(o)
+			f.drawTypedObject(o)
 		}
 	}
 

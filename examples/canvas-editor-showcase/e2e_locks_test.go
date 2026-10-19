@@ -52,6 +52,7 @@ func TestAnObjectOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 
 	a.Fill("#eq-formula-0", "x^3") // Ana is at it
 	b.WaitFor("Bo sees Ana holding it", `JSON.parse(document.getElementById("state").textContent).live.holding.includes('Ana=equation:0')`)
+	b.WaitFor("the equation Ana changed is outlined in her colour", `JSON.parse(document.getElementById("state").textContent).live.typed > 0`)
 	b.Fill("#eq-formula-0", "y^2") // and Bo's change is refused
 	b.WaitFor("Bo is told it is busy", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this equation.')`)
 	b.Sleep(500)

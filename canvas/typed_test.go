@@ -87,3 +87,35 @@ func TestTypedRangesInVerticalText(t *testing.T) {
 		t.Errorf("the pieces and their colours: %v", seen)
 	}
 }
+
+// An object somebody just put in or changed has an outline in their colour for the moment text would be coloured.
+func TestAnObjectSomebodyChangedIsOutlinedInTheirColour(t *testing.T) {
+	f := NewTextFlow("", 10, 30, 400, 200)
+	p := &fakePainter{}
+	f.SetPainter(p)
+	f.Items = []Item{Chars{Text: "see "}, Inline{Object: &Rule{Color: "#888"}, Block: true}, Chars{Text: "\n"}}
+	var placed []PlacedObject
+	for _, ln := range f.Layout().Lines {
+		placed = append(placed, ln.Objects...)
+	}
+	if len(placed) != 1 {
+		t.Fatalf("%d objects placed", len(placed))
+	}
+	f.TypedRanges = []TypedRange{{From: placed[0].Offset, To: placed[0].Offset + 1, Name: "Ana", Color: "#ff0000"}}
+	f.Draw()
+	hit := false
+	for i, c := range p.calls {
+		if strings.HasPrefix(c, "strokeRect ") && i >= 2 && p.calls[i-2] == "strokeStyle #ff0000" {
+			hit = true
+		}
+	}
+	if !hit {
+		t.Errorf("no outline in Ana's colour: %q", p.calls)
+	}
+	f.TypedRanges = nil
+	p.calls = nil
+	f.Draw()
+	if p.has("strokeStyle #ff0000") {
+		t.Error("an outline with nobody's change")
+	}
+}

@@ -160,3 +160,8 @@ Today sharing goes through a hub that somebody runs (the editor itself is local-
 ### P2-14 Pack: encrypt the index — design
 
 A pack lists every document in a plain index: name, folder, times, size, trash flag (a sealed document shows a placeholder name, the time rounded to the day and a size bucket; [opendoc-format.md](opendoc-format.md)). Encrypting the index too would hide the structure, but then nothing can be listed, verified or repaired without the key, and the keyless check, which lets whoever stores a backup confirm it is intact, is lost. Decided (owner, 2026-10-18): offer it as an option in phase 2, off by default. To settle: whether the hashes stay readable (so `verify` still works without the key and only the names and folders are hidden), the key's source (the same keys as the sealed documents), and what `opendoc list` shows without it.
+
+### P2-15 Syntax highlighting — design
+
+Decided (owner, 2026-10-19): text highlighting is phase 2. What exists: a reading copy of a JSON, JSON5, YAML, TOML, XML, settings or log file is painted when it is opened (`textimport/highlight.go`: character colours that every export carries, files up to 256 KB). Phase 2 is the rest: highlighting for code blocks in any document and more languages (a shared tokenizer, not one per format), colours that follow the dark theme, recolouring while the text is edited (today the colours are formatting like any other), a larger limit with painting only the visible lines, and a way to turn it off. To settle: whether the tokenizer is ours or a library, and the size it may add to the page.
+
