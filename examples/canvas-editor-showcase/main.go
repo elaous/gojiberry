@@ -91,6 +91,7 @@ type ui struct {
 	mentionsTold    map[string]bool        // mentions already announced
 	commentsSeen    map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
 	imageFocus      bool
+	imageFocusAt    time.Time
 	floating        func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
 	imageDraftBy    map[int]string            // who made a draft: "describe" for the add-on, absent for the colours and shape
 	imageDraft      map[int]string            // the draft descriptions made on this device, by picture (imagehint)
