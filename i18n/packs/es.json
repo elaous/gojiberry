@@ -1889,6 +1889,7 @@
   "textfmt.readonly": "Abierto para leer: esto es una copia de un archivo %s. Cambie el modo para modificar la copia; no se guarda de vuelta en el archivo.",
   "lock.table": "tabla",
   "push.lost": "Las notificaciones de menciones se detuvieron: el navegador no pudo renovarlas. Vuelva a activarlas.",
-  "prefs.typed": "Mostrar un momento en su color el texto que escriben otros"
+  "prefs.typed": "Mostrar un momento en su color el texto que escriben otros",
+  "textfmt.problem": "No se lee como %s válido: %s"
  }
 }

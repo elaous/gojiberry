@@ -815,6 +815,13 @@ func (d Document) HasTag(tag string) bool {
 // is saving the copy, and the key is not kept.
 const SourceFormatKey = "source.format"
 
+// SourceProblemKey is the Meta key of what is wrong with the file a reading copy was made from ("line 3: ..."): the text
+// is shown as it is, and the editor says it does not read as the format it came in.
+const SourceProblemKey = "source.problem"
+
+// SourceProblem returns what is wrong with the file the document is a reading copy of, or "".
+func (d Document) SourceProblem() string { v, _ := d.Get(SourceProblemKey); return v }
+
 // SourceFormat returns the format the document is a reading copy of, or "".
 func (d Document) SourceFormat() string { v, _ := d.Get(SourceFormatKey); return v }
 

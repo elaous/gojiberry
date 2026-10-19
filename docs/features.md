@@ -96,7 +96,7 @@ Built with the tag `exp_map` (or `experimental`; see [phase-2.md](phase-2.md)), 
 
 ## Text formats as they are
 
-Built with the tag `exp_textformats` (or `experimental`; see [phase-2.md](phase-2.md)), the editor and `opendoc` also open JSON (indented when valid), JSON lines, JSON5, YAML, TOML, INI and log files as a code block with the text as written (keys, strings, numbers, comments and, in a log, the level of each line in colour), and CSV and TSV files as a table, for reading, searching, quoting and printing. A cell that starts with = is shown as text. The file is not converted to anything and there is no saving back to it. Files over 5 MB, binary files and files that are not text are refused with the reason.
+Built with the tag `exp_textformats` (or `experimental`; see [phase-2.md](phase-2.md)), the editor and `opendoc` also open JSON (indented when valid), JSON lines, JSON5, YAML, TOML, XML, INI and log files as a code block with the text as written (keys, strings, numbers, comments and, in a log, the level of each line in colour), and CSV and TSV files as a table, for reading, searching, quoting and printing. A cell that starts with = is shown as text. The file is not converted to anything and there is no saving back to it. A JSON, JSON lines, YAML or XML file that is not valid opens as it is and the page says what is wrong with it. Files over 5 MB, binary files and files that are not text are refused with the reason.
 
 ## Table grips and sizes
 

@@ -1889,6 +1889,7 @@
   "textfmt.readonly": "Zum Lesen geöffnet: Dies ist eine Kopie einer %s-Datei. Wechseln Sie den Modus, um die Kopie zu ändern; sie wird nicht in die Datei zurückgespeichert.",
   "lock.table": "Tabelle",
   "push.lost": "Benachrichtigungen für Erwähnungen wurden beendet: Der Browser konnte sie nicht erneuern. Schalten Sie sie wieder ein.",
-  "prefs.typed": "Text, den andere gerade tippen, kurz in ihrer Farbe zeigen"
+  "prefs.typed": "Text, den andere gerade tippen, kurz in ihrer Farbe zeigen",
+  "textfmt.problem": "Es lässt sich nicht als gültiges %s lesen: %s"
  }
 }

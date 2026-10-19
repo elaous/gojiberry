@@ -31,6 +31,7 @@ var TextFormats = []Importer{
 	textFormat{textimport.TOML, "TOML (.toml)", "application/toml", []string{".toml"}},
 	textFormat{textimport.INI, "Settings file (.ini, .cfg, .conf, .properties)", "text/plain", []string{".ini", ".cfg", ".conf", ".properties"}},
 	textFormat{textimport.Log, "Log file (.log)", "text/plain", []string{".log"}},
+	textFormat{textimport.XML, "XML (.xml)", "application/xml", []string{".xml"}},
 }
 
 // jsonFile reads a .json file as one of the editor's own documents when it is one (it has the keys of a document), and as
