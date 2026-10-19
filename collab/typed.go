@@ -47,15 +47,32 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 	for _, op := range ops {
 		for _, c := range op.CharOps {
-			if c.Kind != crdt.CharInsert || c.ID.Replica == "" {
+			// A character somebody typed, or an object (a picture, a table, a field) somebody changed: a change of an
+			// object is a new value for its control mark, over the one character the object is.
+			var stamp crdt.Timestamp
+			var at crdt.Timestamp // the character to show
+			switch {
+			case c.Kind == crdt.CharInsert:
+				stamp, at = c.ID, c.ID
+			case c.Kind == crdt.CharMark && c.Mark != nil && c.Mark.Key == ctlKey:
+				stamp = c.Mark.ID
+				if c.Mark.End.Side == crdt.After && c.Mark.End.ID != (crdt.Timestamp{}) {
+					at = c.Mark.End.ID
+				} else {
+					at = c.Mark.Start.ID
+				}
+			default:
 				continue
 			}
-			fresh := uint64(c.ID.Counter) > s.maxSeen[c.ID.Replica]
-			if fresh {
-				s.maxSeen[c.ID.Replica] = uint64(c.ID.Counter)
+			if stamp.Replica == "" {
+				continue
 			}
-			if note && fresh && s.TypedFor >= 0 && c.ID.Replica != s.replica {
-				s.typed = append(s.typed, typedChar{id: c.ID, replica: c.ID.Replica, at: now})
+			fresh := stamp.Counter > s.maxSeen[stamp.Replica]
+			if fresh {
+				s.maxSeen[stamp.Replica] = stamp.Counter
+			}
+			if note && fresh && s.TypedFor >= 0 && stamp.Replica != s.replica && at != (crdt.Timestamp{}) {
+				s.typed = append(s.typed, typedChar{id: at, replica: stamp.Replica, at: now})
 			}
 		}
 	}
@@ -103,7 +120,12 @@ func (s *Session) typedRanges() []canvas.TypedRange {
 		}
 	}
 	var out []canvas.TypedRange
+	done := map[crdt.Timestamp]bool{} // an object that was put in and then filled in is shown once
 	for _, t := range live {
+		if done[t.id] {
+			continue
+		}
+		done[t.id] = true
 		i, ok := index[t.id]
 		if !ok || i >= len(atoms) || !atoms[i].inStream() {
 			continue
