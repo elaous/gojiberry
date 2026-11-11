@@ -1,4 +1,3 @@
-// Package client is the Go client for the collab hub.
 package client
 
 import (
@@ -85,11 +84,9 @@ type Options struct {
 	PresenceInterval time.Duration
 	// OnError, if set, hears about connection errors.
 	OnError func(error)
-	// Queue, if set, keeps ops that have not been sent yet.
-	Queue Queue
+	Queue   Queue
 }
 
-// Queue is a durable place for ops waiting to be sent.
 type Queue interface {
 	Load() []crdt.Op
 	Save([]crdt.Op)
@@ -107,7 +104,7 @@ type Conn struct {
 	queue   []Event       // events not yet taken from the channel, in order
 	wake    chan struct{} // wakes the pump
 	pending []crdt.Op
-	offline int // ops made while the connection was not up, until the next Hello
+	offline int
 	status  Status
 	kick    chan struct{} // wakes the sender
 	done    sync.WaitGroup
@@ -158,7 +155,6 @@ func (c *Conn) Status() Status {
 	return c.status
 }
 
-// takeOffline returns how many ops were made while offline.
 func (c *Conn) takeOffline() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -184,7 +180,6 @@ func (c *Conn) emit(e Event) {
 	}
 }
 
-// pump moves queued events to the channel, in order.
 func (c *Conn) pump() {
 	for {
 		c.mu.Lock()
@@ -331,7 +326,6 @@ func (c *Conn) Close() {
 	close(c.events)
 }
 
-// sender posts pending ops, retrying with backoff.
 const maxBatch = 200
 
 func (c *Conn) sender() {
@@ -378,7 +372,6 @@ func (c *Conn) dropSent(n int) {
 	c.mu.Unlock()
 }
 
-// persistLocked saves the waiting ops to the Queue.
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
@@ -420,7 +413,6 @@ func (c *Conn) post(ops []crdt.Op) error {
 	return fmt.Errorf("client: the server said %s", resp.Status)
 }
 
-// stream keeps the event stream open, reconnecting when it fails.
 func (c *Conn) stream() {
 	delay := c.opts.Retry
 	for c.ctx.Err() == nil {
@@ -446,7 +438,6 @@ func (c *Conn) stream() {
 	}
 }
 
-// readEvents opens the stream and reads it until it fails.
 func (c *Conn) readEvents() error {
 	req, err := c.request(http.MethodGet, c.url("events", url.Values{"replica": {c.opts.Replica}}), nil)
 	if err != nil {
@@ -494,7 +485,6 @@ func (c *Conn) dispatch(name, data string) {
 		if json.Unmarshal([]byte(data), &h) == nil {
 			c.setStatus(Online)
 			c.emit(Event{Kind: Hello, Role: h.Role, Waiting: c.takeOffline()})
-			// Ops queued while offline go now.
 			select {
 			case c.kick <- struct{}{}:
 			default:

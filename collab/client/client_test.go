@@ -272,7 +272,6 @@ loop:
 		for range c.Events() {
 		}
 	}
-	// A request that cannot even be built.
 	bad := Dial(Options{BaseURL: "http://[::1", Doc: "d", Replica: "r", Retry: 2 * time.Millisecond})
 	time.Sleep(20 * time.Millisecond)
 	bad.Send([]crdt.Op{op("a", "b")})
