@@ -1,4 +1,3 @@
-// Package client is the Go client for the public offer.
 package client
 
 import (
@@ -100,7 +99,6 @@ func (c *Client) do(ctx context.Context, method, path string, auth bool, body []
 	if err != nil {
 		return nil, nil, err
 	}
-	// A busy server may ask for a small computation first.
 	if ch := resp.Header.Get(pow.Header); ch != "" && resp.StatusCode == http.StatusForbidden && req.Header.Get(pow.AnswerHeader) == "" {
 		if answer, ok := pow.Answer(ch); ok {
 			_ = resp.Body.Close()
@@ -126,7 +124,6 @@ func (c *Client) do(ctx context.Context, method, path string, auth bool, body []
 	return resp, data, nil
 }
 
-// noteTerms keeps the terms link of an answer.
 func (c *Client) noteTerms(resp *http.Response) {
 	for _, l := range resp.Header.Values("Link") {
 		for _, part := range strings.Split(l, ",") {
@@ -169,7 +166,6 @@ func refusal(resp *http.Response, data []byte) error {
 	return e
 }
 
-// expires reads the deadline an answer carries.
 func expires(resp *http.Response) time.Time {
 	t, _ := time.Parse(time.RFC3339, resp.Header.Get("X-Gojiberry-Expires"))
 	return t

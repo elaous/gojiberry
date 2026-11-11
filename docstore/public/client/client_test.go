@@ -17,7 +17,6 @@ type clock struct{ t time.Time }
 
 func (c *clock) Now() time.Time { return c.t }
 
-// offer starts the real public service over a test server.
 func offer(t *testing.T, mod func(*public.Options)) (*client.Client, *clock, *httptest.Server) {
 	t.Helper()
 	clk := &clock{t: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
