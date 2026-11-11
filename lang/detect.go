@@ -1,8 +1,3 @@
-// Package lang guesses which language a text is written in, by counting the
-// short function words (articles, pronouns, prepositions) that differ most
-// between languages and are densest in ordinary prose. It is a heuristic for
-// the languages in Stopwords, not a general classifier: it declines to guess
-// (ok false) when the text is short or no language clearly wins.
 package lang
 
 import (
@@ -11,7 +6,6 @@ import (
 	"unicode"
 )
 
-// Stopwords are each supported language's detection words, by ISO 639-1 code.
 var Stopwords = map[string][]string{
 	"en": {"the", "and", "is", "of", "to", "a", "in", "that", "it", "for", "with", "as", "was", "on", "are", "this", "be", "have", "not"},
 	"es": {"el", "la", "de", "que", "y", "en", "los", "se", "del", "las", "un", "por", "con", "no", "una", "su", "para", "es", "al"},
@@ -28,7 +22,6 @@ var Names = map[string]string{
 }
 
 const (
-	// MinWords is the fewest words Detect needs to venture a guess.
 	MinWords = 12
 	// MinMatches is the fewest stopword hits the winner must have.
 	MinMatches = 3
@@ -56,9 +49,7 @@ var sets = func() map[string]map[string]bool {
 	return m
 }()
 
-// Detect guesses the language of text. ok is false when the text has fewer
-// than MinWords words, the best language matches fewer than MinMatches of them,
-// or two languages tie.
+// Detect guesses the language of text.
 func Detect(text string) (code string, ok bool) {
 	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return !unicode.IsLetter(r) && r != '\'' })
 	if len(words) < MinWords {
