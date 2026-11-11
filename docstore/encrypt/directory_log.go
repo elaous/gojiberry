@@ -18,35 +18,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// The transparency log: an append-only record of every publication, revocation and owner
-// enrollment, so that a client or an auditor can notice a rewritten history.
-//
-// Entries are records "directory-log/e/<12-digit number>" holding {seq, prev, at, op, address,
-// fingerprint, kid, ref, owner_*, hash, sig}: prev is the hash of the entry before, hash is the
-// SHA-256 of the entry's other fields, and sig is the server key's signature of the hash, so
-// removing, changing or reordering an entry breaks the chain from there on, and no entry can be
-// added without the server's key. "directory-log/head" holds the number and hash of the last
-// entry, as a hint for the next append (an entry that exists past it is found and the head
-// catches up).
-//
-// What the log is for, and what it is not (see docs/encryption-and-passkeys.md, step 4b): an
-// auditor who keeps the last entry it saw (number and hash) and checks the chain from there
-// (VerifyLog, VerifyLogHead) detects that earlier history was changed or cut, and a person who
-// watches the entries for their own address (the keyed pseudonym LogAddressFor gives the owner)
-// sees every key published or revoked for it, including one the server published on its own,
-// unless the address has an owner key: then every entry for it must carry the owner's signature
-// (AuditAddress), which the server alone cannot make. Entry times (At) are written by the server
-// but must not go backwards along the chain beyond a small skew (VerifyLog), so the waits the
-// rules depend on (the 24 hours of a reset) are measured by chain order and cannot be shortened by
-// back-dating. It cannot detect a rewrite from a point the auditor never saw; a server that signs
-// a whole new chain (it holds the key) shows a different history to different people unless
-// auditors compare notes (witnesses narrow that: see directory_witness.go); and a record written without an entry (by
-// someone with write access to the store) is not in it. What a lookup demands of the log: a
-// record's Seq names its entry, and a lookup requires that entry (same address, key and
-// operation, signed by a directory key) only where it matters: for a record signed by a retired
-// key, and for an address that has an owner key (publishedKey). For an ordinary address a record
-// with a valid signature of the current key is Verified without an entry (a record the publish
-// route wrote has one, and a watcher of the address sees it, but the lookup does not check).
+// The transparency log: an append-only record of directory changes.
 
 // zeroHash is the Prev of the first entry.
 var zeroHash = strings.Repeat("0", 64)
@@ -66,28 +38,17 @@ const (
 	OpReset        = "reset"
 	OpResetCancel  = "reset-cancel"
 	OpVoid         = "void"
-	// OpOperatorReset removes the owner enrollment of an address by the operator's hand
-	// (AdapterDirectory.OperatorResetEnrollment). It is signed by the directory key like every
-	// entry, not by the owner, so it cannot be hidden: AuditAddress accepts it as legitimate and
-	// lists it (AddressAudit.OperatorResets), and a watcher is told ("Foreign").
+	// OpOperatorReset removes an address's owner enrollment.
 	OpOperatorReset = "operator-reset"
 )
 
-// DefaultAtSkew is how far back an entry's time may be from the latest time earlier in the chain:
-// VerifyLog and AuditAddress refuse a chain whose times go back by more (the server writes them,
-// so back-dating a reset request, say, to shorten its wait would otherwise be free).
+// DefaultAtSkew is how far back an entry's time may be.
 const DefaultAtSkew = 5 * time.Minute
 
-// VoidWindow is how long after the entry it cancels a "void" entry may be written: a void is the
-// compensation of a failed write, made in the same round (seconds). AuditAddress accepts no later
-// one, for any operation: it is a violation and cancels nothing. (A crash that leaves an owner-state
-// entry without its record is not mended by a void but by completing the record from the log:
-// see directory_recover.go.)
+// VoidWindow is how long a void entry may cancel an entry.
 const VoidWindow = 2 * time.Minute
 
-// voidable says an entry of this kind may be cancelled by a void: a publication, revocation or
-// owner-state change whose record may fail to be written. A void of a void or of an operator
-// reset is not one.
+// voidable says an entry of this kind may be cancelled.
 func voidable(op string) bool {
 	switch op {
 	case OpPublish, OpRevoke, OpEnroll, OpRotate, OpResetRequest, OpReset, OpResetCancel:
@@ -96,24 +57,17 @@ func voidable(op string) bool {
 	return false
 }
 
-// LogEntry is one entry of the log (docstore.DirectoryLogEntry).
+// LogEntry is one entry of the log.
 type LogEntry = docstore.DirectoryLogEntry
 
 func logEntryID(seq int64) string { return fmt.Sprintf("%s%012d", logEntryPrefix, seq) }
 
-// LogAddressFor is the Address of the entries about an e-mail address: a keyed hash (HMAC under
-// the directory's key material, domain-separated from the record names) of the lower-cased,
-// trimmed address. Only the directory can compute it, so a guessed address cannot be tested
-// against the log; the signed-in owner is told theirs (GET /directory/log/address) to find the
-// entries about their own address. It is the current key's; LogAddressesFor adds the retired
-// keys' (entries made before a rotation).
+// LogAddressFor is the Address of the entries about an address.
 func (d *AdapterDirectory) LogAddressFor(email string) string {
 	return d.Signer.Pseudonym(logAddressDomain + normalizeEmail(email))
 }
 
-// LogAddressesFor is LogAddressFor under every key the signer knows, the current one first, then
-// the pseudonyms recorded for the address under keys since removed from the retired list (aliases,
-// directory_alias.go).
+// LogAddressesFor is LogAddressFor for every key of an address.
 func (d *AdapterDirectory) LogAddressesFor(email string) []string {
 	all := d.Signer.Pseudonyms(logAddressDomain + normalizeEmail(email))
 	d.aliasMu.RLock()
@@ -128,9 +82,7 @@ func (d *AdapterDirectory) LogAddressesFor(email string) []string {
 
 const logAddressDomain = "gojiberry-directory-log-address|"
 
-// SignLogEntry fills in an entry's Kid, Hash and Sig with the signer's current key: what the
-// directory does when it appends one, for tools that build or mirror a log (and for tests of an
-// auditor, which need a log with an entry the directory would not have written).
+// SignLogEntry fills in an entry's Kid, Hash and Sig.
 func SignLogEntry(s DirectorySigner, e LogEntry) LogEntry {
 	e.Kid = s.KeyID()
 	e.Hash = logHash(e)
@@ -138,11 +90,11 @@ func SignLogEntry(s DirectorySigner, e LogEntry) LogEntry {
 	return e
 }
 
-// logHash is the hash of an entry's fields other than Hash and Sig.
+// logHash hashes an entry's fields.
 func logHash(e LogEntry) string {
 	fields := []any{"gojiberry-directory-log-v2", e.Seq, e.Prev, e.At, e.Op, e.Address, e.Fingerprint, e.Kid,
 		e.Ref, e.OwnerPub, e.OwnerSig, e.ProofSig, e.OpTime, e.OwnerPrev}
-	if e.OwnerV != 0 || e.LabelHash != "" { // entries made before the label was signed keep their hash
+	if e.OwnerV != 0 || e.LabelHash != "" {
 		fields[0] = "gojiberry-directory-log-v3"
 		fields = append(fields, e.OwnerV, e.LabelHash)
 	}
@@ -168,12 +120,12 @@ func (d *AdapterDirectory) readLogHead(ctx context.Context) (logHead, string, er
 	}
 	var h logHead
 	if json.Unmarshal(doc.Data, &h) != nil || h.Seq < 0 || h.Hash == "" {
-		return logHead{Hash: zeroHash}, docstore.Digest(doc.Data), nil // unreadable: found again by walking
+		return logHead{Hash: zeroHash}, docstore.Digest(doc.Data), nil
 	}
 	return h, docstore.Digest(doc.Data), nil
 }
 
-// logInput is what an entry says besides its place in the chain.
+// logInput is an entry's content, without its place.
 type logInput struct {
 	Op, Email, Fingerprint string
 	Ref                    int64
@@ -182,14 +134,11 @@ type logInput struct {
 	OpTime                 int64
 	OwnerV                 int
 	LabelHash              string
-	// Address, when set, is the entry's address pseudonym itself (for an operator reset of an
-	// address whose e-mail is not known, only its pseudonym); Email is then ignored.
+	// Address, when set, is the entry's pseudonymous address.
 	Address string
 }
 
-// maxLogRounds bounds the rounds an append loses to other appenders before it gives up
-// (ErrDirectoryBusy, answered 503). logBackoff is the wait before the next round: it grows with
-// the rounds lost and carries jitter, so appenders that collided do not collide again in step.
+// maxLogRounds bounds the rounds an append loses to others.
 const maxLogRounds = 16
 
 var logBackoffBase = 2 * time.Millisecond
@@ -199,14 +148,9 @@ func logBackoff(lost int) time.Duration {
 	return base/2 + time.Duration(mrand.Int64N(int64(base/2)+1))
 }
 
-// appendLog adds an entry and returns its number. Several processes on one conditional store
-// append in turn: each creates the entry after the last (create-if-absent), and a loser waits a
-// little (backoff, jitter) and starts over; after maxLogRounds lost rounds it gives up with
-// docstore.ErrDirectoryBusy. Without a conditional store only this process's appends are
-// serialised, and two replicas can fork the chain, which VerifyLog then reports (and
-// AdapterDirectory.CheckStore refuses to run replicas on such a store).
+// appendLog adds an entry and returns its number.
 func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.Time) (int64, error) {
-	lost := 0 // rounds lost to another appender; walking forward to a lagging head is not one
+	lost := 0
 	for lost < maxLogRounds {
 		head, headDigest, err := d.readLogHead(ctx)
 		if err != nil {
@@ -214,7 +158,7 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 		}
 		next := head.Seq + 1
 		if doc, err := d.Store.Load(ctx, logEntryID(next)); err == nil {
-			// The head lags (a crash between the entry and the head): catch it up and go on.
+			// The head may lag the latest entry after a crash.
 			var e LogEntry
 			if json.Unmarshal(doc.Data, &e) != nil || e.Seq != next || e.Hash == "" {
 				return 0, fmt.Errorf("encrypt: the directory log entry %d is unreadable", next)
@@ -224,8 +168,6 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 		} else if !errors.Is(err, docstore.ErrNotFound) {
 			return 0, err
 		}
-		// An entry is never dated before the one it follows (a replica whose clock is behind
-		// would otherwise write a chain that VerifyLog refuses).
 		when := at.Unix()
 		if head.Seq > 0 {
 			pe, found, err := d.readEntry(ctx, head.Seq)
@@ -264,12 +206,8 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 	return 0, docstore.ErrDirectoryBusy
 }
 
-// voidLog appends the compensating entry of an entry whose record could not be written: the log
-// then never claims a publication (or revocation, enrollment) that did not happen. It is best
-// effort: if even that fails, the error is logged, and the entry stands with no record behind it,
-// which an owner who watches the log sees as an operation they did not make.
+// voidLog appends the compensating entry of an entry.
 func (d *AdapterDirectory) voidLog(ctx context.Context, email string, ref int64, fingerprint string, at time.Time) {
-	// The caller's context may be what failed; the compensation must not be lost to it.
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := d.appendLog(vctx, logInput{Op: OpVoid, Email: email, Fingerprint: fingerprint, Ref: ref}, at); err != nil {
@@ -277,14 +215,13 @@ func (d *AdapterDirectory) voidLog(ctx context.Context, email string, ref int64,
 	}
 }
 
-// advanceHead moves the head to e; best effort (a lost race or a failure leaves it behind, which
-// the next append repairs).
+// advanceHead moves the head to e, best effort.
 func (d *AdapterDirectory) advanceHead(ctx context.Context, e LogEntry, prevDigest string) {
 	data, _ := json.Marshal(logHead{Seq: e.Seq, Hash: e.Hash})
 	_ = d.saveIf(ctx, logHeadID, data, prevDigest)
 }
 
-// latest walks from the head hint to the real last entry and returns its number and hash.
+// latest walks from the head hint to the last entry.
 func (d *AdapterDirectory) latest(ctx context.Context) (logHead, error) {
 	head, _, err := d.readLogHead(ctx)
 	if err != nil {
@@ -310,10 +247,7 @@ func logHeadMessage(seq int64, hash string, at int64) []byte {
 	return []byte(fmt.Sprintf("gojiberry-directory-log-head-v1|%d|%s|%d", seq, hash, at))
 }
 
-// Head is the signed head of the log: the number and hash of the last entry, the time, and the
-// server key's signature of them. A client that keeps the head it saw checks a later one with
-// CheckHead, and the entries since with VerifyLogHead, so it notices a log that was cut back or
-// rewritten.
+// Head is the signed head of the log.
 func (d *AdapterDirectory) Head(ctx context.Context) (docstore.DirectoryHead, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryHead{}, ErrDirectoryOff
@@ -327,7 +261,7 @@ func (d *AdapterDirectory) Head(ctx context.Context) (docstore.DirectoryHead, er
 		Sig: base64.StdEncoding.EncodeToString(d.Signer.Sign(logHeadMessage(h.Seq, h.Hash, at)))}, nil
 }
 
-// VerifyHead checks the signature of a head against the pinned keys (by key ID).
+// VerifyHead checks a head's signature.
 func VerifyHead(h docstore.DirectoryHead, keys map[string]ed25519.PublicKey) error {
 	pub, ok := keys[h.Kid]
 	sig, err := base64.StdEncoding.DecodeString(h.Sig)
@@ -337,14 +271,10 @@ func VerifyHead(h docstore.DirectoryHead, keys map[string]ed25519.PublicKey) err
 	return nil
 }
 
-// ErrLogTruncated is returned by CheckHead and VerifyLogHead when the log is shorter than what
-// the client saw, or has a different entry where the client saw one: it was cut back or
-// rewritten.
+// ErrLogTruncated is returned when the log shrank.
 var ErrLogTruncated = errors.New("encrypt: the directory log is shorter than, or differs from, what was seen before")
 
-// CheckHead compares a head (signed: VerifyHead it first) with the one the client saw: a head
-// with a lower number is a truncation, one with the same number and another hash a rewrite (both
-// ErrLogTruncated). prevSeq 0 means nothing was seen.
+// CheckHead compares a head with the log.
 func CheckHead(prevSeq int64, prevHash string, h docstore.DirectoryHead) error {
 	switch {
 	case prevSeq == 0:
@@ -357,13 +287,7 @@ func CheckHead(prevSeq int64, prevHash string, h docstore.DirectoryHead) error {
 	return nil
 }
 
-// VerifyLogHead is the client's check that the log still contains what it saw. entries is the
-// log read from the entry the client saw last (GET /directory/log?since=<prevSeenSeq-1>): its
-// first entry must be number prevSeenSeq with hash prevSeenHash, and the entries must chain from
-// there (their number, Prev and Hash; VerifyLog checks the signatures). An empty answer, a first
-// entry with another number or hash, or a broken chain is ErrLogTruncated or ErrLogBroken: the
-// server cut the log back or rewrote it. With prevSeenSeq 0 (nothing seen) it accepts anything
-// that chains from the start.
+// VerifyLogHead checks that the log stands on a signed head.
 func VerifyLogHead(prevSeenSeq int64, prevSeenHash string, entries []LogEntry) error {
 	if prevSeenSeq <= 0 {
 		return nil
@@ -385,10 +309,7 @@ func VerifyLogHead(prevSeenSeq int64, prevSeenHash string, entries []LogEntry) e
 	return nil
 }
 
-// ReadLog returns up to limit entries after number since (all of them from 0; the library caps
-// one call at 1000, the HTTP route at 200: ask again from the last number for more), and the
-// public keys that verify them when the signer can show them (PublicKeyer; as the server states
-// them, to be pinned elsewhere). It stops at the first number with no entry.
+// ReadLog returns up to limit entries after number since.
 func (d *AdapterDirectory) ReadLog(ctx context.Context, since int64, limit int) (docstore.DirectoryLog, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryLog{}, ErrDirectoryOff
@@ -420,7 +341,7 @@ func (d *AdapterDirectory) ReadLog(ctx context.Context, since int64, limit int) 
 	return out, nil
 }
 
-// readEntry loads one log entry (found false when there is none).
+// readEntry loads one log entry.
 func (d *AdapterDirectory) readEntry(ctx context.Context, seq int64) (e LogEntry, found bool, err error) {
 	if seq <= 0 {
 		return LogEntry{}, false, nil
@@ -438,28 +359,19 @@ func (d *AdapterDirectory) readEntry(ctx context.Context, seq int64) (e LogEntry
 	return e, true, nil
 }
 
-// ErrLogBroken is returned by VerifyLog; the error says where.
+// ErrLogBroken is returned by VerifyLog when the log is damaged.
 var ErrLogBroken = errors.New("encrypt: the directory log does not verify")
 
-// VerifyLog checks entries, a run of the log that follows the entry whose hash is prevHash
-// ("" for the start of the log): each entry's number is the one after the one before, its Prev is
-// that one's hash, its Hash is the hash of its fields, its signature is by the key it names
-// among keys (the pinned public keys by key ID), and its time (At) is not more than
-// DefaultAtSkew before the latest time earlier in the run (the server writes the times: a chain
-// whose times go back is one that was back-dated, which would shorten the waits the audit
-// measures). It returns the hash of the last entry, to be kept and given as prevHash next time.
-// An auditor calls it on what ReadLog (GET /directory/log) returned since the last number it kept.
+// VerifyLog checks a run of log entries.
 func VerifyLog(entries []LogEntry, prevHash string, since int64, keys map[string]ed25519.PublicKey) (lastHash string, err error) {
 	return VerifyLogWith(entries, prevHash, since, keys, LogChecks{})
 }
 
 // LogChecks tunes VerifyLogWith.
 type LogChecks struct {
-	// AtSkew is how far back an entry's time may be from the latest time before it (DefaultAtSkew
-	// when 0).
+	// AtSkew is how far back an entry's time may be.
 	AtSkew time.Duration
-	// PrevAt is the time of the entry the run follows, when the caller knows it (0: unknown, the
-	// first entry sets the baseline).
+	// PrevAt is the time of the entry the run follows.
 	PrevAt int64
 }
 
@@ -501,10 +413,7 @@ func VerifyLogWith(entries []LogEntry, prevHash string, since int64, keys map[st
 	return prevHash, nil
 }
 
-// VerifyEntry checks one entry on its own: its hash is the hash of its fields and its signature
-// is by the key it names among keys. It does not check the chain (the entries around it): the
-// entries of a filtered log read (the caller may see only their own address's entries) are
-// checked with it.
+// VerifyEntry checks one entry on its own.
 func VerifyEntry(e LogEntry, keys map[string]ed25519.PublicKey) error {
 	pub, ok := keys[e.Kid]
 	sig, decErr := base64.StdEncoding.DecodeString(e.Sig)
@@ -517,9 +426,7 @@ func VerifyEntry(e LogEntry, keys map[string]ed25519.PublicKey) error {
 	return nil
 }
 
-// LogFor is ReadLog for the entries of some addresses (their pseudonyms): it scans at most scan
-// entries after since, returns up to limit of those that are about one of addresses, and says
-// where it stopped (Next) and whether there is more (More). docstore.DirectoryLogFilterer.
+// LogFor is ReadLog for the entries of some addresses.
 func (d *AdapterDirectory) LogFor(ctx context.Context, addresses []string, since int64, scan, limit int) (docstore.DirectoryLog, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryLog{}, ErrDirectoryOff
@@ -547,7 +454,6 @@ func (d *AdapterDirectory) LogFor(ctx context.Context, addresses []string, since
 			out.Entries = append(out.Entries, e)
 		}
 	}
-	// More: is there an entry after where the scan stopped?
 	if _, err := d.Store.Load(ctx, logEntryID(out.Next+1)); err == nil {
 		out.More = true
 	}
