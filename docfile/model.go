@@ -55,16 +55,15 @@ type Item struct {
 	Table *TableItem `json:"table,omitempty" pb:"9"`
 	// Image is an inline image.
 	Image *ImageItem `json:"image,omitempty" pb:"10"`
-	// Media is an embedded audio or video clip with its captions and transcript (roadmap 68). The editor
-	// has no player: it opens a clip as text (MediaText) and the exports write it so.
+	// Media is an embedded audio or video clip.
 	Media *MediaItem `json:"media,omitempty" pb:"11"`
-	// Equation is a formula with its text alternative (roadmap 78).
+	// Equation is a formula with its text alternative.
 	Equation *EquationItem `json:"equation,omitempty" pb:"12"`
-	// Form is a form field: its properties and what was written in it.
+	// Form is a form field.
 	Form *FormFieldItem `json:"form,omitempty" pb:"13"`
 }
 
-// Words is what the exports and the search write for the field: its label and what is in it.
+// Words is the text exports and search write.
 func (f FormFieldItem) Words() string {
 	label := strings.TrimSpace(f.Label)
 	if f.Kind == "checkbox" {
@@ -80,9 +79,7 @@ func (f FormFieldItem) Words() string {
 	return label + ": " + f.Value
 }
 
-// FormFieldItem mirrors canvas.FormFieldObject: a field of a form, what it takes (Kind: text, textarea, email, number,
-// phone, url, date, checkbox or select), how it is shown and checked, and the Value written in it. Locked keeps its
-// properties from being changed.
+// FormFieldItem mirrors canvas.FormFieldObject.
 type FormFieldItem struct {
 	Kind        string   `json:"kind" pb:"1"`
 	Name        string   `json:"name,omitempty" pb:"2"`
@@ -93,46 +90,41 @@ type FormFieldItem struct {
 	Options     []string `json:"options,omitempty" pb:"7"`
 	Value       string   `json:"value,omitempty" pb:"8"`
 	Locked      bool     `json:"locked,omitempty" pb:"9"`
-	// LockKey and LockSig are the seal of a lock (package formseal): the public key that locked the field and its
-	// signature over the properties, both base64; empty for a lock without a key.
+	// LockKey and LockSig are the seal of a lock.
 	LockKey string `json:"lockKey,omitempty" pb:"10"`
 	LockSig string `json:"lockSig,omitempty" pb:"11"`
 }
 
-// ImageItem is an inline image. URL is what to fetch it from (a data: URL
-// holds the bitmap itself); Width and Height are its displayed size.
+// ImageItem is an inline image.
 type ImageItem struct {
 	URL    string  `json:"url" pb:"1"`
 	Width  float64 `json:"width,omitempty" pb:"2"`
 	Height float64 `json:"height,omitempty" pb:"3"`
 	Alpha  float64 `json:"alpha,omitempty" pb:"4"`
-	// ClipLeft..ClipBottom are the pixels cropped from each side.
+	// ClipLeft to ClipBottom are the cropped pixels.
 	ClipLeft   float64 `json:"clipLeft,omitempty" pb:"5"`
 	ClipTop    float64 `json:"clipTop,omitempty" pb:"6"`
 	ClipRight  float64 `json:"clipRight,omitempty" pb:"7"`
 	ClipBottom float64 `json:"clipBottom,omitempty" pb:"8"`
-	// Alt describes the image; Decorative says it needs no description.
+	// Alt describes the image; Decorative marks it as decoration.
 	Alt        string `json:"alt,omitempty" pb:"9"`
 	Decorative bool   `json:"decorative,omitempty" pb:"10"`
-	// LongDesc is a longer description of a diagram or chart than Alt can hold (roadmap 78).
+	// LongDesc is a longer description of a diagram.
 	LongDesc string `json:"longDesc,omitempty" pb:"11"`
-	// Legend is the visible caption under the picture (canvas.Image.Legend).
+	// Legend is the visible caption under the picture.
 	Legend string `json:"legend,omitempty" pb:"12"`
-	// Credit and SourceURL are the author, licence and page of a picture found in an image repository (canvas.Image).
+	// Credit and SourceURL give the picture's source.
 	Credit    string `json:"credit,omitempty" pb:"13"`
 	SourceURL string `json:"sourceUrl,omitempty" pb:"14"`
-	// Diagram is the kind of a picture drawn by the diagram add-on from the description in LongDesc ("" for another picture).
+	// Diagram is the kind of a generated picture.
 	Diagram string `json:"diagram,omitempty" pb:"15"`
 }
 
-// EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
-// alternative, what a person would read aloud. The alternative is required: a document with an equation
-// that has none is a finding of package a11ycheck, and every export writes the alternative as the text of
-// the equation (the HTML export also writes MathML).
+// EquationItem is a formula in linear notation.
 type EquationItem struct {
 	Formula string `json:"formula" pb:"1"`
 	Alt     string `json:"alt,omitempty" pb:"2"`
-	// Inline puts the formula in its line of text instead of on a line of its own.
+	// Inline puts the formula in its line of text.
 	Inline bool `json:"inline,omitempty" pb:"3"`
 }
 
@@ -142,7 +134,7 @@ type RuleItem struct {
 	Thickness float64 `json:"thickness,omitempty" pb:"2"`
 }
 
-// TableItem is the text of a table in the flow, row by row.
+// TableItem is a table in the flow.
 type TableItem struct {
 	Rows []TableRow `json:"rows,omitempty" pb:"1"`
 	// Merges are blocks of cells shown as one.
