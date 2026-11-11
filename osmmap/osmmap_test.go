@@ -18,12 +18,10 @@ import (
 func near(a, b, eps float64) bool { return math.Abs(a-b) <= eps }
 
 func TestPlusCodeFromTheSpecification(t *testing.T) {
-	// 7FG49Q00+ is the area 20.35..20.40 N, 2.75..2.80 E (a padded code: six digits).
 	lat, lng, ls, gs, err := DecodePlusCode("7FG49Q00+")
 	if err != nil || !near(lat, 20.375, 1e-9) || !near(lng, 2.775, 1e-9) || !near(ls, 0.05, 1e-9) || !near(gs, 0.05, 1e-9) {
 		t.Fatalf("7FG49Q00+: %v %v %v %v %v", lat, lng, ls, gs, err)
 	}
-	// 8FVC9G8F+6W: ten digits, about 14 m; it contains the point it was made from.
 	lat, lng, ls, gs, err = DecodePlusCode("8fvc9g8f+6w") // lower case is the same
 	if err != nil || !near(lat, 47.3655625, 1e-6) || !near(lng, 8.5248125, 1e-6) || !near(ls, 0.000125, 1e-9) {
 		t.Fatalf("8FVC9G8F+6W: %v %v %v %v %v", lat, lng, ls, gs, err)
@@ -177,10 +175,7 @@ func TestTilesServer(t *testing.T) {
 	}
 }
 
-// A short code recovered near the place it was cut from is the code it was cut from, from 4 or 6 digits cut, and a far
-// reference gives a different place.
 func TestShortPlusCodesAreRecoveredNearestTheReference(t *testing.T) {
-	// A code recovered near the place it was cut from is the code it was cut from.
 	for _, p := range [][2]float64{{48.8584, 2.2945}, {-33.8568, 151.2153}, {40.7128, -74.006}, {-0.1, 179.99}} {
 		full := EncodePlusCode(p[0], p[1], 10)
 		short := full[4:]

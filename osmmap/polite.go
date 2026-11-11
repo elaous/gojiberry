@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// The public OpenStreetMap servers are for light use: a cache so that the same tile or address is not asked for twice,
-// and a gap between requests. Wrap what Tiles and Nominatim give; a deployment with its own servers need not.
-
-// gate keeps requests at least gap apart, in the order they ask.
 type gate struct {
 	mu   sync.Mutex
 	gap  time.Duration
@@ -52,7 +48,6 @@ func (g *gate) wait(ctx context.Context) error {
 	}
 }
 
-// lru is a small least recently used cache.
 type lru[V any] struct {
 	mu    sync.Mutex
 	max   int
@@ -95,8 +90,6 @@ func (c *lru[V]) put(k string, v V) {
 	}
 }
 
-// PoliteTiles caches the tiles of a source (the newest MaxTiles, 128 by default) and keeps the requests it makes to it
-// Gap apart (none by default). One PoliteTiles is meant to live as long as the page does.
 type PoliteTiles struct {
 	Source   TileSource
 	MaxTiles int
@@ -134,8 +127,6 @@ func (p *PoliteTiles) Tile(ctx context.Context, z, x, y int) (image.Image, error
 	return img, err
 }
 
-// PoliteGeocoder caches the answers of a geocoder (the newest MaxQueries, 64 by default, by the query with its spaces
-// and case ignored) and keeps its requests Gap apart (none by default; the public Nominatim asks for one a second).
 type PoliteGeocoder struct {
 	Source     Geocoder
 	MaxQueries int
