@@ -28,11 +28,9 @@ func TestPackSealerSealsForTheOwnerKeysAndOpensWithThem(t *testing.T) {
 	if err != nil || string(got) != "secret payroll" {
 		t.Fatalf("%q %v", got, err)
 	}
-	// The envelope is bound to its record: another id does not open it.
 	if _, err := open(ctx, "00000000-0000-4000-8000-000000000043", env); err == nil {
 		t.Error("an envelope opened under another record's id")
 	}
-	// Another person's key, or none (a locked store), cannot open it and says it is locked.
 	_, openBo := PackSealer(nil, []age.Identity{bo.id})
 	if _, err := openBo(ctx, id, env); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("a stranger: %v", err)
@@ -73,8 +71,6 @@ func TestPackSealerIsSafeForConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-// A pack sealed for another key is not "locked": keys are held and none opens it. The error says
-// so (docstore.ErrWrongKey), and still reads as a document that cannot be opened (ErrLocked).
 func TestPackOpenSaysWrongKeyWhenKeysAreHeld(t *testing.T) {
 	ctx := context.Background()
 	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")

@@ -23,7 +23,6 @@ type dirEnv struct {
 
 func newDirEnv(t *testing.T) *dirEnv { return newDirEnvWith(t, nil, nil) }
 
-// newDirEnvWith is newDirEnv with a say in the directory and the server before it is mounted.
 func newDirEnvWith(t *testing.T, dir func(*AdapterDirectory), srvOpt func(*docstore.Server)) *dirEnv {
 	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://x.test"})
@@ -84,7 +83,6 @@ func TestDirectoryRoutesPublishAndLookup(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	// Any signed-in provider user finds it; a passkey session may not look up.
 	pk := e.token(auth.User{ID: "passkey:z"})
 	if code, _ := e.lookup(pk, "ana@x.io"); code != 403 {
 		t.Errorf("passkey lookup = %d, want 403", code)
@@ -111,7 +109,6 @@ func TestDirectoryRoutesPublishAndLookup(t *testing.T) {
 	if rec := e.do("GET", "/directory/publish", ana, ""); rec.Code != 405 {
 		t.Errorf("%d", rec.Code)
 	}
-	// The record is not reachable through the document API, by name or in the listing.
 	metas, _ := docstore.ListPrefix(context.Background(), e.store, "directory/")
 	if len(metas) != 1 {
 		t.Fatalf("%v", metas)
@@ -151,7 +148,6 @@ func TestDirectoryPublishRefusals(t *testing.T) {
 			t.Errorf("%s = %d", name, rec.Code)
 		}
 	}
-	// An address that is not the session's own is refused; the session's own is fine.
 	if rec := e.publish(ana, map[string]string{"key": key.Text, "email": "bo@x.io"}); rec.Code != 403 {
 		t.Errorf("another address = %d", rec.Code)
 	}
@@ -161,7 +157,6 @@ func TestDirectoryPublishRefusals(t *testing.T) {
 	if rec := e.publish(ana, map[string]string{"key": key.Text, "email": " ANA@x.io "}); rec.Code != 200 {
 		t.Errorf("own address = %d", rec.Code)
 	}
-	// An oversized body is refused before it is read in full.
 	big := `{"key":"` + strings.Repeat("a", 8<<10) + `"}`
 	if rec := e.do("POST", "/directory/publish", ana, big); rec.Code != 413 {
 		t.Errorf("big body = %d", rec.Code)
@@ -200,7 +195,6 @@ func TestDirectoryRoutesNeedSignInAndAService(t *testing.T) {
 	if rec.Code != 404 {
 		t.Errorf("without sign-in: %d", rec.Code)
 	}
-	// An auth.Manager but no directory (no key configured): not mounted either.
 	mgr, _ := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://x.test"})
 	h = docstore.NewServer(store, "memory").WithAuth(mgr).Handler()
 	rec = httptest.NewRecorder()
@@ -220,7 +214,6 @@ func TestDirectoryServiceMapsRefusals(t *testing.T) {
 
 func TestDirectoryLookupIsLimitedPerIP(t *testing.T) {
 	e := newDirEnv(t)
-	// Three users, each well under the per-user limit, share one client address.
 	var toks []string
 	for i := 1; i <= 3; i++ {
 		toks = append(toks, e.token(auth.User{ID: fmt.Sprintf("google:%d", i), Email: fmt.Sprintf("u%d@x.io", i), VerifiedEmail: true}))
@@ -234,7 +227,6 @@ func TestDirectoryLookupIsLimitedPerIP(t *testing.T) {
 	}
 }
 
-// A record someone wrote straight into the store (no server signature) is shown label-only.
 func TestDirectoryRouteShowsAForgedRecordUnverified(t *testing.T) {
 	e := newDirEnv(t)
 	ana := e.token(auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true})

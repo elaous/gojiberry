@@ -17,7 +17,6 @@ import (
 	"testing"
 )
 
-// sshKey makes an ed25519 SSH key pair: the public line and the private PEM.
 func sshKey(t *testing.T, comment string) (pub string, priv []byte) {
 	t.Helper()
 	p, k, err := ed25519.GenerateKey(rand.Reader)
@@ -74,13 +73,11 @@ func TestRoundTripWithSSHKeysAndTheStoreHoldsCiphertext(t *testing.T) {
 	if err != nil || !bytes.Equal(got.Data, secret) {
 		t.Fatalf("%q %v", got.Data, err)
 	}
-	// The same plaintext is a different ciphertext each time (a fresh data key).
 	_ = a.Save(ctx, "doc2", secret)
 	raw2, _ := inner.Load(ctx, "doc2")
 	if bytes.Equal(raw.Data, raw2.Data) {
 		t.Error("each save has its own data key")
 	}
-	// The catalog and ACL records stay readable.
 	_ = a.Save(ctx, "catalog:index", []byte(`{"docs":{}}`))
 	_ = a.Save(ctx, "acl:doc1", []byte(`{}`))
 	for _, id := range []string{"catalog:index", "acl:doc1"} {
@@ -107,8 +104,6 @@ func TestWrongKeyAndTamperedCiphertextAreRefused(t *testing.T) {
 	if d, err := New(inner, Static{Keys: []age.Identity{ana.id}}).Load(ctx, "d"); err == nil {
 		t.Fatalf("tampered ciphertext was read: %q", d.Data)
 	}
-	// A document stored in the clear is refused by default (a store writer cannot replace a
-	// ciphertext with plaintext), and read only with the explicit opt-out.
 	_ = inner.Save(ctx, "plain", []byte("not secret"))
 	a := New(inner, Static{Keys: []age.Identity{ana.id}})
 	if _, err := a.Load(ctx, "plain"); !errors.Is(err, ErrNotEncrypted) {
@@ -130,7 +125,6 @@ func TestSharingIsAnotherRecipientAndRevokingIsAReKey(t *testing.T) {
 	ring := &mutable{to: []age.Recipient{ana.r.Key}}
 	a := New(inner, ring)
 	_ = a.Save(ctx, "d", []byte("version 1"))
-	// Shared with Bo: a save to both.
 	ring.to = []age.Recipient{ana.r.Key, bo.r.Key}
 	if err := a.Rekey(ctx, "d"); err == nil {
 		t.Fatal("Ana's own key is needed to open it first") // ring has no identities yet
@@ -144,7 +138,6 @@ func TestSharingIsAnotherRecipientAndRevokingIsAReKey(t *testing.T) {
 		t.Fatalf("Bo can open it now: %v", err)
 	}
 	oldCopy, _ := inner.Load(ctx, "d") // what Bo could have kept
-	// Revoked: Ana's re-key to her alone, with a new data key.
 	ring.to = []age.Recipient{ana.r.Key}
 	n, err := a.RekeyAll(ctx)
 	if err != nil || n != 1 {
@@ -156,7 +149,6 @@ func TestSharingIsAnotherRecipientAndRevokingIsAReKey(t *testing.T) {
 	if d, err := a.Load(ctx, "d"); err != nil || string(d.Data) != "version 1" {
 		t.Fatalf("Ana still reads it: %v", err)
 	}
-	// What Bo already had still opens for him: nothing can take that back.
 	kept := docstore.NewMemoryAdapter()
 	_ = kept.Save(ctx, "d", oldCopy.Data)
 	if d, err := New(kept, Static{Keys: []age.Identity{bo.id}}).Load(ctx, "d"); err != nil || string(d.Data) != "version 1" {
@@ -212,8 +204,6 @@ func TestParsingBadKeys(t *testing.T) {
 	}
 }
 
-// The saver, folders, versions and the conditional catalog work through the encrypting
-// adapter, and the store holds no document text.
 func TestTheSaverWorksOnAnEncryptedStore(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")
@@ -245,7 +235,6 @@ func TestTheSaverWorksOnAnEncryptedStore(t *testing.T) {
 	if rep, err := s.Verify(ctx, "m"); err != nil || len(rep.Lost) != 0 || rep.Checked != 1 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// Nothing in the store has the text; the catalog does list the name.
 	metas, _ := inner.List(ctx)
 	sawName := false
 	for _, m := range metas {
@@ -260,7 +249,6 @@ func TestTheSaverWorksOnAnEncryptedStore(t *testing.T) {
 	if !sawName {
 		t.Error("the catalog stays readable (names, tags, folders)")
 	}
-	// Someone with only the store sees ciphertext and cannot open a document.
 	stranger := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(inner, Static{})}}}
 	if _, err := stranger.Load(ctx, "m", e.ID); err == nil {
 		t.Error("a store with no key opens nothing")
@@ -303,7 +291,6 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 		t.Fatal("not shared yet")
 	}
 
-	// The fingerprint has to be confirmed, and be this key's.
 	if err := sh.Add(ctx, docID, bo.r, ""); !errors.Is(err, ErrFingerprint) {
 		t.Fatalf("no confirmation: %v", err)
 	}
@@ -320,7 +307,6 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 	if len(list) != 1 || list[0].Label != "bo" || list[0].Fingerprint != bo.r.Fingerprint || list[0].Type != "ssh-ed25519" {
 		t.Fatalf("%+v", list)
 	}
-	// Everything of the document opens for Bo: the copy, the previous copy and the version.
 	for _, id := range []string{cur, prev, ver} {
 		if d, err := asBo.Load(ctx, id); err != nil || string(d.Data) != "text of "+id {
 			t.Errorf("%s: %v", id, err)
@@ -329,19 +315,16 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 	if _, err := asBo.Load(ctx, other); !errors.Is(err, ErrNoKey) {
 		t.Error("another document is not shared")
 	}
-	// The record is readable by anyone with the store (public keys only).
 	raw, err := inner.Load(ctx, KeysPrefix+docID)
 	var sr signedRecord
 	if err != nil || IsEncrypted(raw.Data) || json.Unmarshal(raw.Data, &sr) != nil || !bytes.Contains(sr.Payload, []byte(bo.r.Fingerprint)) {
 		t.Errorf("the recipient list is plain (and signed): %v", err)
 	}
-	// A save made later goes to Bo too.
 	_ = ad.Save(ctx, cur, []byte("newer"))
 	if d, err := asBo.Load(ctx, cur); err != nil || string(d.Data) != "newer" {
 		t.Errorf("%v", err)
 	}
 
-	// Revoked: the files are encrypted again without Bo.
 	n, err := sh.Remove(ctx, docID, bo.r.Fingerprint)
 	if err != nil || n != 3 {
 		t.Fatalf("%d %v", n, err)
@@ -363,7 +346,6 @@ func TestSharingByKeyNeedsTheFingerprintAndRemovingIsAReKey(t *testing.T) {
 	if _, err := sh.Remove(ctx, docID, "SHA256:nobody"); !errors.Is(err, docstore.ErrNotFound) {
 		t.Errorf("%v", err)
 	}
-	// An age (recovery) key shares the same way.
 	pub, secret, _ := GenerateRecoveryKey()
 	rec, _ := ParseAgeRecipient(pub)
 	if err := sh.Add(ctx, docID, rec, rec.Fingerprint); err != nil {
@@ -471,7 +453,6 @@ func TestTruncatedTrailingAndFlippedCiphertextAreRefused(t *testing.T) {
 	try("one chunk cut", good[:len(good)-65536-16])
 	try("last byte cut", good[:len(good)-1])
 	try("trailing bytes", append(append([]byte(nil), good...), 'x'))
-	// A flip in the header (the stanza or its MAC).
 	for _, off := range []int{len(header) + 2, len(header) + 40, bytes.Index(good, []byte("\n--- ")) + 8} {
 		b := append([]byte(nil), good...)
 		b[off] ^= 1
@@ -495,7 +476,6 @@ func TestCustomSkip(t *testing.T) {
 	if r, _ := inner.Load(ctx, "closed"); !IsEncrypted(r.Data) {
 		t.Error("the rest is encrypted")
 	}
-	// With a custom Skip, the catalog is not skipped, and writing it encrypted is refused.
 	if err := a.Save(ctx, "catalog:index", []byte("{}")); !errors.Is(err, ErrReservedID) {
 		t.Errorf("%v", err)
 	}
@@ -574,7 +554,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	}
 	good, _ := inner.Load(ctx, KeysPrefix+docA)
 
-	// The old unsigned format, with Mallory in it.
 	legacy := `{"recipients":[{"type":"` + mallory.r.Type + `","key":"` + mallory.r.Text + `"}]}`
 	_ = inner.Save(ctx, KeysPrefix+docA, []byte(legacy))
 	if err := ad.Save(ctx, f, []byte("v2")); !errors.Is(err, ErrUnsignedRecord) {
@@ -584,8 +563,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	evil, _ := NewSigner(bytes.Repeat([]byte{9}, 32))
 	forged := &Sharing{Store: inner, Adapter: ad, Signer: evil}
 	_ = inner.Delete(ctx, KeysPrefix+docA)
-	// Mallory writes a record under her own key (recover mode: no check against the files'
-	// frames, which would refuse the deleted record; the point here is the signature).
 	if _, err := forged.mutateWith(ctx, docA, mutateOpts{recover: true}, func(rec *sharedRecord) (bool, error) {
 		rec.Recipients = append(rec.Recipients, sharedEntry{Type: mallory.r.Type, Key: mallory.r.Text})
 		return true, nil
@@ -595,7 +572,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	if err := ad.Save(ctx, f, []byte("v2")); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("a record signed by a stranger: %v", err)
 	}
-	// A valid record of another document does not do for this one.
 	_ = inner.Save(ctx, KeysPrefix+docA, good.Data)
 	_ = sh.Add(ctx, docB, mallory.r, mallory.r.Fingerprint)
 	other, _ := inner.Load(ctx, KeysPrefix+docB)
@@ -612,7 +588,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	if _, err := sh.List(ctx, docA); err == nil {
 		t.Fatal("a changed record verified")
 	}
-	// The real one works, and a keyring with no signers refuses a document that has a record.
 	_ = inner.Save(ctx, KeysPrefix+docA, good.Data)
 	if err := ad.Save(ctx, f, []byte("v2")); err != nil {
 		t.Fatal(err)
@@ -635,8 +610,6 @@ func TestTheFingerprintIsComputedFromTheStoredKey(t *testing.T) {
 	if err := sh.Add(ctx, docA, bo.r, bo.r.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
-	// Rewrite the stored fingerprint (re-signing as the owner would be needed to do this
-	// for real; here the list is read through the same path with the field changed).
 	var lied sharedEntry
 	rec, _, _ := loadRecord(ctx, inner, docA, sh.verifiers(), nil)
 	lied = rec.Recipients[0]
@@ -645,7 +618,6 @@ func TestTheFingerprintIsComputedFromTheStoredKey(t *testing.T) {
 	if err != nil || p.Fingerprint != bo.r.Fingerprint {
 		t.Fatalf("%+v %v", p, err)
 	}
-	// An entry that claims to be age but holds an SSH key is not read as either.
 	if _, err := parseShared(sharedEntry{Type: "age-x25519", Key: bo.r.Text}); err == nil {
 		t.Error("type and key must agree")
 	}

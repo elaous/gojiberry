@@ -23,7 +23,6 @@ func TestDeviceUseIsKeptEncryptedPerKey(t *testing.T) {
 	if err := a.RecordDeviceUse(ctx, "fp-phone", "phone", t0.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	// A later use of the same key replaces its record.
 	if err := a.RecordDeviceUse(ctx, "fp-laptop", "work laptop", t0.Add(48*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +35,6 @@ func TestDeviceUseIsKeptEncryptedPerKey(t *testing.T) {
 			t.Errorf("laptop record: %v", u)
 		}
 	}
-	// On the server the record is ciphertext: neither the label nor the time is readable.
 	phoneID, _ := deviceUseID("fp-phone")
 	raw, err := inner.Load(ctx, phoneID)
 	if err != nil {
@@ -45,7 +43,6 @@ func TestDeviceUseIsKeptEncryptedPerKey(t *testing.T) {
 	if bytes.Contains(raw.Data, []byte("phone")) || bytes.Contains(raw.Data, []byte("2030")) || !IsEncrypted(raw.Data) {
 		t.Errorf("the record is not encrypted: %q", raw.Data)
 	}
-	// It is not a document: it never expires and is not listed as one.
 	if docstore.IsDocumentKey(phoneID) {
 		t.Error("a device record counts as a document")
 	}

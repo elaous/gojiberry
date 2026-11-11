@@ -40,7 +40,6 @@ func TestConfidentialCheckNeedsARecoverableOwnerKey(t *testing.T) {
 	if err := ConfidentialCheck(nil, pk, ana.r)(ctx, "t", id); err != nil {
 		t.Errorf("no sharing: %v", err)
 	}
-	// Someone else's key the document is shared with is not the owner's way back in.
 	bo := newPerson(t, "bo")
 	if err := sh.Add(ctx, id, bo.r, bo.r.Fingerprint); err != nil {
 		t.Fatal(err)
@@ -48,7 +47,6 @@ func TestConfidentialCheckNeedsARecoverableOwnerKey(t *testing.T) {
 	if err := ConfidentialCheck(sh, pk)(ctx, "t", id); !errors.Is(err, ErrNeedSecondRecipient) {
 		t.Errorf("a shared SSH key does not count: %v", err)
 	}
-	// A list that does not verify is not trusted: the check fails with that error.
 	_ = inner.Save(ctx, KeysPrefix+id, []byte(`{"payload":"e30=","sig":"AAAA"}`))
 	if err := ConfidentialCheck(sh, pk, ana.r)(ctx, "t", id); !errors.Is(err, ErrBadSignature) {
 		t.Errorf("a forged list: %v", err)
@@ -69,7 +67,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 	}
 	sharingFor := func(ad *Adapter) *Sharing { return &Sharing{Store: inner, Adapter: ad, Signer: sg} }
 
-	// A store whose only owner key is a passkey: nothing can be made confidential.
 	ad := ring(pk.Key)
 	s := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: ad}}}
 	s.ConfidentialCheck = ConfidentialCheck(sharingFor(ad), pk)
@@ -89,7 +86,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 
-	// With the SSH recovery key as a second owner key it is allowed.
 	ad = ring(pk.Key, ana.r.Key)
 	s = &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: ad}}}
 	s.ConfidentialCheck = ConfidentialCheck(sharingFor(ad), pk, ana.r)
@@ -100,7 +96,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 	if got.Name != saver.ConfidentialName || len(got.Tags) != 0 || got.Protection != saver.ProtectionE2EE {
 		t.Fatalf("%+v", got)
 	}
-	// What the store shows to whoever can read it: a placeholder, ciphertext, no name or text.
 	metas, _ := inner.List(ctx)
 	for _, m := range metas {
 		raw, _ := inner.Load(ctx, m.ID)
@@ -110,7 +105,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 			}
 		}
 	}
-	// The owner opens it with the passkey alone, or with the recovery key alone.
 	for name, id := range map[string]age.Identity{"passkey": pkID, "recovery key": ana.id} {
 		only := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(inner, Static{Keys: []age.Identity{id}})}}}
 		n, tags, err := only.Reveal(ctx, "m", e.ID)
@@ -119,8 +113,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 		}
 	}
 
-	// Someone with the store and a key that does not fit: the document is locked, a rebuild
-	// lists it as confidential without reading it, and Verify says it could not check it.
 	bo := newPerson(t, "bo")
 	stranger := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(inner, Static{Keys: []age.Identity{bo.id}})}}}
 	if _, _, err := stranger.Reveal(ctx, "m", e.ID); !errors.Is(err, ErrNoKey) || !errors.Is(err, docstore.ErrLocked) {
@@ -137,7 +129,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 	if rep, err := stranger.Verify(ctx, "m"); err != nil || rep.Locked != 1 || len(rep.Lost) != 0 {
 		t.Errorf("%+v %v", rep, err)
 	}
-	// The owner rebuilds from the documents: the level and the placeholder are what they were.
 	_ = inner.Delete(ctx, saver.CatalogKey)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -151,8 +142,6 @@ func TestConfidentialDocumentsOnAnEncryptedStore(t *testing.T) {
 	}
 }
 
-// A pack of a confidential document, sealed to the owner's keys with the library's own
-// encryption injected as Seal, and opened again with the matching Open.
 func TestPackSealedWithTheStoresKeys(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")
@@ -165,7 +154,6 @@ func TestPackSealedWithTheStoresKeys(t *testing.T) {
 	if err := s.SetProtection(ctx, "m", e.ID, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
-	// Seal and Open are Adapters of their own over an empty store: the pack carries what they write.
 	scratch := docstore.NewMemoryAdapter()
 	sealer := New(scratch, Static{To: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}})
 	seal := func(ctx context.Context, id string, plain []byte) ([]byte, error) {

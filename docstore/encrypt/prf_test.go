@@ -95,21 +95,15 @@ func TestPasskeyKeyIsSharedAndOpensTheDocument(t *testing.T) {
 	if len(list) != 1 || list[0].Type != TypePasskey || list[0].Hint != "cred-9" || list[0].Label != "ana's phone" {
 		t.Fatalf("%+v", list)
 	}
-	// Later the passkey is asked again: same bytes, same identity, opens the document.
 	idn, _ := PRFIdentity(secret)
 	if d, err := New(inner, Static{Keys: []age.Identity{idn}}).Load(ctx, id); err != nil || string(d.Data) != "secret" {
 		t.Errorf("%v", err)
 	}
-	// Opening later still works after the list is read back (the entry parses as a recipient).
 	if _, err := ad.RekeyDocument(ctx, doc); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Known answers: a fixed PRF output gives these exact strings. They were computed once and the
-// derivation step was checked by hand (HKDF-SHA256, no salt, the info string, with a second
-// implementation), so a change to the derivation (the salt, the info, the encoding) fails here
-// instead of silently locking people out of documents they encrypted.
 var prfVectors = []struct {
 	secretHex, seedHex, secretKey, recipient, fingerprint string
 }{
@@ -155,14 +149,11 @@ func TestPRFKnownAnswers(t *testing.T) {
 			}
 		}
 	}
-	// The salt every passkey is asked with is part of the format too.
 	if hex.EncodeToString(PRFSalt) != "c9b03ab7dd2e276e2c15c6da079e3420bc56eac3d62875a9e06210e8ba2bc3b8" {
 		t.Error("PRFSalt")
 	}
 }
 
-// bech32Decode is a small independent decoder for the tests: it checks the checksum and returns
-// the bytes.
 func bech32Decode(t *testing.T, hrp, s string) []byte {
 	t.Helper()
 	const charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
@@ -214,9 +205,6 @@ func bech32Decode(t *testing.T, hrp, s string) []byte {
 	return out
 }
 
-// ageSecretKey must agree with the age library: for keys it generates, our encoding of the
-// bytes is the text it wrote; and for our encoding of chosen bytes, it derives the public key
-// crypto/ecdh does.
 func TestAgeSecretKeyAgreesWithAgeAndEcdh(t *testing.T) {
 	for range 20 {
 		id, err := age.GenerateX25519Identity()
@@ -256,7 +244,6 @@ func TestAgeSecretKeyAgreesWithAgeAndEcdh(t *testing.T) {
 
 func TestParseSharedRejectsABadPasskeyEntry(t *testing.T) {
 	ana := newPerson(t, "ana")
-	// A passkey entry whose key is an SSH key, junk, or empty is not read as anything.
 	for _, key := range []string{ana.r.Text, "age1junk", "", "AGE-SECRET-KEY-1SE0C0VHQ7HG9YLL60VJARETKRNUSQPLYSM5PVDN3T69MWZU83TPSGHWQU6"} {
 		if r, err := parseShared(sharedEntry{Type: TypePasskey, Key: key, Label: "x"}); err == nil || r.Key != nil {
 			t.Errorf("%q: %+v %v", key, r, err)

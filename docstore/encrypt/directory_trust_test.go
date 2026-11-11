@@ -39,7 +39,6 @@ func (c *testClock) Now() time.Time {
 }
 func (c *testClock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
-// ageKey is a key pair of the kind a passkey or a recovery key makes.
 func ageKey(t *testing.T) (Recipient, age.Identity) {
 	t.Helper()
 	id, err := age.GenerateX25519Identity()
@@ -53,8 +52,6 @@ func ageKey(t *testing.T) (Recipient, age.Identity) {
 	return r, id
 }
 
-// sshKey is an ssh-ed25519 key pair: the private PEM, the public line, the parsed recipient and
-// the age identity that opens what is encrypted to it.
 func edSSHKey(t *testing.T) (pemBytes []byte, r Recipient, id age.Identity) {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -88,8 +85,6 @@ func newTestDirectory(t *testing.T) (*AdapterDirectory, docstore.Adapter, *testC
 	return &AdapterDirectory{Store: store, Signer: testSigner(t, 1), Now: clk.Now}, store, clk
 }
 
-// --- rotation -------------------------------------------------------------------------------
-
 func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
@@ -101,7 +96,6 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Rotation: a new current key, the old one for verification only.
 	newSeed := []byte(strings.Repeat("\x02", 32))
 	rotated, err := DirectorySignerFromSeed(newSeed, []byte(strings.Repeat("\x01", 32)))
 	if err != nil {
@@ -120,13 +114,10 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 			t.Errorf("a record signed before the rotation still verifies, under its own key ID: %+v", k)
 		}
 	}
-	// A directory that has only the new key does not know the old records (named and signed by
-	// the old key): the retired key must stay listed until Resign has run.
 	if got, _ := (&AdapterDirectory{Store: store, Signer: testSigner(t, 2)}).Lookup(ctx, "ana@x.io"); len(got) != 0 {
 		t.Errorf("without the retired key the old records are not found: %v", got)
 	}
 
-	// Publishing again re-signs one record with the current key and moves it to the new name.
 	if err := d2.Publish(ctx, ana, k1); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +139,6 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 		t.Errorf("the old copy of the republished record is gone: %v", err)
 	}
 
-	// Resign finishes the job; a second run has nothing to do.
 	if rep, err := d2.Resign(ctx); err != nil || rep.Resigned != 1 {
 		t.Fatalf("Resign = %+v %v, want 1", rep, err)
 	}
@@ -166,13 +156,11 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 			t.Errorf("%+v", k)
 		}
 	}
-	// What the publisher proved survives: nothing was lost by re-signing (Seq stays).
 	for _, k := range got {
 		if k.Seq == 0 {
 			t.Errorf("the log number is kept: %+v", k)
 		}
 	}
-	// The log was not touched by Resign: two publishes and a republish.
 	l, _ := d3.ReadLog(ctx, 0, 100)
 	if len(l.Entries) != 3 {
 		t.Errorf("log entries = %d, want 3", len(l.Entries))
@@ -210,8 +198,6 @@ func TestDirectorySignerRotationFromTheEnvironment(t *testing.T) {
 	if len(sg.(PublicKeyer).PublicKeys()) != 3 {
 		t.Error("the public keys of all three")
 	}
-	// The current key listed as retired is not a second key; a bad retired key is an error, and
-	// the retired keys alone do not turn the directory on.
 	t.Setenv(DirectoryKeyPrevEnv, a)
 	if sg, _ := DirectorySignerFromEnv(); len(sg.Pseudonyms("x")) != 1 {
 		t.Error("a key listed twice counts once")
@@ -240,8 +226,6 @@ func mustHexSigner(t *testing.T, hexSeed string) DirectorySigner {
 	return s
 }
 
-// --- revocation -----------------------------------------------------------------------------
-
 func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	ctx := context.Background()
 	d, store, clk := newTestDirectory(t)
@@ -251,7 +235,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Only the signed-in owner of the address can revoke; another address cannot reach it.
 	if _, err := d.Revoke(ctx, bo, k1.Fingerprint, nil); !errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("another user's revoke: %v", err)
 	}
@@ -272,12 +255,10 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	if err != nil || !k.Revoked || k.Fingerprint != k1.Fingerprint || k.RevokedAt != clk.Now().Unix() {
 		t.Fatalf("%+v %v", k, err)
 	}
-	// The key is gone from lookup at once; the other stays.
 	got, _ := d.Lookup(ctx, "ana@x.io")
 	if len(got) != 1 || got[0].Fingerprint != k2.Fingerprint || got[0].Revoked {
 		t.Fatalf("%v", got)
 	}
-	// Asked for, it shows, flagged and verified (the tombstone is signed).
 	got, _ = d.LookupWith(ctx, "ana@x.io", LookupOptions{IncludeRevoked: true})
 	if len(got) != 2 {
 		t.Fatalf("%v", got)
@@ -290,7 +271,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 			t.Errorf("%+v", g)
 		}
 	}
-	// Revoking again finds nothing to revoke. The fingerprint also works in its path form.
 	if _, err := d.Revoke(ctx, ana, k1.Fingerprint, nil); !errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("twice: %v", err)
 	}
@@ -298,7 +278,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 		t.Errorf("path form: %v", err)
 	}
 
-	// A replayed publish of the revoked key is refused within the window...
 	clk.Add(23 * time.Hour)
 	if err := d.Publish(ctx, ana, k1); !errors.Is(err, ErrRevoked) {
 		t.Fatalf("replay within the window: %v", err)
@@ -306,7 +285,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	if got, _ := d.Lookup(ctx, "ana@x.io"); len(got) != 0 {
 		t.Errorf("%v", got)
 	}
-	// ...and allowed after it; the old tombstone is replaced.
 	clk.Add(2 * time.Hour)
 	if got, _ := d.LookupWith(ctx, "ana@x.io", LookupOptions{IncludeRevoked: true}); len(got) != 0 {
 		t.Errorf("the tombstones expired: %v", got)
@@ -317,7 +295,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	if got, _ := d.Lookup(ctx, "ana@x.io"); len(got) != 1 || got[0].Revoked || !got[0].Verified {
 		t.Errorf("%v", got)
 	}
-	// The expired tombstone of k2 is pruned by the publish, or by Sweep.
 	n, err := d.Sweep(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +303,6 @@ func TestDirectoryRevokeRemovesTheKeyAndRemembersIt(t *testing.T) {
 	if len(metas) != 1 {
 		t.Errorf("after the sweep (%d deleted): %v", n, metas)
 	}
-	// The log says all of it: 2 publishes, 2 revokes, 1 publish.
 	l, _ := d.ReadLog(ctx, 0, 100)
 	var ops []string
 	for _, e := range l.Entries {
@@ -347,11 +323,9 @@ func TestDirectoryTombstonesCountAgainstTheCapAndForgedOnesAreIgnored(t *testing
 	if _, err := d.Revoke(ctx, ana, k1.Fingerprint, nil); err != nil {
 		t.Fatal(err)
 	}
-	// Cycling keys does not get past the cap within the window: the revoked one still counts.
 	if err := d.Publish(ctx, ana, k3); !errors.Is(err, ErrTooManyKeys) {
 		t.Errorf("%v", err)
 	}
-	// Someone with write access but no key writes a tombstone for k2: not believed.
 	id := d.directoryID("ana@x.io", k2.Fingerprint)
 	doc, _ := store.Load(ctx, id)
 	var rec directoryRecord
@@ -365,7 +339,6 @@ func TestDirectoryTombstonesCountAgainstTheCapAndForgedOnesAreIgnored(t *testing
 			t.Errorf("a forged tombstone hides nothing and shows nothing: %+v", g)
 		}
 	}
-	// An unsigned tombstone does not block publishing either.
 	b, _ = json.Marshal(directoryRecord{V: 3, Key: k3.Text, Publisher: "google:1", Provider: "google", Email: "ana@x.io", Revoked: d.now().Unix()})
 	_ = store.Save(ctx, d.directoryID("ana@x.io", k3.Fingerprint), b)
 	_ = store.Delete(ctx, id)
@@ -373,8 +346,6 @@ func TestDirectoryTombstonesCountAgainstTheCapAndForgedOnesAreIgnored(t *testing
 		t.Errorf("a forged tombstone does not block: %v", err)
 	}
 }
-
-// --- proof of possession --------------------------------------------------------------------
 
 func TestDirectoryProofOfPossession(t *testing.T) {
 	ctx := context.Background()
@@ -391,7 +362,6 @@ func TestDirectoryProofOfPossession(t *testing.T) {
 		if c.Expires != clk.Now().Add(ChallengeTTL).Unix() || c.Token == "" || c.Encrypted == "" {
 			t.Fatalf("%s: %+v", name, c)
 		}
-		// Whoever lacks the private key cannot answer.
 		_, otherID := ageKey(t)
 		if _, err := OpenChallenge(c, otherID); err == nil {
 			t.Errorf("%s: another key opened the challenge", name)
@@ -414,12 +384,10 @@ func TestDirectoryProofOfPossession(t *testing.T) {
 		if !found {
 			t.Errorf("%s: lookup says held: %v", name, got)
 		}
-		// A challenge works once: the same answer again is a replay.
 		if _, err := d.PublishWith(ctx, ana, key, PublishOptions{Challenge: proof.Token, Nonce: proof.Nonce}); !errors.Is(err, ErrBadProof) {
 			t.Errorf("%s: replay: %v", name, err)
 		}
 	}
-	// A key published without a proof is not Held, and RequireProof refuses it.
 	plainKey := newRecovery(t)
 	k, err := d.PublishWith(ctx, ana, plainKey, PublishOptions{})
 	if err != nil || k.Held {
@@ -446,8 +414,6 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 		_, err := d.PublishWith(ctx, u, k, PublishOptions{Challenge: p.Token, Nonce: p.Nonce})
 		return err
 	}
-	// Another user cannot use ana's answer, nor ana for another key, nor with a wrong nonce or
-	// a token made up or altered.
 	if err := publish(bo, key, proof); !errors.Is(err, ErrBadProof) {
 		t.Errorf("another user: %v", err)
 	}
@@ -463,14 +429,12 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// A token another server (key) made does not count.
 	d2 := &AdapterDirectory{Store: docstore.NewMemoryAdapter(), Signer: testSigner(t, 9), Now: clk.Now}
 	c2, _ := d2.Challenge(ctx, ana, key.Text)
 	p2, _ := OpenChallenge(c2, id)
 	if err := publish(ana, key, p2); !errors.Is(err, ErrBadProof) {
 		t.Errorf("another directory's token: %v", err)
 	}
-	// None of those used the challenge up: the right answer still works, within its time...
 	clk.Add(ChallengeTTL - time.Second)
 	if err := publish(ana, key, proof); err != nil {
 		t.Fatalf("%v", err)
@@ -482,7 +446,6 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 	if err := publish(ana, other, p3); !errors.Is(err, ErrBadProof) || !strings.Contains(err.Error(), "expired") {
 		t.Errorf("expired: %v", err)
 	}
-	// Used challenges are remembered until they could no longer be answered, then swept.
 	if metas, _ := docstore.ListPrefix(ctx, store, popPrefix); len(metas) != 1 {
 		t.Fatalf("used challenge records: %v", metas)
 	}
@@ -490,7 +453,6 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 	if n, err := d.Sweep(ctx); err != nil || n != 1 {
 		t.Errorf("Sweep = %d %v", n, err)
 	}
-	// Refusals: who may not publish may not ask; a non-key is refused.
 	if _, err := d.Challenge(ctx, auth.User{ID: "passkey:1", Email: "a@x.io", VerifiedEmail: true}, key.Text); !errors.Is(err, ErrNotPublishable) {
 		t.Errorf("%v", err)
 	}
@@ -528,8 +490,6 @@ func TestDirectoryProofIsSingleUseAcrossConcurrentPublishes(t *testing.T) {
 	}
 }
 
-// --- attestation ----------------------------------------------------------------------------
-
 func TestDirectoryAttestationOfAnSSHKey(t *testing.T) {
 	ctx := context.Background()
 	d, _, clk := newTestDirectory(t)
@@ -538,7 +498,6 @@ func TestDirectoryAttestationOfAnSSHKey(t *testing.T) {
 	if err != nil || pub != key.Text {
 		t.Fatalf("%q %v", pub, err)
 	}
-	// Anyone can check it, with the key text alone.
 	if !VerifyAttestation(key.Text, "ana@x.io", att) {
 		t.Fatal("the attestation verifies")
 	}
@@ -561,8 +520,6 @@ func TestDirectoryAttestationOfAnSSHKey(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 
-	// Refusals: an attestation for another address, a stale one, one from another key, and a key
-	// that cannot attest.
 	_, otherAtt, _ := AttestSSH(pemBytes, "bo@x.io", clk.Now())
 	stale, _ := mustAttest(t, pemBytes, "ana@x.io", clk.Now().Add(-11*time.Minute))
 	future, _ := mustAttest(t, pemBytes, "ana@x.io", clk.Now().Add(11*time.Minute))
@@ -581,7 +538,6 @@ func TestDirectoryAttestationOfAnSSHKey(t *testing.T) {
 		}
 	}
 	_ = key2
-	// Without an attestation an ssh key is published, just not Attested.
 	k, err = d.PublishWith(ctx, ana, key2, PublishOptions{})
 	if err != nil || k.Attested || k.Attestation != nil {
 		t.Errorf("%+v %v", k, err)
@@ -606,8 +562,6 @@ func TestAttestSSHRefusesKeysThatCannotAttest(t *testing.T) {
 	}
 }
 
-// The directory key alone cannot make a key it does not hold Held or Attested, and an attestation
-// cannot be moved to another record: the marks are recomputed on every lookup.
 func TestDirectoryAttestationCannotBeForgedWithTheServerKey(t *testing.T) {
 	ctx := context.Background()
 	d, store, clk := newTestDirectory(t)
@@ -615,9 +569,6 @@ func TestDirectoryAttestationCannotBeForgedWithTheServerKey(t *testing.T) {
 	_, attackerKey, _ := edSSHKey(t)
 	_, victimAtt, _ := AttestSSH(pemBytes, "ana@x.io", clk.Now())
 
-	// A forger with the server's signing key writes a perfectly signed record for the victim's
-	// key under bo's address, with ana's attestation attached: signed, but not attested (the
-	// attestation binds the key to ana's address, not bo's), and never Held.
 	forge := func(email string, key Recipient, att *docstore.DirectoryAttestation) {
 		rec := directoryRecord{Key: key.Text, Publisher: "google:2", Provider: "google", Email: email, At: clk.Now().Unix(), Held: false}
 		if att != nil {
@@ -634,16 +585,11 @@ func TestDirectoryAttestationCannotBeForgedWithTheServerKey(t *testing.T) {
 	if len(got) != 1 || !got[0].Verified || got[0].Attested || got[0].Held {
 		t.Fatalf("a signed record with someone else's attestation: %+v", got)
 	}
-	// The same for the attacker's own key under ana's address with no attestation at all: the
-	// server's signature gives Verified and nothing more.
 	forge("ana@x.io", attackerKey, nil)
 	got, _ = d.Lookup(ctx, "ana@x.io")
 	if len(got) != 1 || !got[0].Verified || got[0].Attested || got[0].Held {
 		t.Fatalf("%+v", got)
 	}
-	// Setting Held in a record the publisher did not prove is the one thing the signature does
-	// cover: that is the server's word, which is why a client that must not trust the server
-	// checks Attestation itself (VerifyAttestation) and the log (Seq).
 	rec := directoryRecord{Key: victimKey.Text, Publisher: "google:1", Provider: "google", Email: "ana@x.io", At: clk.Now().Unix(), Held: true}
 	id := d.directoryID("ana@x.io", victimKey.Fingerprint)
 	b, _ := json.Marshal(d.sign(rec, id))
@@ -655,8 +601,6 @@ func TestDirectoryAttestationCannotBeForgedWithTheServerKey(t *testing.T) {
 		}
 	}
 }
-
-// --- transparency log -----------------------------------------------------------------------
 
 func logKeys(t *testing.T, d *AdapterDirectory) map[string]ed25519.PublicKey {
 	t.Helper()
@@ -694,7 +638,6 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 	if strings.Contains(l.Entries[0].Address, "ana") {
 		t.Error("the address is hashed")
 	}
-	// An auditor that kept entry 3's hash checks only what came after, and a window of size 1.
 	part, _ := d.ReadLog(ctx, 3, 100)
 	if len(part.Entries) != 2 || part.Entries[0].Seq != 4 {
 		t.Fatalf("since: %v", part.Entries)
@@ -708,7 +651,6 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 	if none, _ := d.ReadLog(ctx, 5, 10); len(none.Entries) != 0 {
 		t.Errorf("past the end: %v", none.Entries)
 	}
-	// ...but a continuation checked against the wrong earlier hash fails.
 	if _, err := VerifyLog(part.Entries, l.Entries[1].Hash, 3, keys); !errors.Is(err, ErrLogBroken) {
 		t.Errorf("wrong anchor: %v", err)
 	}
@@ -741,7 +683,6 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 	if _, err := VerifyLog(l.Entries, "", 0, map[string]ed25519.PublicKey{l.Entries[0].Kid: logKeys(t, &AdapterDirectory{Signer: testSigner(t, 5)})[testSigner(t, 5).KeyID()]}); !errors.Is(err, ErrLogBroken) {
 		t.Errorf("wrong key: %v", err)
 	}
-	// A rewritten store entry is what ReadLog then serves, and the auditor's check catches it.
 	doc, _ := store.Load(ctx, logEntryID(2))
 	var e LogEntry
 	_ = json.Unmarshal(doc.Data, &e)
@@ -758,8 +699,6 @@ func TestDirectoryLogAppendsStayOrderedAcrossReplicas(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
 	signer := testSigner(t, 1)
-	// Three replicas of the directory on one (conditional) store, publishing for different
-	// addresses at once: every log number is used once and the chain verifies.
 	dirs := []*AdapterDirectory{{Store: store, Signer: signer}, {Store: store, Signer: signer}, {Store: store, Signer: signer}}
 	var wg sync.WaitGroup
 	for i := range 30 {
@@ -780,7 +719,6 @@ func TestDirectoryLogAppendsStayOrderedAcrossReplicas(t *testing.T) {
 	if _, err := VerifyLog(l.Entries, "", 0, logKeys(t, dirs[0])); err != nil {
 		t.Fatal(err)
 	}
-	// A crash between an entry and the head leaves the head behind: the next append catches up.
 	_ = store.Save(ctx, logHeadID, []byte(`{"seq":10,"hash":"`+l.Entries[9].Hash+`"}`))
 	if err := dirs[1].Publish(ctx, ana, newRecovery(t)); err != nil {
 		t.Fatal(err)
@@ -792,7 +730,6 @@ func TestDirectoryLogAppendsStayOrderedAcrossReplicas(t *testing.T) {
 	if _, err := VerifyLog(l.Entries, "", 0, logKeys(t, dirs[0])); err != nil {
 		t.Fatalf("after catching up: %v", err)
 	}
-	// An unreadable head is repaired the same way (found again by walking).
 	_ = store.Save(ctx, logHeadID, []byte("garbage"))
 	if err := dirs[2].Publish(ctx, bo, newRecovery(t)); err != nil {
 		t.Fatal(err)
@@ -805,7 +742,6 @@ func TestDirectoryLogAppendsStayOrderedAcrossReplicas(t *testing.T) {
 	}
 }
 
-// The log works over a store with no conditional write too (one process).
 func TestDirectoryLogOverANonConditionalStore(t *testing.T) {
 	ctx := context.Background()
 	inner := docstore.NewMemoryAdapter()
@@ -827,8 +763,6 @@ func TestDirectoryLogOverANonConditionalStore(t *testing.T) {
 	}
 }
 
-// A log entry is written for a publication that is later refused or fails: none for a refusal
-// before the write.
 func TestDirectoryRefusedPublishesAreNotLogged(t *testing.T) {
 	ctx := context.Background()
 	d, _, _ := newTestDirectory(t)

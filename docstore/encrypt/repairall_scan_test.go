@@ -17,10 +17,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Tests of RepairAll's header-only scan, EncryptPlaintext and the resume cursor
-// (docs/roadmap.md, backlog item 3, PR C).
-
-// headCounter counts the bytes the scan takes from the store, by Load and by LoadHead.
 type headCounter struct {
 	*flaky
 	loaded, headed atomic.Int64
@@ -48,7 +44,6 @@ func (c *headCounter) LoadHead(ctx context.Context, id string, n int) ([]byte, e
 	return h, err
 }
 
-// noHead hides every optional capability of the store but Load, List and the writes.
 type noHead struct{ docstore.Adapter }
 
 func randomBytes(t *testing.T, n int) []byte {
@@ -60,7 +55,6 @@ func randomBytes(t *testing.T, n int) []byte {
 	return b
 }
 
-// scanDigest is what a report says, in a form that two runs can be compared by.
 func scanDigest(rep RepairAllReport) string {
 	var sk []string
 	for _, s := range rep.Skipped {
@@ -75,9 +69,6 @@ func scanDigest(rep RepairAllReport) string {
 		rep.Total, rep.Signed, rep.Repaired, rep.Encrypted, rep.Resigned, rep.Files, rep.Todo, rep.OtherSigner, sk, by, rep.Remaining)
 }
 
-// bigStore is a mixed store whose files are far larger than a header: unsigned (v2) and signed
-// items of 1 MiB, a confidential document, a big file that is not a frame, one of a stranger's,
-// one in the clear, and the small mixed documents.
 type bigStore struct {
 	mixedStore
 	oldBig, signedBig, junkBig, foreignBig, plainBig string
@@ -108,7 +99,6 @@ func (w *world) bigMixed(t *testing.T) bigStore {
 	return b
 }
 
-// The scan takes a bounded head of each file, and says exactly what a scan of whole files says.
 func TestRepairAllScanReadsOnlyTheHeadAndAgreesWithAFullScan(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -119,7 +109,6 @@ func TestRepairAllScanReadsOnlyTheHeadAndAgreesWithAFullScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sanity of the store: every state was met.
 	sk := skippedBy(full)
 	if sk[b.junk] != SkipUnreadable || sk[b.foreign] != SkipNoKey || sk[b.junkBig] != SkipUnreadable ||
 		sk[b.foreignBig] != SkipNoKey || sk[b.plainBig] != SkipPlaintext || len(full.Todo) != 4 || full.Signed != 2 {
@@ -135,8 +124,6 @@ func TestRepairAllScanReadsOnlyTheHeadAndAgreesWithAFullScan(t *testing.T) {
 		t.Fatalf("head scan\n%s\nfull scan\n%s", scanDigest(head), scanDigest(full))
 	}
 	sameStore(t, "dry run", before, w.snapshot(t))
-	// No head is longer than the bound, and the big files that settle from their head (the unsigned
-	// and the signed frame, the stranger's, the clear one) were never loaded whole.
 	for id, n := range cnt.perHead {
 		if n > repairHeadBytes {
 			t.Errorf("%s: a head of %d bytes", id, n)
@@ -147,7 +134,6 @@ func TestRepairAllScanReadsOnlyTheHeadAndAgreesWithAFullScan(t *testing.T) {
 			t.Errorf("%s: loaded %d, headed %d", id, cnt.perLoad[id], cnt.perHead[id])
 		}
 	}
-	// The junk that opens to nothing from its head is judged from the whole file.
 	if cnt.perLoad[b.junkBig] == 0 {
 		t.Errorf("%s was not read in full", b.junkBig)
 	}
@@ -156,9 +142,6 @@ func TestRepairAllScanReadsOnlyTheHeadAndAgreesWithAFullScan(t *testing.T) {
 	}
 }
 
-// A head too short for the age header and the first chunk is a head cut short: the file is read
-// in full and judged from all of it, never classified from the head. Every state agrees with the
-// full scan with a head of 1 KiB, where nothing fits.
 func TestRepairAllScanFallsBackWhenTheHeadIsCutShort(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -179,7 +162,6 @@ func TestRepairAllScanFallsBackWhenTheHeadIsCutShort(t *testing.T) {
 			t.Errorf("head of %d bytes\n%s\nfull scan\n%s", n, scanDigest(got), scanDigest(full))
 		}
 	}
-	// And a real run with a short head repairs what a full one does.
 	repairHeadBytes = 2 << 10
 	defer func() { repairHeadBytes = 128 << 10 }()
 	rep, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
@@ -188,7 +170,6 @@ func TestRepairAllScanFallsBackWhenTheHeadIsCutShort(t *testing.T) {
 	}
 }
 
-// An age header larger than the bound (many recipients) is read in full.
 func TestRepairAllScanWithMoreRecipientsThanTheHeadHolds(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -205,8 +186,6 @@ func TestRepairAllScanWithMoreRecipientsThanTheHeadHolds(t *testing.T) {
 	if err := w.inner.Save(ctx, id, sealRaw(t, rs, frame(id, Binding{}, randomBytes(t, 100<<10), w.signer))); err != nil {
 		t.Fatal(err)
 	}
-	// 40 recipients take over 4 KiB of age header; the payload is two chunks, so the stream is
-	// longer than the head and the scan must fall back to a whole read.
 	old := repairHeadBytes
 	repairHeadBytes = 66 << 10
 	defer func() { repairHeadBytes = old }()
@@ -220,7 +199,6 @@ func TestRepairAllScanWithMoreRecipientsThanTheHeadHolds(t *testing.T) {
 	}
 }
 
-// What the Adapter wraps must not bypass its semantics through the head read.
 func TestRepairAllScanHeadReadDoesNotBypassExpiry(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -242,20 +220,17 @@ func TestRepairAllScanHeadReadDoesNotBypassExpiry(t *testing.T) {
 		t.Fatalf("live: %+v", sc)
 	}
 	now = clk.Add(48 * time.Hour)
-	// Expired: the file is gone for the scan, as it is for Load, though the bytes are in the store.
 	if _, ok := w.inner.Load(ctx, "lapsing"); ok != nil {
 		t.Fatal("the inner store lost the file")
 	}
 	if sc := ad.scanFrames(ctx, []string{"lapsing"}, false); len(sc.unsigned) != 0 || len(sc.signers) != 0 || sc.err != nil {
 		t.Fatalf("an expired file was scanned: %+v", sc)
 	}
-	// The wrappers that cannot read a head are not asked for one.
 	if _, ok := any(ad).(docstore.HeadReader); ok {
 		t.Error("the encrypting Adapter must not expose a head read: it would hand out ciphertext")
 	}
 }
 
-// A head read through a wrapper is a head read of the inner store: bytes are bounded.
 func TestRepairAllScanThroughExpiringAdapterReadsOnlyTheHead(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -282,8 +257,6 @@ func TestRepairAllScanThroughExpiringAdapterReadsOnlyTheHead(t *testing.T) {
 		t.Errorf("loaded %d, headed %d", cnt.loaded.Load(), cnt.headed.Load())
 	}
 }
-
-// ---- EncryptPlaintext -----------------------------------------------------------------------
 
 func (w *world) clearStore(t *testing.T) (clearDoc, clearItem string) {
 	t.Helper()
@@ -320,7 +293,6 @@ func TestRepairAllEncryptPlaintext(t *testing.T) {
 	old := w.history(t)
 	w.legacyV2(t, old)
 	clearDoc, clearItem := w.clearStore(t)
-	// Ids the Skip policy leaves readable stay as they are, in the clear.
 	kept := map[string][]byte{"open/readme": []byte("in the clear"), "catalog:x": []byte("{}"), "acl:y": []byte("{}")}
 	for id, d := range kept {
 		if err := w.inner.Save(ctx, id, d); err != nil {
@@ -334,12 +306,10 @@ func TestRepairAllEncryptPlaintext(t *testing.T) {
 	sh := w.over(w.inner, skipOpen)
 	before := w.snapshot(t)
 
-	// Without the option the clear items are reported and nothing is written.
 	rep, err := sh.RepairAll(ctx, RepairAllOptions{DryRun: true})
 	if err != nil || skippedBy(rep)[clearDoc] != SkipPlaintext || skippedBy(rep)[clearItem] != SkipPlaintext || rep.Encrypted != 0 {
 		t.Fatalf("%v %s", err, scanDigest(rep))
 	}
-	// DryRun lists them in Todo and writes nothing.
 	dry, err := sh.RepairAll(ctx, RepairAllOptions{DryRun: true, EncryptPlaintext: true})
 	if err != nil || len(dry.Todo) != 3 || len(dry.Skipped) != 0 || dry.Encrypted != 0 || dry.Left() != 3 {
 		t.Fatalf("%v %s", err, scanDigest(dry))
@@ -370,7 +340,6 @@ func TestRepairAllEncryptPlaintext(t *testing.T) {
 			t.Errorf("%s, left readable by Skip, was written", id)
 		}
 	}
-	// Idempotent: nothing is left to do, nothing is written.
 	settled := w.snapshot(t)
 	rep2, err := sh.RepairAll(ctx, RepairAllOptions{EncryptPlaintext: true})
 	if err != nil || rep2.Encrypted != 0 || rep2.Repaired != 0 || rep2.Signed != 3 || rep2.Left() != 0 || rep2.Files != 0 {
@@ -379,7 +348,6 @@ func TestRepairAllEncryptPlaintext(t *testing.T) {
 	sameStore(t, "second run", settled, w.snapshot(t))
 }
 
-// A document with a clear file and one that cannot be opened is not partly encrypted.
 func TestRepairAllEncryptPlaintextIsAllOrNonePerDocument(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -398,8 +366,6 @@ func TestRepairAllEncryptPlaintextIsAllOrNonePerDocument(t *testing.T) {
 	}
 	sameStore(t, "unreadable sibling", before, w.snapshot(t))
 }
-
-// ---- the cursor -----------------------------------------------------------------------------
 
 func TestRepairAllCursorWalksTheStoreInSlices(t *testing.T) {
 	ctx := context.Background()
@@ -460,7 +426,6 @@ func TestRepairAllCursorWalksTheStoreInSlices(t *testing.T) {
 			t.Fatal("does not finish")
 		}
 	}
-	// Every group exactly once, in id order, and the totals are a full run's.
 	if len(seen) != full.Total || !sort.StringsAreSorted(seen) {
 		t.Fatalf("seen %d of %d: %v", len(seen), full.Total, seen)
 	}
@@ -501,14 +466,12 @@ func TestRepairAllCursorEdges(t *testing.T) {
 		}
 		return rep, seen
 	}
-	// After the last group, or past the end: finished at once, nothing looked at.
 	for _, after := range []string{groups[len(groups)-1], "zzzz", groups[len(groups)-1] + "~"} {
 		rep, seen := run(after)
 		if len(seen) != 0 || rep.Total != 0 || rep.Next != "" || rep.Left() != 0 {
 			t.Errorf("After %q: %v %s next %q", after, seen, scanDigest(rep), rep.Next)
 		}
 	}
-	// A cursor that is not a group id starts at the next group; one before the first sees all.
 	rep, seen := run("")
 	if len(seen) != len(groups) || rep.Total != len(groups) {
 		t.Fatalf("%v", seen)
@@ -524,7 +487,6 @@ func TestRepairAllCursorEdges(t *testing.T) {
 			t.Errorf("After %q+NUL: %v, want %v", groups[i], seen, want)
 		}
 	}
-	// A cursor that names a file in the middle of a document's group is that document's.
 	var file string
 	for _, f := range w.files(t, doc) {
 		file = f
@@ -537,7 +499,6 @@ func TestRepairAllCursorEdges(t *testing.T) {
 			}
 		}
 	}
-	// Where a run that was cut short says to carry on.
 	ctxc, cancel := context.WithCancel(ctx)
 	n := 0
 	rep, err := w.sharing.RepairAll(ctxc, RepairAllOptions{DryRun: true, Progress: func(RepairProgress) {
@@ -548,8 +509,6 @@ func TestRepairAllCursorEdges(t *testing.T) {
 	if err == nil || rep.Next != groups[1] || rep.Remaining != len(groups)-2 || rep.Finished {
 		t.Errorf("cut short: %v next %q remaining %d finished %v", err, rep.Next, rep.Remaining, rep.Finished)
 	}
-	// Cut short before the first group: Next is After unchanged ("" here) but the run is not
-	// finished, and Remaining says so.
 	dead, stop := context.WithCancel(ctx)
 	stop()
 	early, err := w.sharing.RepairAll(dead, RepairAllOptions{DryRun: true})
@@ -564,7 +523,6 @@ func TestRepairAllCursorEdges(t *testing.T) {
 	if strings.Join(seen, ",") != strings.Join(groups[2:], ",") || rest.Next != "" {
 		t.Errorf("resumed: %v", seen)
 	}
-	// Limit that ends exactly at the end is finished.
 	sh := w.sharing
 	last, err := sh.RepairAll(ctx, RepairAllOptions{DryRun: true, Limit: len(groups)})
 	if err != nil || last.Next != "" || last.Remaining != 0 || !last.Finished {

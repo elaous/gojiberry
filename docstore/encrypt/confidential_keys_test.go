@@ -23,7 +23,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// flaky is a store whose writes of chosen files can be made to fail, to cut a re-key short.
 type flaky struct {
 	*docstore.MemoryAdapter
 	failOn atomic.Value // string: a substring of the ids whose writes fail ("" none)
@@ -61,7 +60,6 @@ type world struct {
 
 func newWorld(t *testing.T) *world { return newWorldFloor(t, nil) }
 
-// newWorldFloor is newWorld whose keyring and sharing both use a SeqFloor.
 func newWorldFloor(t *testing.T, floor SeqFloor) *world {
 	t.Helper()
 	w := &world{inner: &flaky{MemoryAdapter: docstore.NewMemoryAdapter()}}
@@ -74,8 +72,6 @@ func newWorldFloor(t *testing.T, floor SeqFloor) *world {
 		t.Fatal(err)
 	}
 	w.ring = ConfidentialKeyring{
-		// The server key is (wrongly) also in the owners' list, as in a deployment that grew from
-		// the at-rest level: confidential documents must still not be wrapped for it.
 		People: StoreKeyring{Store: w.inner, Owners: []age.Recipient{w.ana.r.Key, w.server.Recipient()},
 			Keys: []age.Identity{w.ana.id}, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}, SeqFloor: floor},
 		AtRest:           Static{To: []age.Recipient{w.server.Recipient(), w.ana.r.Key}, Keys: []age.Identity{w.server}},
@@ -90,7 +86,6 @@ func newWorldFloor(t *testing.T, floor SeqFloor) *world {
 	return w
 }
 
-// files lists the stored files of a document that are encrypted.
 func (w *world) files(t *testing.T, id string) []string {
 	t.Helper()
 	metas, _ := w.inner.List(context.Background())
@@ -108,7 +103,6 @@ func (w *world) opens(id string, f string, keys ...age.Identity) bool {
 	return err == nil
 }
 
-// history makes a document with a current copy, a previous copy and two version snapshots.
 func (w *world) history(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
@@ -158,7 +152,6 @@ func TestSetProtectionRekeysEveryFileBothWays(t *testing.T) {
 	if err := w.sharing.Add(ctx, id, w.bo.r, w.bo.r.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
-	// Server level: the server key opens everything (and the people's keys, as at rest).
 	w.assertOnly(t, id, "server level", []age.Identity{w.server, w.ana.id}, nil)
 
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err != nil {
@@ -168,7 +161,6 @@ func TestSetProtectionRekeysEveryFileBothWays(t *testing.T) {
 	if p, _ := w.sharing.Pending(ctx, id); p {
 		t.Error("still pending after success")
 	}
-	// A save after the switch stays confidential.
 	d, _ := w.saver.Load(ctx, "m", id)
 	d.Content = []docfile.Item{{Chars: &docfile.Chars{Text: "terms v4"}}}
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, d); err != nil {
@@ -178,20 +170,17 @@ func TestSetProtectionRekeysEveryFileBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.assertOnly(t, id, "after a later save", []age.Identity{w.ana.id, w.bo.id}, []age.Identity{w.server})
-	// Reveal works for the owner; the record is the authority.
 	if n, _, err := w.saver.Reveal(ctx, "m", id); err != nil || n != "Merger xango.io" {
 		t.Errorf("%q %v", n, err)
 	}
 	if c, err := w.ring.IsConfidential(ctx, id); err != nil || !c {
 		t.Errorf("%v %v", c, err)
 	}
-	// The server-key holder cannot even read the name through a saver.
 	srv := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(w.inner, Static{Keys: []age.Identity{w.server}})}}}
 	if _, _, err := srv.Reveal(ctx, "m", id); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("%v", err)
 	}
 
-	// Back to server level: re-keyed the other way. Idempotent when repeated.
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
@@ -238,8 +227,6 @@ func TestSetProtectionFailureNamesTheStaleFilesAndRetries(t *testing.T) {
 	if !errors.As(err, &re) || len(re.Stale) != 1 || re.Stale[0] != version {
 		t.Fatalf("want the one stale file named: %v", err)
 	}
-	// The catalog did not move, nothing was concealed, and only the stale file is still
-	// wrapped for the server.
 	if got, _ := w.saver.Get(ctx, "m", id); got.Protection != saver.ProtectionServer || got.Name != "Merger xango.io" {
 		t.Errorf("%+v", got)
 	}
@@ -251,12 +238,10 @@ func TestSetProtectionFailureNamesTheStaleFilesAndRetries(t *testing.T) {
 	if p, _ := w.sharing.Pending(ctx, id); !p {
 		t.Error("a failed re-key must stay pending")
 	}
-	// Saves meanwhile already use the people's keys.
 	d, _ := w.saver.Load(ctx, "m", id)
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, d); err != nil {
 		t.Fatal(err)
 	}
-	// Retry (the disk is back) finishes it, and a second retry is a no-op.
 	w.inner.failOn.Store("")
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
@@ -269,8 +254,6 @@ func TestSetProtectionFailureNamesTheStaleFilesAndRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The same going back: a failure leaves the document wrapped for people only (nothing
-	// exposed), the catalog says server, and running it again finishes.
 	w.inner.failOn.Store(version)
 	err = w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer)
 	if !errors.As(err, &re) || len(re.Stale) != 1 {
@@ -290,7 +273,6 @@ func TestSetProtectionOnAnUnopenableFileWritesNothing(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
 	id := w.history(t)
-	// A file nobody here can open (wrapped for a stranger): the group is all or none.
 	stranger := newPerson(t, "stranger")
 	files := w.files(t, id)
 	odd := files[len(files)-1]
@@ -385,14 +367,12 @@ func TestSharedWithAPasskeyAndARecoveryKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.assertOnly(t, id, "e2ee with a passkey and a recovery key", []age.Identity{w.ana.id, pkID, recID}, []age.Identity{w.server})
-	// Each of the shared keys alone reads the document through a saver.
 	for name, k := range map[string]age.Identity{"passkey": pkID, "recovery": recID} {
 		only := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(w.inner, Static{Keys: []age.Identity{k}})}}}
 		if n, _, err := only.Reveal(ctx, "m", id); err != nil || n != "Merger xango.io" {
 			t.Errorf("%s: %q %v", name, n, err)
 		}
 	}
-	// Removing the passkey re-keys inside the confidential level: still no server key.
 	if _, err := w.sharing.Remove(ctx, id, pk.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
@@ -413,8 +393,6 @@ func TestConfidentialKeyringFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := id + "~aaaaaaaaaaaa.json"
-	// A store writer flips the signed protection field to "server": the signature breaks and
-	// saves fail; they are not wrapped for the server.
 	raw, _ := w.inner.Load(ctx, KeysPrefix+id)
 	var sr signedRecord
 	_ = json.Unmarshal(raw.Data, &sr)
@@ -435,12 +413,10 @@ func TestConfidentialKeyringFailsClosed(t *testing.T) {
 	if _, err := w.ring.IsConfidential(ctx, id); !errors.Is(err, ErrUnsignedRecord) {
 		t.Errorf("%v", err)
 	}
-	// A document of the at-rest level keeps the at-rest keys, and non-document ids too.
 	rs, err := w.ring.Recipients(ctx, "not-a-document")
 	if err != nil || len(rs) != 2 {
 		t.Errorf("%d %v", len(rs), err)
 	}
-	// If the owners' list holds nothing but the server key, a confidential document is not saved.
 	only := w.ring
 	only.People.Owners = []age.Recipient{w.server.Recipient()}
 	other := docfile.NewID()
@@ -454,7 +430,6 @@ func TestConfidentialKeyringFailsClosed(t *testing.T) {
 	}
 }
 
-// replay puts back the record bytes saved earlier: a validly signed but older record.
 func (w *world) replay(t *testing.T, id string, old []byte) {
 	t.Helper()
 	if err := w.inner.Save(context.Background(), KeysPrefix+id, old); err != nil {
@@ -471,10 +446,6 @@ func (w *world) rawRecord(t *testing.T, id string) []byte {
 	return d.Data
 }
 
-// TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord is the saver's re-assertion,
-// the layer that is left for a document whose files are still in the v1 frame (written before
-// the frame carried the level): nothing in them proves the record was newer, so the replay
-// reads as the record and the next save asserts e2ee again and pins the level in a signed (v3) frame.
 func TestSaveOfAConfidentialDocumentHealsAReplayedServerLevelRecord(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -538,7 +509,6 @@ func TestSeqFloorRefusesAReplayedRecord(t *testing.T) {
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, saved); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("Save: %v", err)
 	}
-	// A deleted record where one was seen is refused as well, and no floor means no refusal.
 	if err := w.inner.Delete(ctx, KeysPrefix+id); err != nil {
 		t.Fatal(err)
 	}
@@ -584,11 +554,9 @@ func TestSetProtectionAtASettledLevelNeedsNoSigner(t *testing.T) {
 	if n, err := reader.SetProtection(ctx, id, ProtectionE2EE); err != nil || n != 0 {
 		t.Errorf("settled, no signer: %d %v", n, err)
 	}
-	// Not settled: changing the level does need it.
 	if _, err := reader.SetProtection(ctx, id, ""); !errors.Is(err, ErrNoSigner) {
 		t.Errorf("%v", err)
 	}
-	// And a document with no record at the server level is settled too.
 	if n, err := reader.SetProtection(ctx, docfile.NewID(), ""); err != nil || n != 0 {
 		t.Errorf("%d %v", n, err)
 	}
@@ -605,7 +573,6 @@ func TestUnreadableSnapshotBlocksTheSwitchUntilTheCallerDropsIt(t *testing.T) {
 			break
 		}
 	}
-	// The snapshot becomes unopenable: wrapped to a key nobody here holds.
 	stranger, _ := age.GenerateX25519Identity()
 	if err := New(w.inner, Static{To: []age.Recipient{stranger.Recipient()}}).Save(ctx, lost, []byte("{}")); err != nil {
 		t.Fatal(err)
@@ -618,7 +585,6 @@ func TestUnreadableSnapshotBlocksTheSwitchUntilTheCallerDropsIt(t *testing.T) {
 	if keys := saver.UnreadableKeys(err); len(keys) != 1 || keys[0] != lost {
 		t.Fatalf("the saver gives the keys to confirm: %v", keys)
 	}
-	// All or none, never silent: the other files were not touched, the switch can be retried.
 	for _, f := range w.files(t, id) {
 		if f != lost && !w.opens(id, f, w.server) {
 			t.Errorf("%s was re-keyed although another file could not be opened", f)
@@ -627,7 +593,6 @@ func TestUnreadableSnapshotBlocksTheSwitchUntilTheCallerDropsIt(t *testing.T) {
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err == nil {
 		t.Fatal("the default stays all or none")
 	}
-	// The caller confirms; the snapshot goes; the switch finishes.
 	if err := w.saver.DropVersions(ctx, "m", id, []string{lost}); err != nil {
 		t.Fatal(err)
 	}
@@ -635,7 +600,6 @@ func TestUnreadableSnapshotBlocksTheSwitchUntilTheCallerDropsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.assertOnly(t, id, "after dropping", []age.Identity{w.ana.id}, []age.Identity{w.server})
-	// A current copy cannot be dropped through it.
 	for _, f := range w.files(t, id) {
 		if !strings.HasPrefix(f, "versions/") {
 			if err := w.saver.DropVersions(ctx, "m", id, []string{f}); err == nil {
@@ -661,7 +625,6 @@ func TestServerSSHKeysAreNeverRecipientsOfAConfidentialDocument(t *testing.T) {
 				srv, _ = ParseSSHRecipient(pub)
 				srvID, _ = ParseSSHIdentity(priv)
 			}
-			// The same key, parsed again, is a different pointer.
 			again, _ := ParseSSHRecipient(srv.Text)
 			w.ring.People.Owners = []age.Recipient{w.ana.r.Key, srv.Key}
 			w.ring.ServerRecipients = []age.Recipient{again.Key}

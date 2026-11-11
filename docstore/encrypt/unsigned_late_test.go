@@ -7,15 +7,11 @@ import (
 	"testing"
 )
 
-// A document whose re-key ended in ErrUnsignedAfterFlip is not pending (the record says Signed)
-// but is not done either: UnsignedDocs lists it with the file ids, so "what is left to do" shows
-// it, and the listing survives a new Sharing (the marker is in the signed record).
 func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
 	id, f := lockedDocument(t, w, "v2")
 
-	// Another client (a fresh Sharing over the same store) sees it too.
 	other := &Sharing{Store: w.inner, Adapter: w.ad, Signer: w.signer}
 	for name, sh := range map[string]*Sharing{"same": w.sharing, "other": other} {
 		docs, err := sh.UnsignedDocs(ctx)
@@ -34,7 +30,6 @@ func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 		t.Errorf("PendingDocs = %v, %v", p, err)
 	}
 
-	// Repair with AcceptUnsigned settles it, and the list empties.
 	if _, err := w.sharing.Repair(ctx, id, AcceptUnsigned()); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +67,6 @@ func TestUnsignedMarkerClearedByRecoverAcceptUnsigned(t *testing.T) {
 	}
 }
 
-// A document that was never in the window is not listed, before or after a normal re-key.
 func TestDocumentOutsideTheWindowIsNotListed(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -88,7 +82,6 @@ func TestDocumentOutsideTheWindowIsNotListed(t *testing.T) {
 	}
 }
 
-// RepairAll's report and the list agree: the document it skips as forged, with the same file.
 func TestRepairAllAndUnsignedDocsAgree(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

@@ -20,7 +20,6 @@ func decodeBody[T any](t *testing.T, body []byte) T {
 	return v
 }
 
-// headPos asks the head route for the log position an owner signature names.
 func (e *dirEnv) headPos(tok string) string {
 	e.t.Helper()
 	rec := e.do("GET", "/directory/log/head", tok, "")
@@ -59,7 +58,6 @@ func TestOwnerRoutesEnrollPublishRevokeAndReset(t *testing.T) {
 	if rec := e.do("GET", "/directory/enroll?email=a@b@c", tok, ""); rec.Code != 400 {
 		t.Errorf("malformed: %d", rec.Code)
 	}
-	// Enroll: challenge, then the request signed by the new key.
 	rec := e.do("POST", "/directory/enroll/challenge", tok, "")
 	if rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
@@ -77,7 +75,6 @@ func TestOwnerRoutesEnrollPublishRevokeAndReset(t *testing.T) {
 		t.Errorf("anybody who may look up the address sees that it is enrolled: %d %s", rec.Code, rec.Body)
 	}
 
-	// Publishing now needs the owner signature: 428 without, 403 with a wrong one, 200 with it.
 	key := newRecovery(t)
 	if rec := e.publish(tok, map[string]string{"key": key.Text}); rec.Code != 428 {
 		t.Errorf("no owner signature: %d %s", rec.Code, rec.Body)
@@ -94,7 +91,6 @@ func TestOwnerRoutesEnrollPublishRevokeAndReset(t *testing.T) {
 		t.Fatalf("%d %+v", code, keys)
 	}
 
-	// Revoke carries the signature in the body.
 	path := "/directory/keys/" + url.PathEscape(key.Fingerprint)
 	if rec := e.do("DELETE", path, tok, ""); rec.Code != 428 {
 		t.Errorf("revoke without: %d", rec.Code)
@@ -107,7 +103,6 @@ func TestOwnerRoutesEnrollPublishRevokeAndReset(t *testing.T) {
 		t.Errorf("revoke with the owner signature: %d %s", rec.Code, rec.Body)
 	}
 
-	// Reset: the request is logged; cancelling needs the owner key; completing needs the wait.
 	if rec := e.do("POST", "/directory/enroll/reset", tok, ""); rec.Code != 200 || decodeBody[docstore.DirectoryEnrollment](t, rec.Body.Bytes()).ResetSince == 0 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
@@ -125,7 +120,6 @@ func TestOwnerRoutesEnrollPublishRevokeAndReset(t *testing.T) {
 			t.Errorf("%s %s = %d", c.method, c.path, rec.Code)
 		}
 	}
-	// None of the owner routes is open to a passkey session, nor to nobody.
 	pk := e.token(auth.User{ID: "passkey:z", Email: "ana@x.io", VerifiedEmail: true})
 	for _, c := range []struct{ method, path string }{{"GET", "/directory/enroll?email=ana@x.io"}, {"POST", "/directory/enroll/challenge"}, {"POST", "/directory/enroll"}, {"POST", "/directory/enroll/reset"}, {"POST", "/directory/enroll/cancel"}} {
 		if rec := e.do(c.method, c.path, pk, "{}"); rec.Code != 403 {

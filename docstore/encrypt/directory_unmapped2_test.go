@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// unmappedOf runs findUnmapped over an index holding exactly these entries for one address.
 func unmappedOf(t *testing.T, ents ...LogEntry) []string {
 	t.Helper()
 	d, _, _ := newTestDirectory(t)
@@ -49,8 +48,6 @@ func TestFindUnmappedVoidAndReset(t *testing.T) {
 	}
 }
 
-// The real path: an enrollment whose record write failed gets a void entry; the address is then
-// settled, as AuditAddress treats it.
 func TestUnmappedIgnoresAVoidedFirstEnrollment(t *testing.T) {
 	ctx := context.Background()
 	e := newOwnerEnv(t)
@@ -64,7 +61,6 @@ func TestUnmappedIgnoresAVoidedFirstEnrollment(t *testing.T) {
 	}
 }
 
-// Every owner operation named in the docs mends an unmapped address.
 func TestUnmappedMendedByEnrollAndCancelReset(t *testing.T) {
 	ctx := context.Background()
 	crash := func() (*ownerEnv, ed25519.PrivateKey) {
@@ -81,7 +77,6 @@ func TestUnmappedMendedByEnrollAndCancelReset(t *testing.T) {
 		return e, priv
 	}
 	e, priv := crash()
-	// The record is completed from the log first, so enrolling again meets it (not a second entry).
 	if _, err := e.enroll(OpEnroll, priv, nil); !errors.Is(err, ErrEnrolled) {
 		t.Errorf("Enroll finds the mended record: %v", err)
 	}

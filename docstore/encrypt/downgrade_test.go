@@ -18,11 +18,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// Tests of the protection level and record seq that live inside each file's frame
-// (docs/encryption-and-passkeys.md C.5), with the real adapter, keyring and saver.
-
-// legacyV1 rewrites every stored file of the document with the v1 frame (no level, no seq),
-// wrapped to the recipients the keyring chooses now: a store written before frame v2.
 func (w *world) legacyV1(t *testing.T, id string) {
 	t.Helper()
 	ctx := context.Background()
@@ -61,8 +56,6 @@ func (w *world) legacyV1(t *testing.T, id string) {
 	}
 }
 
-// rewriteRecord signs the document's record again, at the same seq, with fn applied: a record as
-// an older version (or a crafted one) would have written it.
 func (w *world) rewriteRecord(t *testing.T, id string, fn func(*sharedRecord)) {
 	t.Helper()
 	ctx := context.Background()
@@ -84,8 +77,6 @@ func (w *world) rewriteRecord(t *testing.T, id string, fn func(*sharedRecord)) {
 	}
 }
 
-// legacyRecordBytes is a stored record as a version from before frames were signed wrote it: the
-// same record without the signed flag, signed again.
 func (w *world) legacyRecordBytes(t *testing.T, id string, raw []byte) []byte {
 	t.Helper()
 	rec, err := verifyRecord(raw, id, w.ring.People.OwnerSigners)
@@ -148,8 +139,6 @@ func sameStore(t *testing.T, what string, before, after map[string]string) {
 	}
 }
 
-// makeConfidential switches a fresh history to e2ee and returns its id, with an older record
-// (a shared one at server level, listing Bo) kept to replay.
 func (w *world) confidentialWithOldRecord(t *testing.T) (id string, old []byte) {
 	t.Helper()
 	ctx := context.Background()
@@ -188,7 +177,6 @@ func TestFrameV2CarriesLevelSeqAndRecipientHash(t *testing.T) {
 			t.Errorf("%s: %+v (record %+v)", f, fi, want)
 		}
 	}
-	// A document that never had a record is sealed under seq 0 at the server level.
 	w2 := newWorld(t)
 	id2 := w2.history(t)
 	for _, f := range w2.files(t, id2) {
@@ -196,7 +184,6 @@ func TestFrameV2CarriesLevelSeqAndRecipientHash(t *testing.T) {
 			t.Errorf("%s: %+v", f, fi)
 		}
 	}
-	// A different recipient list is a different hash.
 	if _, err := w.sharing.Remove(ctx, id, w.bo.r.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +224,6 @@ func TestReplayedRecordThenSaveIsRefusedAndNothingIsWritten(t *testing.T) {
 	if _, err := w.saver.Load(ctx, "m", id); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("Saver.Load: %v", err)
 	}
-	// The owner's own changes never sign over the replayed record.
 	carol := newPerson(t, "carol")
 	if err := w.sharing.Add(ctx, id, carol.r, carol.r.Fingerprint); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("Add: %v", err)
@@ -251,8 +237,6 @@ func TestReplayedRecordThenSaveIsRefusedAndNothingIsWritten(t *testing.T) {
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("Saver.SetProtection: %v", err)
 	}
-	// A re-key (Repair, RekeyDocument, RekeyAll) would seal every file under the replayed
-	// record, which is the downgrade itself: refused, nothing written.
 	if _, err := w.sharing.Repair(ctx, id); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("Repair: %v", err)
 	}
@@ -302,14 +286,12 @@ func TestDeletedRecordThenSaveAndLoadAreRefused(t *testing.T) {
 			if _, err := w.saver.Load(ctx, "m", id); !errors.Is(err, ErrDowngrade) {
 				t.Errorf("Saver.Load: %v", err)
 			}
-			// "Settled at server level" is not believed when the files say a record existed.
 			if _, err := w.sharing.SetProtection(ctx, id, ""); !errors.Is(err, ErrDowngrade) {
 				t.Errorf("Sharing.SetProtection: %v", err)
 			}
 			if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer); level == "e2ee" && !errors.Is(err, ErrDowngrade) {
 				t.Errorf("Saver.SetProtection: %v", err)
 			}
-			// Re-keying with no record would wrap the files for the server's keys.
 			if _, err := w.ad.RekeyDocument(ctx, id); !errors.Is(err, ErrDowngrade) {
 				t.Errorf("RekeyDocument: %v", err)
 			}
@@ -321,7 +303,6 @@ func TestDeletedRecordThenSaveAndLoadAreRefused(t *testing.T) {
 			}
 		})
 	}
-	// No false alarm: a document that never had a record is saved and loaded as before.
 	w := newWorld(t)
 	id := w.history(t)
 	d := w.doc(t, id)
@@ -359,7 +340,6 @@ func TestLegitimateSwitchesNeverLookLikeADowngrade(t *testing.T) {
 		}
 	}
 	for round := 0; round < 2; round++ {
-		// To e2ee, cut short at one snapshot: record pending, one file still server-wrapped.
 		w.inner.failOn.Store(version)
 		err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE)
 		var re *RekeyError
@@ -378,7 +358,6 @@ func TestLegitimateSwitchesNeverLookLikeADowngrade(t *testing.T) {
 		loadAll("e2ee settled")
 		save("e2ee settled")
 
-		// And back to server, cut short the same way.
 		w.inner.failOn.Store(version)
 		err = w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer)
 		if !errors.As(err, &re) || errors.Is(err, ErrDowngrade) {
@@ -393,8 +372,6 @@ func TestLegitimateSwitchesNeverLookLikeADowngrade(t *testing.T) {
 		loadAll("server settled")
 		save("server settled")
 	}
-	// A server-wrapped file put back into a settled e2ee document is refused by Load, and
-	// Repair (a re-key) heals it: the data is the old data, but wrapped for people only.
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +418,6 @@ func TestV1FilesAreAcceptedAndTheFirstSavePinsTheLevel(t *testing.T) {
 			t.Errorf("a v1 file is read as before: %v", err)
 		}
 	}
-	// The first save under the intact record writes a signed v3 frame: from then on the level is pinned.
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, w.doc(t, id)); err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +438,6 @@ func TestV1FilesAreAcceptedAndTheFirstSavePinsTheLevel(t *testing.T) {
 		t.Errorf("after the upgrade the deletion is detected: %v", err)
 	}
 
-	// A re-key upgrades every file at once.
 	w2 := newWorld(t)
 	id2 := w2.history(t)
 	w2.legacyV1(t, id2)
@@ -475,9 +450,6 @@ func TestV1FilesAreAcceptedAndTheFirstSavePinsTheLevel(t *testing.T) {
 		}
 	}
 
-	// The limit, stated: a deletion before the first save of a v1 file is not seen by the
-	// frame (there is no level in it), and the save then pins the wrong, server level. The
-	// index (a document made e2ee after it was introduced) is what still reports it.
 	w3 := newWorld(t)
 	id3 := w3.history(t)
 	if err := w3.saver.SetProtection(ctx, "m", id3, saver.ProtectionE2EE); err != nil {
@@ -503,8 +475,6 @@ func TestTwoClientsOneStoreAFreshClientIsStillProtected(t *testing.T) {
 	a := newWorld(t)
 	id, old := a.confidentialWithOldRecord(t)
 	saved := a.doc(t, id)
-	// Client B: the same owner key, its own adapter, keyring and saver; it never saw the
-	// newer record (no floor, nothing cached).
 	b := &world{inner: a.inner, server: a.server, ana: a.ana, bo: a.bo, signer: a.signer}
 	b.ring = ConfidentialKeyring{
 		People: StoreKeyring{Store: b.inner, Owners: []age.Recipient{b.ana.r.Key, b.server.Recipient()},
@@ -530,7 +500,6 @@ func TestTwoClientsOneStoreAFreshClientIsStillProtected(t *testing.T) {
 		t.Errorf("B Load: %v", err)
 	}
 	sameStore(t, "B", before, a.snapshot(t))
-	// And A, which has seen both, agrees.
 	if _, err := a.saver.Load(ctx, "m", id); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("A Load: %v", err)
 	}
@@ -555,7 +524,6 @@ func TestRecoverAfterAReplayOrADeletion(t *testing.T) {
 		if _, err := w.saver.Load(ctx, "m", id); !errors.Is(err, ErrDowngrade) {
 			t.Fatalf("%v", err)
 		}
-		// Bad level is refused; the owner says what the document should be.
 		if _, err := w.sharing.Recover(ctx, id, "nope", nil); !errors.Is(err, ErrProtection) {
 			t.Errorf("%v", err)
 		}
@@ -637,7 +605,6 @@ func TestIndexDetectsADeletedRecordOfADocumentNeverOpened(t *testing.T) {
 	}
 	w.replay(t, replayed, old)
 
-	// A fresh client: its own adapter, no frames read, no floor yet, never opened any of them.
 	floor := &MemorySeqFloor{}
 	fresh := &Sharing{Store: w.inner, Adapter: w.ad, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}, SeqFloor: floor}
 	findings, err := fresh.VerifyIndex(ctx)
@@ -654,11 +621,9 @@ func TestIndexDetectsADeletedRecordOfADocumentNeverOpened(t *testing.T) {
 	if !bytes.Contains([]byte(got[deleted].Error()), []byte("missing")) {
 		t.Errorf("%v", got[deleted])
 	}
-	// The same, with no floor at all.
 	if f2, err := (&Sharing{Store: w.inner, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}}).VerifyIndex(ctx); err != nil || len(f2) != 2 {
 		t.Errorf("no floor: %v %v", f2, err)
 	}
-	// VerifyIndex pinned the floor, so the ordinary reads of that client now refuse too.
 	ring := StoreKeyring{Store: w.inner, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}, SeqFloor: floor}
 	if _, _, err := ring.Bind(ctx, deleted+"~aaaaaaaaaaaa.open"); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("deleted, after the index: %v", err)
@@ -688,7 +653,6 @@ func TestIndexIsSignedByTheOwner(t *testing.T) {
 	if !DefaultSkip(IndexKey) || docstore.IsDocumentKey(IndexKey) {
 		t.Error("the index is readable and never expires")
 	}
-	// A store writer's index (their own key), an unsigned one and a changed one do not verify.
 	evil, _ := NewSigner(bytes.Repeat([]byte{7}, 32))
 	forged := &Sharing{Store: w.inner, Adapter: w.ad, Signer: evil}
 	if err := w.inner.Delete(ctx, IndexKey); err != nil {
@@ -704,7 +668,6 @@ func TestIndexIsSignedByTheOwner(t *testing.T) {
 	if _, err := w.sharing.Index(ctx); !errors.Is(err, ErrUnsignedRecord) {
 		t.Errorf("unsigned: %v", err)
 	}
-	// A record's signature is not an index's.
 	rec := w.rawRecord(t, id)
 	_ = w.inner.Save(ctx, IndexKey, rec)
 	if _, err := w.sharing.Index(ctx); err == nil {
@@ -718,8 +681,6 @@ func TestIndexIsSignedByTheOwner(t *testing.T) {
 	if docs, err := w.sharing.Usage(ctx, w.bo.r.Fingerprint); err != nil || len(docs) != 0 {
 		t.Errorf("%v %v", docs, err)
 	}
-	// What the index cannot do on its own: a deleted index reads as no index, unless the
-	// client has a floor that saw it.
 	floor := &MemorySeqFloor{}
 	withFloor := &Sharing{Store: w.inner, Adapter: w.ad, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}, SeqFloor: floor}
 	if _, err := withFloor.Index(ctx); err != nil {
@@ -737,7 +698,6 @@ func TestIndexIsSignedByTheOwner(t *testing.T) {
 	if _, err := withFloor.VerifyIndex(ctx); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("VerifyIndex: %v", err)
 	}
-	// An older index put back (it lacks the newer documents) is refused by the floor.
 	_ = w.inner.Save(ctx, IndexKey, good.Data)
 	id2 := w.history(t)
 	if err := w.saver.SetProtection(ctx, "m", id2, saver.ProtectionE2EE); err != nil {
@@ -822,7 +782,6 @@ func TestConfidentialFolderRecordsAreCrossCheckedToo(t *testing.T) {
 			t.Errorf("SetProtection: %v", err)
 		}
 		sameStore(t, "folder", before, w.snapshot(t))
-		// The owner's way forward works for a folder too.
 		if _, err := w.sharing.Recover(ctx, sec, ProtectionE2EE, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -850,16 +809,11 @@ func TestVerifyReportsADowngradedDocumentAndTheRebuildRefusesIt(t *testing.T) {
 	if _, err := w.saver.Load(ctx, "m", ok); err != nil {
 		t.Errorf("the others are untouched: %v", err)
 	}
-	// A rebuilt catalog does not list a downgraded document as a server one.
 	if err := w.saver.Rebuild(ctx, "m"); !errors.Is(err, ErrDowngrade) {
 		t.Errorf("Rebuild: %v", err)
 	}
 }
 
-// TestSavesAndLoadsRacingSwitchesNeverSeeADowngrade runs under -race: while the owner flips a
-// document between the levels (each flip a record write and a re-key of every file), other
-// goroutines save, snapshot and load it. A legitimate in-flight switch must never read as a
-// downgrade, and the end state is consistent.
 func TestSavesAndLoadsRacingSwitchesNeverSeeADowngrade(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

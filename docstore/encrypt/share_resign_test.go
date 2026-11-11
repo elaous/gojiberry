@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Resign signs a list again with another owner's key, so a list survives the removal of the
-// owner key that signed it: after the old signer is out of OwnerSigners, only the re-signed list
-// verifies.
 func TestResignMovesAListToAnotherSigner(t *testing.T) {
 	ctx := context.Background()
 	ana, bo := newPerson(t, "ana"), newPerson(t, "bo")
@@ -23,7 +20,6 @@ func TestResignMovesAListToAnotherSigner(t *testing.T) {
 	seed := make([]byte, 32)
 	seed[0] = 2
 	newSigner, _ := NewSigner(seed)
-	// A Sharing that trusts both signers, signing with the new one, moves the list over.
 	moving := &Sharing{Store: inner, Adapter: sh.Adapter, Signer: newSigner, OwnerSigners: []ed25519.PublicKey{oldSigner.Public()}}
 	if err := moving.Resign(ctx, docA); err != nil {
 		t.Fatal(err)
@@ -39,8 +35,6 @@ func TestResignMovesAListToAnotherSigner(t *testing.T) {
 	}
 }
 
-// Sign is a signature of the host's own statements, kept apart from the recipient lists: one is
-// never accepted as the other.
 func TestSignedMessagesAreSeparateFromRecipientLists(t *testing.T) {
 	seed := make([]byte, 32)
 	seed[0] = 9

@@ -93,7 +93,6 @@ func TestFileSeqFloorSurvivesARestartAndOnlyRises(t *testing.T) {
 	if err := bad.Raise(ctx, "a", 1); err == nil {
 		t.Error("an unwritable floor is an error")
 	}
-	// Concurrent raises (run under -race) keep the highest.
 	c := &FileSeqFloor{Path: filepath.Join(t.TempDir(), "c.json")}
 	var wg sync.WaitGroup
 	for i := uint64(1); i <= 20; i++ {
@@ -124,8 +123,6 @@ func TestStorageSeqFloorKeepsAFloorInTheKVAndDegradesToMemory(t *testing.T) {
 	if v, _ := g.Get(ctx, "a"); v != 4 {
 		t.Errorf("%d", v)
 	}
-	// Storage that fails (a private window, a full quota): the floor still works in memory,
-	// and says so.
 	kv.fail = errors.New("SecurityError")
 	_ = g.Raise(ctx, "a", 7)
 	if err := g.Raise(ctx, "a", 8); !errors.Is(err, ErrFloorDegraded) {
@@ -137,7 +134,6 @@ func TestStorageSeqFloorKeepsAFloorInTheKVAndDegradesToMemory(t *testing.T) {
 	if g.Err() == nil {
 		t.Error("Err should report the failing storage")
 	}
-	// A damaged value is noted and the memory value is used.
 	kv.fail = nil
 	kv.m["floor:z"] = "banana"
 	if v, err := g.Get(ctx, "z"); !errors.Is(err, ErrFloorDegraded) || v != 0 || g.Err() == nil {
@@ -145,15 +141,11 @@ func TestStorageSeqFloorKeepsAFloorInTheKVAndDegradesToMemory(t *testing.T) {
 	}
 }
 
-// TestFloorsRefuseAReplayedAndADeletedRecordThroughTheRealStack uses the file floor as the
-// keyring's, as a server would: the replay and the deletion are refused (ErrStaleRecord) on
-// the first read, and a new process with the same file still refuses.
 func TestFloorsRefuseAReplayedAndADeletedRecordThroughTheRealStack(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "floor.json")
 	w := newWorldFloor(t, &FileSeqFloor{Path: path})
 	id, old := w.confidentialWithOldRecord(t)
-	// A restarted client: nothing in memory, only the file.
 	w2 := newWorldFloor(t, &FileSeqFloor{Path: path})
 	w2.inner = w.inner
 	w2.ring.People.Store = w.inner
@@ -170,8 +162,6 @@ func TestFloorsRefuseAReplayedAndADeletedRecordThroughTheRealStack(t *testing.T)
 		t.Errorf("deleted: %v", err)
 	}
 }
-
-// ---- finding 6: the file floor's cost -------------------------------------------------------
 
 func TestFileSeqFloorReadsOnceWritesInBatchesAndSyncsTheDirectory(t *testing.T) {
 	ctx := context.Background()
@@ -212,7 +202,6 @@ func TestFileSeqFloorReadsOnceWritesInBatchesAndSyncsTheDirectory(t *testing.T) 
 	if f.reads != 0 || f.writes != 1 {
 		t.Errorf("a floor that wrote the file does not read it again, and a raise that changes nothing writes nothing: %d reads, %d writes", f.reads, f.writes)
 	}
-	// A new process reads once for all of its gets.
 	g := &FileSeqFloor{Path: path}
 	for i := 0; i < 300; i++ {
 		_, _ = g.Get(ctx, fmt.Sprintf("doc-%03d", i))
@@ -220,7 +209,6 @@ func TestFileSeqFloorReadsOnceWritesInBatchesAndSyncsTheDirectory(t *testing.T) 
 	if g.reads != 1 {
 		t.Errorf("one read, got %d", g.reads)
 	}
-	// What another process wrote is seen (the file changed on disk).
 	h := &FileSeqFloor{Path: path}
 	_ = h.Raise(ctx, "from-h", 9)
 	if v, _ := g.Get(ctx, "from-h"); v != 9 {
@@ -231,7 +219,6 @@ func TestFileSeqFloorReadsOnceWritesInBatchesAndSyncsTheDirectory(t *testing.T) 
 	}
 }
 
-// A damaged floor file: the runbook is to move it away and run VerifyIndex.
 func TestDamagedFloorFileRunbookVerifyIndexRebuildsIt(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "floor.json")
@@ -272,7 +259,6 @@ func TestVerifyIndexRaisesTheFloorInOneWrite(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		w.e2eeDoc(t)
 	}
-	// A fresh client with the same store and an empty floor file.
 	fresh := &FileSeqFloor{Path: filepath.Join(t.TempDir(), "fresh.json")}
 	s := &Sharing{Store: w.inner, Adapter: w.ad, Signer: w.signer, SeqFloor: fresh}
 	if _, err := s.VerifyIndex(ctx); err != nil {
@@ -289,8 +275,6 @@ func TestVerifyIndexRaisesTheFloorInOneWrite(t *testing.T) {
 	}
 }
 
-// ---- finding 8: a degraded floor says so -----------------------------------------------------
-
 func TestDegradedFloorIsReportedThroughTheKeyringAndSharing(t *testing.T) {
 	ctx := context.Background()
 	var noted []error
@@ -304,14 +288,12 @@ func TestDegradedFloorIsReportedThroughTheKeyringAndSharing(t *testing.T) {
 		t.Fatalf("a working storage is not reported: %v", noted)
 	}
 	kv.fail = errors.New("QuotaExceededError")
-	// The document is still readable and writable (availability is kept) ...
 	if _, err := w.saver.Load(ctx, "m", id); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.saver.Save(ctx, "m", docfile.Open, w.doc(t, id)); err != nil {
 		t.Fatal(err)
 	}
-	// ... and the degradation was surfaced, not swallowed.
 	if len(noted) == 0 {
 		t.Fatal("the floor failed and nothing said so")
 	}
@@ -325,7 +307,6 @@ func TestDegradedFloorIsReportedThroughTheKeyringAndSharing(t *testing.T) {
 	}
 }
 
-// A full quota: reads work and writes fail. The raise reports it, and the memory still holds it.
 func TestStorageSeqFloorReportsAFailingWrite(t *testing.T) {
 	ctx := context.Background()
 	kv := &mapKV{failSet: errors.New("QuotaExceededError")}
@@ -341,8 +322,6 @@ func TestStorageSeqFloorReportsAFailingWrite(t *testing.T) {
 	}
 }
 
-// A damaged stored value is written over with what this process knows, never with a lower number:
-// raising by a smaller seq must not lower a floor that was higher.
 func TestStorageSeqFloorRaiseOverADamagedValueNeverLowersIt(t *testing.T) {
 	ctx := context.Background()
 	kv := &mapKV{}

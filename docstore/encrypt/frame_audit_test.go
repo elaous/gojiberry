@@ -22,7 +22,6 @@ func fillSigner(t *testing.T, b byte) *Signer {
 	return sg
 }
 
-// PeekFrame is how a host audits its files: what the frame says, and whether an owner signed it.
 func TestPeekFrameReportsTheHeaderAndWhetherItIsSigned(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")
@@ -40,12 +39,10 @@ func TestPeekFrameReportsTheHeaderAndWhetherItIsSigned(t *testing.T) {
 	if err != nil || h.Version != 3 || !h.Signed || h.Level != "" || h.Seq != 0 {
 		t.Fatalf("%+v %v", h, err)
 	}
-	// Another adapter that does not know the signer sees a v3 frame it cannot vouch for.
 	stranger := New(inner, StoreKeyring{Store: inner, Owners: []age.Recipient{ana.r.Key}, Keys: []age.Identity{ana.id}, OwnerSigners: []ed25519.PublicKey{fillSigner(t, 2).Public()}})
 	if h, err := stranger.PeekFrame(ctx, f, stored.Data); err != nil || h.Version != 3 || h.Signed {
 		t.Fatalf("%+v %v", h, err)
 	}
-	// Without a signer the frame is v2 and never Signed.
 	un := New(inner, ring)
 	if err := un.Save(ctx, f, []byte("v2")); err != nil {
 		t.Fatal(err)
@@ -54,7 +51,6 @@ func TestPeekFrameReportsTheHeaderAndWhetherItIsSigned(t *testing.T) {
 	if h, err := un.PeekFrame(ctx, f, stored.Data); err != nil || h.Version != 2 || h.Signed {
 		t.Fatalf("%+v %v", h, err)
 	}
-	// A key that does not open the file, and a file in the clear.
 	other := newPerson(t, "bo")
 	if _, err := New(inner, Static{Keys: []age.Identity{other.id}}).PeekFrame(ctx, f, stored.Data); !errors.Is(err, ErrNoKey) {
 		t.Fatalf("%v", err)
@@ -64,8 +60,6 @@ func TestPeekFrameReportsTheHeaderAndWhetherItIsSigned(t *testing.T) {
 	}
 }
 
-// TrustFrames is the owner's decision to take files as theirs when the list of their signing keys
-// is gone: a frame signed by a key nobody knows is read instead of refused.
 func TestTrustFramesReadsAFrameSignedByAnUnknownKey(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")
@@ -88,7 +82,6 @@ func TestTrustFramesReadsAFrameSignedByAnUnknownKey(t *testing.T) {
 	}
 }
 
-// ResignIndex signs the owner-signed index again, so it survives the removal of the key that signed it.
 func TestResignIndexMovesTheIndexToAnotherSigner(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")

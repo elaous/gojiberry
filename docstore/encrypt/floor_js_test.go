@@ -9,16 +9,6 @@ import (
 	"testing"
 )
 
-// Run under node, as auth/passkey/client's wasm test is:
-//
-//	GOOS=js GOARCH=wasm go test -exec "$(go env GOROOT)/lib/wasm/go_js_wasm_exec" -run LocalStorage ./docstore/encrypt
-//
-// (node has no localStorage here; the tests install a fake one that behaves like the
-// browser's, including the ways it fails.)
-
-// fakeLocalStorage installs a localStorage global backed by a JS object. throwOn names the
-// method that throws ("" none); "accessor" makes reading the global itself throw, as a private
-// window or blocked site data does.
 func fakeLocalStorage(t *testing.T, throwOn string) {
 	t.Helper()
 	g := js.Global()
@@ -54,7 +44,6 @@ func TestLocalStorageSeqFloorPersistsInTheBrowsersStorage(t *testing.T) {
 	if v, ok := js.Global().Get("localStorage").Call("getItem", "gojiberry-floor:ana:doc"), true; !ok || v.String() != "6" {
 		t.Fatalf("not in localStorage: %v", v)
 	}
-	// A reloaded page: a new floor over the same storage sees it, and only raises it.
 	g := LocalStorageSeqFloor("gojiberry-floor:ana:")
 	if v, err := g.Get(ctx, "doc"); err != nil || v != 6 {
 		t.Fatalf("%d %v", v, err)
@@ -78,8 +67,6 @@ func TestLocalStorageSeqFloorFallsBackToMemoryWhenStorageThrows(t *testing.T) {
 		t.Run(throwOn, func(t *testing.T) {
 			fakeLocalStorage(t, throwOn)
 			f := LocalStorageSeqFloor("p:")
-			// The floor keeps working from memory, and says so: the value comes with an error
-			// that wraps ErrFloorDegraded (the keyring goes on, and notes it).
 			if err := f.Raise(ctx, "doc", 5); !errors.Is(err, ErrFloorDegraded) {
 				t.Fatalf("a throwing localStorage must be reported: %v", err)
 			}
@@ -92,7 +79,6 @@ func TestLocalStorageSeqFloorFallsBackToMemoryWhenStorageThrows(t *testing.T) {
 			}
 		})
 	}
-	// A missing localStorage (a worker) behaves the same way.
 	js.Global().Get("Object").Call("defineProperty", js.Global(), "localStorage", map[string]any{"value": js.Undefined(), "configurable": true})
 	f := LocalStorageSeqFloor("p:")
 	if err := f.Raise(ctx, "doc", 2); !errors.Is(err, ErrFloorDegraded) {
@@ -103,8 +89,6 @@ func TestLocalStorageSeqFloorFallsBackToMemoryWhenStorageThrows(t *testing.T) {
 	}
 }
 
-// TestLocalStorageFloorRefusesAReplayThroughTheKeyring: the floor as a page would use it. The
-// page is "reloaded" by building a new floor over the same storage.
 func TestLocalStorageFloorRefusesAReplayThroughTheKeyring(t *testing.T) {
 	ctx := context.Background()
 	fakeLocalStorage(t, "")

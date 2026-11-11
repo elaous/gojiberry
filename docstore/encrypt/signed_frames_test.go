@@ -18,11 +18,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// Tests of the signed frame, the scan of a document's files and the races between clients
-// (docs/encryption-and-passkeys.md C.5).
-
-// sealRaw encrypts an already framed plaintext to recipients: what anyone who knows only their
-// public keys can do, with any frame they like.
 func sealRaw(t *testing.T, rs []age.Recipient, framed []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -39,12 +34,10 @@ func sealRaw(t *testing.T, rs []age.Recipient, framed []byte) []byte {
 	return buf.Bytes()
 }
 
-// publicRecipients are the keys a store writer is assumed to know: the owner's, the server's.
 func (w *world) publicRecipients() []age.Recipient {
 	return []age.Recipient{w.ana.r.Key, w.server.Recipient()}
 }
 
-// mainFile is one of the document's generations (not a version snapshot).
 func (w *world) mainFile(t *testing.T, id string) string {
 	t.Helper()
 	for _, f := range w.files(t, id) {
@@ -65,7 +58,6 @@ func (w *world) binding(t *testing.T, f string) Binding {
 	return b
 }
 
-// e2eeDoc makes a document with a history and switches it to end to end.
 func (w *world) e2eeDoc(t *testing.T) string {
 	t.Helper()
 	id := w.history(t)
@@ -88,8 +80,6 @@ func readAll(t *testing.T, r io.Reader) []byte {
 func ageHeaderJunk(n int) []byte {
 	return append(append([]byte(nil), header...), bytes.Repeat([]byte{byte(n)}, 64)...)
 }
-
-// ---- finding 1: decoy files ---------------------------------------------------------------
 
 func TestDecoyFilesCannotHideADeletedRecord(t *testing.T) {
 	ctx := context.Background()
@@ -128,7 +118,6 @@ func TestDecoyFilesCannotHideADeletedRecord(t *testing.T) {
 			if _, err := w.saver.Save(ctx, "m", docfile.Open, saved); err == nil {
 				t.Error("Saver.Save over a deleted record with decoys returned nil")
 			}
-			// The owner's own change must not sign a fresh record over the deleted one.
 			carol := newPerson(t, "carol")
 			if err := w.sharing.Add(ctx, id, carol.r, carol.r.Fingerprint); !errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrUnreadable) {
 				t.Errorf("Add with decoys: %v", err)
@@ -139,7 +128,6 @@ func TestDecoyFilesCannotHideADeletedRecord(t *testing.T) {
 			sameStore(t, "after the refusals", before, w.snapshot(t))
 		})
 	}
-	// The junk is named: an unreadable file is not skipped as "no evidence".
 	w := newWorld(t)
 	id := w.e2eeDoc(t)
 	_ = w.inner.Delete(ctx, KeysPrefix+id)
@@ -150,8 +138,6 @@ func TestDecoyFilesCannotHideADeletedRecord(t *testing.T) {
 	}
 }
 
-// A document's files that are provably someone else's (the document is shared with us, a
-// version snapshot was sealed to a key we do not have) are not an obstacle.
 func TestForeignFilesAreSkippedNotFatal(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -166,8 +152,6 @@ func TestForeignFilesAreSkippedNotFatal(t *testing.T) {
 	}
 }
 
-// The store reports the times, so the file that looks newest proves nothing: the highest seq of
-// ANY file that opens is what the record is compared with.
 func TestHighestSeqOfAllFilesCountsNotTheNewestByTime(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -185,12 +169,6 @@ func TestHighestSeqOfAllFilesCountsNotTheNewestByTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.replay(t, id, old) // validly signed, older, server level
-	// One old, genuine generation put back: it is now the newest the store lists.
-	// The file must be one of the genuine generations captured above: SetProtection writes a new
-	// generation under a fresh name and drops the oldest, so the first generation listed now may
-	// have no captured bytes (the original test then overwrote it with an empty file, which
-	// rightly reads as unreadable). The product never orders files by the store's times, so no
-	// timing is needed: the old generation is simply the one put back last.
 	var f string
 	for _, g := range w.files(t, id) {
 		if _, ok := genuine[g]; ok && strings.HasPrefix(g, id+"~") && (f == "" || g < f) {
@@ -212,8 +190,6 @@ func TestHighestSeqOfAllFilesCountsNotTheNewestByTime(t *testing.T) {
 	}
 }
 
-// ---- finding 2: the frame is signed --------------------------------------------------------
-
 func TestForgedFramesAreRefused(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -232,7 +208,6 @@ func TestForgedFramesAreRefused(t *testing.T) {
 		"unsigned level server frame":                                         frame(f, Binding{Seq: 0}, []byte("forged"), nil),
 		"signed by a key that is not an owner's":                              frame(f, good, []byte("forged"), attacker),
 	}
-	// A genuine signed header put on other content.
 	d, _ := w.inner.Load(ctx, f)
 	r, _, err := w.ad.decrypt(ctx, f, d.Data)
 	if err != nil {
@@ -261,9 +236,6 @@ func TestForgedFramesAreRefused(t *testing.T) {
 	}
 }
 
-// The limit of the old formats, stated: until a signing client re-keys a document its files may
-// be unsigned, and an unsigned frame can then be minted by anyone who knows a recipient's public
-// key. Repair writes signed frames and the record then says so.
 func TestUnsignedFramesAreAcceptedUntilRepairThenForgedAndRequireSigned(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -276,17 +248,14 @@ func TestUnsignedFramesAreAcceptedUntilRepairThenForgedAndRequireSigned(t *testi
 	if err := w.inner.Save(ctx, f, forged); err != nil {
 		t.Fatal(err)
 	}
-	// Before the upgrade the limit holds: this is accepted (with a warning logged once).
 	if d, err := w.ad.Load(ctx, f); err != nil || string(d.Data) != "forged" {
 		t.Fatalf("an unsigned frame of a not yet upgraded document is read as before: %v", err)
 	}
-	// RequireSigned closes it for a deployment whose files are all upgraded.
 	strict := New(w.inner, w.ring)
 	strict.RequireSigned = true
 	if _, err := strict.Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Errorf("RequireSigned: %v", err)
 	}
-	// A re-key (the owner's Repair) upgrades every file and pins it in the record.
 	_ = w.inner.Delete(ctx, f) // the forged file is not something to re-key (a missing file is fine)
 	if _, err := w.sharing.Repair(ctx, id); err != nil {
 		t.Fatal(err)
@@ -327,7 +296,6 @@ func TestConfidentialSaveNeedsTheSigner(t *testing.T) {
 		t.Errorf("RekeyDocument: %v", err)
 	}
 	sameStore(t, "no signer", before, w.snapshot(t))
-	// A document that is not confidential and has no signed record is still written without one.
 	plain := w.history(t)
 	if err := nosign.Save(ctx, plain+"~cccccccccccc.open", []byte("x")); err != nil {
 		t.Errorf("server level, no signer: %v", err)
@@ -337,7 +305,6 @@ func TestConfidentialSaveNeedsTheSigner(t *testing.T) {
 	}
 }
 
-// Frames signed by any of the owner's signers verify; each owner client has its own.
 func TestFramesOfAnotherOwnerSignerVerify(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -354,15 +321,12 @@ func TestFramesOfAnotherOwnerSignerVerify(t *testing.T) {
 	if d, err := reader.Load(ctx, f); err != nil || string(d.Data) != "from another owner client" {
 		t.Errorf("%v", err)
 	}
-	// Without the second signer listed it is forged.
 	solo := w.ring
 	solo.People.OwnerSigners = []ed25519.PublicKey{w.signer.Public()}
 	if _, err := New(w.inner, solo).Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Errorf("%v", err)
 	}
 }
-
-// ---- finding 5: the equal-seq check --------------------------------------------------------
 
 func TestSameSeqFileThatDisagreesWithTheRecordIsADowngrade(t *testing.T) {
 	ctx := context.Background()
@@ -378,8 +342,6 @@ func TestSameSeqFileThatDisagreesWithTheRecordIsADowngrade(t *testing.T) {
 	}
 	for name, b := range cases {
 		t.Run(name, func(t *testing.T) {
-			// Signed by the owner's signer, so it is not forged: the frame is genuine and
-			// disagrees with the record at the same seq.
 			crafted := sealRaw(t, w.publicRecipients(), frame(f, b, []byte("x"), w.signer))
 			if err := w.inner.Save(ctx, f, crafted); err != nil {
 				t.Fatal(err)
@@ -395,8 +357,6 @@ func TestSameSeqFileThatDisagreesWithTheRecordIsADowngrade(t *testing.T) {
 		})
 	}
 }
-
-// ---- finding 3: a switch completed between the reads ---------------------------------------
 
 func TestSaveRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 	ctx := context.Background()
@@ -475,7 +435,6 @@ func TestSaveRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 			t.Errorf("both changes should be in the list: %v", list)
 		}
 	})
-	// A real replay is still refused the second time.
 	w := newWorld(t)
 	id, old := w.confidentialWithOldRecord(t)
 	w.replay(t, id, old)
@@ -483,8 +442,6 @@ func TestSaveRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 		t.Errorf("replay: %v", err)
 	}
 }
-
-// ---- finding 4: a stuck pending flag --------------------------------------------------------
 
 func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 	ctx := context.Background()
@@ -494,7 +451,6 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 	w.sharing.now = func() time.Time { return now }
 	w.saver.PendingCheck = PendingHook(w.sharing)
 
-	// A switch cut short at a version snapshot: the record is pending, one file still server-wrapped.
 	var version string
 	for _, f := range w.files(t, id) {
 		if strings.HasPrefix(f, "versions/") {
@@ -518,7 +474,6 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 		t.Fatalf("Verify: %+v %v", rep, err)
 	}
 
-	// An hour later the flag is stuck, and Verify says so.
 	now = now.Add(time.Hour)
 	if st, _ := w.sharing.PendingStatus(ctx, id); !st.Stuck {
 		t.Errorf("%+v", st)
@@ -534,11 +489,9 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 	}
 	w.sharing.PendingWarnAfter = 0
 
-	// While pending the strict Load rule is off for the document (the weakness being reported).
 	if _, err := w.ad.Load(ctx, version); err != nil {
 		t.Errorf("a stale file of a pending document loads: %v", err)
 	}
-	// Repair finishes it, and nothing is reported afterwards.
 	if _, err := w.sharing.Repair(ctx, id); err != nil {
 		t.Fatal(err)
 	}
@@ -549,8 +502,6 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 		t.Errorf("%+v", st)
 	}
 
-	// Once not pending, a file wrapped below the level is a downgrade, and the message says how
-	// to go on.
 	below := New(w.inner, Static{To: []age.Recipient{w.server.Recipient(), w.ana.r.Key}, Keys: []age.Identity{w.ana.id}})
 	below.Signer = w.signer // a server-level copy the owner's own tooling wrote
 	if err := below.Save(ctx, version, []byte("server wrapped")); err != nil {
@@ -560,8 +511,6 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 		t.Errorf("the error should name Repair: %v", err)
 	}
 }
-
-// ---- the Load side of finding 3 ----------------------------------------------------------------
 
 func TestLoadRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 	ctx := context.Background()
@@ -588,8 +537,6 @@ func TestLoadRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 	}
 }
 
-// ---- finding 7: the index ----------------------------------------------------------------------
-
 func TestVerifyIndexWarnsWhenAnEmptyIndexCannotBeTold(t *testing.T) {
 	ctx := context.Background()
 	hasWarning := func(fs []IndexFinding) bool {
@@ -600,27 +547,21 @@ func TestVerifyIndexWarnsWhenAnEmptyIndexCannotBeTold(t *testing.T) {
 		}
 		return false
 	}
-	// No floor, no index: an index that was deleted looks like none.
 	w := newWorld(t)
 	fs, err := w.sharing.VerifyIndex(ctx)
 	if err != nil || !hasWarning(fs) {
 		t.Errorf("no floor, no index: %v %v", fs, err)
 	}
-	// An index that lists a document is not empty: no warning, and a deleted one is a finding.
 	id := w.e2eeDoc(t)
 	if fs, err := w.sharing.VerifyIndex(ctx); err != nil || len(fs) != 0 {
 		t.Errorf("%v %v", fs, err)
 	}
-	// Emptied again (the document is back at server level): empty, and without a floor it
-	// cannot be told from a deleted one.
 	if err := w.saver.SetProtection(ctx, "m", id, saver.ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
 	if fs, _ := w.sharing.VerifyIndex(ctx); !hasWarning(fs) {
 		t.Errorf("an emptied index without a floor: %v", fs)
 	}
-	// With a floor that has seen an index, an empty one is believed (a deleted one would be
-	// ErrStaleRecord).
 	wf := newWorldFloor(t, &MemorySeqFloor{})
 	idf := wf.e2eeDoc(t)
 	if err := wf.saver.SetProtection(ctx, "m", idf, saver.ProtectionServer); err != nil {
@@ -635,16 +576,12 @@ func TestVerifyIndexWarnsWhenAnEmptyIndexCannotBeTold(t *testing.T) {
 	if _, err := wf.sharing.VerifyIndex(ctx); !errors.Is(err, ErrStaleRecord) {
 		t.Errorf("a deleted index with a floor: %v", err)
 	}
-	// A floor that never saw an index does not make an empty one trustworthy.
 	wn := newWorldFloor(t, &MemorySeqFloor{})
 	if fs, _ := wn.sharing.VerifyIndex(ctx); !hasWarning(fs) {
 		t.Errorf("an empty floor: %v", fs)
 	}
 }
 
-// plainStore is a store with no compare-and-swap but a Lock, and a Load of the index that waits
-// (up to a timeout) for a second reader: two index changes that are not serialized both read the
-// same index.
 type plainStore struct {
 	m        *docstore.MemoryAdapter
 	lock     sync.Mutex
