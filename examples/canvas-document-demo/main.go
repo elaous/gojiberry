@@ -1,12 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-document-demo is a small word processor's page view,
-// drawn entirely on a <canvas>: a ScrollView over several PageSet
-// sheets (margins, borders, headers, footers, page numbers), a TextFlow
-// that runs continuously across the pages -- with column configs, user
-// page and column breaks, and natural page breaks -- an Image and a
-// FloatingText that the text wraps around. #state mirrors the layout as
-// JSON (the e2e test reads it).
 package main
 
 import (
@@ -64,8 +57,6 @@ func main() {
 	flow := canvas.NewTextFlow("", 0, 0, 0, 0)
 	flow.Pages = ps
 
-	// An inline image sits in the text; the Markdown resolver hands the
-	// flow this object for ![sun](sun) once the bitmap has loaded.
 	var inline *canvas.Image
 	flow.Transform = canvas.Markdown{
 		Images: func(url, alt string) canvas.InlineObject {
@@ -85,7 +76,6 @@ func main() {
 	ft.SetFlow(flow)
 	ft.Vocabulary = []string{"Quarterly", "Markdown"}
 
-	// A floating table, anchored to the last page, that text wraps around.
 	table := canvas.NewTableView(canvas.NewTableFrom([][]string{
 		{"Metric", "Value"}, {"Pages", "4"}, {"Columns", "2"},
 	}), nil)
@@ -238,7 +228,6 @@ func main() {
 
 	canvas.LoadImage("data:image/svg+xml;base64,"+base64.StdEncoding.EncodeToString([]byte(svg)),
 		func(src *canvas.HTMLImage) {
-			// A floating image, anchored to page 1: text wraps around it.
 			img = canvas.NewImage(src, 0, 0)
 			img.W, img.H = 120, 80
 			img.Anchor = &canvas.Anchor{Page: 1, X: 330, Y: 150}
@@ -247,7 +236,6 @@ func main() {
 			img.SetFlow(flow)
 			sv.Add(img, 0, 0)
 
-			// And an inline one, placed in the text by the Markdown ![sun](sun).
 			inline = canvas.NewImage(src, 0, 0)
 			inline.W, inline.H = 160, 107
 			inline.Placement = canvas.PlaceInline
