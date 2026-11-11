@@ -106,7 +106,6 @@ func TestStatePathComesFromTheEnvironment(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("closing the observer writes the totals: %v", err)
 	}
-	// Without the builtin sink there is nothing to keep, and the operator is told.
 	cfg, _ = ParseEnv(env("GOJIBERRY_OBS", "on", "GOJIBERRY_OBS_SINKS", "posthog", "GOJIBERRY_OBS_STATE", path))
 	if cfg.StatePath != "" || len(cfg.Notes) == 0 {
 		t.Fatalf("cfg=%+v", cfg)

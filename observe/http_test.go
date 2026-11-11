@@ -136,7 +136,6 @@ func FuzzRouteOf(f *testing.F) {
 	})
 }
 
-// fuzzBytes returns n random printable-ish bytes, including separators and non-ASCII.
 func fuzzString(rng *rand.Rand, n int) string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789-_./:@%?=&+ \té中"
 	rs := []rune(alphabet)
@@ -147,10 +146,6 @@ func fuzzString(rng *rand.Rand, n int) string {
 	return b.String()
 }
 
-// TestNothingRequestDerivedReachesAnySink is the no-PII test: requests with random paths, methods,
-// headers, queries and bodies, carrying markers where an address, an id, a token or a user agent
-// would be, go through the middleware into a sink that records everything. Every label and attribute
-// that arrives must be an enumerated value, and no marker may appear anywhere in what the sinks got.
 func TestNothingRequestDerivedReachesAnySink(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 11))
 	b := NewBuiltin()
@@ -160,7 +155,6 @@ func TestNothingRequestDerivedReachesAnySink(t *testing.T) {
 	markers := []string{"203.0.113.77", "2001:db8::dead:beef", "MARKER-DOC-ID-9f8e7d", "Bearer MARKER-TOKEN-abcdef", "MARKER-SESSION-COOKIE",
 		"Mozilla/5.0 MARKER-UA", "alice@example.com", "MARKER-QUERY-VALUE", "MARKER-BODY-TEXT", "MARKER-SHARE-KEY"}
 	h := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// a handler that touches everything a real one could
 		_ = req.RemoteAddr
 		_ = req.Header.Get("Authorization")
 		code := []int{200, 204, 301, 400, 401, 403, 404, 429, 500, 503}[rng.IntN(10)]
@@ -225,7 +219,6 @@ func TestNothingRequestDerivedReachesAnySink(t *testing.T) {
 			}
 		}
 	}
-	// and no marker anywhere: not in the points, the spans, or the built-in sink's totals
 	dump, _ := json.Marshal([]any{pts, spans, b.Describe(), o.Describe()})
 	for _, m := range markers {
 		if strings.Contains(string(dump), m) {

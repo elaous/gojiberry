@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// rec is a sink that keeps everything it is given.
 type rec struct {
 	mu      sync.Mutex
 	points  []Point
@@ -145,11 +144,9 @@ func TestAnythingOutsideTheAllowlistIsDroppedAndCounted(t *testing.T) {
 			}
 		}
 	}
-	// the refusals are visible to the operator as a metric of their own
 	if r.count(DroppedPoints) == 0 {
 		t.Error("the refusals were not reported as obs_dropped_total")
 	}
-	// and a dropped attribute never reaches the sink
 	_, sp := o.Start(context.Background(), SpanHTTP)
 	sp.Set(S("route", "/docs/secret"), S("route", "/docs"))
 	sp.End()
@@ -210,7 +207,6 @@ func TestSpansLinkParentAndChildAndFollowTheSample(t *testing.T) {
 	if _, s := r2.snapshot(); len(s) != 0 {
 		t.Fatalf("sample 0 kept spans: %v", s)
 	}
-	// a rate between 0 and 1 keeps some roots and a child follows its parent
 	r3 := &rec{}
 	half := New(Options{Operator: r3, TraceSample: 0.5})
 	roots := 0
@@ -253,7 +249,6 @@ func TestUsageIsRoutedOnlyToTheUsageSinkAndOnlyWhatIsAllowed(t *testing.T) {
 			t.Fatal("usage points must not reach the operator sink")
 		}
 	}
-	// without a usage sink nothing is routed
 	none := New(Options{Operator: op})
 	none.SetUsageAllowlist(map[string][]string{"feature": {"find"}})
 	none.Usage("feature", "find", 1)
@@ -342,7 +337,6 @@ func TestCardinalityIsBoundedByTheAllowlist(t *testing.T) {
 	if o.Dropped()["bad_label_value"] == 0 {
 		t.Fatal("drops were not counted")
 	}
-	// the worst case, every combination of every label, is a fixed number
 	worst := 0
 	for _, d := range defs {
 		n := 1

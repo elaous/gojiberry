@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// TestDocsListEverythingTheAllowlistAllows keeps docs/observability.md in step with the code: a
-// metric, label value, span, attribute or variable that is not documented fails here.
 func TestDocsListEverythingTheAllowlistAllows(t *testing.T) {
 	b, err := os.ReadFile("../docs/observability.md")
 	if err != nil {
@@ -46,7 +44,6 @@ func TestDocsListEverythingTheAllowlistAllows(t *testing.T) {
 	}
 }
 
-// TestConfigurationDocNamesTheVariables keeps docs/configuration.md pointing at the new variables.
 func TestConfigurationDocNamesTheVariables(t *testing.T) {
 	b, err := os.ReadFile("../docs/configuration.md")
 	if err != nil {

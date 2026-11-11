@@ -6,10 +6,6 @@ import (
 	"sync/atomic"
 )
 
-// RouteOf maps a request path to one of the route templates of the allowlist. It is a pure
-// function of the path's shape: an id, a provider name or any other segment a person could choose
-// never appears in its result, which is always a member of the "route" label's values ("other"
-// for anything it does not know).
 func RouteOf(path string) string {
 	p := strings.ToLower(path)
 	switch {
@@ -99,7 +95,6 @@ func statusClass(code int) string {
 	return "other"
 }
 
-// flowOf is the sign-in flow a route template belongs to ("" for a route that is not one).
 func flowOf(route string) string {
 	switch route {
 	case "/auth/{provider}/login", "/auth/{provider}/callback", "/auth/me", "/auth/logout", "/auth/other":
@@ -116,7 +111,6 @@ func flowOf(route string) string {
 	return ""
 }
 
-// outcomeOf is how a status ends a sign-in-like request.
 func outcomeOf(code int) string {
 	switch {
 	case code == http.StatusTooManyRequests:
@@ -160,10 +154,6 @@ func (w *statusWriter) Flush() {
 // Unwrap lets http.ResponseController reach the real writer (hijack, deadlines).
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// Middleware records one span and the request metrics for every request next serves: the route
-// template, the method class, the status class and the duration. It reads the request's method and
-// path to choose a template and nothing else of it: not the remote address, not a header or cookie,
-// not the query, not the body. With a nil or disabled observer it returns next unchanged.
 func Middleware(o *Observer, next http.Handler) http.Handler {
 	if !o.Enabled() {
 		return next

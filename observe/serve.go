@@ -11,13 +11,8 @@ import (
 	"time"
 )
 
-// ShutdownGrace is how long a stop signal waits for requests to finish and the sinks to flush.
 const ShutdownGrace = 10 * time.Second
 
-// Setup builds the operator observability the environment asks for, for a server of the project
-// (service is the name the sinks report, and the prefix of the log lines). Unset or GOJIBERRY_OBS=off
-// it returns nil and starts nothing: no sink is built, no secret file is read, nothing leaves. An
-// invalid setting is an error that names the variable. The Observer is also the process default.
 func Setup(ctx context.Context, getenv func(string) string, service string) (*Observer, error) {
 	o, cfg, err := FromEnvFor(ctx, getenv, service)
 	for _, n := range cfg.Notes {
@@ -37,9 +32,6 @@ func Setup(ctx context.Context, getenv func(string) string, service string) (*Ob
 	return o, nil
 }
 
-// Serve runs hs until it fails or a stop signal arrives. On a signal it stops accepting requests, lets
-// the running ones finish, and flushes and closes the observer (so the last counts are sent). With a nil
-// observer it is hs.ListenAndServe.
 func Serve(hs *http.Server, o *Observer) error {
 	if o == nil {
 		return hs.ListenAndServe()

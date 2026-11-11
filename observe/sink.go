@@ -8,14 +8,7 @@ import (
 	"sync"
 )
 
-// Sink is where validated points and spans go. Both producers (the operator's metrics and traces,
-// and the usage counts of package telemetry) write to Sinks, so each can be routed to the built-in
-// admin pages, OpenTelemetry, PostHog, or several, without the producers knowing which.
-//
-// Metric and Span are called on the request path: they must not block or do network I/O (an
-// adapter aggregates or queues, and sends on Flush or from its own goroutine). They receive only
-// points that passed the allowlist. Flush sends what is held now; Close flushes and releases
-// resources and is called once at shutdown. All four are safe for concurrent use.
+// Sink is where validated points and spans go.
 type Sink interface {
 	// Name is the name the operator uses in GOJIBERRY_OBS_SINKS.
 	Name() string
@@ -25,8 +18,6 @@ type Sink interface {
 	Close(ctx context.Context) error
 }
 
-// Describer is implemented by a sink that can say what it would send (the admin route shows it).
-// The result must hold no secret (never the API key) and be JSON encodable.
 type Describer interface {
 	Describe() any
 }
@@ -40,9 +31,7 @@ func (Nop) Span(SpanData)               {}
 func (Nop) Flush(context.Context) error { return nil }
 func (Nop) Close(context.Context) error { return nil }
 
-// Fanout sends everything to every sink. A sink that fails or panics does not stop the others: a
-// panic in Metric or Span is recovered and counted, and Flush and Close try every sink and return
-// all their errors together.
+// Fanout sends everything to every sink.
 func Fanout(sinks ...Sink) Sink {
 	var live []Sink
 	for _, s := range sinks {
@@ -54,8 +43,7 @@ func Fanout(sinks ...Sink) Sink {
 }
 
 type fanout struct {
-	sinks []Sink
-	// failures counts the panics recovered on the request path.
+	sinks    []Sink
 	mu       sync.Mutex
 	failures int
 }
@@ -114,7 +102,6 @@ func (f *fanout) Describe() any {
 	return out
 }
 
-// safely runs f, turning a panic into an error that names the sink and nothing else.
 func safely(name string, f func() error) (err error) {
 	defer func() {
 		if recover() != nil {
@@ -146,11 +133,8 @@ func closeAll(ctx context.Context, sinks []Sink) []error {
 
 func joinErr(errs []error) error { return errors.Join(errs...) }
 
-// maxSeries bounds what a sink that aggregates keeps. Every label has a closed set of values, so
-// the number of series is bounded by the allowlist anyway; this is the second fence.
 const maxSeries = 2048
 
-// agg is the aggregate of one series since the last flush.
 type agg struct {
 	metric   Metric
 	kind     Kind
@@ -186,7 +170,6 @@ func newAgg(p Point) *agg {
 	return &agg{metric: p.Metric, kind: p.Kind, source: p.Source, labels: append([]Label(nil), p.Labels...)}
 }
 
-// Series is one aggregate series, as the built-in sink reports it.
 type Series struct {
 	Metric Metric            `json:"metric"`
 	Kind   string            `json:"kind"`
@@ -199,7 +182,6 @@ type Series struct {
 	Last   float64           `json:"last"`
 }
 
-// SpanStat is what the built-in sink keeps of a span name: how many and how long, never a span.
 type SpanStat struct {
 	Name         SpanName `json:"name"`
 	Count        int64    `json:"count"`
@@ -208,16 +190,12 @@ type SpanStat struct {
 	Errors       int64    `json:"errors"`
 }
 
-// Builtin is the sink that keeps totals in memory for the admin route (GET /admin/observe): the
-// current admin pages' counterpart for the operator's metrics. It holds one aggregate per series
-// (bounded) and one per span name; nothing is sent anywhere.
 type Builtin struct {
 	mu       sync.Mutex
 	series   map[string]*agg
 	spans    map[SpanName]*SpanStat
 	overflow int64
 
-	// path, stop and done are the file the totals are kept in and its writer (KeepIn).
 	path       string
 	stop, done chan struct{}
 }
@@ -272,7 +250,6 @@ func (b *Builtin) Span(s SpanData) {
 	}
 }
 
-// Flush implements Sink (the totals stay in memory; with KeepIn they are written to the file).
 func (b *Builtin) Flush(context.Context) error { return b.save() }
 
 // Close implements Sink.
@@ -321,8 +298,7 @@ type SinkEnv struct {
 	Service string
 }
 
-// SinkFactory builds a sink named in GOJIBERRY_OBS_SINKS. An error must name the variable at
-// fault and never repeat a secret.
+// SinkFactory builds a sink named in GOJIBERRY_OBS_SINKS.
 type SinkFactory func(ctx context.Context, env SinkEnv) (Sink, error)
 
 var (
@@ -330,9 +306,7 @@ var (
 	factories = map[string]SinkFactory{}
 )
 
-// RegisterSink makes a sink available by name. The adapter that needs a heavy dependency
-// (OpenTelemetry) lives in its own module and registers itself from there, so a build that does not
-// import it neither links it nor can be asked for it.
+// RegisterSink makes a sink available by name.
 func RegisterSink(name string, f SinkFactory) {
 	regMu.Lock()
 	defer regMu.Unlock()
@@ -346,7 +320,6 @@ func factory(name string) (SinkFactory, bool) {
 	return f, ok
 }
 
-// Registered lists the sink names this build can make, "builtin" included.
 func Registered() []string {
 	regMu.Lock()
 	defer regMu.Unlock()
@@ -358,8 +331,6 @@ func Registered() []string {
 	return out
 }
 
-// Count is the count of the series of metric m whose labels include every name and value pair in kv (none: all
-// its series). A test, or a caller that wants one number, uses it instead of reading the whole Snapshot.
 func (b *Builtin) Count(m Metric, kv ...string) int64 {
 	series, _, _ := b.Snapshot()
 	var n int64

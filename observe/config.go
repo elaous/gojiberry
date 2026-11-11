@@ -30,29 +30,21 @@ const (
 	envTraceSample = "GOJIBERRY_OBS_TRACE_SAMPLE"
 )
 
-// (envState, the file of the built-in totals, is in persist.go.)
-
-// DefaultTraceSample is the share of requests that get a trace when GOJIBERRY_OBS_TRACE_SAMPLE is unset.
 const DefaultTraceSample = 0.1
 
 // ServiceName is the name sinks report this server as.
 const ServiceName = "gojiberry-docstore"
 
-// knownSinks are the names GOJIBERRY_OBS_SINKS accepts; whether a build can make one is another matter.
 var knownSinks = []string{"builtin", "otlp", "posthog"}
 
 // Config is the parsed environment.
 type Config struct {
 	// Enabled is GOJIBERRY_OBS=on.
-	Enabled bool
-	// Sinks are the sinks of the operator's metrics and traces, UsageSinks of the usage counts
-	// (the built-in admin pages always have those, listed or not).
+	Enabled           bool
 	Sinks, UsageSinks []string
 	TraceSample       float64
-	// StatePath is GOJIBERRY_OBS_STATE: the file the built-in totals are kept in ("" none).
-	StatePath string
-	// Notes are things the operator should hear at start (an ignored variable).
-	Notes []string
+	StatePath         string
+	Notes             []string
 }
 
 func parseSinks(env, raw string, def []string) ([]string, error) {
@@ -85,8 +77,6 @@ func parseSinks(env, raw string, def []string) ([]string, error) {
 	return out, nil
 }
 
-// ParseEnv reads and validates the GOJIBERRY_OBS_* variables that are not specific to one sink. It
-// reads no file and starts nothing.
 func ParseEnv(getenv func(string) string) (Config, error) {
 	get := func(n string) string { return strings.TrimSpace(getenv(n)) }
 	var c Config
@@ -98,7 +88,6 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 		return c, fmt.Errorf("observe: %s must be \"on\" or \"off\"", envSwitch)
 	}
 	if !c.Enabled {
-		// The kill switch: nothing else is read, so a bad value cannot stop a server that has it off.
 		for _, v := range []string{envSinks, envUsageSinks, envTraceSample, envState, "GOJIBERRY_OBS_POSTHOG_KEY", "GOJIBERRY_OBS_POSTHOG_KEY_FILE", "GOJIBERRY_OBS_POSTHOG_HOST"} {
 			if get(v) != "" {
 				c.Notes = append(c.Notes, v+" is ignored: "+envSwitch+" is not on")
@@ -131,16 +120,10 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 	return c, nil
 }
 
-// FromEnv builds the Observer the environment describes: nil (and no error) when GOJIBERRY_OBS is not
-// on, in which case nothing is read, started or sent. It checks the whole configuration at once, so a
-// deployment fails at start. The caller closes the Observer at shutdown (Observer.Close flushes).
-// getenv is os.Getenv in production.
 func FromEnv(ctx context.Context, getenv func(string) string) (*Observer, Config, error) {
 	return fromEnv(ctx, getenv, os.ReadFile, ServiceName)
 }
 
-// FromEnvFor is FromEnv for another server of the project: service is the name the sinks report it as
-// (for example "gojiberry-fontserver").
 func FromEnvFor(ctx context.Context, getenv func(string) string, service string) (*Observer, Config, error) {
 	return fromEnv(ctx, getenv, os.ReadFile, service)
 }
@@ -202,9 +185,6 @@ func fromEnv(ctx context.Context, getenv func(string) string, readFile func(stri
 	return o, c, nil
 }
 
-// ReadSecret reads a secret that has two forms, NAME with the value and NAME_FILE with the path of a
-// file that holds it (the convention of docs/configuration.md; giving both is an error). Errors name
-// the variable and never the value.
 func ReadSecret(env SinkEnv, name string) (string, error) {
 	v := strings.TrimSpace(env.Getenv(name))
 	f := strings.TrimSpace(env.Getenv(name + "_FILE"))
