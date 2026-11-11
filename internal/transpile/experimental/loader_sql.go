@@ -13,10 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/transpile"
 )
 
-// sqlcConfig is the subset of sqlc's v2 config format (sqlc.yaml/
-// sqlc.json) this loader needs: where the first `sql:` entry's
-// generated Go package lands, so xango can derive the Go import path
-// for it. See https://docs.sqlc.dev/en/latest/reference/config.html.
 type sqlcConfig struct {
 	SQL []struct {
 		Gen struct {
@@ -28,21 +24,6 @@ type sqlcConfig struct {
 	} `yaml:"sql" json:"sql"`
 }
 
-// LoadSQL generates typed Go bindings for a .sql file by shelling out
-// to the real sqlc toolchain (xango does not reimplement sqlc's query
-// analysis or codegen). Unlike proto/capnp, sqlc's own config
-// (sqlc.yaml/sqlc.json, which pairs queries with a schema and controls
-// output location) already fully owns this file's meaning -- xango
-// doesn't try to generate or validate that config, only locate it,
-// invoke `sqlc generate`, and derive the resulting Go import path from
-// its `gen.go.package`/`out` fields, then rewrite the import to point
-// at it, the same "orchestrate the real tool, don't re-implement it"
-// approach as the proto/capnp loaders.
-//
-// xango does not verify the sqlc config actually lists this specific
-// .sql file among its query sources (that would mean re-implementing
-// sqlc's own config resolution); it just requires a config to exist
-// somewhere above the file and trusts it's the right one.
 func LoadSQL(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 	abs, err := transpile.ResolveResourcePath(in)
 	if err != nil {
@@ -88,8 +69,6 @@ func LoadSQL(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 	return transpile.LoaderResult{ImportPath: modulePath + "/" + filepath.ToSlash(rel)}, nil
 }
 
-// findSqlcConfig walks up from startDir looking for a sqlc project
-// config file.
 func findSqlcConfig(startDir string) (string, error) {
 	dir := startDir
 	for {

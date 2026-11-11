@@ -9,16 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/transpile"
 )
 
-// loadProto generates Go bindings for a .proto file by shelling out to
-// the real protoc/protoc-gen-go toolchain (xango does not reimplement a
-// protobuf compiler) and rewrites the import to point at the result.
-//
-// protoc-gen-go requires knowing the target Go import path for a
-// .proto file; rather than requiring the .proto to declare its own
-// `option go_package`, xango tells protoc directly via the `-M` file
-// mapping flag (a real, documented protoc-gen-go option) that this
-// file's output belongs at <module>/internal/xggen/proto/<alias>, so
-// xango -- not the .proto author -- controls where generated code lands.
 func LoadProto(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 	abs, err := transpile.ResolveResourcePath(in)
 	if err != nil {
