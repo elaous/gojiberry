@@ -9,18 +9,16 @@ import (
 	"time"
 )
 
-// expiryRecord is what is known about a document's life: the deadline ("expiry:<id>", one line)
-// and when the document was created ("expiry-created:<id>"; zero when unknown: a record written
-// by an older build, or by hand).
+// expiryRecord is what is known about a document's deadline.
 type expiryRecord struct {
 	deadline time.Time
 	created  time.Time
 }
 
-// errBadRecord marks a deadline record that cannot be parsed.
+// errBadRecord marks an unreadable deadline record.
 var errBadRecord = errors.New("docstore: unreadable expiry record")
 
-// deadlineBytes is the body of "expiry:<id>": the deadline alone, the only format older builds read.
+// deadlineBytes is the body of an expiry record.
 func (r expiryRecord) deadlineBytes() []byte {
 	return []byte(r.deadline.UTC().Format(time.RFC3339Nano))
 }
@@ -29,9 +27,7 @@ func (r expiryRecord) createdBytes() []byte {
 	return []byte(r.created.UTC().Format(time.RFC3339Nano))
 }
 
-// parseRecord reads a deadline record. The first line is the deadline. A second line (written by
-// a pre-release build that kept the creation time there) is read as the creation time; it is
-// never written any more.
+// parseRecord reads a deadline record.
 func parseRecord(b []byte) (expiryRecord, error) {
 	first, rest, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
 	var r expiryRecord
@@ -41,16 +37,13 @@ func parseRecord(b []byte) (expiryRecord, error) {
 	}
 	if rest = strings.TrimSpace(rest); rest != "" {
 		if r.created, err = time.Parse(time.RFC3339Nano, rest); err != nil {
-			r.created = time.Time{} // the creation time is advisory: ignore a damaged one
+			r.created = time.Time{}
 		}
 	}
 	return r, nil
 }
 
-// readRecordFull returns the stored record of id. A deadline record that cannot be parsed is
-// logged (once per id) and counts as absent: one damaged record must never fail the Load or Save
-// of its document, nor abort a sweep; the next write of the document replaces it, and the first
-// sweep adopts a document that has none.
+// readRecordFull returns the stored record and its digest.
 func (e *ExpiringAdapter) readRecordFull(ctx context.Context, id string) (expiryRecord, bool, error) {
 	d, err := e.Inner.Load(ctx, ExpiryPrefix+id)
 	if errors.Is(err, ErrNotFound) {
@@ -74,7 +67,7 @@ func (e *ExpiringAdapter) readRecordFull(ctx context.Context, id string) (expiry
 	return r, true, nil
 }
 
-// noteBadRecord logs an unreadable deadline record once per id.
+// noteBadRecord logs an unreadable deadline record.
 func (e *ExpiringAdapter) noteBadRecord(id string, err error) {
 	e.badMu.Lock()
 	if e.bad == nil {
@@ -90,7 +83,7 @@ func (e *ExpiringAdapter) noteBadRecord(id string, err error) {
 	}
 }
 
-// readRecord returns the instant document id expires (its deadline, with MaxAge applied).
+// readRecord returns the instant a document expires.
 func (e *ExpiringAdapter) readRecord(ctx context.Context, id string) (time.Time, bool, error) {
 	r, ok, err := e.readRecordFull(ctx, id)
 	if err != nil || !ok {
@@ -99,9 +92,7 @@ func (e *ExpiringAdapter) readRecord(ctx context.Context, id string) (time.Time,
 	return e.effective(r), true, nil
 }
 
-// writeRecord stores r: the creation time first (only when it is known), then the deadline, so a
-// crash between the two leaves a deadline record with its old or no creation time, never the
-// reverse. A record without a creation time removes a stale sibling.
+// writeRecord stores r with its creation time.
 func (e *ExpiringAdapter) writeRecord(ctx context.Context, id string, r expiryRecord) error {
 	defer e.invalidate()
 	if r.created.IsZero() {
@@ -114,15 +105,13 @@ func (e *ExpiringAdapter) writeRecord(ctx context.Context, id string, r expiryRe
 	return e.Inner.Save(ctx, ExpiryPrefix+id, r.deadlineBytes())
 }
 
-// writeDeadline rewrites the deadline record only (the creation time is unchanged).
+// writeDeadline rewrites the deadline of a record.
 func (e *ExpiringAdapter) writeDeadline(ctx context.Context, id string, deadline time.Time) error {
 	defer e.invalidate()
 	return e.Inner.Save(ctx, ExpiryPrefix+id, expiryRecord{deadline: deadline}.deadlineBytes())
 }
 
-// deleteRecord removes the creation time first and the deadline record last: a crash in between
-// leaves the deadline record, so the next sweep finishes, and a creation time can never outlive
-// its deadline record to be inherited by a new document (a new record always writes its own).
+// deleteRecord removes the creation record.
 func (e *ExpiringAdapter) deleteRecord(ctx context.Context, id string) error {
 	defer e.invalidate()
 	if err := e.Inner.Delete(ctx, ExpiryCreatedPrefix+id); err != nil && !errors.Is(err, ErrNotFound) {
@@ -149,21 +138,20 @@ func (e *ExpiringAdapter) Expiry(ctx context.Context, id string) (time.Time, boo
 	return t, true, nil
 }
 
-// invalidate drops the cached deadlines (a record is about to change or has changed).
+// invalidate drops the cached deadlines.
 func (e *ExpiringAdapter) invalidate() {
 	e.cacheMu.Lock()
 	e.cache, e.cacheGen = nil, e.cacheGen+1
 	e.cacheMu.Unlock()
 }
 
-// readDeadlines reads every deadline record: one listing and one Load per record.
+// readDeadlines reads every deadline record.
 func (e *ExpiringAdapter) readDeadlines(ctx context.Context) (map[string]time.Time, error) {
 	out, _, err := e.readDeadlinesBad(ctx)
 	return out, err
 }
 
-// readDeadlinesBad is readDeadlines that also returns the ids whose record is unreadable: they
-// are skipped (logged once), never an error, so one damaged record cannot abort a sweep.
+// readDeadlinesBad is readDeadlines that also reports bad records.
 func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]time.Time, bad []string, err error) {
 	recs, err := ListPrefix(ctx, e.Inner, ExpiryPrefix)
 	if err != nil {
@@ -179,16 +167,13 @@ func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]
 		if ok {
 			out[id] = t
 		} else {
-			bad = append(bad, id) // listed but unreadable (or deleted since the listing)
+			bad = append(bad, id)
 		}
 	}
 	return out, bad, nil
 }
 
-// healBad repairs the records readDeadlinesBad could not read, under the lock and after
-// re-reading: a record whose document exists gets a fresh full lifetime (the same grace adoption
-// gives), one with no document is deleted. Without it a document with a damaged record would
-// never expire.
+// healBad repairs the records readDeadlinesBad reported.
 func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	var first error
 	for _, id := range bad {
@@ -198,7 +183,7 @@ func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 		e.mu.Lock()
 		err := func() error {
 			if _, ok, err := e.readRecordFull(ctx, id); err != nil || ok {
-				return err // fine now (written since), or the store failed
+				return err
 			}
 			if _, err := e.Inner.Load(ctx, ExpiryPrefix+id); errors.Is(err, ErrNotFound) {
 				return nil // deleted since the listing
@@ -226,8 +211,7 @@ func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	return first
 }
 
-// deadlines returns the deadlines for a listing: the cached copy while it is fresh. The map is
-// shared and must not be modified.
+// deadlines returns the deadlines found under a prefix.
 func (e *ExpiringAdapter) deadlines(ctx context.Context) (map[string]time.Time, error) {
 	ttl := e.DeadlineCacheTTL
 	if ttl == 0 {
@@ -253,9 +237,7 @@ func (e *ExpiringAdapter) deadlines(ctx context.Context) (map[string]time.Time, 
 	return m, nil
 }
 
-// Expiries implements Expirer, from the cache described on ExpiringAdapter. Documents already
-// past their deadline are included, since they are what the next Sweep deletes; List and Load
-// already hide them.
+// Expiries implements Expirer from the stored records.
 func (e *ExpiringAdapter) Expiries(ctx context.Context) (map[string]time.Time, error) {
 	m, err := e.deadlines(ctx)
 	if err != nil {

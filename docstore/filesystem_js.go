@@ -11,31 +11,17 @@ import (
 	"time"
 )
 
-// FileSystemAdapter keeps documents as files in a folder of the person's own computer, through
-// the browser's File System Access API (Chrome, Edge and Opera; see FileSystemSupported). The
-// person chooses the folder once (PickFolder); the handle is remembered in IndexedDB
-// (Remember, RestoreFolder) so the next visit finds the same folder again. Permission is the
-// browser's to give: after a restart it has to be asked for again with a click
-// (FileSystemAdapter.Request), and Permission says where it stands. The page can be served
-// from any static host over HTTPS (or localhost): no server of ours is involved.
-//
-// Files are named as LocalFSAdapter names them (the ID, base64url-encoded), so the same folder
-// can be opened by the Go tools (docsh -store files:DIR) and by the server. A file is written
-// through a writable stream that replaces the old file when closed, so a write is whole or not
-// there. The same adapter works on the browser's origin-private file system (OriginPrivate),
-// which needs no picker, in every current browser, but is not a folder the person can see.
+// FileSystemAdapter keeps documents as files in a folder.
 type FileSystemAdapter struct {
 	dir     js.Value
 	name    string
 	private bool // the origin-private file system
 }
 
-// FileSystemSupported says whether the browser can let the person choose a folder.
+// FileSystemSupported says whether the browser can pick folders.
 func FileSystemSupported() bool { return js.Global().Get("showDirectoryPicker").Truthy() }
 
-// PickFolder asks the person to choose a folder to save in (the browser shows its own picker).
-// It must be called from a click or key press. A cancelled picker is an error satisfying
-// errors.Is(err, ErrPickCancelled).
+// PickFolder asks the person to choose a folder.
 func PickFolder(ctx context.Context) (*FileSystemAdapter, error) {
 	if !FileSystemSupported() {
 		return nil, errors.New("docstore: this browser cannot save to a folder you choose (try Chrome or Edge), or use the browser's own storage")
@@ -54,11 +40,10 @@ func PickFolder(ctx context.Context) (*FileSystemAdapter, error) {
 	return &FileSystemAdapter{dir: h, name: h.Get("name").String()}, nil
 }
 
-// ErrPickCancelled is returned by PickFolder when the person closed the picker.
+// ErrPickCancelled is returned by PickFolder when cancelled.
 var ErrPickCancelled = errors.New("docstore: no folder was chosen")
 
-// OriginPrivate is the browser's private file system for this site: files in a real file
-// system the person cannot browse, with nothing to pick or allow.
+// OriginPrivate is the browser's private file storage.
 func OriginPrivate(ctx context.Context) (*FileSystemAdapter, error) {
 	storage := js.Global().Get("navigator").Get("storage")
 	if !storage.Truthy() || !storage.Get("getDirectory").Truthy() {
@@ -74,8 +59,7 @@ func OriginPrivate(ctx context.Context) (*FileSystemAdapter, error) {
 // Name is the folder's name, to show.
 func (a *FileSystemAdapter) Name() string { return a.name }
 
-// Permission says where the browser's permission to write the folder stands: "granted",
-// "prompt" (ask with Request, from a click) or "denied".
+// Permission says whether the folder can be written.
 func (a *FileSystemAdapter) Permission(ctx context.Context) string {
 	v, err := jsAwait(ctx, a.dir, "queryPermission", fsMode())
 	if err != nil || !v.Truthy() {
@@ -84,7 +68,7 @@ func (a *FileSystemAdapter) Permission(ctx context.Context) string {
 	return v.String()
 }
 
-// Request asks for the permission back (the browser may show a prompt). Call it from a click.
+// Request asks for the permission back.
 func (a *FileSystemAdapter) Request(ctx context.Context) (granted bool, err error) {
 	v, err := jsAwait(ctx, a.dir, "requestPermission", fsMode())
 	if err != nil {
@@ -151,7 +135,7 @@ func idbRequest(ctx context.Context, req js.Value) (js.Value, error) {
 	}
 }
 
-// Remember keeps the folder under key, so RestoreFolder finds it on a later visit.
+// Remember keeps the folder under key.
 func (a *FileSystemAdapter) Remember(ctx context.Context, key string) error {
 	db, err := openFSDB(ctx)
 	if err != nil {
@@ -165,8 +149,7 @@ func (a *FileSystemAdapter) Remember(ctx context.Context, key string) error {
 	return nil
 }
 
-// RestoreFolder finds the folder remembered under key; ok is false if there is none. The
-// permission may have lapsed: check Permission and, from a click, Request.
+// RestoreFolder finds the folder remembered under key.
 func RestoreFolder(ctx context.Context, key string) (a *FileSystemAdapter, ok bool, err error) {
 	db, err := openFSDB(ctx)
 	if err != nil {
@@ -180,7 +163,7 @@ func RestoreFolder(ctx context.Context, key string) (a *FileSystemAdapter, ok bo
 	return &FileSystemAdapter{dir: v, name: v.Get("name").String()}, true, nil
 }
 
-// Forget drops the folder remembered under key (the files stay where they are).
+// Forget drops the folder remembered under key.
 func ForgetFolder(ctx context.Context, key string) error {
 	db, err := openFSDB(ctx)
 	if err != nil {
@@ -195,8 +178,7 @@ func ForgetFolder(ctx context.Context, key string) error {
 
 func fsName(id string) string { return base64.RawURLEncoding.EncodeToString([]byte(id)) }
 
-// fsWrap maps a browser error to the docstore errors. Reading and writing are told apart in
-// the words used for a refused permission; either one satisfies errors.Is(err, ErrPermission).
+// fsWrap maps a browser error to a Go error.
 func fsWrap(err error, writing bool) error {
 	var je *jsError
 	if errors.As(err, &je) {
@@ -215,7 +197,7 @@ func fsWrap(err error, writing bool) error {
 	return err
 }
 
-// abortWritable gives up a writable stream, whatever state the caller's context is in.
+// abortWritable gives up a writable stream.
 func abortWritable(w js.Value) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -237,8 +219,8 @@ func (a *FileSystemAdapter) write(ctx context.Context, id string, data []byte) e
 		abortWritable(w)
 		return fsWrap(err, true)
 	}
-	if _, err := jsAwait(ctx, w, "close"); err != nil { // the old file is replaced here, whole
-		abortWritable(w) // a failed or cancelled close leaves no half-written swap file behind
+	if _, err := jsAwait(ctx, w, "close"); err != nil {
+		abortWritable(w)
 		return fsWrap(err, true)
 	}
 	return nil
@@ -295,12 +277,12 @@ func (a *FileSystemAdapter) List(ctx context.Context) ([]Meta, error) {
 		}
 		raw, derr := base64.RawURLEncoding.DecodeString(h.Get("name").String())
 		if derr != nil {
-			continue // not one of ours
+			continue
 		}
 		f, err := jsAwait(ctx, h, "getFile")
 		if err != nil {
 			if werr := fsWrap(err, false); errors.Is(werr, ErrPermission) {
-				return nil, werr // not allowed is not "gone": do not report a shorter list
+				return nil, werr
 			}
 			continue // gone since the listing
 		}
@@ -317,10 +299,7 @@ func (a *FileSystemAdapter) Delete(ctx context.Context, id string) error {
 	return fsWrap(err, true)
 }
 
-// SaveIf implements ConditionalAdapter: the check and the write are made under a Web Lock shared
-// by every tab of the origin that has this folder open (by its name), and the write is read
-// back, as BrowserAdapter does. Another program writing the same folder at that moment is not
-// excluded by anything the browser offers; the read-back catches most of it.
+// SaveIf implements ConditionalAdapter.
 func (a *FileSystemAdapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
 	release, err := webLock(ctx, "gojiberry-fs:"+a.name+"#cas")
 	if err != nil {
@@ -346,18 +325,16 @@ func (a *FileSystemAdapter) SaveIf(ctx context.Context, id string, data []byte, 
 	back, _, err := a.read(ctx, id)
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return ErrConflict // removed by someone else since the write
+		return ErrConflict
 	case err != nil:
-		return err // not allowed, or unreadable: not a conflict
+		return err
 	case Digest(back) != Digest(data):
 		return ErrConflict
 	}
 	return nil
 }
 
-// Usage implements QuotaReporter for the origin-private file system, whose room is the
-// browser's storage quota of the site. For a folder the person chose the browser does not
-// say how much room the disk has, so there is no answer.
+// Usage implements QuotaReporter for the folder.
 func (a *FileSystemAdapter) Usage(ctx context.Context) (Quota, error) {
 	if !a.private {
 		return Quota{}, errors.New("docstore: the browser does not report the free space of a chosen folder")
