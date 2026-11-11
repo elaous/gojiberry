@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package dom wraps browser DOM objects as typed Go values.
 package html
 
 import "syscall/js"

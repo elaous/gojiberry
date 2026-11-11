@@ -57,7 +57,6 @@ func (e *Element) OffsetLeft() int { return e.Element.Get("offsetLeft").Int() }
 // OffsetTop returns e's offset from its offset parent.
 func (e *Element) OffsetTop() int { return e.Element.Get("offsetTop").Int() }
 
-// rectFromJS converts a live DOMRect/DOMRectReadOnly js.Value into a Rect.
 func rectFromJS(r js.Value) Rect {
 	return Rect{
 		X: r.Get("x").Float(), Y: r.Get("y").Float(),

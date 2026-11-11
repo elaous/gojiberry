@@ -13,7 +13,6 @@ type MouseEvent struct {
 	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
 
-// Detail is the DOM's UIEvent.detail, the click count.
 func newMouseEvent(v js.Value) MouseEvent {
 	return MouseEvent{
 		Value:    v,

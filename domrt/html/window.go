@@ -11,10 +11,8 @@ type Window struct {
 	Window js.Value
 }
 
-// pendingTimers tracks outstanding timer callbacks by id.
 var pendingTimers = map[int]js.Func{}
 
-// pendingFrames tracks outstanding animation-frame callbacks by id.
 var pendingFrames = map[int]js.Func{}
 
 // SetTimeout runs fn once after delay milliseconds; returns its id.
@@ -138,7 +136,6 @@ func (w *Window) ClearAnimationFrame(id int) {
 	}
 }
 
-// releasePendingTimer releases id's entry in pendingTimers.
 func releasePendingTimer(id int) {
 	if cb, ok := pendingTimers[id]; ok {
 		delete(pendingTimers, id)

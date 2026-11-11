@@ -7,9 +7,9 @@ import "syscall/js"
 // JSError wraps an error surfaced from JavaScript.
 type JSError struct {
 	Message string
-	Source  string // the script's URL; "" for a rejection (there's no single throw site)
-	Line    int    // 1-based; 0 for a rejection
-	Column  int    // 1-based; 0 for a rejection
+	Source  string
+	Line    int // 1-based; 0 for a rejection
+	Column  int // 1-based; 0 for a rejection
 	Value   js.Value
 }
 
@@ -24,7 +24,6 @@ func (e *JSError) AsJSException() js.Value { return e.Value }
 
 // NewJSErrorFromEvent builds a JSError from an ErrorEvent.
 func NewJSErrorFromEvent(ev js.Value) *JSError {
-	// A plain Event has none of the ErrorEvent fields.
 	str := func(k string) string {
 		if v := ev.Get(k); v.Type() == js.TypeString {
 			return v.String()
@@ -51,7 +50,6 @@ func NewJSErrorFromEvent(ev js.Value) *JSError {
 	}
 }
 
-// jsErrorFromRejection builds a JSError from a rejection event.
 func jsErrorFromRejection(ev js.Value) *JSError {
 	reason := ev.Get("reason")
 	return &JSError{Message: messageFromValue(reason), Value: reason}

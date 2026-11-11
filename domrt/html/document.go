@@ -11,8 +11,6 @@ type Document struct {
 	Document js.Value
 }
 
-// wrapAll wraps a DOM collection (NodeList/HTMLCollection) as a
-// []Element.
 func wrapAll(v js.Value) []Element {
 	result := make([]Element, v.Length())
 	for i := range result {

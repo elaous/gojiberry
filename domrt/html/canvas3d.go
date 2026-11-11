@@ -31,12 +31,9 @@ func (c *Context3D) Call(method string, args ...any) js.Value {
 	return c.Context.Call(method, args...)
 }
 
-// constant reads a named constant from the live context.
 func (c *Context3D) constant(name string) int {
 	return c.Context.Get(name).Int()
 }
-
-// Constants used by the methods below.
 
 // ARRAY_BUFFER is the buffer target for vertex attribute data.
 func (c *Context3D) ARRAY_BUFFER() int { return c.constant("ARRAY_BUFFER") }
@@ -143,8 +140,6 @@ func (c *Context3D) TEXTURE_WRAP_S() int { return c.constant("TEXTURE_WRAP_S") }
 // TEXTURE_WRAP_T is the pname for vertical wrap.
 func (c *Context3D) TEXTURE_WRAP_T() int { return c.constant("TEXTURE_WRAP_T") }
 
-// -- Viewport / clearing --
-
 // Viewport sets the pixel rectangle that clip space maps to.
 func (c *Context3D) Viewport(x, y, width, height int) {
 	c.Context.Call("viewport", x, y, width, height)
@@ -163,8 +158,6 @@ func (c *Context3D) Enable(cap int) { c.Context.Call("enable", cap) }
 
 // Disable turns off a WebGL capability.
 func (c *Context3D) Disable(cap int) { c.Context.Call("disable", cap) }
-
-// -- Shaders / programs --
 
 // CreateShader allocates a shader of the given type.
 func (c *Context3D) CreateShader(shaderType int) js.Value {
@@ -247,7 +240,6 @@ func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, err
 	c.AttachShader(program, vs)
 	c.AttachShader(program, fs)
 	c.LinkProgram(program)
-	// The program keeps what it linked; shaders are not needed.
 	defer c.DeleteShader(vs)
 	defer c.DeleteShader(fs)
 	if !c.GetProgramParameter(program, c.LINK_STATUS()).Bool() {
@@ -261,8 +253,6 @@ func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, err
 type webglError struct{ msg string }
 
 func (e *webglError) Error() string { return e.msg }
-
-// -- Buffers --
 
 // CreateBuffer allocates a new buffer object.
 func (c *Context3D) CreateBuffer() js.Value { return c.Context.Call("createBuffer") }
@@ -289,8 +279,6 @@ func (c *Context3D) BufferDataUint16(target int, data []uint16, usage int) {
 	}
 	c.Context.Call("bufferData", target, jsArr, usage)
 }
-
-// -- Attributes / uniforms --
 
 // GetAttribLocation returns an attribute's location, or -1.
 func (c *Context3D) GetAttribLocation(program js.Value, name string) int {
@@ -340,8 +328,6 @@ func (c *Context3D) UniformMatrix4fv(loc js.Value, transpose bool, m [16]float32
 	c.Context.Call("uniformMatrix4fv", loc, transpose, jsArr)
 }
 
-// -- Textures --
-
 // CreateTexture allocates a new texture object.
 func (c *Context3D) CreateTexture() js.Value { return c.Context.Call("createTexture") }
 
@@ -362,8 +348,6 @@ func (c *Context3D) TexParameteri(target, pname, param int) {
 func (c *Context3D) TexImage2DElement(target, level, internalFormat int, format, texType int, source js.Value) {
 	c.Context.Call("texImage2D", target, level, internalFormat, format, texType, source)
 }
-
-// -- Drawing --
 
 // DrawArrays draws primitives from the bound buffers.
 func (c *Context3D) DrawArrays(mode, first, count int) {

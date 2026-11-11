@@ -66,8 +66,6 @@ func (c *Context2D) Call(method string, args ...any) js.Value {
 	return c.Context.Call(method, args...)
 }
 
-// -- Style/state properties --
-
 // FillStyle returns the color/gradient/pattern used by Fill/FillRect/FillText.
 func (c *Context2D) FillStyle() string { return c.Context.Get("fillStyle").String() }
 
@@ -137,8 +135,6 @@ func (c *Context2D) SetGlobalCompositeOperation(op string) {
 	c.Context.Set("globalCompositeOperation", op)
 }
 
-// -- Rectangles --
-
 // ClearRect clears the given rectangle to transparent black.
 func (c *Context2D) ClearRect(x, y, w, h float64) { c.Context.Call("clearRect", x, y, w, h) }
 
@@ -147,8 +143,6 @@ func (c *Context2D) FillRect(x, y, w, h float64) { c.Context.Call("fillRect", x,
 
 // StrokeRect outlines the given rectangle with the current stroke style.
 func (c *Context2D) StrokeRect(x, y, w, h float64) { c.Context.Call("strokeRect", x, y, w, h) }
-
-// -- Paths --
 
 // BeginPath starts a new path, discarding any current subpaths.
 func (c *Context2D) BeginPath() { c.Context.Call("beginPath") }
@@ -194,8 +188,6 @@ func (c *Context2D) Stroke() { c.Context.Call("stroke") }
 // Clip restricts drawing to the interior of the current path.
 func (c *Context2D) Clip() { c.Context.Call("clip") }
 
-// -- Text --
-
 // FillText draws filled text at (x, y).
 func (c *Context2D) FillText(text string, x, y float64) { c.Context.Call("fillText", text, x, y) }
 
@@ -206,8 +198,6 @@ func (c *Context2D) StrokeText(text string, x, y float64) { c.Context.Call("stro
 func (c *Context2D) MeasureTextWidth(text string) float64 {
 	return c.Context.Call("measureText", text).Get("width").Float()
 }
-
-// -- Images --
 
 // DrawImage draws an image at (dx, dy).
 func (c *Context2D) DrawImage(image js.Value, dx, dy float64) {
@@ -238,8 +228,6 @@ func (c *Context2D) GetImageData(x, y, w, h int) ImageData {
 	js.CopyBytesToGo(pix, arr)
 	return ImageData{Width: data.Get("width").Int(), Height: data.Get("height").Int(), Pix: pix}
 }
-
-// -- Transforms --
 
 // Save pushes the current drawing state onto a stack.
 func (c *Context2D) Save() { c.Context.Call("save") }

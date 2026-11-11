@@ -1,6 +1,5 @@
 package html // import "github.com/elaous/gojiberry/domrt/html"
 
-Package dom wraps browser DOM objects as typed Go values.
 
 TYPES
 
@@ -1026,9 +1025,9 @@ func (o *IntersectionObserver) Unobserve(el *Element)
 
 type JSError struct {
 	Message string
-	Source  string // the script's URL; "" for a rejection (there's no single throw site)
-	Line    int    // 1-based; 0 for a rejection
-	Column  int    // 1-based; 0 for a rejection
+	Source  string
+	Line    int // 1-based; 0 for a rejection
+	Column  int // 1-based; 0 for a rejection
 	Value   js.Value
 }
     JSError wraps an error surfaced from JavaScript.
