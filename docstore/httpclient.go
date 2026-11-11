@@ -207,7 +207,6 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
-		// The error carries the request URL.
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			ue.URL = RedactURL(ue.URL)
@@ -230,13 +229,11 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	return nil
 }
 
-// GoneHeader is set, with the value 1, on a gone answer.
 const GoneHeader = "X-Gojiberry-Gone"
 
 // ErrRenewUnsupported is returned by servers that lack renew.
 var ErrRenewUnsupported = errors.New("docstore: the server does not support renewals here")
 
-// isGoneAnswer reports whether a 404 is a gone answer.
 func isGoneAnswer(resp *http.Response) bool {
 	if resp.Header.Get(GoneHeader) != "1" {
 		return false

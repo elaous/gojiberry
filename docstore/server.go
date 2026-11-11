@@ -144,7 +144,6 @@ func ParseExpiryOrphansDefault(raw, graceRaw string, defaultOn bool) (on bool, g
 	return true, grace, nil
 }
 
-// publicOfferOn reports whether the public offer is enabled.
 func publicOfferOn(raw string) bool {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "true", "1", "on":
@@ -188,10 +187,8 @@ func ParseExpiryEnv(ttlRaw, sweepRaw string) (ttl, sweep time.Duration, err erro
 	return ttl, sweep, nil
 }
 
-// maxDocBytes is the largest document a PUT accepts.
 const maxDocBytes = 64 << 20
 
-// serverError answers a backend failure with 500 and logs it.
 func serverError(w http.ResponseWriter, err error) {
 	log.Printf("docstore: %v", err)
 	http.Error(w, "storage error", http.StatusInternalServerError)
@@ -206,45 +203,33 @@ func envOr(key, fallback string) string {
 
 // Server exposes an Adapter over HTTP.
 type Server struct {
-	adapter Adapter
-	backend string
-	auth    *auth.Manager
-	guard   guard.Guard
-	// requireACL closes documents that have no access list.
+	adapter    Adapter
+	backend    string
+	auth       *auth.Manager
+	guard      guard.Guard
 	requireACL bool
-	// extra are more routes mounted beside the document API.
-	extra  []extraRoute
-	hidden []string // lowercased (Hide)
-	// now is the clock used for share link deadlines.
-	now   func() time.Time
-	aclMu sync.Mutex
-	// telemetry holds the totals of usage reports.
-	telemetry *telemetry.Counters
-	// obs is operator observability, when enabled.
-	obs *observe.Observer
+	extra      []extraRoute
+	hidden     []string // lowercased (Hide)
+	now        func() time.Time
+	aclMu      sync.Mutex
+	telemetry  *telemetry.Counters
+	obs        *observe.Observer
 
-	// auditLog and auditKey are the operator's audit log.
-	auditLog *audit.Logger
-	auditKey []byte
-	// usage is the bounded series of usage samples.
-	usage      usageSeries
-	usageOnce  sync.Once   // the stored series is read into usage on first use
-	sampling   atomic.Bool // RunUsageSampling is running (a second call returns at once)
-	usageClock func() time.Time
-	// docsClosed answers 404 to the generic document routes.
-	docsClosed bool
-	// directory is the key directory behind the directory routes.
+	auditLog        *audit.Logger
+	auditKey        []byte
+	usage           usageSeries
+	usageOnce       sync.Once   // the stored series is read into usage on first use
+	sampling        atomic.Bool // RunUsageSampling is running (a second call returns at once)
+	usageClock      func() time.Time
+	docsClosed      bool
 	directory       DirectoryService
 	dirLimitFactory LimiterFactory
 	dirLimitOnce    sync.Once
 	dirLimits       *directoryLimits
 	dirPolicy       DirectoryPolicy
-	// dirDomainBudget makes the whole-domain budget.
 	dirDomainBudget bool
-	// dirAdmin says a request comes from an operator.
-	dirAdmin func(*http.Request) bool
-	// dirClientIP names the client of a directory request.
-	dirClientIP func(*http.Request) string
+	dirAdmin        func(*http.Request) bool
+	dirClientIP     func(*http.Request) string
 }
 
 type extraRoute struct {
@@ -293,7 +278,6 @@ func (s *Server) WithExpiry(e *ExpiringAdapter) *Server {
 	return s
 }
 
-// setExpires adds the X-Gojiberry-Expires header.
 func (s *Server) setExpires(w http.ResponseWriter, r *http.Request, id string) {
 	if x, ok := s.adapter.(Expirer); ok {
 		if t, has, err := x.Expiry(r.Context(), id); err == nil && has {
@@ -302,7 +286,6 @@ func (s *Server) setExpires(w http.ResponseWriter, r *http.Request, id string) {
 	}
 }
 
-// listItem is one entry of the GET /docs list.
 type listItem struct {
 	Meta
 	Expires *time.Time `json:"expires,omitempty"`
@@ -331,7 +314,6 @@ func (s *Server) DocsClosed() bool {
 	return s.docsClosed || (s.requireACL && s.auth != nil)
 }
 
-// reserved says an id is not for people to use.
 func (s *Server) reserved(id string) bool {
 	if isReservedDocID(id) {
 		return true
@@ -431,10 +413,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// readyTimeout is how long /ready waits for the store.
 const readyTimeout = 3 * time.Second
 
-// handleReady answers whether this server can serve.
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -456,7 +436,6 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ready": ready})
 }
 
-// usageResponse is what GET /admin/usage returns.
 type usageResponse struct {
 	Documents int           `json:"documents"`
 	Records   int           `json:"records"`
@@ -467,7 +446,6 @@ type usageResponse struct {
 	Telemetry *telemetry.Totals `json:"telemetry,omitempty"`
 }
 
-// handleUsage serves GET /admin/usage to operators.
 func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -492,14 +470,12 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// quotaResponse is handleQuota's JSON shape.
 type quotaResponse struct {
 	Available bool  `json:"available"`
 	Used      int64 `json:"used,omitempty"`
 	Total     int64 `json:"total,omitempty"`
 }
 
-// handleQuota reports the server's configured quota.
 func (s *Server) handleQuota(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -531,7 +507,6 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	// Filter out the reserved ACL keyspace.
 	var deadlines map[string]time.Time
 	if x, ok := s.adapter.(Expirer); ok {
 		deadlines, _ = x.Expiries(r.Context())
@@ -681,13 +656,11 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// idEndsInRoute reports whether the request path ends in a route.
 func idEndsInRoute(r *http.Request) bool {
 	ep := strings.ToLower(r.URL.EscapedPath())
 	return strings.HasSuffix(ep, "%2frenew") || strings.HasSuffix(ep, "%2facl")
 }
 
-// handleRenew serves POST /docs/{id}/renew.
 func (s *Server) handleRenew(w http.ResponseWriter, r *http.Request, id string) {
 	if id == "" || s.reserved(id) {
 		http.Error(w, "missing or invalid document id", http.StatusBadRequest)

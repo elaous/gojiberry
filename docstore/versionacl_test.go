@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The history of a shared document follows the document's access list: a viewer reads it and writes nothing, an
-// editor adds and deletes versions, a stranger does nothing, and a history of an unshared document is as before.
 func TestVersionHistoryFollowsTheDocumentsAccessList(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
@@ -26,7 +24,6 @@ func TestVersionHistoryFollowsTheDocumentsAccessList(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	// the owner saves "plan.open" (the saver's id is "plan") and shares it
 	if do("owner", "PUT", "/docs/plan.open", "v1") != http.StatusNoContent {
 		t.Fatal("save")
 	}
@@ -57,15 +54,12 @@ func TestVersionHistoryFollowsTheDocumentsAccessList(t *testing.T) {
 			t.Errorf("%s %s %s = %d, want %d", c.who, c.method, c.path, got, c.want)
 		}
 	}
-	// A history whose document has no access list is decided as an unshared key is (closed to a stranger here only
-	// because the first writer would own it): nothing changes for it. The stranger becomes the owner of their key.
 	if got := do("stranger", "PUT", "/docs/versions/nobody/1.open", "x"); got != http.StatusNoContent {
 		t.Errorf("an unshared history: %d", got)
 	}
 	if got := do("owner", "GET", "/docs/versions/nobody/1.open", ""); got != http.StatusForbidden {
 		t.Errorf("and it stays its owner's: %d", got)
 	}
-	// Keys that only look like histories are not.
 	for _, k := range []string{"versions/plan", "versions//x", "versions/plan/a/b", "versions/plan/.."} {
 		if _, ok := versionDocID(k); ok {
 			t.Errorf("%q is not a version key", k)

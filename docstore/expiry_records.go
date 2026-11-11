@@ -9,16 +9,13 @@ import (
 	"time"
 )
 
-// expiryRecord is what is known about a document's deadline.
 type expiryRecord struct {
 	deadline time.Time
 	created  time.Time
 }
 
-// errBadRecord marks an unreadable deadline record.
 var errBadRecord = errors.New("docstore: unreadable expiry record")
 
-// deadlineBytes is the body of an expiry record.
 func (r expiryRecord) deadlineBytes() []byte {
 	return []byte(r.deadline.UTC().Format(time.RFC3339Nano))
 }
@@ -27,7 +24,6 @@ func (r expiryRecord) createdBytes() []byte {
 	return []byte(r.created.UTC().Format(time.RFC3339Nano))
 }
 
-// parseRecord reads a deadline record.
 func parseRecord(b []byte) (expiryRecord, error) {
 	first, rest, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
 	var r expiryRecord
@@ -43,7 +39,6 @@ func parseRecord(b []byte) (expiryRecord, error) {
 	return r, nil
 }
 
-// readRecordFull returns the stored record and its digest.
 func (e *ExpiringAdapter) readRecordFull(ctx context.Context, id string) (expiryRecord, bool, error) {
 	d, err := e.Inner.Load(ctx, ExpiryPrefix+id)
 	if errors.Is(err, ErrNotFound) {
@@ -67,7 +62,6 @@ func (e *ExpiringAdapter) readRecordFull(ctx context.Context, id string) (expiry
 	return r, true, nil
 }
 
-// noteBadRecord logs an unreadable deadline record.
 func (e *ExpiringAdapter) noteBadRecord(id string, err error) {
 	e.badMu.Lock()
 	if e.bad == nil {
@@ -83,7 +77,6 @@ func (e *ExpiringAdapter) noteBadRecord(id string, err error) {
 	}
 }
 
-// readRecord returns the instant a document expires.
 func (e *ExpiringAdapter) readRecord(ctx context.Context, id string) (time.Time, bool, error) {
 	r, ok, err := e.readRecordFull(ctx, id)
 	if err != nil || !ok {
@@ -92,7 +85,6 @@ func (e *ExpiringAdapter) readRecord(ctx context.Context, id string) (time.Time,
 	return e.effective(r), true, nil
 }
 
-// writeRecord stores r with its creation time.
 func (e *ExpiringAdapter) writeRecord(ctx context.Context, id string, r expiryRecord) error {
 	defer e.invalidate()
 	if r.created.IsZero() {
@@ -105,13 +97,11 @@ func (e *ExpiringAdapter) writeRecord(ctx context.Context, id string, r expiryRe
 	return e.Inner.Save(ctx, ExpiryPrefix+id, r.deadlineBytes())
 }
 
-// writeDeadline rewrites the deadline of a record.
 func (e *ExpiringAdapter) writeDeadline(ctx context.Context, id string, deadline time.Time) error {
 	defer e.invalidate()
 	return e.Inner.Save(ctx, ExpiryPrefix+id, expiryRecord{deadline: deadline}.deadlineBytes())
 }
 
-// deleteRecord removes the creation record.
 func (e *ExpiringAdapter) deleteRecord(ctx context.Context, id string) error {
 	defer e.invalidate()
 	if err := e.Inner.Delete(ctx, ExpiryCreatedPrefix+id); err != nil && !errors.Is(err, ErrNotFound) {
@@ -123,7 +113,6 @@ func (e *ExpiringAdapter) deleteRecord(ctx context.Context, id string) error {
 	return nil
 }
 
-// expired reports whether a record's deadline has passed.
 func (e *ExpiringAdapter) expired(t time.Time) bool { return !e.now().Before(t) }
 
 // Expiry implements Expirer.
@@ -138,20 +127,17 @@ func (e *ExpiringAdapter) Expiry(ctx context.Context, id string) (time.Time, boo
 	return t, true, nil
 }
 
-// invalidate drops the cached deadlines.
 func (e *ExpiringAdapter) invalidate() {
 	e.cacheMu.Lock()
 	e.cache, e.cacheGen = nil, e.cacheGen+1
 	e.cacheMu.Unlock()
 }
 
-// readDeadlines reads every deadline record.
 func (e *ExpiringAdapter) readDeadlines(ctx context.Context) (map[string]time.Time, error) {
 	out, _, err := e.readDeadlinesBad(ctx)
 	return out, err
 }
 
-// readDeadlinesBad is readDeadlines that also reports bad records.
 func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]time.Time, bad []string, err error) {
 	recs, err := ListPrefix(ctx, e.Inner, ExpiryPrefix)
 	if err != nil {
@@ -173,7 +159,6 @@ func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]
 	return out, bad, nil
 }
 
-// healBad repairs the records readDeadlinesBad reported.
 func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	var first error
 	for _, id := range bad {
@@ -211,7 +196,6 @@ func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	return first
 }
 
-// deadlines returns the deadlines found under a prefix.
 func (e *ExpiringAdapter) deadlines(ctx context.Context) (map[string]time.Time, error) {
 	ttl := e.DeadlineCacheTTL
 	if ttl == 0 {

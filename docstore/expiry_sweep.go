@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// adopt gives every document without a deadline one.
 func (e *ExpiringAdapter) adopt(ctx context.Context) error {
 	e.mu.Lock()
 	done := e.adopted
@@ -124,7 +123,6 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 	return deleted, first
 }
 
-// sweepCreated deletes creation records of expired documents.
 func (e *ExpiringAdapter) sweepCreated(ctx context.Context) error {
 	metas, err := ListPrefix(ctx, e.Inner, ExpiryCreatedPrefix)
 	if err != nil {
@@ -182,7 +180,6 @@ func (c collabOrphans) Expired(updated, now time.Time, ttl time.Duration) bool {
 	return !updated.IsZero() && now.Sub(updated) > ttl+c.grace
 }
 
-// hasLiveDocument reports whether a live document owns the entry.
 func (e *ExpiringAdapter) hasLiveDocument(ctx context.Context, id string) (bool, error) {
 	metas, err := ListPrefix(ctx, e.Inner, id)
 	if err != nil {
@@ -203,7 +200,6 @@ func (e *ExpiringAdapter) hasLiveDocument(ctx context.Context, id string) (bool,
 	return false, nil
 }
 
-// sweepOrphans deletes the entries OrphanPolicy finds.
 func (e *ExpiringAdapter) sweepOrphans(ctx context.Context) (deleted int, first error) {
 	prefix := e.Orphans.Prefix()
 	metas, err := ListPrefix(ctx, e.Inner, prefix)
@@ -234,7 +230,6 @@ func (e *ExpiringAdapter) sweepOrphans(ctx context.Context) (deleted int, first 
 	return deleted, first
 }
 
-// dropOrphan re-checks under the lock, then deletes.
 func (e *ExpiringAdapter) dropOrphan(ctx context.Context, prefix, id string, ttl time.Duration) (bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

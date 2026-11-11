@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// The per-user configuration keyspace is reserved.
 func TestConfigKeyspaceIsRefusedByTheDocumentAPI(t *testing.T) {
 	srv := newTestServer()
 	h := srv.Handler()

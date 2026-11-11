@@ -13,7 +13,6 @@ import (
 	"testing"
 )
 
-// plain hides every optional method of a store.
 type plain struct{ Adapter }
 
 func conditionalAdapters(t *testing.T) map[string]ConditionalAdapter {
@@ -36,7 +35,6 @@ func conditionalAdapters(t *testing.T) map[string]ConditionalAdapter {
 func TestSaveIfOnlySavesWhatWasRead(t *testing.T) {
 	ctx := context.Background()
 	for name, a := range conditionalAdapters(t) {
-		// A new document has prev "".
 		if err := a.SaveIf(ctx, "x", []byte("one"), ""); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

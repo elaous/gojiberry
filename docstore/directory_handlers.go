@@ -34,7 +34,6 @@ func (s *Server) directoryPublisher(w http.ResponseWriter, r *http.Request) (aut
 	return u, true
 }
 
-// directoryError maps a DirectoryService error to an HTTP answer.
 func directoryError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrDirectoryRefused):
@@ -154,7 +153,6 @@ func DirectoryFingerprintSegment(fp string) string {
 	return strings.NewReplacer("/", "_", "+", "-", ":", "-").Replace(fp)
 }
 
-// handleRevoke serves the revoke route.
 func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -215,7 +213,6 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// readBudget spends the budgets of a log read.
 func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User, kind readKind) bool {
 	lim := s.limits()
 	all := "all"
@@ -238,7 +235,6 @@ func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User,
 	return true
 }
 
-// lookupShard picks the sub-budget for an address.
 func lookupShard(userID string) int {
 	h := fnv.New32a()
 	h.Write([]byte(userID))
@@ -292,7 +288,6 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// logReader is what the log routes need of a directory.
 func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	u, ok := s.directoryReader(w, r)
 	if !ok {
@@ -308,7 +303,6 @@ func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, b
 	return u, true
 }
 
-// handleLog serves GET /directory/log.
 func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -354,7 +348,6 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, l)
 }
 
-// handleOwnLog answers the log read of an owner.
 func (s *Server) handleOwnLog(w http.ResponseWriter, r *http.Request, u auth.User, since int64) {
 	f, ok := s.directory.(DirectoryLogFilterer)
 	if !ok {
@@ -382,7 +375,6 @@ func (s *Server) handleOwnLog(w http.ResponseWriter, r *http.Request, u auth.Use
 	writeJSONStatus(w, http.StatusOK, l)
 }
 
-// handleOperatorReset serves the operator reset route.
 func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -418,7 +410,6 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
-// handleUnmapped serves GET /admin/directory/unmapped.
 func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
@@ -449,7 +440,6 @@ func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, u)
 }
 
-// handleLogHead serves GET /directory/log/head.
 func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -466,7 +456,6 @@ func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, h)
 }
 
-// handleWitness serves POST /directory/witness.
 func (s *Server) handleWitness(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -492,7 +481,6 @@ func (s *Server) handleWitness(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleCosigned serves GET /directory/cosigned.
 func (s *Server) handleCosigned(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -517,7 +505,6 @@ func (s *Server) handleCosigned(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, c)
 }
 
-// handleLogAddress serves GET /directory/log/address.
 func (s *Server) handleLogAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

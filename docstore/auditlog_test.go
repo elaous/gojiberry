@@ -128,7 +128,6 @@ func TestAuditLogCountsExpiredDocumentsAndRefusedRequests(t *testing.T) {
 		t.Fatalf("events = %+v", es)
 	}
 
-	// A limiter that refuses logs the refusal.
 	buf.Reset()
 	f := AuditLimiters(func(string, float64, int) Limiter { return refuseAll{} }, l)
 	if ok, _ := f("dir-publish", 1, 1).Allow(context.Background(), "client-a"); ok {
@@ -162,7 +161,6 @@ func TestAuditLogRecordsOwnerKeyEvents(t *testing.T) {
 	}
 }
 
-// A failed sign-in is logged as a refusal.
 func TestAuditLogRecordsFailedSignIns(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL)

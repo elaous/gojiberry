@@ -16,7 +16,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// Every keyspace constant must be listed as a system prefix.
 func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 	keys := map[string]string{
 		"docstore.ExpiryPrefix":          docstore.ExpiryPrefix + "x",
@@ -50,7 +49,6 @@ func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 	}
 }
 
-// irrelevantPrefixConstants are keyspaces outside the system list.
 var irrelevantPrefixConstants = map[string]string{
 	"cachePrefix":          "service-worker cache name",
 	"LWWKindPrefix":        "CRDT op kind",
@@ -61,7 +59,6 @@ var irrelevantPrefixConstants = map[string]string{
 
 var prefixConst = regexp.MustCompile(`(?m)^\s*(?:const\s+)?(\w*[Pp]refix\w*)\s*=\s*"([^"]*)"`)
 
-// TestSystemPrefixesCoverEveryPrefix checks the system prefixes.
 func TestSystemPrefixesCoverEveryPrefixConstant(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

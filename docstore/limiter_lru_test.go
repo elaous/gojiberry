@@ -7,21 +7,20 @@ import (
 	"time"
 )
 
-// At the table's capacity the least recently used key is dropped.
 func TestRateLimiterEvictsTheLeastRecentlyUsedKey(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0)
-	l := NewRateLimiter(0.0001, 1) // a token a week: nothing refills, so nothing counts as idle
+	l := NewRateLimiter(0.0001, 1)
 	l.Now = func() time.Time { return now }
 	for i := range maxBuckets {
 		if ok, _ := l.Allow(ctx, fmt.Sprintf("k%d", i)); !ok {
 			t.Fatalf("k%d refused", i)
 		}
 	}
-	if ok, _ := l.Allow(ctx, "k0"); ok { // k0 is used again: the most recent now, and still spent
+	if ok, _ := l.Allow(ctx, "k0"); ok {
 		t.Fatal("k0 was not spent")
 	}
-	if ok, _ := l.Allow(ctx, "new"); !ok { // the table is full: the least recently used (k1) is dropped
+	if ok, _ := l.Allow(ctx, "new"); !ok {
 		t.Fatal("new refused")
 	}
 	if ok, _ := l.Allow(ctx, "k0"); ok {
@@ -35,7 +34,6 @@ func TestRateLimiterEvictsTheLeastRecentlyUsedKey(t *testing.T) {
 	}
 }
 
-// A new key at capacity must not scan the table.
 func TestRateLimiterDoesNotScanTheTableForANewKey(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0)

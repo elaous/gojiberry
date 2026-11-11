@@ -12,12 +12,10 @@ func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 	return a.lock(ctx, "gojiberry-docstore:"+a.prefix)
 }
 
-// lock takes the Web Lock called name.
 func (a *BrowserAdapter) lock(ctx context.Context, name string) (func(), error) {
 	return webLock(ctx, name)
 }
 
-// webLock takes the Web Lock called name (see BrowserAdapter.Lock), for any adapter of the page.
 func webLock(ctx context.Context, name string) (func(), error) {
 	locks := js.Global().Get("navigator").Get("locks")
 	if !locks.Truthy() {
@@ -28,7 +26,6 @@ func webLock(ctx context.Context, name string) (func(), error) {
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
 		close(acquired)
-		// The lock is held until the returned promise settles.
 		var executor js.Func
 		executor = js.FuncOf(func(_ js.Value, p []js.Value) any {
 			resolve := p[0]

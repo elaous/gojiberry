@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Share links let people open a document through a secret link.
-
 // ShareHeader is the request header carrying a share token.
 const ShareHeader = "X-Gojiberry-Share"
 
@@ -27,7 +25,6 @@ const (
 	MaxLinks = 20
 )
 
-// Link is one share link as the access list stores it.
 type Link struct {
 	Role    Role      `json:"role"`
 	Created time.Time `json:"created"`
@@ -148,7 +145,6 @@ func (a ACL) WhoCanSee(now time.Time) []Viewer {
 	return append(out, links...)
 }
 
-// clock is the server's time source.
 func (s *Server) clock() time.Time {
 	if s.now != nil {
 		return s.now()

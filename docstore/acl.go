@@ -55,22 +55,17 @@ func (a ACL) RoleOfPerson(p user.Person) string {
 	return role
 }
 
-// canRead reports whether email may read the document.
 func (a ACL) canRead(p user.Person) bool { return a.RoleOfPerson(p) != "" }
 
-// canWrite reports whether email may modify the document.
 func (a ACL) canWrite(p user.Person) bool {
 	r := a.RoleOfPerson(p)
 	return r == user.Owner || r == user.Editor
 }
 
-// owns reports whether the person is the owner.
 func (a ACL) owns(p user.Person) bool { return a.RoleOfPerson(p) == user.Owner }
 
-// personOf is the signed-in user as the ACL sees them.
 func personOf(u auth.User) user.Person { return u.Person("") }
 
-// ownerKey is what an ACL records for an owner.
 func ownerKey(u auth.User) string {
 	if u.Email != "" {
 		return u.Email
@@ -78,14 +73,12 @@ func ownerKey(u auth.User) string {
 	return u.ID
 }
 
-// aclKeyPrefix marks the reserved key region of ACLs.
 const aclKeyPrefix = "acl:"
 
 func aclKey(id string) string {
 	return aclKeyPrefix + id
 }
 
-// loadACL returns a document's ACL, or ErrNotFound.
 func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	doc, err := s.adapter.Load(ctx, aclKey(id))
 	if err != nil {
@@ -95,7 +88,6 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	if err := json.Unmarshal(doc.Data, &acl); err != nil {
 		return ACL{}, err
 	}
-	// Grants are looked up by normalised address.
 	for k, v := range acl.Grants {
 		if n := NormalizeAddress(k); n != k {
 			delete(acl.Grants, k)
@@ -108,14 +100,11 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 			acl.Until[n] = v
 		}
 	}
-	// A grant that has ended opens nothing.
 	return acl.Active(s.clock()), nil
 }
 
-// methodRenew is checkPermission's name for the renew route.
 const methodRenew = "RENEW"
 
-// checkPermission enforces a document's ACL, if any.
 func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bool, status int) {
 	if s.auth == nil {
 		return true, 0
@@ -125,7 +114,6 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	}
 	acl, err := s.loadACL(r.Context(), id)
 	if docID, isVersion := versionDocID(id); isVersion && errors.Is(err, ErrNotFound) {
-		// The history of a document follows the document's access.
 		var found bool
 		if acl, found, err = s.versionACL(r.Context(), docID); found {
 			err = nil
@@ -137,7 +125,6 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		if !s.requireACL {
 			return true, 0 // never shared this way: open
 		}
-		// With RequireACL, a document nobody owns is refused.
 		me, signedIn := s.auth.CurrentUser(r)
 		if !signedIn || ownerKey(me) == "" {
 			return false, http.StatusUnauthorized
@@ -153,7 +140,6 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		return true, 0
 	}
 	if err != nil {
-		// An unreadable ACL denies access.
 		return false, http.StatusServiceUnavailable
 	}
 	me, signedIn := s.auth.CurrentUser(r)
@@ -161,7 +147,6 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	if signedIn {
 		who = personOf(me)
 	}
-	// A share link adds access for whoever holds it.
 	link := acl.LinkRole(r.Header.Get(ShareHeader), s.clock())
 	switch method {
 	case http.MethodGet:
@@ -183,7 +168,6 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	return false, http.StatusForbidden
 }
 
-// handleACL serves GET and PUT on a document's ACL.
 func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 	if s.auth == nil {
 		http.Error(w, "docstore: auth is not configured on this server", http.StatusNotImplemented)
@@ -242,7 +226,7 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 		}
 		body.Grants = normalizedGrants(body.Grants)
 		body.Until = normalizedUntil(body.Until, body.Grants, s.clock())
-		body.Links = nil // links are made and revoked by POST and DELETE; replacing the list keeps the ones it has
+		body.Links = nil
 		if err == nil {
 			body.Links = existing.Links
 		}
@@ -272,7 +256,6 @@ func UserCatalogPrefix(userID string) string {
 	return "catalog:u/" + hex.EncodeToString(sum[:16]) + "/"
 }
 
-// checkCatalog decides access to a saver's catalog keys.
 func (s *Server) checkCatalog(r *http.Request, id string) (allowed bool, status int) {
 	if !s.requireACL {
 		return true, 0
@@ -287,7 +270,6 @@ func (s *Server) checkCatalog(r *http.Request, id string) (allowed bool, status 
 	return false, http.StatusForbidden
 }
 
-// writePermissionError reports checkPermission's outcome.
 func writePermissionError(w http.ResponseWriter, status int) {
 	if status == http.StatusUnauthorized {
 		http.Error(w, "sign in required", status)
@@ -301,12 +283,9 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 	_ = json.NewEncoder(w).Encode(acl)
 }
 
-// telemetryKeyspace is the reserved keyspace of telemetry.
 const telemetryKeyspace = "telemetry:"
 
-// isReservedDocID reports whether id is in a reserved keyspace.
 func isReservedDocID(id string) bool {
-	// "collab:" is the shared-editing hub's own keyspace.
 	lower := strings.ToLower(id)
 	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, SessionPrefix, LoginStatePrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix, telemetryKeyspace, usageKeyspace} {
 		if strings.HasPrefix(lower, p) {
@@ -357,7 +336,6 @@ func (a *ACL) GrantFor(email string, role Role, now time.Time, life time.Duratio
 	return nil
 }
 
-// GrantEnds is when email's access ends; ok is false if never.
 func (a ACL) GrantEnds(email string) (t time.Time, ok bool) {
 	t, ok = a.Until[NormalizeAddress(email)]
 	return t, ok
@@ -414,7 +392,6 @@ func (a ACL) People() []user.Person {
 // NormalizeAddress is how an address is kept and compared.
 func NormalizeAddress(email string) string { return user.Normalize(email) }
 
-// normalizedGrants is grants with normalised identifiers.
 func normalizedGrants(in map[string]Role) map[string]Role {
 	if len(in) == 0 {
 		return nil
@@ -428,7 +405,6 @@ func normalizedGrants(in map[string]Role) map[string]Role {
 	return out
 }
 
-// normalizedUntil keeps the ends that belong to a grant.
 func normalizedUntil(in map[string]time.Time, grants map[string]Role, now time.Time) map[string]time.Time {
 	var out map[string]time.Time
 	for k, v := range in {

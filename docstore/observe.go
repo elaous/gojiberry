@@ -18,7 +18,6 @@ func (s *Server) WithObserver(o *observe.Observer) *Server {
 	return s
 }
 
-// syncUsageAllowlist hands the observer the usage allowlist.
 func (s *Server) syncUsageAllowlist() {
 	if s.obs == nil || s.telemetry == nil {
 		return
@@ -30,14 +29,12 @@ func (s *Server) syncUsageAllowlist() {
 	s.obs.SetUsageAllowlist(allow)
 }
 
-// routeUsage is the receiver's hook for every usage event.
 func (s *Server) routeUsage(b telemetry.Batch) {
 	for _, c := range b.Counts {
 		s.obs.Usage(string(c.Name), c.Value, c.N)
 	}
 }
 
-// handleObserve serves GET /admin/observe.
 func (s *Server) handleObserve(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOnly(w, r) {
 		return
@@ -45,7 +42,6 @@ func (s *Server) handleObserve(w http.ResponseWriter, r *http.Request) {
 	observe.WriteAdmin(w, s.obs)
 }
 
-// opStart times one store operation.
 func (s *Server) opStart(ctx context.Context, op string) func(err error, count int) {
 	done := s.obs.StoreOp(ctx, op)
 	return func(err error, count int) {
@@ -53,7 +49,6 @@ func (s *Server) opStart(ctx context.Context, op string) func(err error, count i
 	}
 }
 
-// storeResult sorts a store error into one outcome.
 func storeResult(ctx context.Context, err error) string {
 	switch {
 	case err == nil:
@@ -94,7 +89,6 @@ func (l observedLimiter) Allow(ctx context.Context, key string) (bool, time.Dura
 	return ok, wait
 }
 
-// limiterKind maps a limiter's name to its kind.
 func limiterKind(name string) string {
 	switch {
 	case strings.HasPrefix(name, "dir-admin"):
@@ -109,7 +103,6 @@ func limiterKind(name string) string {
 	return "other"
 }
 
-// observeUsage reports the size of the store.
 func (s *Server) observeUsage(u usageResponse) {
 	s.obs.Set(observe.StoreDocuments, float64(u.Documents))
 	s.obs.Set(observe.StoreRecords, float64(u.Records))

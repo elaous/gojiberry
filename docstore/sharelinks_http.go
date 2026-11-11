@@ -9,14 +9,11 @@ import (
 	"github.com/elaous/gojiberry/auth"
 )
 
-// createLinkRequest is the body of POST /docs/{id}/acl.
 type createLinkRequest struct {
-	Role Role `json:"role"`
-	// Hours is how long the link lasts (DefaultLinkLife when 0; at most MaxLinkLife).
+	Role  Role    `json:"role"`
 	Hours float64 `json:"hours"`
 }
 
-// createLinkResponse is what POST /docs/{id}/acl answers: the token is shown here and nowhere else.
 type createLinkResponse struct {
 	Token   string    `json:"token"`
 	ID      string    `json:"id"`
@@ -24,8 +21,6 @@ type createLinkResponse struct {
 	Expires time.Time `json:"expires"`
 }
 
-// owned loads id's access list for a change by its owner. A document nobody shared yet gets one owned by
-// the caller (the same first-use rule as PUT /docs/{id}/acl). It answers false after writing the error.
 func (s *Server) owned(w http.ResponseWriter, r *http.Request, id string, me auth.User, signedIn bool) (ACL, bool) {
 	if !signedIn {
 		http.Error(w, "sign in required", http.StatusUnauthorized)
@@ -57,7 +52,6 @@ func (s *Server) saveACL(w http.ResponseWriter, r *http.Request, id string, acl 
 	return true
 }
 
-// handleCreateLink serves POST /docs/{id}/acl: the owner makes a share link with a role and a lifetime.
 func (s *Server) handleCreateLink(w http.ResponseWriter, r *http.Request, id string, me auth.User, signedIn bool) {
 	var body createLinkRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
@@ -94,7 +88,6 @@ func (s *Server) handleCreateLink(w http.ResponseWriter, r *http.Request, id str
 	_ = json.NewEncoder(w).Encode(createLinkResponse{Token: token, ID: linkID, Role: link.Role, Expires: link.Expires})
 }
 
-// handleRevokeLink serves DELETE /docs/{id}/acl?link={id}: the owner ends a link at once.
 func (s *Server) handleRevokeLink(w http.ResponseWriter, r *http.Request, id string, me auth.User, signedIn bool) {
 	linkID := r.URL.Query().Get("link")
 	if linkID == "" {

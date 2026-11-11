@@ -47,7 +47,6 @@ func NewSQLiteAdapter(ctx context.Context, path string) (*SQLiteAdapter, error) 
 	if err != nil {
 		return nil, err
 	}
-	// One connection: :memory: databases are per-connection.
 	db.SetMaxOpenConns(1)
 	_, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
 		id TEXT PRIMARY KEY,
@@ -128,8 +127,6 @@ func (a *SQLiteAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, 
 	if prefix == "" {
 		return a.List(ctx)
 	}
-	// ids in [prefix, prefix with its last byte raised by one) all start with prefix
-	// (a prefix ending in 0xff, which no valid ID has, falls back to the filter).
 	upper := []byte(prefix)
 	if upper[len(upper)-1] == 0xff {
 		all, err := a.List(ctx)

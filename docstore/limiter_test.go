@@ -40,7 +40,6 @@ func TestStoreLimiterBurstRefillAndReset(t *testing.T) {
 	if ok, _ := l.Allow(ctx, "a"); ok {
 		t.Error("only one token came back")
 	}
-	// The window resets: a long wait refills the bucket to the burst, not beyond.
 	clk.Add(time.Hour)
 	for i := range 3 {
 		if ok, _ := l.Allow(ctx, "a"); !ok {
@@ -64,7 +63,6 @@ func TestStoreLimiterNoRefillBudget(t *testing.T) {
 	}
 }
 
-// Two limiters (two replicas) over one store share budgets.
 func TestStoreLimiterSharedBudgetAcrossInstances(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -84,7 +82,6 @@ func TestStoreLimiterSharedBudgetAcrossInstances(t *testing.T) {
 	if allowed != 4 {
 		t.Fatalf("two replicas allowed %d, want the shared burst of 4", allowed)
 	}
-	// A limiter with another name is another budget, over the same store.
 	if ok, _ := newStoreLimiter(store, clk, "lookup", 1, 4).Allow(ctx, "user"); !ok {
 		t.Error("another name, another budget")
 	}
@@ -103,7 +100,6 @@ func TestStoreLimiterSharedBudgetAcrossInstances(t *testing.T) {
 	if n != 8 {
 		t.Fatalf("control: %d", n)
 	}
-	// The records are under the reserved prefix and do not contain the key.
 	metas, _ := store.List(ctx)
 	for _, m := range metas {
 		if !strings.HasPrefix(m.ID, RateLimitPrefix) || strings.Contains(m.ID, "user") {
@@ -150,7 +146,6 @@ func TestStoreLimiterFallsBackToMemory(t *testing.T) {
 	if metas, _ := inner.List(ctx); len(metas) != 0 {
 		t.Errorf("a store that is not conditional is not written: %v", metas)
 	}
-	// A store that has SaveIf but cannot use it (ExpiringAdapter over a plain one) is the same.
 	ea := NewExpiringAdapter(plainAdapter{NewMemoryAdapter()}, FixedTTL(time.Hour))
 	l = newStoreLimiter(ea, clk, "m", 1, 1)
 	if ok, _ := l.Allow(ctx, "a"); !ok {

@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/telemetry"
 )
 
-// obsRec is a sink that keeps everything it receives.
 type obsRec struct {
 	mu     sync.Mutex
 	points []observe.Point
@@ -35,7 +34,6 @@ func (r *obsRec) Span(s observe.SpanData) {
 func (*obsRec) Flush(context.Context) error { return nil }
 func (*obsRec) Close(context.Context) error { return nil }
 
-// sum totals the counter points of a metric.
 func (r *obsRec) sum(m observe.Metric, want ...string) (n float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -115,7 +113,6 @@ func TestObservedServerRecordsRoutesAndStoreOpsWithoutIdentifiers(t *testing.T) 
 	if len(op.spans) == 0 {
 		t.Fatal("no spans")
 	}
-	// A store span is a child of the request span.
 	var child *observe.SpanData
 	for i := range op.spans {
 		if op.spans[i].Name == observe.SpanStoreLoad {
@@ -159,7 +156,6 @@ func TestAdminObserveIsForTheOperatorAndWorksWhileOff(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil || len(d.Metrics) == 0 || len(d.Spans) == 0 || len(d.NeverSent) == 0 {
 		t.Fatalf("description: %v %+v", err, d)
 	}
-	// Usage facts reach the telemetry package.
 	var facts []string
 	for _, m := range d.Metrics {
 		if m.Name == observe.UsageEvents {

@@ -83,8 +83,6 @@ func fsMode() js.Value {
 	return o
 }
 
-// ---- remembering the folder ----
-
 const (
 	fsDB    = "gojiberry-folders"
 	fsStore = "handles"
@@ -174,11 +172,8 @@ func ForgetFolder(ctx context.Context, key string) error {
 	return err
 }
 
-// ---- Adapter ----
-
 func fsName(id string) string { return base64.RawURLEncoding.EncodeToString([]byte(id)) }
 
-// fsWrap maps a browser error to a Go error.
 func fsWrap(err error, writing bool) error {
 	var je *jsError
 	if errors.As(err, &je) {
@@ -197,7 +192,6 @@ func fsWrap(err error, writing bool) error {
 	return err
 }
 
-// abortWritable gives up a writable stream.
 func abortWritable(w js.Value) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

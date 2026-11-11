@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// stepAdapter records every mutation step.
 type stepAdapter struct {
 	Adapter
 	mu     sync.Mutex
@@ -388,7 +387,6 @@ func TestExpiryDeleteOfLiveDocumentRemovesRelatedRecords(t *testing.T) {
 	}
 }
 
-// countLoads counts Loads of documents.
 type countLoads struct {
 	Adapter
 	mu    sync.Mutex

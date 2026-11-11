@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// putACL replaces the access list as the owner.
 func (f *linkFixture) putACL(grants map[string]string, until map[string]time.Time) {
 	f.t.Helper()
 	b, _ := json.Marshal(map[string]any{"grants": grants, "until": until})
@@ -37,14 +36,12 @@ func TestAPersonsAccessEndsAtTheirDeadline(t *testing.T) {
 	}
 	f.advance(time.Second)
 	f.want(http.StatusForbidden, f.do(http.MethodGet, "/docs/doc1", "", f.viewer, ""), "at the end")
-	// Someone with no end keeps theirs, and the owner always does.
 	f.want(http.StatusNoContent, f.do(http.MethodPut, "/docs/doc1", "v2", f.stranger, ""), "a grant without an end")
 	f.want(http.StatusOK, f.do(http.MethodGet, "/docs/doc1", "", f.owner, ""), "the owner")
 	acl := f.readACL()
 	if _, ok := acl.Grants["viewer@example.com"]; ok {
 		t.Errorf("an ended grant is still listed: %+v", acl)
 	}
-	// Giving access again (a new end) works from then on.
 	f.putACL(map[string]string{"viewer@example.com": "viewer"}, map[string]time.Time{"viewer@example.com": time.Unix(f.clock.Load(), 0).Add(time.Hour)})
 	f.want(http.StatusOK, f.do(http.MethodGet, "/docs/doc1", "", f.viewer, ""), "after being given access again")
 }

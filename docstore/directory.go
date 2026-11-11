@@ -13,21 +13,13 @@ import (
 	"time"
 )
 
-// DirectoryPrefix is the keyspace of the key directory. Its records are written only by the
-// server's directory routes (publish, revoke): the document API treats the prefix as reserved,
-// like "acl:" and "collab:", so no session can read, write, list or delete them there.
+// DirectoryPrefix is the keyspace of the key directory.
 const DirectoryPrefix = "directory/"
 
-// DirectoryLogPrefix is the keyspace of the directory's transparency log (see
-// DirectoryService.Log): written only by the directory, reserved from /docs like DirectoryPrefix.
 const DirectoryLogPrefix = "directory-log/"
 
-// DirectoryEnrollPrefix is the keyspace of the owner enrollments (see DirectoryService.Enroll):
-// one record per address that has enrolled an owner signing key. Written only by the directory,
-// reserved from /docs like DirectoryPrefix, exempt from expiry and from encryption.
 const DirectoryEnrollPrefix = "directory-enroll/"
 
-// Errors a DirectoryService returns, so the routes can say what went wrong.
 var (
 	// ErrDirectoryRefused: the user may not publish.
 	ErrDirectoryRefused = errors.New("docstore: the directory refuses this publisher")
@@ -81,11 +73,10 @@ type DirectoryKey struct {
 	OwnerResetPending bool                    `json:"owner_reset_pending,omitempty"`
 	Owner             *DirectoryOwnerEvidence `json:"owner,omitempty"`
 	// Seq is the number of the log entry.
-	Seq int64  `json:"seq,omitempty"`
-	Kid string `json:"kid,omitempty"`
-	// Revoked is set, with the time, when the key was revoked.
-	Revoked   bool  `json:"revoked,omitempty"`
-	RevokedAt int64 `json:"revoked_at,omitempty"`
+	Seq       int64  `json:"seq,omitempty"`
+	Kid       string `json:"kid,omitempty"`
+	Revoked   bool   `json:"revoked,omitempty"`
+	RevokedAt int64  `json:"revoked_at,omitempty"`
 }
 
 // DirectoryProof is the answer to a challenge.
@@ -314,19 +305,11 @@ type DirectoryService interface {
 	Log(ctx context.Context, since int64, limit int) (DirectoryLog, error)
 	// Head is the signed head of the log.
 	Head(ctx context.Context) (DirectoryHead, error)
-	// LogAddress is the pseudonym of the user's own address in the log.
 	LogAddress(ctx context.Context, user auth.User) (DirectoryLogAddress, error)
-	// Enrollment is the owner enrollment of an address (Enrolled false if none).
 	Enrollment(ctx context.Context, email string) (DirectoryEnrollment, error)
-	// EnrollChallenge starts an enrollment, rotation or reset for the user's own address.
 	EnrollChallenge(ctx context.Context, user auth.User) (DirectoryEnrollChallenge, error)
-	// Enroll installs an owner key for the user's own address: the first one, a rotation signed
-	// by the current key, or a reset after the waiting period (see DirectoryEnroll).
 	Enroll(ctx context.Context, user auth.User, req DirectoryEnroll) (DirectoryEnrollment, error)
-	// RequestReset starts the waiting period of a provider-session reset of the owner key; the
-	// request is logged, where the owner (and everybody who watches the address) sees it.
 	RequestReset(ctx context.Context, user auth.User) (DirectoryEnrollment, error)
-	// CancelReset ends a pending reset; it needs the current owner key's signature.
 	CancelReset(ctx context.Context, user auth.User, owner *DirectoryOwnerSig) (DirectoryEnrollment, error)
 }
 
@@ -349,7 +332,6 @@ func (f DirectoryPolicyFunc) CanLookup(user auth.User, email string) bool { retu
 // AllowAllLookups is the default policy: anyone may look up.
 var AllowAllLookups DirectoryPolicy = DirectoryPolicyFunc(func(auth.User, string) bool { return true })
 
-// SameDomain allows a user to look up addresses in their domain.
 func SameDomain() DirectoryPolicy {
 	return DirectoryPolicyFunc(func(u auth.User, email string) bool {
 		d := addressDomain(u.Email)
@@ -426,7 +408,6 @@ func (s *Server) WithDirectoryClientIP(f func(*http.Request) string) *Server {
 	return s
 }
 
-// clientAddr is the client of r for the per-client budget.
 func (s *Server) clientAddr(r *http.Request) string {
 	if s.dirClientIP != nil {
 		return s.dirClientIP(r)
@@ -447,24 +428,21 @@ func (s *Server) WithDirectoryPolicy(p DirectoryPolicy) *Server {
 }
 
 const (
-	maxDirectoryBody   = 4 << 10
-	maxLookupKeys      = 50
-	maxLogEntries      = 200
-	publishesPerMinute = 10
-	logReadsPerMinute  = 30
-	challengesPerMin   = 20
-	lookupsPerMinute   = 60
-	lookupsPerIP       = 120
-	lookupsInTotal     = 1200
-	logsPerIP          = 120
-	logsInTotal        = 1200
-	// adminFailuresPerMinute caps failed admin attempts per minute.
+	maxDirectoryBody       = 4 << 10
+	maxLookupKeys          = 50
+	maxLogEntries          = 200
+	publishesPerMinute     = 10
+	logReadsPerMinute      = 30
+	challengesPerMin       = 20
+	lookupsPerMinute       = 60
+	lookupsPerIP           = 120
+	lookupsInTotal         = 1200
+	logsPerIP              = 120
+	logsInTotal            = 1200
 	adminFailuresPerMinute = 10
-	// maxLogScan is how many entries one filtered read may scan.
-	maxLogScan = 500
+	maxLogScan             = 500
 )
 
-// lookupShards is how many sub-budgets the lookup budget splits into.
 const lookupShards = 16
 
 type directoryLimits struct {
@@ -496,7 +474,6 @@ func (s *Server) limits() *directoryLimits {
 	return s.dirLimits
 }
 
-// tooMany answers 429 with the Retry-After time.
 func tooMany(w http.ResponseWriter, wait time.Duration) {
 	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
 	http.Error(w, "too many requests", http.StatusTooManyRequests)
@@ -520,7 +497,6 @@ func ValidAddress(email string) bool {
 	return true
 }
 
-// readKind says which family of budgets a read uses.
 type readKind int
 
 const (

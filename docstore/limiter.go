@@ -80,7 +80,7 @@ type RateLimiter struct {
 	Now func() time.Time
 
 	mu        sync.Mutex
-	buckets   map[string]*list.Element // value: *bucket; the list is ordered by last use, newest first
+	buckets   map[string]*list.Element
 	order     *list.List
 	lastSweep time.Time
 }
@@ -96,13 +96,10 @@ func NewRateLimiter(perMinute float64, burst int) *RateLimiter {
 	return &RateLimiter{PerMinute: perMinute, Burst: burst, buckets: map[string]*list.Element{}, order: list.New()}
 }
 
-// maxBuckets bounds the keys remembered.
 const maxBuckets = 100000
 
-// sweepEvery is the shortest time between sweeps.
 const sweepEvery = time.Minute
 
-// refill is the token count after the time elapsed.
 func refill(tokens float64, since time.Duration, perMinute float64, burst int) float64 {
 	if since > 0 {
 		tokens += since.Minutes() * perMinute
@@ -110,7 +107,6 @@ func refill(tokens float64, since time.Duration, perMinute float64, burst int) f
 	return math.Min(tokens, float64(burst))
 }
 
-// waitFor is how long until a bucket holds a token.
 func waitFor(tokens, perMinute float64) time.Duration {
 	if perMinute <= 0 {
 		return time.Hour
@@ -157,7 +153,6 @@ func (l *RateLimiter) Allow(_ context.Context, key string) (bool, time.Duration)
 	return false, waitFor(b.tokens, l.PerMinute)
 }
 
-// sweepLocked forgets buckets that have refilled.
 func (l *RateLimiter) sweepLocked(now time.Time) {
 	l.lastSweep = now
 	for {
@@ -174,7 +169,6 @@ func (l *RateLimiter) sweepLocked(now time.Time) {
 	}
 }
 
-// StoreLimiter is a token bucket per key kept in the store.
 type StoreLimiter struct {
 	// Store holds the records.
 	Store Adapter
@@ -196,13 +190,10 @@ func NewStoreLimiter(store Adapter, name string, perMinute float64, burst int) *
 	return &StoreLimiter{Store: store, Name: name, PerMinute: perMinute, Burst: burst}
 }
 
-// maxClockSkew is how far a record's time may run ahead.
 const maxClockSkew = 5 * time.Second
 
-// maxCASRounds bounds compare-and-set retries.
 const maxCASRounds = 64
 
-// limitState is what a record holds: tokens and last use.
 type limitState struct {
 	Tokens float64 `json:"t"`
 	At     int64   `json:"a"`
@@ -308,7 +299,6 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 	return false, time.Second
 }
 
-// read loads the state and the digest Save compares.
 func (l *StoreLimiter) read(ctx context.Context, a Adapter, id string) (limitState, string, error) {
 	doc, err := a.Load(ctx, id)
 	if errors.Is(err, ErrNotFound) {
@@ -324,7 +314,6 @@ func (l *StoreLimiter) read(ctx context.Context, a Adapter, id string) (limitSta
 	return st, Digest(doc.Data), nil
 }
 
-// rateLimitGrace is how long an idle bucket is kept.
 const rateLimitGrace = time.Minute
 
 // MaxRateLimitRecords is how many budget records are kept.
@@ -345,7 +334,7 @@ func SweepRateLimitsMax(ctx context.Context, store Adapter, now time.Time, maxRe
 type RateLimitSweep struct {
 	Deleted     int // records deleted in all (idle ones, unreadable ones, and evictions)
 	Evicted     int // of those, deleted only to get under the cap
-	EvictedLive int // of the evicted, records whose bucket was not full yet: their callers got a fresh bucket
+	EvictedLive int
 	Kept        int // records left
 }
 
@@ -362,7 +351,7 @@ func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, max
 	var errs []error
 	type keptRec struct {
 		meta Meta
-		full int64 // when its bucket is full again (unix nanoseconds); the largest value if unknown
+		full int64
 	}
 	kept := make([]keptRec, 0, len(metas))
 	for _, m := range metas {
@@ -432,7 +421,6 @@ func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, max
 	return out, errors.Join(errs...)
 }
 
-// deleteRateLimit deletes record id if it is unchanged.
 func deleteRateLimit(ctx context.Context, store Adapter, id string, data []byte) (bool, error) {
 	prev := Digest(data)
 	if c, ok := store.(ConditionalDeleter); ok {

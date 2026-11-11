@@ -35,9 +35,6 @@ func TestLocalFSAdapterUsageReportsRealDiskSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalFSAdapter: %v", err)
 	}
-	// Compile-time assertion that LocalFSAdapter really does satisfy
-	// QuotaReporter, the same way handleQuota's own type assertion
-	// will check at runtime.
 	var _ QuotaReporter = a
 
 	q, err := a.Usage(context.Background())

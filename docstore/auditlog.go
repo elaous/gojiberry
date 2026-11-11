@@ -18,7 +18,6 @@ func (s *Server) WithAudit(l *audit.Logger, key []byte) *Server {
 	return s
 }
 
-// audit writes one event; subjects are pseudonymised.
 func (s *Server) audit(kind audit.Kind, outcome audit.Outcome, actor audit.Actor, reason audit.Reason, count int, subject string) {
 	if s.auditLog == nil {
 		return
@@ -30,7 +29,6 @@ func (s *Server) audit(kind audit.Kind, outcome audit.Outcome, actor audit.Actor
 	_ = s.auditLog.Log(e)
 }
 
-// auditActor is the class of the actor making the request.
 func (s *Server) auditActor(r *http.Request, id string) audit.Actor {
 	if s.auth == nil {
 		return audit.Anonymous
@@ -51,7 +49,6 @@ func (s *Server) auditActor(r *http.Request, id string) audit.Actor {
 	return audit.Viewer
 }
 
-// auditGrants logs the difference between two ACLs.
 func (s *Server) auditGrants(r *http.Request, id string, before, after map[string]Role) {
 	var granted, revoked int
 	for who, role := range after {
@@ -96,7 +93,6 @@ func (a auditedLimiter) Allow(ctx context.Context, key string) (bool, time.Durat
 	return ok, wait
 }
 
-// auditSignIns logs a failed sign-in.
 func (s *Server) auditSignIns(next http.Handler) http.Handler {
 	if s.auditLog == nil {
 		return next
@@ -119,7 +115,6 @@ func (s *Server) auditSignIns(next http.Handler) http.Handler {
 	})
 }
 
-// codeWriter remembers the status an answer wrote.
 type codeWriter struct {
 	http.ResponseWriter
 	code int

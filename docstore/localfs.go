@@ -61,7 +61,6 @@ func (a *LocalFSAdapter) Save(_ context.Context, id string, data []byte) error {
 	return a.writeFile(id, data)
 }
 
-// writeFile replaces the file atomically.
 func (a *LocalFSAdapter) writeFile(id string, data []byte) error {
 	err := a.writeFile1(id, data)
 	if errors.Is(err, syscall.ENOSPC) {

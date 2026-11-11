@@ -152,7 +152,6 @@ func (a *BrowserAdapter) Delete(_ context.Context, id string) (err error) {
 	return nil
 }
 
-// recoverJS turns a JS exception into a Go error.
 func recoverJS(err *error) {
 	if r := recover(); r != nil {
 		*err = fmt.Errorf("docstore: browser storage: %v", r)

@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// slowPlainStore is a store with no conditional write, and one that is slow between a read and a
-// write, so that two unlocked read-change-writes would interleave.
 type slowPlainStore struct {
 	*MemoryAdapter
 }
@@ -58,8 +56,6 @@ func TestLockedAdapterWritesConditionally(t *testing.T) {
 	}
 }
 
-// Several writers, each its own LockedAdapter on the one KeyLocker (as processes would be), add
-// to one counter by read, change and SaveIf: no increment is lost.
 func TestLockedAdapterLosesNoIncrementOfSeveralWriters(t *testing.T) {
 	ctx := context.Background()
 	inner := slowPlainStore{NewMemoryAdapter()}

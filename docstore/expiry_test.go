@@ -68,7 +68,6 @@ func TestExpirySaveRenewsLoadAndListDoNot(t *testing.T) {
 		t.Fatalf("expiry = %v %v", at, ok)
 	}
 	clk.Add(20 * time.Hour)
-	// Viewing does not renew; saving does.
 	if _, err := ea.Load(ctx, "d"); err != nil {
 		t.Fatal(err)
 	}
@@ -78,14 +77,13 @@ func TestExpirySaveRenewsLoadAndListDoNot(t *testing.T) {
 	if at, _, _ := ea.Expiry(ctx, "d"); !at.Equal(t0.Add(day)) {
 		t.Errorf("viewing renewed: %v", at)
 	}
-	// Saving does.
 	if err := ea.Save(ctx, "d", []byte("v2")); err != nil {
 		t.Fatal(err)
 	}
 	if at, _, _ := ea.Expiry(ctx, "d"); !at.Equal(t0.Add(20*time.Hour + day)) {
 		t.Errorf("save did not renew: %v", at)
 	}
-	clk.Add(10 * time.Hour) // 30 h after the first save, 10 h after the second
+	clk.Add(10 * time.Hour)
 	if _, err := ea.Load(ctx, "d"); err != nil {
 		t.Errorf("renewed document gone: %v", err)
 	}
@@ -218,7 +216,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 	})
 }
 
-// failingSave fails the document write.
 type failingSave struct {
 	Adapter
 	fail bool
@@ -360,7 +357,6 @@ func TestExpiryPassthroughOfOptionalCapabilities(t *testing.T) {
 	})
 }
 
-// lockingAdapter is an adapter with a lock.
 type lockingAdapter struct {
 	Adapter
 	mu sync.Mutex
@@ -556,7 +552,6 @@ func TestParseExpiryEnv(t *testing.T) {
 	}
 }
 
-// The public offer's keyspaces are reserved.
 func TestPublicKeyspacesReservedFromDocs(t *testing.T) {
 	ea, _ := newExpiring(NewMemoryAdapter())
 	for _, k := range []string{"public/doc/x", "public/tomb/x", "report/x", "Public/doc/x", "REPORT/x"} {

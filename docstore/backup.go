@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// Backup and Restore move a whole store as one archive.
-
 const manifestName = "manifest.json"
 
 // BackupEntry is one document in a backup manifest.
@@ -78,7 +76,6 @@ func writeEntry(tw *tar.Writer, name string, data []byte, mod time.Time) error {
 // ErrBadBackup is returned by Restore for an invalid archive.
 var ErrBadBackup = errors.New("docstore: the backup is damaged or incomplete")
 
-// maxBackupEntry bounds one entry read while checking.
 const maxBackupEntry = 1 << 30
 
 // Restore writes the documents of a backup into a store.
@@ -122,7 +119,6 @@ func Restore(ctx context.Context, a Adapter, r io.ReadSeeker) (int, error) {
 	}
 }
 
-// verifyBackup reads the archive once and checks it.
 func verifyBackup(r io.Reader) (BackupManifest, error) {
 	var man BackupManifest
 	tr := tar.NewReader(r)
@@ -171,7 +167,6 @@ func verifyBackup(r io.Reader) (BackupManifest, error) {
 	return man, nil
 }
 
-// limitedBuf collects the manifest, which is small.
 type limitedBuf struct{ b []byte }
 
 func (l *limitedBuf) Write(p []byte) (int, error) {

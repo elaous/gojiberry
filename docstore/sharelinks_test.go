@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// linkFixture is a server with an owned document.
 type linkFixture struct {
 	t        *testing.T
 	h        http.Handler
@@ -41,7 +40,6 @@ func newLinkFixture(t *testing.T) *linkFixture {
 
 func (f *linkFixture) advance(d time.Duration) { f.clock.Add(int64(d / time.Second)) }
 
-// do sends a request as a session.
 func (f *linkFixture) do(method, path, body, session, share string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))

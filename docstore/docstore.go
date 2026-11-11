@@ -1,4 +1,3 @@
-// Package docstore defines a small, storage-agnostic document store interface.
 package docstore
 
 import (
@@ -16,7 +15,6 @@ var ErrNotFound = errors.New("docstore: document not found")
 // ErrLocked is returned when a document is held elsewhere.
 var ErrLocked = errors.New("docstore: the document is locked: no key here opens it")
 
-// ErrWrongKey is what a pack opener wraps for a wrong key.
 var ErrWrongKey = errors.New("docstore: sealed for another key")
 
 // ErrDowngrade is returned when an encrypted document would be downgraded.
@@ -28,7 +26,6 @@ var ErrStorageFull = errors.New("docstore: storage full")
 // ErrPermission is returned, wrapped, when access is denied.
 var ErrPermission = errors.New("docstore: permission needed")
 
-// Document is one stored unit: an opaque payload and its metadata.
 type Document struct {
 	ID        string
 	Data      []byte
@@ -54,7 +51,6 @@ type Adapter interface {
 	Delete(ctx context.Context, id string) error
 }
 
-// Quota is one backend's answer to how much space is used.
 type Quota struct {
 	Used  int64
 	Total int64

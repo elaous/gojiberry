@@ -8,8 +8,6 @@ import (
 	"syscall/js"
 )
 
-// jsError is a rejected promise or a thrown JS exception: its DOMException name ("NotFoundError",
-// "QuotaExceededError", "NotAllowedError") and message.
 type jsError struct{ Name, Message string }
 
 func (e *jsError) Error() string { return e.Name + ": " + e.Message }
@@ -31,8 +29,6 @@ func toJSError(v js.Value) error {
 	return e
 }
 
-// await waits for a promise from Go: its value, or its rejection as a *jsError. It is made for
-// the goroutine of a Go call (not for a JS callback, which must not block).
 func await(ctx context.Context, p js.Value) (js.Value, error) {
 	type result struct {
 		v   js.Value
@@ -68,7 +64,6 @@ func await(ctx context.Context, p js.Value) (js.Value, error) {
 	}
 }
 
-// jsCall calls a JS method and recovers a synchronous throw as an error.
 func jsCall(v js.Value, method string, args ...any) (out js.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -82,7 +77,6 @@ func jsCall(v js.Value, method string, args ...any) (out js.Value, err error) {
 	return v.Call(method, args...), nil
 }
 
-// jsAwait is jsCall of a method that returns a promise, then await.
 func jsAwait(ctx context.Context, v js.Value, method string, args ...any) (js.Value, error) {
 	p, err := jsCall(v, method, args...)
 	if err != nil {

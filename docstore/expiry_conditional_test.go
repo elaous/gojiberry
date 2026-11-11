@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// raceStore is a conditional store for tests.
 type raceStore struct {
 	*MemoryAdapter
 	before func()
@@ -21,7 +20,6 @@ func (r *raceStore) DeleteIf(ctx context.Context, id, prev string) error {
 	return r.MemoryAdapter.DeleteIf(ctx, id, prev)
 }
 
-// twoProcesses is one store shared by two processes.
 func twoProcesses() (p1, p2 *ExpiringAdapter, race *raceStore, clk *fakeClock) {
 	mem := NewMemoryAdapter()
 	race = &raceStore{MemoryAdapter: mem}
@@ -31,7 +29,6 @@ func twoProcesses() (p1, p2 *ExpiringAdapter, race *raceStore, clk *fakeClock) {
 	return p1, p2, race, clk
 }
 
-// A document another process renewed survives.
 func TestSweepKeepsADocumentAnotherProcessSavedAtItsDeadline(t *testing.T) {
 	ctx := context.Background()
 	p1, p2, race, clk := twoProcesses()
@@ -103,7 +100,6 @@ func TestSweepWithoutConditionalDeleteStillDeletes(t *testing.T) {
 	}
 }
 
-// plainStore hides every optional method.
 type plainStore struct{ m *MemoryAdapter }
 
 func (p plainStore) Save(ctx context.Context, id string, d []byte) error { return p.m.Save(ctx, id, d) }

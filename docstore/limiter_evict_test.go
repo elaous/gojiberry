@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// Over the cap, the sweep deletes the least recently used keys.
 func TestSweepEvictsRefilledBucketsBeforeLiveOnes(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -18,7 +17,7 @@ func TestSweepEvictsRefilledBucketsBeforeLiveOnes(t *testing.T) {
 	}
 	time.Sleep(2 * time.Millisecond) // distinct write times: "live" is the oldest record
 	l.Allow(ctx, "refilled")         // one token spent
-	clk.Add(90 * time.Second)        // "refilled" has been full for 30 seconds (inside the one minute grace), "live" is not full
+	clk.Add(90 * time.Second)
 
 	st, err := SweepRateLimitsStats(ctx, store, clk.Now(), 1)
 	if err != nil {
@@ -38,7 +37,7 @@ func TestSweepEvictsTheLeastSpentLiveBucketsFirstAndCountsThem(t *testing.T) {
 	store := NewMemoryAdapter()
 	clk := newClock()
 	l := newStoreLimiter(store, clk, "evict", 1, 5)
-	for range 4 { // the slow caller has the most spent budget and is the oldest record
+	for range 4 {
 		l.Allow(ctx, "slow")
 	}
 	time.Sleep(2 * time.Millisecond)
@@ -62,7 +61,6 @@ func TestSweepEvictsTheLeastSpentLiveBucketsFirstAndCountsThem(t *testing.T) {
 	}
 }
 
-// A sweep that evicts nothing live keeps everything.
 func TestSweepStatsMatchSweepRateLimitsMax(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()

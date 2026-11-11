@@ -15,7 +15,6 @@ func doRequest(h http.Handler, method, path, body string) *httptest.ResponseReco
 	return rec
 }
 
-// plainAdapter hides the optional interfaces of the adapter it wraps.
 type plainAdapter struct{ Adapter }
 
 func TestListPrefixOnEveryAdapter(t *testing.T) {

@@ -89,7 +89,6 @@ type Expirer interface {
 	Expiries(ctx context.Context) (map[string]time.Time, error)
 }
 
-// logicalID is the document a key belongs to.
 func logicalID(id string) string {
 	if strings.Contains(id, "/") {
 		return id
@@ -104,7 +103,6 @@ func logicalID(id string) string {
 	return s
 }
 
-// relatedSets splits what belongs to document id into sets.
 func relatedSets(id string) (own, ownPrefixes, group, groupPrefixes []string) {
 	own = []string{aclKeyPrefix + id, collabPrefix + id, keysPrefix + id}
 	logical := logicalID(id)
@@ -157,7 +155,7 @@ type ExpiringAdapter struct {
 	cacheMu  sync.Mutex
 	cache    map[string]time.Time
 	cacheAt  time.Time
-	cacheGen uint64 // bumped by every write of a record, so a slow read cannot store stale data
+	cacheGen uint64
 }
 
 // NewExpiringAdapter wraps inner with the policy.
@@ -165,7 +163,6 @@ func NewExpiringAdapter(inner Adapter, policy ExpiryPolicy) *ExpiringAdapter {
 	return &ExpiringAdapter{Inner: inner, Policy: policy}
 }
 
-// Renewer is what a collaborative editor calls to renew a document.
 type Renewer interface {
 	Renew(ctx context.Context, docID string) error
 }
@@ -190,7 +187,6 @@ func isExpiryKey(id string) bool {
 	return strings.HasPrefix(id, ExpiryPrefix) || strings.HasPrefix(id, ExpiryCreatedPrefix)
 }
 
-// capped is deadline limited by MaxAge counted from creation.
 func (e *ExpiringAdapter) capped(deadline, created time.Time) time.Time {
 	if e.MaxAge > 0 && !created.IsZero() {
 		if c := created.Add(e.MaxAge); c.Before(deadline) {
@@ -200,10 +196,8 @@ func (e *ExpiringAdapter) capped(deadline, created time.Time) time.Time {
 	return deadline
 }
 
-// effective is the instant a record's document expires.
 func (e *ExpiringAdapter) effective(r expiryRecord) time.Time { return e.capped(r.deadline, r.created) }
 
-// liveSibling reports whether a document other than id is live.
 func (e *ExpiringAdapter) liveSibling(ctx context.Context, id, logical string) (bool, error) {
 	metas, err := ListPrefix(ctx, e.Inner, logical)
 	if err != nil {
@@ -224,7 +218,6 @@ func (e *ExpiringAdapter) liveSibling(ctx context.Context, id, logical string) (
 	return false, nil
 }
 
-// relatedFor is what goes with document id.
 func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, prefixes []string, err error) {
 	if e.Related != nil {
 		exact, prefixes = e.Related(id)
@@ -239,10 +232,8 @@ func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, pre
 	return append(own, group...), append(ownP, groupP...), nil
 }
 
-// errRenewed is purgeLocked's answer when another process renewed.
 var errRenewed = errors.New("docstore: the document was renewed while it was being expired")
 
-// deleteExpired deletes the expired document id.
 func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found bool, err error) {
 	cd, ok := e.Inner.(ConditionalDeleter)
 	if !ok {
@@ -284,7 +275,6 @@ func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found b
 	}
 }
 
-// purgeLocked deletes document id and what Related lists.
 func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bool) (bool, error) {
 	var found bool
 	if expired {
@@ -328,7 +318,6 @@ func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bo
 	return found, e.deleteRecord(ctx, id)
 }
 
-// renewed runs write with the renewal applied.
 func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() error) error {
 	if isExpiryKey(id) {
 		return fmt.Errorf("docstore: %q is in the reserved expiry keyspace", id)
@@ -507,7 +496,6 @@ func (e *ExpiringAdapter) Touch(ctx context.Context, id string) error {
 	return nil
 }
 
-// generationOf reads the saver's generation tag.
 func generationOf(id string) string {
 	s := strings.TrimSuffix(id, path.Ext(id))
 	if i := strings.LastIndex(s, "~"); i > 0 && i < len(s)-1 && strings.Trim(s[i+1:], "0123456789abcdef") == "" {
@@ -516,7 +504,6 @@ func generationOf(id string) string {
 	return ""
 }
 
-// touchLocked moves the deadline record of the document.
 func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.Time) error {
 	ttl, ok := e.Policy.TTL(key, now)
 	if !ok {
@@ -586,7 +573,6 @@ func (e *ExpiringAdapter) LoadHead(ctx context.Context, id string, n int) ([]byt
 	return head, err
 }
 
-// visible drops the deadline records and the expired documents.
 func (e *ExpiringAdapter) visible(ctx context.Context, metas []Meta) ([]Meta, error) {
 	deadlines, err := e.deadlines(ctx)
 	if err != nil {
@@ -626,10 +612,7 @@ func (e *ExpiringAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta
 	return e.visible(ctx, metas)
 }
 
-// Delete implements Adapter. An expired document is already gone (ErrNotFound; it is purged).
-// Deleting a live document removes what Sweep would remove with it (its access list,
-// shared-editing state, wrapped keys and versions, by the same rule), so a new document with the
-// same id does not inherit the old one's access list or history.
+// Delete implements Adapter.
 func (e *ExpiringAdapter) Delete(ctx context.Context, id string) error {
 	if isExpiryKey(id) {
 		return ErrNotFound
@@ -660,8 +643,6 @@ func (e *ExpiringAdapter) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Lock implements Locker by the inner store's, if it has one (else it does nothing, which is
-// what a store with no shared lock gets from an encrypting adapter too).
 func (e *ExpiringAdapter) Lock(ctx context.Context) (func(), error) {
 	if l, ok := e.Inner.(Locker); ok {
 		return l.Lock(ctx)
@@ -669,8 +650,6 @@ func (e *ExpiringAdapter) Lock(ctx context.Context) (func(), error) {
 	return func() {}, nil
 }
 
-// Usage implements QuotaReporter by the inner store's; without one it is an error, which Server
-// reports as "not available".
 func (e *ExpiringAdapter) Usage(ctx context.Context) (Quota, error) {
 	if q, ok := e.Inner.(QuotaReporter); ok {
 		return q.Usage(ctx)
@@ -678,11 +657,6 @@ func (e *ExpiringAdapter) Usage(ctx context.Context) (Quota, error) {
 	return Quota{}, errors.New("docstore: the store reports no usage")
 }
 
-// WithConfiguredExpiry wraps adapter in an ExpiringAdapter when cfg asks for expiry
-// (GOJIBERRY_DOCSTORE_EXPIRY_TTL), starts its sweeper (until ctx is done) and logs it; it returns
-// the adapter to use and the ExpiringAdapter, which is nil, with adapter unchanged, when expiry
-// is off. The docstore server and the collaboration hub program share it, so a hub in the same
-// process can pass the ExpiringAdapter as its Renewer.
 func WithConfiguredExpiry(ctx context.Context, adapter Adapter, cfg Config) (Adapter, *ExpiringAdapter) {
 	if cfg.ExpiryTTL <= 0 {
 		return adapter, nil

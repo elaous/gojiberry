@@ -25,14 +25,12 @@ func TestUsageHistorySurvivesARestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the series was not written: %v", err)
 	}
-	// No identifier: the record names no document and holds no field beyond the points.
 	for _, leak := range []string{"ana", "bo-notes", "report"} {
 		if strings.Contains(string(stored.Data), leak) {
 			t.Errorf("the stored series names %q: %s", leak, stored.Data)
 		}
 	}
 
-	// A new server process on the same store, an hour later, continues the series.
 	clock = clock.Add(time.Hour)
 	srv2 := NewServer(mem, "memory").WithDirectoryAdmin(func(r *http.Request) bool { return true })
 	srv2.usageClock = func() time.Time { return clock }
@@ -48,7 +46,6 @@ func TestUsageHistorySurvivesARestart(t *testing.T) {
 	if len(hist.Hourly) != 3 || hist.Hourly[0].Documents != 1 || hist.Hourly[1].Documents != 2 || hist.Hourly[2].Documents != 2 {
 		t.Fatalf("after the restart: %+v", hist.Hourly)
 	}
-	// The monitor's own records are not part of what it measures.
 	if hist.Hourly[2].Records != 0 {
 		t.Errorf("the series counted its own record: %+v", hist.Hourly[2])
 	}
@@ -127,7 +124,6 @@ func TestAStoredSeriesThatBreaksTheRulesIsRefusedWhole(t *testing.T) {
 		t.Error("a series longer than the retention was accepted")
 	}
 
-	// A server whose stored series is damaged starts again and replaces it.
 	mem := NewMemoryAdapter()
 	_ = mem.Save(ctx, UsageSeriesKey, []byte(`{"v":1,"hourly":[],"daily":[],"who":"ana"}`))
 	clock := now
@@ -161,7 +157,6 @@ func TestTheStoredSeriesIsNotReachableThroughTheDocumentAPI(t *testing.T) {
 
 func decodeJSON(b []byte, v any) error { return json.Unmarshal(b, v) }
 
-// countingAdapter counts the saves of each key.
 type countingAdapter struct {
 	Adapter
 	mu sync.Mutex
@@ -180,8 +175,6 @@ func (c *countingAdapter) Save(ctx context.Context, key string, data []byte) err
 
 func (c *countingAdapter) saves(key string) int { c.mu.Lock(); defer c.mu.Unlock(); return c.n[key] }
 
-// A second request to sample (the history and the observability gauges both ask) returns at once and does not start a
-// second sampler; after the first stops, sampling can be started again.
 func TestUsageSamplingRunsOnlyOnce(t *testing.T) {
 	srv := NewServer(NewMemoryAdapter(), "memory")
 	ctx, cancel := context.WithCancel(context.Background())

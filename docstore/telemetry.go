@@ -17,10 +17,8 @@ import (
 // TelemetryKey is where the usage totals are kept.
 const TelemetryKey = "telemetry:totals"
 
-// telemetrySaveDelay is how long a change waits before saving.
 var telemetrySaveDelay = 5 * time.Second
 
-// telemetryStore keeps the totals under TelemetryKey.
 type telemetryStore struct{ a Adapter }
 
 func (t telemetryStore) Load(ctx context.Context) ([]byte, bool, error) {
@@ -38,7 +36,6 @@ func (t telemetryStore) Save(ctx context.Context, data []byte) error {
 	return t.a.Save(ctx, TelemetryKey, data)
 }
 
-// telemetryShared is telemetryStore on a shared store.
 type telemetryShared struct {
 	telemetryStore
 	c ConditionalAdapter
@@ -60,7 +57,6 @@ func (t telemetryShared) SaveIf(ctx context.Context, data []byte, version string
 	return err
 }
 
-// telemetryPerMinute is how many batches one client may send per minute.
 const telemetryPerMinute = 6
 
 // WithTelemetry mounts the usage receiver.
@@ -69,7 +65,6 @@ func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 		return s
 	}
 	s.telemetry = c
-	// The totals live in the store, so restarts keep the counts.
 	if s.adapter != nil {
 		var err error
 		if ca, ok := s.adapter.(ConditionalAdapter); ok {
@@ -91,7 +86,6 @@ func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 	return s
 }
 
-// handleTelemetryReport serves GET /admin/telemetry.
 func (s *Server) handleTelemetryReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

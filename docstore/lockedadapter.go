@@ -72,7 +72,6 @@ var (
 	_ Locker             = (*LockedAdapter)(nil)
 )
 
-// with runs fn holding the write lock.
 func (a *LockedAdapter) with(ctx context.Context, fn func() error) error {
 	unlock, err := a.Locks.LockKey(ctx, "store")
 	if err != nil {

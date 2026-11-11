@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// stampAdapter gives every key the fake clock's time as its UpdatedAt (the memory adapter uses
-// the real one), so UpdatedAt-based policies can be tested with an injected clock.
 type stampAdapter struct {
 	Adapter
 	clk *fakeClock
@@ -222,7 +220,7 @@ func TestMaxAgeBoundsAnEndlesslyEditedDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	created := clk.Now()
-	for i := 0; i < 5; i++ { // an edit every 20 hours keeps a plain document alive for ever
+	for i := 0; i < 5; i++ {
 		clk.Add(20 * time.Hour)
 		if clk.Now().Before(created.Add(3 * day)) {
 			if err := ea.Save(ctx, "doc", []byte("edit")); err != nil {
@@ -238,7 +236,6 @@ func TestMaxAgeBoundsAnEndlesslyEditedDocument(t *testing.T) {
 			}
 		}
 	}
-	// t = 100h > 72h: the cap has passed although the last edit was 20h ago.
 	if _, err := ea.Load(ctx, "doc"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Load after MaxAge = %v, want ErrNotFound", err)
 	}
@@ -274,7 +271,7 @@ func TestMaxAgeSaveAtTheCapStartsANewDocument(t *testing.T) {
 	_ = ea.Save(ctx, "doc", []byte("old2"))
 	clk.Add(20 * time.Hour)
 	_ = ea.Save(ctx, "doc", []byte("old3"))
-	clk.Add(9 * time.Hour) // 49h: past the cap, the 24h life of the last save is not over
+	clk.Add(9 * time.Hour)
 	if err := ea.Save(ctx, "doc", []byte("new")); err != nil {
 		t.Fatal(err)
 	}

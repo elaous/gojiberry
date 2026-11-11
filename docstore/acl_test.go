@@ -22,7 +22,6 @@ import (
 	"github.com/elaous/gojiberry/user"
 )
 
-// fakeOIDCProvider mirrors the auth test provider.
 type fakeOIDCProvider struct {
 	srv        *httptest.Server
 	oidcServer *oidctest.Server
@@ -90,7 +89,6 @@ func newTestServerWithAuth(t *testing.T, issuerURL string) *Server {
 	return NewServer(NewMemoryAdapter(), "memory").WithAuth(m)
 }
 
-// sessionTokenFor logs in and returns the session token.
 func sessionTokenFor(t *testing.T, handler http.Handler, provider *fakeOIDCProvider, email, sub string) string {
 	t.Helper()
 	provider.nextEmail, provider.nextSub = email, sub
@@ -366,7 +364,6 @@ func TestACLRoutesRequireAuthConfigured(t *testing.T) {
 	}
 }
 
-// aclFailAdapter fails loading ACL keys.
 type aclFailAdapter struct {
 	Adapter
 	fail bool
@@ -569,7 +566,6 @@ func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
 	if a.RoleOfPerson(ana) != "editor" || !a.canWrite(ana) || a.owns(ana) {
 		t.Errorf("by subject: %q", a.RoleOfPerson(ana))
 	}
-	// The best role of any identifier counts.
 	both := user.Person{ID: "github:7", Email: "bo@gojiberry.io", Username: "ana"}
 	if a.RoleOfPerson(both) != "viewer" || a.canWrite(both) {
 		t.Errorf("%q", a.RoleOfPerson(both))
@@ -583,7 +579,6 @@ func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
 	}
 }
 
-// A username is whatever the person chose.
 func TestUsernameNeverGrantsAccess(t *testing.T) {
 	acl := ACL{Owner: "ana@x.com", Grants: map[string]Role{"bob@x.com": RoleEditor, "bobby": RoleEditor}}
 	impostor := user.Person{ID: "weak-idp:7", Username: "ana@x.com"}
@@ -601,7 +596,6 @@ func TestUsernameNeverGrantsAccess(t *testing.T) {
 	}
 }
 
-// A catalog lists one person's documents.
 func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)

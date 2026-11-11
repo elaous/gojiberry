@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// recordingAdapter logs the writes it receives.
 type recordingAdapter struct {
 	Adapter
 	mu     sync.Mutex

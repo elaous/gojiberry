@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-// Usage over time: a bounded series of samples.
-
 // The retention of the series.
 const (
 	UsageHourlyPoints = 48 // two days of hours
@@ -26,10 +24,8 @@ const (
 // UsageSeriesKey is where the series is stored.
 const UsageSeriesKey = "usage:series"
 
-// usageKeyspace is the reserved keyspace for usage data.
 const usageKeyspace = "usage:"
 
-// usageSaveEvery is the longest a change waits before saving.
 const usageSaveEvery = 10 * time.Minute
 
 // UsagePoint is one sample of the counters.
@@ -46,7 +42,6 @@ type UsagePoint struct {
 	Refused  int `json:"refused"`
 }
 
-// usageSeries is the bounded history.
 type usageSeries struct {
 	mu        sync.Mutex
 	hourly    []UsagePoint // oldest first, at most UsageHourlyPoints
@@ -54,14 +49,12 @@ type usageSeries struct {
 	lastSaved time.Time
 }
 
-// persisted is the record in the store.
 type persistedUsage struct {
 	Version int          `json:"v"`
 	Hourly  []UsagePoint `json:"hourly"`
 	Daily   []UsagePoint `json:"daily"`
 }
 
-// encode is the series as the record to store.
 func (u *usageSeries) encode() []byte {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -69,7 +62,6 @@ func (u *usageSeries) encode() []byte {
 	return out
 }
 
-// decodeUsage reads a stored series string.
 func decodeUsage(data []byte, now time.Time) (persistedUsage, error) {
 	var p persistedUsage
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -104,7 +96,6 @@ func decodeUsage(data []byte, now time.Time) (persistedUsage, error) {
 	return p, nil
 }
 
-// loadUsageSeries reads the stored series.
 func (s *Server) loadUsageSeries(ctx context.Context, now time.Time) {
 	s.usageOnce.Do(func() {
 		doc, err := s.adapter.Load(ctx, UsageSeriesKey)
@@ -125,7 +116,6 @@ func (s *Server) loadUsageSeries(ctx context.Context, now time.Time) {
 	})
 }
 
-// record stores p taken at now.
 func (u *usageSeries) record(now time.Time, p UsagePoint) (newHour bool) {
 	now = now.UTC()
 	u.mu.Lock()
@@ -177,7 +167,6 @@ func (u *usageSeries) snapshot() UsageHistory {
 	return h
 }
 
-// measureUsage reads the counters of the store.
 func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 	var out usageResponse
 	metas, err := s.adapter.List(ctx)
@@ -208,7 +197,6 @@ func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 	return out, nil
 }
 
-// sampleUsage adds a sample of usage to the series.
 func (s *Server) sampleUsage(u usageResponse) {
 	p := UsagePoint{Documents: u.Documents, Records: u.Records, Bytes: u.Bytes, Largest: u.Largest, QuotaUsed: u.Quota.Used}
 	if u.Telemetry != nil {
@@ -225,7 +213,6 @@ func (s *Server) sampleUsage(u usageResponse) {
 	s.observeUsage(u)
 }
 
-// saveUsageSeries writes the series.
 func (s *Server) saveUsageSeries(now time.Time, newHour bool) {
 	s.usage.mu.Lock()
 	due := newHour || now.Sub(s.usage.lastSaved) >= usageSaveEvery
@@ -271,7 +258,6 @@ func (s *Server) RunUsageSampling(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// operatorOnly reports whether r is from an operator.
 func (s *Server) operatorOnly(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -289,7 +275,6 @@ func (s *Server) operatorOnly(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// currentHistory samples now and returns the history.
 func (s *Server) currentHistory(w http.ResponseWriter, r *http.Request) (UsageHistory, bool) {
 	u, err := s.measureUsage(r.Context())
 	if err != nil {
@@ -300,7 +285,6 @@ func (s *Server) currentHistory(w http.ResponseWriter, r *http.Request) (UsageHi
 	return s.usage.snapshot(), true
 }
 
-// handleUsageHistory serves GET /admin/usage/history.
 func (s *Server) handleUsageHistory(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOnly(w, r) {
 		return
@@ -345,7 +329,6 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// handleUsagePage serves the usage page.
 func (s *Server) handleUsagePage(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOnly(w, r) {
 		return

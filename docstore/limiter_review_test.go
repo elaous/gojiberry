@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// A replica whose clock is far ahead is clamped.
 func TestStoreLimiterBoundsARecordFromAFarFutureClock(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -26,13 +25,12 @@ func TestStoreLimiterBoundsARecordFromAFarFutureClock(t *testing.T) {
 	if ok, _ := lb.Allow(ctx, "k"); ok {
 		t.Fatal("the bucket is empty")
 	}
-	behind.Add(10 * time.Second) // a few seconds past the tolerated skew, and one refill (1 a second)
+	behind.Add(10 * time.Second)
 	if ok, wait := lb.Allow(ctx, "k"); !ok {
 		t.Fatalf("a record written by a clock 3 hours ahead locks the other replicas out (wait %v)", wait)
 	}
 }
 
-// flakyStore fails reads on demand.
 type flakyStore struct {
 	*MemoryAdapter
 	bad          string
@@ -100,7 +98,6 @@ func TestSweepRateLimitsDeletesOnlyTheRecordItRead(t *testing.T) {
 		store.beforeDelete = func(did string) {
 			if did == id && !fired {
 				fired = true
-				// The caller comes back between the sweeper's read and its delete.
 				if ok, _ := l.Allow(ctx, "k"); !ok {
 					t.Error("the returning caller is allowed")
 				}
@@ -137,7 +134,6 @@ func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 	inner.beforeSave = func(sid string) {
 		if sid == id && !fired {
 			fired = true
-			// The caller's change lands between the sweeper's read and its claiming write.
 			_ = inner.Save(ctx, id, []byte(`{"t":1,"a":1,"f":`+fmt.Sprint(clk.Now().UnixNano()+int64(time.Hour))+`}`))
 		}
 	}
@@ -148,7 +144,6 @@ func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 	if _, err := inner.MemoryAdapter.Load(ctx, id); err != nil {
 		t.Errorf("the changed record was deleted: %v", err)
 	}
-	// Undisturbed, the sweep deletes it.
 	inner.beforeSave = nil
 	_ = inner.MemoryAdapter.Delete(ctx, id)
 	l.Allow(ctx, "k2")
@@ -158,7 +153,6 @@ func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 	}
 }
 
-// noDeleteIf is a conditional store without DeleteIf.
 type noDeleteIf struct{ f *flakyStore }
 
 func (n noDeleteIf) Save(ctx context.Context, id string, d []byte) error { return n.f.Save(ctx, id, d) }
@@ -197,7 +191,6 @@ func TestSweepRateLimitsKeepsAtMostTheCapAndEvictsTheOldest(t *testing.T) {
 			t.Errorf("ip-%d, one of the newest, was evicted", i)
 		}
 	}
-	// The default cap is far above this, so a sweep of 50 deletes nothing.
 	if n, err := SweepRateLimits(ctx, store, clk.Now()); err != nil || n != 0 {
 		t.Errorf("default cap: %d %v", n, err)
 	}
@@ -242,7 +235,6 @@ func TestDeleteIfDeletesOnlyWhatWasRead(t *testing.T) {
 			t.Errorf("%s: deleting what is gone: %v", name, err)
 		}
 	}
-	// A document key through the expiring adapter is not conditionally deletable.
 	_ = exp.Save(ctx, "doc", []byte("x"))
 	if err := exp.DeleteIf(ctx, "doc", Digest([]byte("x"))); !errors.Is(err, ErrConditionalUnsupported) {
 		t.Errorf("a document: %v", err)
@@ -273,7 +265,6 @@ func (refuses) SaveIf(context.Context, string, []byte, string) error {
 	return ErrConditionalUnsupported
 }
 
-// fakeConditional has SaveIf for tests.
 type fakeConditional struct{ *MemoryAdapter }
 
 func (f fakeConditional) SaveIf(ctx context.Context, id string, data []byte, _ string) error {
