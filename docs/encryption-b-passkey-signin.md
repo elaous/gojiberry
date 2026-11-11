@@ -30,7 +30,7 @@ This is part of the design [Encryption with SSH keys and passkeys](encryption-an
 5. **UI.** `components.Passkey`: register, list, remove, "Sign in with a passkey"; the
    browser calls `navigator.credentials.create/get` through `syscall/js`.
 6. **Tests.** The server side against recorded ceremonies; the browser side with
-   Chrome's virtual authenticator (the CDP WebAuthn domain), which `internal/e2etest`
+   Chrome's virtual authenticator (the CDP WebAuthn domain), which `e2etest`
    can drive. Replay is covered by the signature counter and one-time challenges.
 
 ### B.1 Extension points

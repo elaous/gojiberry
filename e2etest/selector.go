@@ -71,7 +71,7 @@ func selectorDir(file string) (string, error) {
 			return dir, nil
 		}
 	}
-	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "github.com/elaous/gojiberry/internal/e2etest").Output()
+	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "github.com/elaous/gojiberry/e2etest").Output()
 	if err != nil {
 		return "", fmt.Errorf("e2etest: cannot find the source of the selector helper: %v", err)
 	}

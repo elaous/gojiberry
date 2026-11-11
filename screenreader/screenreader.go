@@ -1,5 +1,6 @@
 //go:build !(js && wasm)
 
+// Package screenreader reads a page like a screen reader, for tests.
 package screenreader
 
 import (

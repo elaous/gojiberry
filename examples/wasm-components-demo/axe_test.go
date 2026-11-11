@@ -5,7 +5,7 @@ package main
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 func TestNoAccessibilityViolationsAxe(t *testing.T) {

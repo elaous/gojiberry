@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 const pageJS = `window.T = {

@@ -15,8 +15,8 @@ import (
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/encrypt"
+	"github.com/elaous/gojiberry/e2etest"
 	"github.com/elaous/gojiberry/examples/people-keys-demo/demoserver"
-	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
 func TestPeopleKeysInARealBrowser(t *testing.T) {

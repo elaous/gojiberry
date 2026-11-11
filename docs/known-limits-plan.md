@@ -55,7 +55,7 @@ order it should land in.
 ## C. Test tooling: chromedp (done)
 
 opendocs drives the browser with **chromedp** (`cdptestkit_test.go`); gojiberry now
-does too. `internal/e2etest` is a Go driver over chromedp (`Site` builds and serves
+does too. `e2etest` is a Go driver over chromedp (`Site` builds and serves
 a wasm example, `Tab` is a browser on it: selectors with `:has-text`/`:text-is`,
 real mouse and keyboard events, waits on the page's `#state`, dialogs, downloads,
 file choosers, routes). Every Playwright script was ported to a Go test and the

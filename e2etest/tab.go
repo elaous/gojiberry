@@ -1,5 +1,6 @@
 //go:build !(js && wasm)
 
+// Package e2etest drives Chromium for browser tests of wasm pages.
 package e2etest
 
 import (
