@@ -12,7 +12,6 @@ func TestPageLayoutRoundTripsThroughMeta(t *testing.T) {
 	if got := d.PageLayout(); got != want {
 		t.Fatalf("layout = %+v, want %+v", got, want)
 	}
-	// Emptying a part removes its key.
 	d.SetPageLayout(PageLayout{})
 	if len(d.Meta) != 0 {
 		t.Fatalf("an empty layout should leave no Meta, got %+v", d.Meta)

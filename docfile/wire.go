@@ -10,12 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docfile/internal/wire"
 )
 
-// The protobuf wire format of a Document, written against the model's types. It is the
-// format protobuf's own libraries write (fields in number order, zero values left out,
-// numbers in a list packed), and reads anything they write: lists packed or not, fields it
-// does not know skipped, a field met twice merged.
-
-// marshalWire writes the struct v as a message.
 func marshalWire(m *message, v reflect.Value) []byte {
 	var b []byte
 	for i := range m.fields {
@@ -105,7 +99,6 @@ func appendList(b []byte, f *field, fv reflect.Value) []byte {
 
 var errWire = errors.New("docfile: malformed protobuf data")
 
-// unmarshalWire reads the message in b into the addressable struct v.
 func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 	for len(b) > 0 {
 		num, typ, n := wire.ConsumeTag(b)
@@ -137,7 +130,7 @@ func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 			}
 		case f.kind != kMsg && typ == scalarWire(f.kind):
 			used, err = readScalar(f.kind, typ, b, v.Field(f.index), f.repeated)
-		default: // a field of another type than the model's: left out, as an unknown one
+		default:
 			used = wire.ConsumeFieldValue(num, typ, b)
 		}
 		if err != nil {
@@ -151,7 +144,6 @@ func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 	return nil
 }
 
-// readMessage reads one message value of the field f (an element of a list, or the field).
 func readMessage(f *field, sub []byte, fv reflect.Value) error {
 	if f.repeated {
 		fv.Set(reflect.Append(fv, reflect.New(fv.Type().Elem()).Elem()))
@@ -166,8 +158,6 @@ func readMessage(f *field, sub []byte, fv reflect.Value) error {
 	return unmarshalWire(f.msg, sub, fv)
 }
 
-// readScalar reads one value at the start of b into fv (appending when it is a list) and
-// returns how many bytes it took.
 func readScalar(k kind, typ wire.Type, b []byte, fv reflect.Value, list bool) (int, error) {
 	dst := fv
 	if list {

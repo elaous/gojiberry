@@ -9,12 +9,6 @@ import (
 	"unicode"
 )
 
-// The protobuf schema is derived from the model's Go types: a struct is a message, its
-// `pb:"N"` tags are the field numbers. That keeps one definition (the Go types), and
-// Schema prints it as .proto text. The wire and text formats are written here against
-// those types directly (wire.go, text.go) on top of the small internal/wire package, so
-// no protobuf module is a dependency at all: a browser build saves several megabytes by it.
-
 const protoPackage = "gojiberry.doc"
 
 type kind int
@@ -27,7 +21,6 @@ const (
 	kMsg
 )
 
-// protoName is the type name .proto text uses for a scalar kind.
 func (k kind) protoName() string {
 	return [...]string{"string", "bool", "double", "int64"}[k]
 }
@@ -36,7 +29,7 @@ type field struct {
 	index    int
 	num      int32
 	name     string // snake_case, the .proto name
-	goName   string // the Go name, which text format also accepts (the JSON name)
+	goName   string
 	kind     kind
 	repeated bool
 	pointer  bool     // a message held behind a pointer
@@ -76,8 +69,6 @@ func fieldNumber(f reflect.StructField) int32 {
 	return int32(n)
 }
 
-// elemStruct returns the struct type a field holds (directly, behind a
-// pointer, or as a slice element), if it holds one.
 func elemStruct(t reflect.Type) (reflect.Type, bool) {
 	if t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice {
 		t = t.Elem()
@@ -99,8 +90,6 @@ func scalarKind(t reflect.Type) kind {
 	panic("docfile: unsupported field type " + t.String())
 }
 
-// buildMessage describes the struct t and, first, the messages it holds. Messages are
-// listed children first, the way Schema has always printed them.
 func buildMessage(t reflect.Type, seen map[reflect.Type]*message, list *[]*message) *message {
 	if m, ok := seen[t]; ok {
 		return m

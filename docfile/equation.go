@@ -36,7 +36,6 @@ func (d Document) EquationsAsText() Document {
 			continue
 		}
 		if n := len(out.Content); n > 0 {
-			// The equation's paragraph starts a line.
 			if last := out.Content[n-1].Chars; last != nil && last.Text != "" && !strings.HasSuffix(last.Text, "\n") {
 				out.Content = append(out.Content, Item{Chars: &Chars{Text: "\n"}})
 			}
@@ -48,7 +47,6 @@ func (d Document) EquationsAsText() Document {
 	return out
 }
 
-// FormFieldsAsText is d with each form field replaced by its text.
 func (d Document) FormFieldsAsText() Document {
 	has := false
 	for _, it := range d.Content {

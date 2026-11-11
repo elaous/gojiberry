@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// fillDoc returns a Document with every field set.
 func fillDoc() Document {
 	var d Document
 	n := 0

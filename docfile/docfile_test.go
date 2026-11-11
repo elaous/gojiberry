@@ -104,7 +104,6 @@ func TestFlowRoundTrip(t *testing.T) {
 	}
 }
 
-// The mirrors must carry every field of the type.
 func TestMirrorsCoverCanvasTypes(t *testing.T) {
 	for _, p := range []struct{ mirror, canvas reflect.Type }{
 		{reflect.TypeFor[Format](), reflect.TypeFor[canvas.Format]()},
@@ -178,7 +177,6 @@ func TestCommentsRoundTripThroughFlow(t *testing.T) {
 	}
 }
 
-// A proposed change is saved as a proposal.
 func TestProposalMarksRoundTrip(t *testing.T) {
 	mark := canvas.ProposalMark{Kind: canvas.ProposalDelete, ID: "ab12", Author: "ana@example.com", Time: time.Unix(1_700_000_000, 0)}.String()
 	f := &canvas.TextFlow{Items: []canvas.Item{

@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// MediaItem is an audio or video clip embedded in the text.
 type MediaItem struct {
 	// URL is where the clip is fetched from.
 	URL  string `json:"url" pb:"1"`
@@ -85,7 +84,6 @@ func CueText(vtt string) string {
 	return strings.Join(out, "\n")
 }
 
-// stripCueTags removes the <...> markup of a cue.
 func stripCueTags(s string) string {
 	var sb strings.Builder
 	in := false
@@ -227,7 +225,6 @@ func ParseCues(vtt string) ([]Cue, []CueProblem) {
 	return cues, problems
 }
 
-// cueTime reads a WebVTT timestamp.
 func cueTime(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	parts := strings.Split(s, ":")
@@ -290,7 +287,6 @@ func BuildCues(cues []Cue) string {
 	return sb.String()
 }
 
-// mediaLabels are the words a clip is written with.
 type mediaLabels struct{ video, audio, transcript string }
 
 var mediaWords = map[string]mediaLabels{

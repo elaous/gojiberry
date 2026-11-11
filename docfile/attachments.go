@@ -2,7 +2,6 @@ package docfile
 
 import "strings"
 
-// AttachmentScheme starts the URL of an image kept in the store.
 const AttachmentScheme = "opendoc-att:"
 
 // AttachmentURL is the reference to an attachment.

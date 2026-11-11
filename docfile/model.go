@@ -1,4 +1,3 @@
-// Package docfile is the saved form of a canvas document.
 package docfile
 
 import (
@@ -34,13 +33,11 @@ type Revision struct {
 	Doc   *Document `json:"doc,omitempty" pb:"2"`
 }
 
-// MetaEntry is a free-form key and value kept with the document.
 type MetaEntry struct {
 	Key   string `json:"key" pb:"1"`
 	Value string `json:"value,omitempty" pb:"2"`
 }
 
-// Item is one element of the content: exactly one kind is set.
 type Item struct {
 	Chars   *Chars   `json:"chars,omitempty" pb:"1"`
 	Columns *Columns `json:"columns,omitempty" pb:"2"`
@@ -183,10 +180,8 @@ type FootnoteMark struct {
 	ID string `json:"id" pb:"1"`
 }
 
-// Block is a generated block, such as a table of contents.
 type Block struct {
 	Title string `json:"title,omitempty" pb:"1"`
-	// Style and Depth are the look of a table of contents.
 	Style string `json:"style,omitempty" pb:"2"`
 	Depth int    `json:"depth,omitempty" pb:"3"`
 }
@@ -347,7 +342,6 @@ type FontVariant struct {
 	Key    string `json:"key,omitempty" pb:"5"`
 }
 
-// copyFields copies fields from src to dst.
 func copyFields(dst, src any) {
 	d, s := reflect.ValueOf(dst).Elem(), reflect.ValueOf(src)
 	if s.Kind() == reflect.Pointer {
@@ -369,7 +363,6 @@ func copyFields(dst, src any) {
 	}
 }
 
-// mirrorMissing lists the canvas struct fields not mirrored.
 func mirrorMissing(dst, src reflect.Type) []string {
 	var missing []string
 	for i := range src.NumField() {
@@ -677,7 +670,6 @@ func ToFootnotes(list []Footnote) *canvas.FootnoteSet {
 // ImageLoader, when set, turns an image's URL into an image.
 var ImageLoader func(url string) canvas.ImageSource
 
-// imageObject makes the inline object for a saved image.
 func imageObject(it ImageItem) canvas.InlineObject {
 	if ImageLoader != nil {
 		if src := ImageLoader(it.URL); src != nil {
@@ -723,7 +715,6 @@ func (p *ImagePlaceholder) DrawAt(pt canvas.Painter, x, y float64) {
 	pt.FillRect(x, y, w, h)
 }
 
-// TagsKey is the Meta key a document's tags are kept under.
 const TagsKey = "tags"
 
 // Tags returns the document's tags.
@@ -778,7 +769,6 @@ func (d Document) SourceProblem() string { v, _ := d.Get(SourceProblemKey); retu
 // SourceFormat returns the format the document came from.
 func (d Document) SourceFormat() string { v, _ := d.Get(SourceFormatKey); return v }
 
-// IDKey and NameKey are the Meta keys for ID and name.
 const (
 	IDKey   = "id"
 	NameKey = "name"
@@ -819,23 +809,19 @@ func (d Document) ID() string { v, _ := d.Get(IDKey); return v }
 // SetID gives the document its ID.
 func (d *Document) SetID(id string) { d.Set(IDKey, id) }
 
-// Name returns the document's name in a list, "" if it has none.
 func (d Document) Name() string { v, _ := d.Get(NameKey); return v }
 
 // SetName names the document.
 func (d *Document) SetName(name string) { d.Set(NameKey, name) }
 
-// TrashedKey is the Meta key holding when the document was trashed.
 const TrashedKey = "trashed"
 
-// Trashed returns when the document was trashed, 0 if it is not in the trash.
 func (d Document) Trashed() int64 {
 	v, _ := d.Get(TrashedKey)
 	n, _ := strconv.ParseInt(v, 10, 64)
 	return n
 }
 
-// SetTrashed records when the document was trashed; 0 takes it out of the trash.
 func (d *Document) SetTrashed(ns int64) {
 	if ns == 0 {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == TrashedKey })
@@ -870,10 +856,8 @@ func (d *Document) SetProtection(level string) {
 // FolderKey is the Meta key holding the folder ID.
 const FolderKey = "folder"
 
-// Folder returns the ID of the folder the document is in, "" at the top level.
 func (d Document) Folder() string { v, _ := d.Get(FolderKey); return v }
 
-// SetFolder puts the document in a folder; "" takes it to the top level.
 func (d *Document) SetFolder(id string) {
 	if id == "" {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == FolderKey })
@@ -882,10 +866,8 @@ func (d *Document) SetFolder(id string) {
 	d.Set(FolderKey, id)
 }
 
-// LangKey is the Meta key a document's language is kept under.
 const LangKey = "lang"
 
-// Language is the document's language, or "" when none is set (or what is set is not a language tag).
 func (d Document) Language() string {
 	if v, _ := d.Get(LangKey); v != "" && canvas.ValidLang(v) {
 		return v
@@ -893,7 +875,6 @@ func (d Document) Language() string {
 	return ""
 }
 
-// ThemeKey is the Meta key a document's theme is kept under.
 const ThemeKey = "theme"
 
 // Theme is the document's theme.
@@ -911,7 +892,7 @@ func (d *Document) SetTheme(css string) {
 	d.Set(ThemeKey, css)
 }
 
-// SetLanguage sets the document's language; "" removes it. A tag that is not valid is ignored.
+// SetLanguage sets the document's language; "" removes it.
 func (d *Document) SetLanguage(tag string) {
 	if !canvas.ValidLang(tag) {
 		return
