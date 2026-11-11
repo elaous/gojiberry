@@ -1,6 +1,6 @@
 # Features of the editor, with a picture of each
 
-The showcase (`examples/canvas-editor-showcase`) is the editor with every feature switched on; this page shows each one in a picture and a few lines. The pictures are made by a test, so they can be made again when the editor changes: `make feature-shots`. How to try each feature by hand is in [feature-testing.md](feature-testing.md); what is done and what is missing is in [status.md](status.md).
+The showcase ([OpenDocs](https://github.com/elaous/opendocs)) is the editor with every feature switched on; this page shows each one in a picture and a few lines. The pictures in `docs/features/img` come from OpenDocs, and regenerating them runs in the OpenDocs repository. How to try each feature by hand is in [feature-testing.md](feature-testing.md); what is done and what is missing is in [status.md](status.md).
 
 ## Editing on the canvas
 

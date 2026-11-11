@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -218,8 +219,19 @@ func TestNoStaleMessagesInThePacks(t *testing.T) {
 			prefixes = append(prefixes, l)
 		}
 	}
+	exemptFile, err := os.ReadFile("testdata/exempt-ids.txt") // ids used by the OpenDocs repository
+	if err != nil {
+		t.Fatal(err)
+	}
+	exempt := map[string]bool{}
+	for _, id := range strings.Fields(string(exemptFile)) {
+		exempt[id] = true
+	}
 	var stale []string
 	for id := range Default().msgs["es"] {
+		if exempt[id] {
+			continue
+		}
 		base, _, _ := strings.Cut(id, "#")
 		if literals[base] {
 			continue

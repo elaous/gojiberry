@@ -79,8 +79,7 @@ allowlist and the sinks, also while it is off.
 ## Running everything: `docker-compose.yml`
 
 `make stack-up` starts PostgreSQL, the docstore server (on Postgres), the collaboration hub, the sync, font and
-translation servers, Mailpit (a mail catcher, web UI on http://localhost:8025) and the canvas editor showcase
-(http://localhost:8000). `make stack-down` stops it.
+translation servers and Mailpit (a mail catcher, web UI on http://localhost:8025). `make stack-down` stops it.
 
 Values come from three places, strongest first: the **shell environment**, then **`.env.local`** (copy
 `.env.local.example`; git-ignored), then the **development default** in the compose file. So `.env.local`

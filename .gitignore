@@ -21,7 +21,7 @@ examples/collab-editor-app/static/*.css
 examples/gio-counter-demo/dist/
 examples/gio-counter-demo/*.syso
 
-# make showcase-dist output (docs/deploy.md)
+# wasmdist output (docs/deploy.md)
 /dist/
 
 # Test binary, built with `go test -c`
@@ -57,7 +57,6 @@ examples/echo-ssr-demo/echo-ssr-demo
 examples/gin-ssr-demo/gin-ssr-demo
 
 # built binaries (go build in the repo root)
-/canvas-editor-showcase
 /collabhub
 /docsh
 

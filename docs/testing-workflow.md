@@ -20,36 +20,26 @@ remote check is wanted. The checks run here instead.
 4. The merge count since the last full run is kept at the top of
    [roadmap.md](roadmap.md#merges-since-the-last-full-test-run), updated with each merge.
 
-## The nightly browser run, and what it costs
-
-The `e2e` job (the whole browser suite of the showcase) runs by itself every night at 03:17 UTC, on the default branch (a scheduled workflow always does), and can still be started by hand. It is the only job that is scheduled.
-
-What it costs: hosted minutes. This repository is private, so its runs count against the account's monthly allowance of hosted minutes (as of 2026: 2,000 minutes on the Free plan, 3,000 on Pro and Team, more on Enterprise; a Linux minute counts as one, a Windows minute as two, a macOS minute as ten; check the current figures on GitHub's billing page, they change). The job takes about 25 minutes of tests plus about 5 for the checkout, Go and Chrome set-up, so **about 30 minutes a night, about 900 a month**: roughly 45% of the Free allowance and 30% of Pro or Team. Minutes beyond the allowance are billed per minute (about $0.006 to $0.008 for the standard Linux runner when this was written). For comparison, running the same suite on every push would cost about 30 minutes for each push, which at the pace of this project (several PRs a day) is several times the Free allowance. If the allowance is short, change the cron line to weekly (`17 3 * * 0`, about 130 minutes a month) or run `make e2e-test` here instead, as before. Repositories that are public have free minutes on standard runners.
-
-The suite runs to the end whatever fails: every test is independent, so a failed test does not stop the next one; only a panic or the 75-minute timeout ends the run early, and then the report names the tests that started and did not finish. The output goes to a file (`GOJIBERRY_E2E_JSON`, `go test -json`), `.github/scripts/e2e-report.py` turns it into a Markdown report (the totals, each failed test with the end of its output, the tests that did not finish) which is put in the run's summary, and a step opens a GitHub issue labelled `nightly-e2e` with it, or adds a comment to the one that is open; a night that passes comments and closes the issue. Only the issue with that label is touched. The job still fails, so the run is red. A night that fails is read the next morning and fixed on a branch of its own, the same rule as for a full run. Decided for the time before the project is open source; the first night on a hosted runner is the first real try (the report script is tested here on sample and real `go test -json` output, the issue step is checked for syntax only).
-
 ## Running the CI steps locally
 
 No hosted runner (or no minutes) is needed: `make ci-local` runs the `make` steps of the workflow on this
 machine, in the workflow's own order (`generate`, `fmt-check`, `vet`, `test`, `wasm-vet`, `lint`,
-`wasm-lint`, `lint-modules`, `modules`, `wasm-size`, `a11y-test`, `e2e-test`, `grammar-test-setup`, `grammar-test`,
+`wasm-lint`, `lint-modules`, `modules`, `grammar-test-setup`, `grammar-test`,
 `mail-test`; each once). It reads them from every job of `.github/workflows/ci.yml`
 (`.github/scripts/local-ci.sh`), so a step added there runs here too. The jobs that need a database
 service (PostgreSQL, MongoDB) are not `make` steps and are not run locally.
 
 The hosted workflow is manual ("Run workflow" on the Actions tab) and asks **what to run**: `all`,
-`fast-checks`, `a11y` (the accessibility gate in the runner's Chrome), `e2e` (the whole browser suite of the showcase, about 25 minutes; `make e2e-test` runs the same thing here), `mailpit` (the SMTP sender against
+`fast-checks`, `mailpit` (the SMTP sender against
 the `axllent/mailpit` Docker image), `grammar`, `postgres` or `mongodb`.
 
 - `make ci-local` stops at the first failure; `.github/scripts/local-ci.sh -k` keeps going and lists
   every failure at the end.
-- `make ci-local STEPS="wasm-size a11y-test"` runs only those steps.
-- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge e2e-test` (the whole browser suite, about 25 minutes: `make e2e-test`, or `make ci-local STEPS=e2e-test`) and `coverage-badge` (it runs the whole test suite a second time, and the
+- `make ci-local STEPS="vet lint"` runs only those steps.
+- `LOCAL_CI_SKIP` is the steps to leave out; the default is `coverage-badge` (it runs the whole test suite a second time, and the
   badge is updated by hand; run `make coverage-badge` yourself at a full run and commit README.md).
   `LOCAL_CI_LIST=1` prints the steps and stops.
 - `local-ci-report.txt` (ignored by git) has the commit, and each step with its time and result.
-- `a11y-test` needs a Chromium; set `CHROMIUM` if it is not on the PATH. The manual screen-reader run
-  of [accessibility-testing.md](accessibility-testing.md) is still done by a person.
 
 ## Mailpit-backed tests (SMTP)
 

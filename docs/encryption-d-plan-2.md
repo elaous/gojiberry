@@ -147,7 +147,7 @@ This is part of the design [Encryption with SSH keys and passkeys](encryption-an
         (`docstore/encrypt/confidential_folders_test.go`): no real name in the store, a stranger's rebuild,
         passkey PRF alone and recovery key alone, rename, move, delete, breadcrumbs, no leak in the lists.
 
-   7. **The showcase's encrypted store (done): `examples/canvas-editor-showcase`.**
+   7. **The showcase's encrypted store (done): in the OpenDocs repository.**
       Encryption is **off by default**. In the Save tab, "Encrypt this store" wraps the browser target
       (`localStorage`) with `encrypt.Adapter` over a `ConfidentialKeyring`; the code is the `encstore` package (no
       browser code, tested natively: `encstore.go`, `transaction.go`, `bind.go`), `encpanel.go` (the screens),

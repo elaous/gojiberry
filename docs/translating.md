@@ -41,8 +41,8 @@ check of the page in that direction.
 ## Languages that are fetched when chosen
 
 Portuguese, Arabic and Hebrew are not in the program. Their packs are files next to the page,
-`examples/canvas-editor-showcase/static/lang-<code>.json` (the same shape as the embedded packs: one
-top-level key, the language), copied beside `index.html` by `make showcase-dist` and by the e2e harness, and fetched
+`static/lang-<code>.json` in the [OpenDocs repository](https://github.com/elaous/opendocs) (the same shape as the embedded packs: one
+top-level key, the language), copied beside `index.html` by its build, and fetched
 the first time the language is asked for (`?lang=ar`, the Language menu, the preferences). A visitor who never
 chooses them downloads nothing, and the wasm does not grow with each language. `TestLazyPacksAreComplete` holds them to
 the same standard as the shipped packs (every message, the same verbs in the same order, a text for every plural

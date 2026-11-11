@@ -21,7 +21,6 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.60.1
-	rsc.io/qr v0.2.0
 )
 
 require (

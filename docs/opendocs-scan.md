@@ -1,6 +1,6 @@
 # Scan of opendocs: what to bring over, what to give back
 
-This showcase (`examples/canvas-editor-showcase`) is the base for opendocs V1.
+The showcase, which has moved to the [opendocs repository](https://github.com/elaous/opendocs), is the base for opendocs V1.
 This page is a first pass over [elaous/opendocs](https://github.com/elaous/opendocs)
 (read from its file names, `docs/ROADMAP.md`, `docs/architecture/` and the doc
 comments of a few packages; the code behind most items was **not** read line

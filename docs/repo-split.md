@@ -99,7 +99,7 @@ Either way the opendocs roadmap already names things that belong in the shared r
   development; the real cost is one pass of `gofmt -r`-style rewriting per move and a version tag per module.
 - CI is one workflow today ([ci.yml](../.github/workflows/ci.yml)): the browser tests, the API dump check, the wasm size
   budget and the generate check all assume one tree. Each new repository needs its own, and the wasm budget
-  ([wasm-budget.txt](wasm-budget.txt)) stays with whichever repository builds the showcase.
+  moved with the showcase to the OpenDocs repository.
 - The `*.xg.go` files are committed generated code. After the split, `xgc` is a dependency of every repository that has
   `.xg` files: pin it by version, not by path.
 - Cross-cutting tests (the end-to-end suite drives the showcase across `canvas`, `docstore` and `components`) stay with
