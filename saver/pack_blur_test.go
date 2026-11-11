@@ -57,7 +57,6 @@ func TestExportPackBlursTheSealedRecords(t *testing.T) {
 			if day := int64(24 * time.Hour); e.Updated%day != 0 {
 				t.Errorf("the time %d is not a whole day", e.Updated)
 			}
-			// the envelope is "SEAL:<id>:" + the padded message
 			if n := int(e.Length) - len("SEAL:"+secret+":"); n&(n-1) != 0 {
 				t.Errorf("the sealed size %d is not a bucket", n)
 			}
@@ -66,7 +65,6 @@ func TestExportPackBlursTheSealedRecords(t *testing.T) {
 			t.Error("an ordinary document was blurred")
 		}
 	}
-	// It imports as before.
 	dst := newDst()
 	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(buf.Bytes()), int64(buf.Len()), ImportOptions{Open: fakeOpen})
 	if err != nil || rep.Documents != 3 || len(rep.Failed) != 0 || len(rep.NeedsKey) != 0 {

@@ -29,9 +29,6 @@ func textOf(d docfile.Document) string {
 	return b.String()
 }
 
-// lenientCut finds how to cut a protobuf file so that what is left still parses as a
-// (shorter, different) document: protobuf has no length or checksum for the whole
-// message, so a file cut at a field boundary is a valid file.
 func lenientCut(t *testing.T, data []byte) []byte {
 	t.Helper()
 	for n := len(data) - 1; n > 0; n-- {
@@ -77,7 +74,6 @@ func TestACutProtobufFileIsDetectedAndTheDocumentIsRestoredFromItsPreviousCopy(t
 	if err != nil || !rec.FromPrevious || textOf(doc) != "version one" {
 		t.Fatalf("%q %+v %v: the cut file must not be shown as the document", textOf(doc), rec, err)
 	}
-	// The catalog now points at the good copy, and the damaged file is gone.
 	again, rec2, err := s.LoadChecked(ctx, "m", id)
 	if err != nil || rec2.FromPrevious || textOf(again) != "version one" {
 		t.Fatalf("the second read is of the restored current file: %q %+v %v", textOf(again), rec2, err)
@@ -98,13 +94,11 @@ func TestADocumentWithNoGoodCopyIsReportedDamagedNotShownCut(t *testing.T) {
 	if !errors.Is(err, ErrUnreadable) || !errors.Is(err, ErrDamaged) {
 		t.Fatalf("%v", err)
 	}
-	// The file is not touched: it may still be worth something to someone.
 	if _, err := mem.Load(ctx, e.Key); err != nil {
 		t.Errorf("%v", err)
 	}
 }
 
-// failingLoadsOf fails the loads of one key with an error that is not "not found".
 type flaky struct {
 	docstore.Adapter
 	key string
@@ -127,21 +121,17 @@ func TestAStoreFailureIsNotAReasonToShowAnOlderCopy(t *testing.T) {
 	if doc, err := bad.Load(ctx, "m", id); err == nil || errors.Is(err, ErrUnreadable) || textOf(doc) != "" {
 		t.Fatalf("an older copy shown while the current one only failed to read: %q %v", textOf(doc), err)
 	}
-	// And nothing was switched or deleted.
 	if _, err := mem.Load(ctx, cur.Key); err != nil {
 		t.Errorf("%v", err)
 	}
 }
 
-// A crash after the file was written and before the catalog was leaves the catalog
-// pointing at the old, intact file: the document must not look damaged.
 func TestACrashBetweenTheFileAndTheCatalogLeavesTheOldDocumentIntact(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	e, _ := s.Save(ctx, "m", docfile.Open, docWithText("doc", "the first save"))
 	before, _ := mem.Load(ctx, CatalogKey)
-	// The crash: a new generation file is written, the catalog is not.
 	orphan := genKey(e.ID, docfile.Open)
 	data, _ := docfile.Open.Marshal(docWithText("doc", "an unfinished save"))
 	_ = mem.Save(ctx, orphan, data)
@@ -165,13 +155,11 @@ func TestVerifyRestoresSealsAndReports(t *testing.T) {
 	lostE, _ := s.Save(ctx, "m", docfile.Open, docWithText("lost", "a document with a single copy of some length"))
 	legacyE, _ := s.Save(ctx, "m", docfile.Open, docWithText("legacy", "saved before checksums"))
 
-	// Damage the restorable one's current file and the lost one's only file.
 	cur, _ := s.Get(ctx, "m", restorable)
 	stored, _ := mem.Load(ctx, cur.Key)
 	_ = mem.Save(ctx, cur.Key, lenientCut(t, stored.Data))
 	ls, _ := mem.Load(ctx, lostE.Key)
 	_ = mem.Save(ctx, lostE.Key, lenientCut(t, ls.Data))
-	// Make the legacy one look like it was saved before checksums existed.
 	raw, _ := mem.Load(ctx, CatalogKey)
 	var c catalog
 	_ = json.Unmarshal(raw.Data, &c)
@@ -188,7 +176,6 @@ func TestVerifyRestoresSealsAndReports(t *testing.T) {
 	if rep.Checked != 4 || len(rep.Restored) != 1 || rep.Restored[0] != "plan" || len(rep.Lost) != 1 || rep.Lost[0] != "lost" || rep.Sealed != 1 {
 		t.Fatalf("%+v", rep)
 	}
-	// A second pass finds nothing more to do about the restored and sealed ones.
 	rep2, _ := s.Verify(ctx, "m")
 	if len(rep2.Restored) != 0 || rep2.Sealed != 0 || len(rep2.Lost) != 1 {
 		t.Errorf("%+v", rep2)
@@ -271,8 +258,6 @@ func TestNoPreviousCopiesWhenTurnedOff(t *testing.T) {
 	}
 }
 
-// lockingAdapter stands for a store others share that cannot write conditionally: it
-// offers a lock instead, and records whether the catalog was written with it held.
 type lockingAdapter struct {
 	docstore.Adapter
 	held      bool
@@ -308,8 +293,6 @@ func TestTheCatalogIsUpdatedWhileHoldingTheStoresLock(t *testing.T) {
 	}
 }
 
-// Deleting a folder does not remove a trashed document whose current file is bad but
-// whose previous copy is good: it is restored from that copy and moved out of the folder.
 func TestDeleteFolderKeepsATrashedDocumentWithAGoodPreviousCopy(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -339,8 +322,6 @@ func TestDeleteFolderKeepsATrashedDocumentWithAGoodPreviousCopy(t *testing.T) {
 	}
 }
 
-// A store whose modification times are coarse (every file the same): a rebuild still
-// picks the newest save as the current one, by the save time inside the file.
 type coarseTimes struct{ docstore.Adapter }
 
 func (c coarseTimes) List(ctx context.Context) ([]docstore.Meta, error) {
@@ -366,8 +347,6 @@ func TestRebuildPicksTheNewestSaveWhenModificationTimesTie(t *testing.T) {
 	}
 }
 
-// A conflicting catalog write makes the update start over; the file the failed try
-// wrote is removed, not left as an orphan.
 type conflictOnce struct {
 	docstore.Adapter
 	done bool
@@ -401,8 +380,6 @@ func TestARetriedSaveLeavesNoOrphanFile(t *testing.T) {
 	}
 }
 
-// Renaming rewrites the file but does not use up the previous copy: it stays the
-// earlier save.
 func TestRenameKeepsThePreviousSave(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -419,8 +396,6 @@ func TestRenameKeepsThePreviousSave(t *testing.T) {
 	}
 }
 
-// After a recovery the new current file carries the catalog's name, so a rebuilt
-// catalog keeps it.
 func TestRecoveredFileKeepsTheCatalogsMetadata(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -443,8 +418,6 @@ func TestRecoveredFileKeepsTheCatalogsMetadata(t *testing.T) {
 	}
 }
 
-// A current file that is gone with a damaged previous copy is not "gone": deleting the
-// folder keeps the document.
 func TestDeleteFolderKeepsADocumentWithADamagedPreviousCopy(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -471,8 +444,6 @@ func TestDeleteFolderKeepsADocumentWithADamagedPreviousCopy(t *testing.T) {
 	}
 }
 
-// capped is a store with room for a number of bytes: a save that would go over is refused
-// with ErrStorageFull, as a browser's quota does.
 type capped struct {
 	docstore.Adapter
 	room int
@@ -498,8 +469,6 @@ func (c *capped) Save(ctx context.Context, id string, data []byte) error {
 	return c.Adapter.Save(ctx, id, data)
 }
 
-// A store with room for little more than one copy of a document still takes saves: the
-// previous copy is given up first, and as a last resort the current file is written over.
 func TestASaveFitsInAFullStoreByGivingUpTheBackup(t *testing.T) {
 	ctx := context.Background()
 	for _, rooms := range []struct{ room int }{{room: 2300}, {room: 1500}} {
@@ -526,7 +495,6 @@ func TestASaveFitsInAFullStoreByGivingUpTheBackup(t *testing.T) {
 	}
 }
 
-// aged reports every file as saved long ago.
 type aged struct{ docstore.Adapter }
 
 func (a aged) List(ctx context.Context) ([]docstore.Meta, error) {
@@ -559,7 +527,6 @@ func TestCollectOrphansRemovesOnlyOldLeftoverGenerations(t *testing.T) {
 	if d, err := s.Load(ctx, "m", id); err != nil || !strings.HasPrefix(textOf(d), "version two") {
 		t.Errorf("the document and its previous copy are untouched: %v", err)
 	}
-	// A young file might be a save in progress.
 	_ = mem.Save(ctx, id+"~bbbbbbbbbbbb.json", []byte("{}"))
 	young := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	if n, _ := young.CollectOrphans(ctx, "m", time.Hour); n != 0 {
@@ -574,20 +541,17 @@ func TestRebuildPutsBackTheSaveTheOldCatalogVouchedFor(t *testing.T) {
 	id := twoSaves(t, s, docfile.JSON)
 	cur, _ := s.Get(ctx, "m", id)
 	stored, _ := mem.Load(ctx, cur.Key)
-	// A change that still parses: one character of the text.
 	flipped := strings.Replace(string(stored.Data), "version two", "version twX", 1)
 	_ = mem.Save(ctx, cur.Key, []byte(flipped))
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
-	// The earlier save, which the old catalog vouched for, is the document again.
 	d, rec, err := s.LoadChecked(ctx, "m", id)
 	if err != nil || rec.FromPrevious || textOf(d) != "version one" {
 		t.Fatalf("the rebuild put the vouched-for save back: %q %+v %v", textOf(d), rec, err)
 	}
 }
 
-// With no earlier copy to put back, a changed file is still found damaged after a rebuild.
 func TestRebuildKeepsAChangedOnlyCopyFlagged(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -692,8 +656,6 @@ func TestOpenSizesAndDownloadWithoutHistory(t *testing.T) {
 	}
 }
 
-// An older file the old catalog knows no checksum for is not vouched for: it does not
-// win over the newer file.
 func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -703,13 +665,11 @@ func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, _ := mem.Load(ctx, e.Key)
-	// A leftover with the same ID, older by its own save time, that no catalog lists.
 	old := docWithText("plan", "version one")
 	old.SetID(e.ID)
 	old.Updated = 1
 	data, _ := docfile.JSON.Marshal(old)
 	_ = mem.Save(ctx, e.ID+"~aaaaaaaaaaaa.json", data)
-	// The newer file changes (still parses).
 	_ = mem.Save(ctx, e.Key, []byte(strings.Replace(string(stored.Data), "version two", "version twX", 1)))
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -724,8 +684,6 @@ func TestRebuildDoesNotPutBackAnUnvouchedOlderFile(t *testing.T) {
 	}
 }
 
-// Three files for one ID: the vouched-for one is the document, the changed one is
-// skipped, and only an old enough skipped file is deleted.
 func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -749,14 +707,12 @@ func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.
 	if now.Key == cur.Key || !slices.Contains(skipped, cur.Key) {
 		t.Fatalf("the changed file is skipped and not the document: %+v %v", now, skipped)
 	}
-	// Young: kept.
 	if n, _ := s.CollectOrphans(ctx, "m", time.Hour); n != 0 {
 		t.Errorf("a young skipped file was removed (%d)", n)
 	}
 	if _, err := mem.Load(ctx, cur.Key); err != nil {
 		t.Fatalf("kept: %v", err)
 	}
-	// Old: removed.
 	old := &Saver{Targets: []Target{{Name: "m", Adapter: aged{mem}}}}
 	if n, err := old.CollectOrphans(ctx, "m", time.Hour); err != nil || n == 0 {
 		t.Fatalf("removed %d: %v", n, err)
@@ -766,7 +722,6 @@ func TestRebuildWithThreeFilesAndTheChangedOneIsCollectedOnlyWhenOld(t *testing.
 	}
 }
 
-// listOrdered lists the files in the given key order (any others after them).
 type listOrdered struct {
 	docstore.Adapter
 	order []string
@@ -784,9 +739,6 @@ func (l listOrdered) List(ctx context.Context) ([]docstore.Meta, error) {
 	return ms, err
 }
 
-// The outcome of a rebuild with a vouched-for save, a changed newer file and a stray does
-// not depend on the order of the listing (the stray first or last, and the changed file
-// before or after the vouched one), and the catalog it writes agrees with the store.
 func TestRebuildWithAStrayDoesNotDependOnListOrder(t *testing.T) {
 	ctx := context.Background()
 	for _, order := range []string{"S B A", "S A B", "B S A", "B A S", "A S B", "A B S"} {

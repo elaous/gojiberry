@@ -51,14 +51,12 @@ func TestVersionsKeepHistoryNewestFirstAndPrune(t *testing.T) {
 		if vs, _ = s.Versions(ctx, tg.Name, e.ID); len(vs) != 2 {
 			t.Errorf("%s: after a delete: %d", tg.Name, len(vs))
 		}
-		// Versions are not documents, and another document's are separate.
 		if list, _ := s.List(ctx, tg.Name); len(list) != 1 {
 			t.Errorf("%s: versions leaked into the list: %v", tg.Name, list)
 		}
 		if other, _ := s.Versions(ctx, tg.Name, docfile.NewID()); len(other) != 0 {
 			t.Errorf("%s: %v", tg.Name, other)
 		}
-		// Deleting the document takes its history with it.
 		if err := s.Delete(ctx, tg.Name, e.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -123,11 +121,9 @@ func TestTrashRestorePurge(t *testing.T) {
 		if err != nil || len(tr) != 1 || tr[0].ID != e.ID || tr[0].Name != "report" || tr[0].Trashed.IsZero() {
 			t.Fatalf("%s: trashed %+v %v", tg.Name, tr, err)
 		}
-		// A trashed document is still there: nothing was copied or overwritten.
 		if got, err := s.Load(ctx, tg.Name, e.ID); err != nil || got.Name() != "report" {
 			t.Errorf("%s: %+v %v", tg.Name, got, err)
 		}
-		// A new document with the same name is a different document.
 		other := saved(t, s, tg.Name, "report", docfile.JSON)
 		if other.ID == e.ID {
 			t.Fatal("same name, same id")
@@ -145,7 +141,6 @@ func TestTrashRestorePurge(t *testing.T) {
 		if vs, _ := s.Versions(ctx, tg.Name, e.ID); len(vs) != 1 {
 			t.Errorf("%s: the history went with the document: %d", tg.Name, len(vs))
 		}
-		// Purge only what is in the trash; EmptyTrash.
 		if err := s.Purge(ctx, tg.Name, e.ID); err == nil {
 			t.Errorf("%s: purged a document that was not in the trash", tg.Name)
 		}
@@ -182,7 +177,6 @@ func TestDuplicate(t *testing.T) {
 		if err != nil || a.Name != "Copy of plan" || a.ID == e.ID || a.Format != docfile.ProtoBinary {
 			t.Fatalf("%s: %+v %v", tg.Name, a, err)
 		}
-		// Names need not be unique: a second copy has the same name and its own ID.
 		b, _ := s.Duplicate(ctx, tg.Name, e.ID, "")
 		if b.Name != "Copy of plan" || b.ID == a.ID {
 			t.Errorf("%s: %+v", tg.Name, b)
@@ -237,7 +231,6 @@ func TestRenameAndTags(t *testing.T) {
 		if got.Title != "Notes" || len(got.Content) != 1 || !got.HasTag("RPG") {
 			t.Errorf("%s: the document changed: %+v", tg.Name, got)
 		}
-		// Saving the document again, with no tags of its own, keeps the catalog's.
 		d := named("a")
 		d.SetID(a.ID)
 		e, _ := s.Save(ctx, tg.Name, docfile.JSON, d)
@@ -287,7 +280,6 @@ func TestSavingDoesNotBringBackRemovedTags(t *testing.T) {
 	if err != nil || len(again.Tags) != 0 {
 		t.Fatalf("%+v %v", again, err)
 	}
-	// And a trashed document stays trashed when it is saved.
 	_ = s.Trash(ctx, "m", e.ID)
 	if _, err := s.Save(ctx, "m", docfile.JSON, stale); err != nil {
 		t.Fatal(err)
@@ -365,8 +357,6 @@ func TestImportIntoAnExistingIDAddsToTheVersions(t *testing.T) {
 		if err != nil || cur.Title != "imported" || len(cur.History) != 0 {
 			t.Fatalf("%s: current %q %v", tg.Name, cur.Title, err)
 		}
-		// The version it had stays and the imported ones are added; the one saved just now
-		// is the newest, the imported ones carry their own (older) times.
 		if got := strings.Join(versionTitles(t, s, tg.Name, e.ID), " "); got != "old h2 h1" {
 			t.Errorf("%s: versions %q", tg.Name, got)
 		}
@@ -409,7 +399,6 @@ func TestVersionNamesPinsAndAuthors(t *testing.T) {
 		if first.Author != "ana@example.com" {
 			t.Fatalf("%s: author %q", tg.Name, first.Author)
 		}
-		// name it, and pin it: it survives the pruning that follows
 		if err := s.RenameVersion(ctx, tg.Name, first.Key, "  Sent to the printer  "); err != nil {
 			t.Fatal(err)
 		}
@@ -423,7 +412,6 @@ func TestVersionNamesPinsAndAuthors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// two unpinned (the newest) and the pinned one
 		if len(vs) != 3 {
 			t.Fatalf("%s: %d versions, want 2 unpinned + 1 pinned", tg.Name, len(vs))
 		}
@@ -434,7 +422,6 @@ func TestVersionNamesPinsAndAuthors(t *testing.T) {
 		if vs[0].Author != "" || vs[0].Pinned || vs[0].Name != "" {
 			t.Errorf("%s: an ordinary snapshot has no notes: %+v", tg.Name, vs[0])
 		}
-		// a pinned version is not deleted until unpinned
 		if err := s.DeleteVersion(ctx, tg.Name, first.Key); !errors.Is(err, ErrPinned) {
 			t.Errorf("%s: deleting a pinned version: %v", tg.Name, err)
 		}
@@ -448,7 +435,6 @@ func TestVersionNamesPinsAndAuthors(t *testing.T) {
 		if len(vs) != 2 {
 			t.Errorf("%s: %d versions after deleting", tg.Name, len(vs))
 		}
-		// the notes of a deleted version are gone; names are cut to length; clearing a name clears the note
 		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, strings.Repeat("é", 200)); err != nil {
 			t.Fatal(err)
 		}
@@ -459,14 +445,12 @@ func TestVersionNamesPinsAndAuthors(t *testing.T) {
 		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, ""); err != nil {
 			t.Fatal(err)
 		}
-		// a version that is not there cannot be given notes, and neither can a key that is not a version's
 		if err := s.RenameVersion(ctx, tg.Name, VersionPrefix+e.ID+"/00000000000000000001.json", "x"); !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: a missing version: %v", tg.Name, err)
 		}
 		if err := s.PinVersion(ctx, tg.Name, "notes/x", true); !errors.Is(err, ErrName) {
 			t.Errorf("%s: a key that is not a version's: %v", tg.Name, err)
 		}
-		// deleting the document takes the notes with it
 		if err := s.RenameVersion(ctx, tg.Name, vs[0].Key, "keep me"); err != nil {
 			t.Fatal(err)
 		}

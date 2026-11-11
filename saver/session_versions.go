@@ -10,8 +10,7 @@ import (
 	"time"
 )
 
-// SaveVersion snapshots the document being edited. It has to have been saved, to
-// have an ID the snapshots are kept under.
+// SaveVersion snapshots the document being edited.
 func (s *Session) SaveVersion(ctx context.Context) error {
 	if s.ID() == "" {
 		return errors.New("save the document before saving a version of it")
@@ -26,8 +25,7 @@ func (s *Session) SaveVersion(ctx context.Context) error {
 	return s.after(ctx, msg("saver.versionSaved", "A version of %s saved", s.Name()))
 }
 
-// OpenVersion opens a snapshot in the editor. The document keeps its ID, so saving
-// it afterwards replaces the saved one: go back, then Save.
+// OpenVersion opens a snapshot in the editor.
 func (s *Session) OpenVersion(ctx context.Context, key string) error {
 	doc, err := s.Saver.LoadVersion(ctx, s.targetName(), key)
 	if err != nil {
@@ -40,8 +38,6 @@ func (s *Session) OpenVersion(ctx context.Context, key string) error {
 	return nil
 }
 
-// CompareVersion compares a snapshot with the document as it is being edited now, and keeps the
-// comparison for Versions to show (docdiff: by block, and by word inside an edited block).
 func (s *Session) CompareVersion(ctx context.Context, key string) error {
 	older, err := s.Saver.LoadVersion(ctx, s.targetName(), key)
 	if err != nil {
@@ -57,9 +53,6 @@ func (s *Session) CompareVersion(ctx context.Context, key string) error {
 	return nil
 }
 
-// RestoreVersion goes back to a snapshot without losing what is being edited: the current text is saved
-// as a new version first (named "Before restoring ..."), and then the snapshot is opened in the editor.
-// Nothing is deleted, and the restore can itself be undone by restoring that version.
 func (s *Session) RestoreVersion(ctx context.Context, key string) error {
 	if s.ID() == "" {
 		return errors.New("save the document before restoring a version of it")
@@ -86,7 +79,6 @@ func (s *Session) RestoreVersion(ctx context.Context, key string) error {
 	return s.after(ctx, msg("saver.versionRestored", "Version restored; what you had is kept as a version"))
 }
 
-// versionLabel is the time of a version key as text ("2026-03-04 05:06:07").
 func versionLabel(key string) string {
 	rest := key[strings.LastIndex(key, "/")+1:]
 	stamp, _, _ := strings.Cut(rest, ".")
@@ -104,7 +96,6 @@ func (s *Session) RenameVersion(ctx context.Context, key, name string) error {
 	return s.after(ctx, msg("saver.versionRenamed", "Version renamed"))
 }
 
-// PinVersion keeps a snapshot when older ones are dropped, or lets it go.
 func (s *Session) PinVersion(ctx context.Context, key string, pinned bool) error {
 	if err := s.Saver.PinVersion(ctx, s.targetName(), key, pinned); err != nil {
 		return err
@@ -128,8 +119,6 @@ func (s *Session) DeleteVersion(ctx context.Context, key string) error {
 	return s.after(ctx, msg("saver.versionDeleted", "Version deleted"))
 }
 
-// Versions returns the props for components.Versions: the snapshots of the
-// document being edited.
 func (s *Session) Versions() components.VersionsProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()

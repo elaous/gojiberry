@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/docfile/pack"
 )
 
-// hooks counts the ConfidentialCheck and Rekey calls made for id.
 func hooks(s *Saver) (checked, rekeyed *[]string) {
 	checked, rekeyed = new([]string), new([]string)
 	s.ConfidentialCheck = func(_ context.Context, _, id string) error { *checked = append(*checked, id); return nil }
@@ -48,7 +47,6 @@ func TestSaveRefusesAFoldersID(t *testing.T) {
 	if len(*checked) != 0 || len(*rekeyed) != 0 {
 		t.Errorf("the hooks ran: %v %v", *checked, *rekeyed)
 	}
-	// The folder is intact.
 	if name, err := s.RevealFolder(ctx, "m", sec); err != nil || name != secretFolder {
 		t.Errorf("%q %v", name, err)
 	}
@@ -57,7 +55,6 @@ func TestSaveRefusesAFoldersID(t *testing.T) {
 	}
 }
 
-// An .open file carries an ID; imported into the editor and saved, it must not take a folder's.
 func TestSessionSaveOfAnImportedOpenFileWithAFoldersID(t *testing.T) {
 	ctx := context.Background()
 	var imported docfile.Document
@@ -72,7 +69,6 @@ func TestSessionSaveOfAnImportedOpenFileWithAFoldersID(t *testing.T) {
 		t.Fatal(err)
 	}
 	checked, rekeyed := hooks(s.Saver)
-	// A crafted .open file, parsed the way an import does.
 	crafted := docfile.FromFlow("Evil", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "x"}}})
 	crafted.SetID(f.ID)
 	crafted.SetProtection(ProtectionE2EE)
@@ -164,7 +160,6 @@ func TestImportPackDocumentWithAPackFoldersIDIsRemapped(t *testing.T) {
 	if err != nil || rep.Folders != 1 || rep.Documents != 1 || len(rep.Failed) != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// Either may be given a new ID, never both the same one.
 	if _, err := s.Get(ctx, "m", fid); err != nil {
 		if fs, _ := s.Folders(ctx, "m"); len(fs) != 1 || fs[0].ID != fid {
 			t.Errorf("neither kept the ID: %+v", fs)

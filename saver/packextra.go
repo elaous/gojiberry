@@ -13,10 +13,8 @@ import (
 	"github.com/elaous/gojiberry/docfile/pack"
 )
 
-// DefaultAttachmentSize is the size from which PackOptions.Attachments keeps an image apart.
 const DefaultAttachmentSize = 64 << 10
 
-// blurTime rounds a time (unix nanoseconds) down to the day, UTC; a zero time stays zero.
 func blurTime(ns int64) int64 {
 	if ns <= 0 {
 		return ns
@@ -25,17 +23,13 @@ func blurTime(ns int64) int64 {
 	return ns - ns%day
 }
 
-// padField is the number of a field no reader knows (the document model stops far below it): the padding of a blurred
-// record is one field of zero bytes, which every reader skips.
 const padField = 1000
 
-// blurPlain pads an .open message with a skipped field so that its length is a bucket: 1 KiB, doubling.
 func blurPlain(plain []byte) []byte {
 	bucket := 1 << 10
 	for bucket < len(plain)+3 {
 		bucket <<= 1
 	}
-	// The field costs its tag (2 bytes), its length (1 to 4 bytes) and the zeros.
 	for lenBytes := 1; lenBytes <= 4; lenBytes++ {
 		n := bucket - len(plain) - 2 - lenBytes
 		if n >= 0 && varintLen(uint64(n)) == lenBytes {
@@ -64,7 +58,6 @@ func appendVarint(b []byte, v uint64) []byte {
 	return append(b, byte(v))
 }
 
-// dataImage splits a base64 data: URL into its type and bytes.
 func dataImage(url string) (mimeType string, data []byte, ok bool) {
 	rest, found := strings.CutPrefix(url, "data:")
 	if !found {
@@ -89,7 +82,6 @@ func dataImage(url string) (mimeType string, data []byte, ok bool) {
 	return mt, data, true
 }
 
-// anyLargeImage says whether any of the documents has an image the export would keep apart.
 func (s *Saver) anyLargeImage(ctx context.Context, target string, ids []string, o PackOptions) (bool, error) {
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
@@ -113,7 +105,6 @@ func (s *Saver) anyLargeImage(ctx context.Context, target string, ids []string, 
 	return false, nil
 }
 
-// apartImages stores the document's large data: images in the pack as attachments and refers to them.
 func apartImages(pw *pack.Writer, doc docfile.Document, min int) (docfile.Document, error) {
 	var firstErr error
 	out := doc.MapImages(func(u string) (string, bool) {
@@ -131,7 +122,6 @@ func apartImages(pw *pack.Writer, doc docfile.Document, min int) (docfile.Docume
 	return out, firstErr
 }
 
-// resolveImages puts back the data: URL of each attachment a document refers to, and counts the ones the pack lacks.
 func resolveImages(rd *pack.Reader, doc docfile.Document) (docfile.Document, int) {
 	missing := 0
 	out := doc.MapImages(func(u string) (string, bool) {

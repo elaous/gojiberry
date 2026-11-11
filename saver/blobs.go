@@ -10,10 +10,6 @@ import (
 
 type blobs struct{ a docstore.Adapter }
 
-// Blobs adapts a docstore backend to fonts.Blobs, so a fonts.Library
-// keeps its downloaded font files in the same place as the documents
-// (Postgres, SQLite, S3, local files, ...). Keys start with
-// fonts.KeyPrefix, which Saver.List skips.
 func Blobs(a docstore.Adapter) fonts.Blobs { return blobs{a} }
 
 func (b blobs) Put(ctx context.Context, key string, data []byte) error {

@@ -18,8 +18,6 @@ func memSaver() *Saver {
 	return &Saver{Targets: []Target{{Name: "m", Adapter: docstore.NewMemoryAdapter()}}}
 }
 
-// seed makes: Work (folder) > Reports (folder); "top" at the top; "r1" in Reports with a tag
-// and a version; "w1" in Work, in the trash.
 func seed(t *testing.T, s *Saver) (work, reports Folder, ids map[string]string) {
 	t.Helper()
 	ctx := context.Background()
@@ -134,7 +132,6 @@ func TestPackImportConflictPolicies(t *testing.T) {
 	if _, err := src.ExportPack(ctx, "m", "", &buf, PackOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	// Change "top" in the target, then import again.
 	d := docWithText("top", "edited here")
 	d.SetID(ids["top"])
 	_, _ = src.Save(ctx, "m", docfile.JSON, d)
@@ -177,7 +174,6 @@ func TestPackSignedAndDamaged(t *testing.T) {
 	if err != nil || !rep.Signed || !rep.SignatureOK || !bytes.Equal(rep.Signer, pub) {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// One document's bytes changed: that one fails, the others come in.
 	bad := append([]byte(nil), buf.Bytes()...)
 	i := bytes.Index(bad, []byte("at the top"))
 	bad[i] ^= 1
@@ -186,12 +182,10 @@ func TestPackSignedAndDamaged(t *testing.T) {
 	if err != nil || rep.Documents != 2 || len(rep.Failed) != 1 || !strings.HasPrefix(rep.Failed[0], "top") {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// A cut pack is refused, not half imported.
 	cut := buf.Bytes()[:buf.Len()-50]
 	if _, err := memSaver().ImportPack(ctx, "m", bytes.NewReader(cut), int64(len(cut)), ImportOptions{}); err == nil {
 		t.Error("a cut pack")
 	}
-	// A damaged document in the source stops an export.
 	mem := docstore.NewMemoryAdapter()
 	s2 := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	e, _ := s2.Save(ctx, "m", docfile.JSON, docWithText("x", "y"))
@@ -214,7 +208,6 @@ func TestPackReplaceTakesTheFoldersTagsAndTrashFlagOfThePack(t *testing.T) {
 	ctx := context.Background()
 	src := memSaver()
 	_, reports, ids := seed(t, src)
-	// The pack: r1 live in Reports with tags q1,draft; w1 trashed.
 	data := exportOne(t, src, "")
 	imp := func() ImportReport {
 		rep, err := src.ImportPack(ctx, "m", bytes.NewReader(data), int64(len(data)), ImportOptions{Conflict: ConflictReplace})
@@ -223,7 +216,6 @@ func TestPackReplaceTakesTheFoldersTagsAndTrashFlagOfThePack(t *testing.T) {
 		}
 		return rep
 	}
-	// Here: r1 trashed, retagged and moved to the top; w1 restored.
 	if err := src.Trash(ctx, "m", ids["r1"]); err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +235,6 @@ func TestPackReplaceTakesTheFoldersTagsAndTrashFlagOfThePack(t *testing.T) {
 	if w.Trashed.IsZero() {
 		t.Errorf("the pack says trashed: %+v", w)
 	}
-	// What the store holds in the document itself agrees.
 	d, _ := src.Load(ctx, "m", ids["r1"])
 	if d.Trashed() != 0 || d.Folder() != reports.ID || strings.Join(d.Tags(), ",") != "q1,draft" {
 		t.Errorf("document file: %d %q %v", d.Trashed(), d.Folder(), d.Tags())
@@ -252,7 +243,6 @@ func TestPackReplaceTakesTheFoldersTagsAndTrashFlagOfThePack(t *testing.T) {
 
 func TestPackWithDeepNestingAndAFolderCycle(t *testing.T) {
 	ctx := context.Background()
-	// A folder loop is refused by the pack format itself, before it can be imported.
 	var loop bytes.Buffer
 	lw, _ := pack.NewWriter(&loop, pack.Meta{ID: docfile.NewID(), Name: "loop"})
 	a, b := docfile.NewID(), docfile.NewID()
@@ -261,8 +251,6 @@ func TestPackWithDeepNestingAndAFolderCycle(t *testing.T) {
 	if err := lw.Close(nil); err == nil {
 		t.Error("a folder loop")
 	}
-	// A pack that nests deeper than the target allows once put under Into: the folders
-	// that do not fit fail, are reported, and their documents go to the folder above.
 	s := memSaver()
 	into := ""
 	for i := 0; i < MaxFolderDepth-2; i++ {
@@ -363,14 +351,12 @@ func TestExportPackWithHistoryStopsOnADamagedVersion(t *testing.T) {
 	if _, err := pack.Open(bytes.NewReader(buf.Bytes()), int64(buf.Len())); err == nil {
 		t.Error("a failed export leaves no pack that opens as complete")
 	}
-	// Without history the same store exports.
 	if n, err := s.ExportPack(ctx, "m", "", &bytes.Buffer{}, PackOptions{}); err != nil || n != 2 {
 		t.Errorf("%d %v", n, err)
 	}
 	_ = e
 }
 
-// failTrashWrite fails the write of a document file that carries the trash flag.
 type failTrashWrite struct{ docstore.Adapter }
 
 func (f failTrashWrite) Save(ctx context.Context, id string, data []byte) error {
@@ -398,9 +384,6 @@ func TestPackTrashFailingAfterSaveIsAWarningNotAFailure(t *testing.T) {
 	}
 }
 
-// The confidential documents of a pack: sealed with an injected function, the fake one here,
-// since the saver only carries the envelope (docstore/encrypt has the real one's tests).
-
 func fakeSeal(_ context.Context, id string, plain []byte) ([]byte, error) {
 	out := []byte("SEAL:" + id + ":")
 	for _, c := range plain {
@@ -421,8 +404,6 @@ func fakeOpen(_ context.Context, id string, env []byte) ([]byte, error) {
 	return out, nil
 }
 
-// packSource is a store with a folder, an ordinary tagged document, one in the trash and a
-// confidential one in the folder.
 func packSource(t *testing.T) (s *Saver, folder Folder, plain, trashed, secret string) {
 	t.Helper()
 	ctx := context.Background()
@@ -476,7 +457,6 @@ func TestExportPackSealsConfidentialDocuments(t *testing.T) {
 	if b := buf.Bytes(); bytes.Contains(b, []byte(secretName)) || bytes.Contains(b, []byte("the secret text")) || bytes.Contains(b, []byte(secretTag)) {
 		t.Fatal("the pack holds the confidential document in the clear")
 	}
-	// Without a key: the pack lists, verifies and is signed.
 	r, err := pack.Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		t.Fatal(err)
@@ -500,7 +480,6 @@ func TestExportPackSealsConfidentialDocuments(t *testing.T) {
 	if e := byID[trashed]; !e.Trashed || e.Encrypted {
 		t.Errorf("%+v", e)
 	}
-	// The envelope holds the real name, tags and text.
 	got, err := r.ReadWith(secret, func(env []byte) ([]byte, error) { return fakeOpen(ctx, secret, env) })
 	if err != nil || got.Name() != secretName || !slices.Equal(got.Tags(), []string{secretTag}) || textOf(got) != "the secret text" {
 		t.Fatalf("%v %v", got.Name(), err)
@@ -522,11 +501,9 @@ func TestExportPackWithoutASealLeavesConfidentialOnesOutNeverInTheClear(t *testi
 	if bytes.Contains(buf.Bytes(), []byte("secret text")) || bytes.Contains(buf.Bytes(), []byte(secretName)) {
 		t.Error("in the clear")
 	}
-	// No Warn is fine too.
 	if n, err := s.ExportPack(ctx, "src", "", &bytes.Buffer{}, PackOptions{}); err != nil || n != 2 {
 		t.Errorf("%d %v", n, err)
 	}
-	// A failing Seal stops the export: a pack that quietly lacks it would pass for a backup.
 	boom := errors.New("no recipients")
 	_, err = s.ExportPack(ctx, "src", "", &bytes.Buffer{}, PackOptions{Seal: func(context.Context, string, []byte) ([]byte, error) { return nil, boom }})
 	if !errors.Is(err, boom) {
@@ -562,7 +539,6 @@ func TestImportPackOpensConfidentialDocumentsAndKeepsThemConfidential(t *testing
 	if n, tags, err := dst.Reveal(ctx, "dst", secret); err != nil || n != secretName || !slices.Equal(tags, []string{secretTag}) {
 		t.Errorf("%q %v %v", n, tags, err)
 	}
-	// Again: everything is there and skipped, nothing is touched.
 	rep, err = dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
 	if err != nil || rep.Documents != 0 || len(rep.Skipped) != 3 || rep.Folders != 0 {
 		t.Fatalf("%+v %v", rep, err)
@@ -583,14 +559,12 @@ func TestImportPackWithoutAKeyWarnsAndImportsTheRest(t *testing.T) {
 	if _, err := dst.Get(ctx, "dst", plain); err != nil {
 		t.Error(err)
 	}
-	// An Open that cannot open it is the same warning, with the reason.
 	dst2 := newDst()
 	nokey := errors.New("wrong key")
 	rep, err = dst2.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: func(context.Context, string, []byte) ([]byte, error) { return nil, nokey }})
 	if err != nil || rep.Documents != 2 || len(rep.NeedsKey) != 1 || !errors.Is(rep.NeedsKey[0].Err, nokey) || !strings.Contains(rep.Warnings[0], "wrong key") {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// Later, with the key, the one left behind comes in (the others are skipped as there).
 	rep, err = dst2.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen})
 	if err != nil || rep.Documents != 1 || len(rep.Skipped) != 2 {
 		t.Fatalf("%+v %v", rep, err)
@@ -622,7 +596,6 @@ func TestImportPackConflictPoliciesWithConfidentialDocuments(t *testing.T) {
 	if _, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen}); err != nil {
 		t.Fatal(err)
 	}
-	// Copy: a new confidential document under a new ID, with its real name inside.
 	rep, err := dst.ImportPack(ctx, "dst", bytes.NewReader(data), int64(len(data)), ImportOptions{Open: fakeOpen, Conflict: ConflictCopy})
 	if err != nil || rep.Documents != 3 {
 		t.Fatalf("%+v %v", rep, err)
@@ -641,7 +614,6 @@ func TestImportPackConflictPoliciesWithConfidentialDocuments(t *testing.T) {
 	if copies != 1 {
 		t.Errorf("%d copies", copies)
 	}
-	// Replace puts a confidential document over an ordinary one with that ID: it is confidential after.
 	d := docWithText("Plain stand-in", "x")
 	d.SetID(secret)
 	dst2 := newDst()
@@ -661,7 +633,6 @@ func TestImportPackConflictPoliciesWithConfidentialDocuments(t *testing.T) {
 	}
 }
 
-// standIn saves an ordinary (server-level) document with the ID of the pack's secret one.
 func standIn(t *testing.T, s *Saver, secret string) {
 	t.Helper()
 	d := docWithText("Plain stand-in", "stand-in text")
@@ -740,7 +711,6 @@ func TestImportPackReplaceOverServerDocumentWithFailingWriteKeepsItAndLeaksNothi
 	}
 }
 
-// toggleFail fails the write of the secret text once on.
 type toggleFail struct {
 	docstore.Adapter
 	on bool

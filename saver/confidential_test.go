@@ -15,8 +15,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// lockable is a store that can stop opening documents, the way an encrypting adapter does
-// without the key: the catalog and records stay readable, a document's file is locked.
 type lockable struct {
 	docstore.Adapter
 	locked atomic.Bool
@@ -51,7 +49,6 @@ func confidentialSaver(t *testing.T) (*Saver, *lockable, string) {
 	return s, mem, e.ID
 }
 
-// catalogText is the catalog as stored, readable by whoever can read the store.
 func catalogText(t *testing.T, s *Saver) string {
 	t.Helper()
 	d, err := s.Targets[0].Adapter.Load(context.Background(), CatalogKey)
@@ -75,7 +72,6 @@ func TestConfidentialCatalogHoldsAPlaceholder(t *testing.T) {
 	if len(live) != 1 || live[0].Name != ConfidentialName || live[0].Protection != ProtectionE2EE {
 		t.Errorf("%+v", live)
 	}
-	// The document holds the real name and tags, and says it is confidential.
 	d, err := s.Load(ctx, "m", id)
 	if err != nil || d.Name() != secretName || !slices.Equal(d.Tags(), []string{secretTag, "q3"}) || d.Protection() != ProtectionE2EE || textOf(d) != "the secret text" {
 		t.Fatalf("%v %v %v", d.Name(), d.Tags(), err)
@@ -84,7 +80,6 @@ func TestConfidentialCatalogHoldsAPlaceholder(t *testing.T) {
 	if err != nil || name != secretName || !slices.Equal(tags, []string{secretTag, "q3"}) {
 		t.Errorf("%q %v %v", name, tags, err)
 	}
-	// Back to the server's protection: name and tags return to the catalog.
 	if err := s.SetProtection(ctx, "m", id, ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +114,6 @@ func TestConfidentialCheckGatesEnablingNotDisabling(t *testing.T) {
 	if got, _ := s.Get(ctx, "m", e.ID); got.Protection != ProtectionServer || got.Name != "plain doc" {
 		t.Errorf("a refused switch changed the entry: %+v", got)
 	}
-	// A new document marked confidential (a copy, an import) asks too.
 	d := docWithText("born confidential", "x")
 	d.SetProtection(ProtectionE2EE)
 	if _, err := s.Save(ctx, "m", docfile.Open, d); !errors.Is(err, need) {
@@ -129,7 +123,6 @@ func TestConfidentialCheckGatesEnablingNotDisabling(t *testing.T) {
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
-	// Switching away needs no check, and the check is not asked for what is already so.
 	s.ConfidentialCheck = func(context.Context, string, string) error { return need }
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
 		t.Errorf("already confidential: %v", err)
@@ -155,7 +148,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 			t.Fatalf("%s: the catalog says what is hidden: %s", when, txt)
 		}
 	}
-	// Saving from an editor that has the name but not the tags keeps the tags, in the document.
 	ed := docWithText("Quarterly numbers xango", "edited text")
 	ed.SetID(id)
 	if _, err := s.Save(ctx, "m", docfile.Open, ed); err != nil {
@@ -165,7 +157,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 	if d, _ := s.Load(ctx, "m", id); textOf(d) != "edited text" || !slices.Equal(d.Tags(), []string{secretTag, "q3"}) || d.Protection() != ProtectionE2EE {
 		t.Errorf("%q %v", textOf(d), d.Tags())
 	}
-	// Rename and tags go into the document.
 	if err := s.Rename(ctx, "m", id, "Renamed secret"); err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +167,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 	if n, tags, _ := s.Reveal(ctx, "m", id); n != "Renamed secret" || !slices.Equal(tags, []string{"renamedtag"}) {
 		t.Errorf("%q %v", n, tags)
 	}
-	// Folders, trash, versions.
 	f, _ := s.CreateFolder(ctx, "m", "", "Work")
 	if err := s.Move(ctx, "m", f.ID, id); err != nil {
 		t.Fatal(err)
@@ -201,7 +191,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 		t.Fatalf("%v", vs)
 	}
 	hidden("version")
-	// A copy of a confidential document is confidential: "Copy of" the real name.
 	cp, err := s.Duplicate(ctx, "m", id, "")
 	if err != nil || cp.Name != ConfidentialName || cp.Protection != ProtectionE2EE {
 		t.Fatalf("%+v %v", cp, err)
@@ -209,7 +198,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 	if n, _, _ := s.Reveal(ctx, "m", cp.ID); n != "Copy of Renamed secret" {
 		t.Errorf("%q", n)
 	}
-	// An archive of the folder is the owner's download: named after what the document is.
 	data, _, err := s.Archive(ctx, "m", f.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +211,6 @@ func TestConfidentialSurvivesTheDocumentOperations(t *testing.T) {
 	if !slices.Equal(files, []string{"Copy of Renamed secret.open", "Renamed secret.open"}) {
 		t.Errorf("%v", files)
 	}
-	// A document that goes wrong is still checked: Verify keeps level and placeholder.
 	rep, err := s.Verify(ctx, "m")
 	if err != nil || rep.Checked != 2 || rep.Locked != 0 || len(rep.Lost)+len(rep.Restored) != 0 {
 		t.Fatalf("%+v %v", rep, err)
@@ -251,24 +238,21 @@ func TestRebuildKeepsLevelAndPlaceholder(t *testing.T) {
 			t.Fatalf("%s: %+v", when, o)
 		}
 	}
-	// Rebuilt with the key, over a catalog that is gone: the document says it is confidential.
 	_ = mem.Delete(ctx, CatalogKey)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
 	check("rebuild from documents, with the key")
-	// Rebuilt over the catalog there is, and by Repair.
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
 	check("rebuild over a catalog")
 	s.RepairGrace = -1
-	_ = mem.Delete(ctx, id+"~") // nothing: a stray delete of a key that does not exist is harmless
+	_ = mem.Delete(ctx, id+"~")
 	if _, err := s.Repair(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
 	check("repair")
-	// A catalog that lists it as confidential keeps it so even for a file that lost its mark.
 	cur, _ := s.Get(ctx, "m", id)
 	stored, _ := mem.Adapter.Load(ctx, cur.Key)
 	d, _ := docfile.Open.Unmarshal(stored.Data)
@@ -291,7 +275,6 @@ func TestRebuildWithoutTheKeyListsAnUnreadableFileAsConfidential(t *testing.T) {
 	other, _ := s.Save(ctx, "m", docfile.Open, docWithText("ordinary", "x"))
 	before, _ := s.Get(ctx, "m", id)
 
-	// 1. With the catalog we had: the entry is as it was (folder included), the other is read.
 	mem.locked.Store(true)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatalf("a rebuild must not stop at a document it cannot open: %v", err)
@@ -300,13 +283,10 @@ func TestRebuildWithoutTheKeyListsAnUnreadableFileAsConfidential(t *testing.T) {
 	if e.Name != ConfidentialName || e.Protection != ProtectionE2EE || e.Folder != f.ID || e.Key != before.Key || e.Size != before.Size {
 		t.Errorf("%+v, was %+v", e, before)
 	}
-	// (the ordinary one is locked too in this fake, so it is listed as it was, by the catalog)
 	if o, _ := s.Get(ctx, "m", other.ID); o.Name != "ordinary" || o.Protection != ProtectionServer {
 		t.Errorf("%+v", o)
 	}
 
-	// 2. With no catalog at all: nothing says what the file is but that it cannot be opened,
-	// so it is listed under the placeholder as confidential; its folder is unknown.
 	_ = mem.Delete(ctx, CatalogKey)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -318,7 +298,6 @@ func TestRebuildWithoutTheKeyListsAnUnreadableFileAsConfidential(t *testing.T) {
 	if txt := catalogText(t, s); strings.Contains(txt, "xango") || strings.Contains(txt, "layoffs") {
 		t.Errorf("%s", txt)
 	}
-	// With the key again, a rebuild reads the document, and the level stays.
 	mem.locked.Store(false)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -345,7 +324,6 @@ func TestLockedDocumentsAreReportedNotRepairedAndNotOverwritten(t *testing.T) {
 	if _, _, err := s.Reveal(ctx, "m", id); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("reveal: %v", err)
 	}
-	// Saving over a document that cannot be read would drop what is inside it (the tags).
 	ed := docWithText("x", "y")
 	ed.SetID(id)
 	if _, err := s.Save(ctx, "m", docfile.Open, ed); !errors.Is(err, docstore.ErrLocked) {
@@ -378,7 +356,6 @@ func TestSessionShowsThePlaceholderUntilOpened(t *testing.T) {
 	if n, tags := names(); !slices.Equal(n, []string{ConfidentialName}) || len(tags) != 0 || len(allTags(ss.entries)) != 0 {
 		t.Fatalf("%v %v", n, tags)
 	}
-	// A tag filter has nothing to match: the hidden tags are not in the list.
 	ss.SetTagFilter(secretTag)
 	for _, d := range ss.Docs().Docs {
 		if slices.Contains(d.Tags, secretTag) {
@@ -399,7 +376,6 @@ func TestSessionShowsThePlaceholderUntilOpened(t *testing.T) {
 	if !strings.Contains(ss.Props().Status, secretName+" opened") {
 		t.Errorf("%q", ss.Props().Status)
 	}
-	// Saving from the session keeps it confidential and keeps showing the real name.
 	if err := ss.Save(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -415,14 +391,12 @@ func TestSessionShowsThePlaceholderUntilOpened(t *testing.T) {
 	if _, tags := names(); !slices.Equal(tags, []string{"new"}) {
 		t.Errorf("%v", tags)
 	}
-	// Making it ordinary again drops the memory; the catalog has the real name.
 	if err := ss.SetProtection(ctx, id, ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := names(); !slices.Equal(n, []string{secretName}) || len(ss.revealed) != 0 {
 		t.Errorf("%v %v", n, ss.revealed)
 	}
-	// And confidential once more: the placeholder is replaced at once, since it is openable.
 	if err := ss.SetProtection(ctx, id, ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +438,6 @@ func TestRekeyHookOrderAndRetry(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	e, _ := s.Save(ctx, "m", docfile.Open, docWithText("plain doc", "x"))
-	// catalogLevel is what the catalog says at the moment the hook runs.
 	var calls []string
 	failing := true
 	s.Rekey = func(_ context.Context, _, id, to string) error {
@@ -475,7 +448,6 @@ func TestRekeyHookOrderAndRetry(t *testing.T) {
 		}
 		return nil
 	}
-	// To e2ee: re-key first; a failure changes nothing and is reported.
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err == nil || !strings.Contains(err.Error(), "file X still wrapped") {
 		t.Fatalf("%v", err)
 	}
@@ -486,7 +458,6 @@ func TestRekeyHookOrderAndRetry(t *testing.T) {
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
-	// Back: the catalog and file move first, the re-key to the server keys is last.
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +465,6 @@ func TestRekeyHookOrderAndRetry(t *testing.T) {
 	if !slices.Equal(calls, want) {
 		t.Errorf("%q", calls)
 	}
-	// A failure on the way back leaves the catalog at server; the same call retries the hook.
 	if err := s.SetProtection(ctx, "m", e.ID, ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
@@ -529,14 +499,11 @@ func TestRekeyHookRunsBeforeANewConfidentialDocumentIsWritten(t *testing.T) {
 	if _, err := s.Save(ctx, "m", docfile.Open, d); err != nil || rekeyed != 1 {
 		t.Fatalf("%v %d", err, rekeyed)
 	}
-	// An ordinary save does not call it.
 	if _, err := s.Save(ctx, "m", docfile.Open, docWithText("plain", "x")); err != nil || rekeyed != 1 {
 		t.Fatalf("%v %d", err, rekeyed)
 	}
 }
 
-// catalogHook runs before: it is called with the number of this catalog load (1 is the first)
-// and can fail it or act before it returns.
 type catalogHook struct {
 	*docstore.MemoryAdapter
 	before func(n int) error
@@ -569,8 +536,6 @@ func TestSaveNeverWritesAConfidentialDocumentOnAGetFault(t *testing.T) {
 	d := docWithText("born confidential", "x")
 	d.SetProtection(ProtectionE2EE)
 	d.SetID(docfile.NewID())
-	// The first catalog read (the existence check) fails with something that is not "not
-	// found": that must not be read as "a new document".
 	h.before = func(n int) error {
 		if n == 1 {
 			return errors.New("transient")
@@ -599,8 +564,7 @@ func TestSaveRekeysWhenTheDocumentIsDeletedBetweenTheReadAndTheWrite(t *testing.
 	h.data = nil
 	d := docWithText("plain", "y")
 	d.SetID(e.ID)
-	d.SetProtection(ProtectionE2EE) // a copy of a confidential document, saved over the server one
-	// The existence check sees the (server) document; then it is deleted before the write.
+	d.SetProtection(ProtectionE2EE)
 	h.n.Store(0)
 	h.before = func(n int) error {
 		if n == 2 {
@@ -634,7 +598,6 @@ func TestSaveOfAConfidentialDocumentAssertsItsKeys(t *testing.T) {
 	if !slices.Equal(calls, []string{ProtectionE2EE}) {
 		t.Errorf("a save of a confidential document re-asserts its level: %v", calls)
 	}
-	// A failed assertion stops the save before anything is written.
 	s.Rekey = func(context.Context, string, string, string) error { return errors.New("record unsigned") }
 	if _, err := s.Save(ctx, "m", docfile.Open, d); err == nil || !strings.Contains(err.Error(), "record unsigned") {
 		t.Errorf("%v", err)

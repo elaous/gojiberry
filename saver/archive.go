@@ -13,31 +13,16 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Archive returns a ZIP of the documents in a folder and, below it, its
-// subfolders ("" for every document of the target). Folders become directories
-// (they are virtual in the store; the archive is where they are drawn), each
-// document is stored as saved, named after its name with the extension of its
-// format, and documents in the trash are left out. Names that would repeat in a
-// directory get their ID's first eight characters. The second result is a name
-// for the archive: the folder's, or "documents" for the top level.
-//
-// A confidential document is in the archive as its open file, plaintext, under its real name
-// (the user asked for it). One that no key opens here is skipped, not an error; Archive does
-// not say which, ArchiveReport does.
 func (s *Saver) Archive(ctx context.Context, target, folder string) (data []byte, name string, err error) {
 	data, name, _, err = s.ArchiveReport(ctx, target, folder)
 	return data, name, err
 }
 
-// ArchiveSkip is a document left out of an archive: a confidential one that is locked here.
 type ArchiveSkip struct {
 	ID, Name string
 	Err      error
 }
 
-// ArchiveReport is Archive that also returns the documents it left out because they are
-// confidential and locked (no key here opens them: a warning to show, not a reason to give up
-// the whole archive). The name is the placeholder, the real one being inside.
 func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data []byte, name string, skipped []ArchiveSkip, err error) {
 	name = "documents"
 	type item struct {
@@ -46,8 +31,6 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 	}
 	var items []item
 	var t Target
-	// Read the catalog under the saver's lock, then let go of it: loading every document
-	// of a big folder must not hold up the other operations.
 	err = s.view(ctx, target, func(tg Target, cat *catalog) error {
 		t = tg
 		if folder != "" {
@@ -57,7 +40,6 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 			}
 			name = f.Name
 		}
-		// dir is the path of a folder inside the archive, built from the names.
 		dir := func(id string) string {
 			var parts []string
 			for n := 0; id != "" && n <= MaxFolderDepth; n++ {
@@ -67,7 +49,6 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 				}
 				part := safeName(f.Name)
 				if f.Protection == ProtectionE2EE {
-					// Every confidential folder is called the placeholder: the ID tells them apart.
 					part += " (" + id[:min(8, len(id))] + ")"
 				}
 				parts = append([]string{part}, parts...)
@@ -100,8 +81,6 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 			continue // no key opens it here: left out, and reported
 		}
 		if errors.Is(err, ErrUnreadable) {
-			// An archive is a backup: one that quietly lacks a document is worse than
-			// one that says so.
 			return nil, name, nil, fmt.Errorf("saver: %q is damaged and has no good copy: %w", it.name, err)
 		}
 		if err != nil {
@@ -109,7 +88,7 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 		}
 		ext := path.Ext(it.entry.Key)
 		if it.entry.confidential() {
-			it.name = doc.Name() // the file is open here: it is named after what it is
+			it.name = doc.Name()
 		}
 		full := path.Join(it.dir, safeName(it.name)+ext)
 		if used[strings.ToLower(full)] {
@@ -130,7 +109,6 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 	return buf.Bytes(), name, skipped, nil
 }
 
-// safeName is a name as one path element: no separators, nothing hidden.
 func safeName(n string) string {
 	n = strings.Map(func(r rune) rune {
 		if r == '/' || r == '\\' || r < 0x20 {

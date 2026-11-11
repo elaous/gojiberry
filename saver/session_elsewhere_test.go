@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A copy saved elsewhere since this one was opened is not replaced without a trace: it is kept as a named
-// version, and the comparison with what is saved now is ready to show.
 func TestSaveKeepsACopySavedElsewhere(t *testing.T) {
 	ctx := context.Background()
 	sv := &Saver{Targets: targets(t)}
@@ -23,7 +21,6 @@ func TestSaveKeepsACopySavedElsewhere(t *testing.T) {
 	}
 	id := a.ID()
 
-	// Someone else (another tab, another person) opens it and saves a change.
 	theirs := "their text"
 	b := NewSession(sv, func() docfile.Document {
 		return docWithText("plan", theirs)
@@ -37,7 +34,6 @@ func TestSaveKeepsACopySavedElsewhere(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ana saves her version of the document: nothing of theirs is lost.
 	time.Sleep(5 * time.Millisecond)
 	mine = "my text, edited"
 	if err := a.Save(ctx); err != nil {
@@ -66,7 +62,6 @@ func TestSaveKeepsACopySavedElsewhere(t *testing.T) {
 	if !found {
 		t.Fatalf("no version %q among %+v", elsewhereVersion, vs)
 	}
-	// Saving again, with nothing new elsewhere, is a plain save.
 	if err := a.Save(ctx); err != nil {
 		t.Fatal(err)
 	}

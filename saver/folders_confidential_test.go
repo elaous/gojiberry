@@ -18,7 +18,6 @@ import (
 
 const secretFolder = "Layoffs 2026 xango"
 
-// storeHolds says whether any stored item (catalog, folder records, files) contains s.
 func storeHolds(t *testing.T, a docstore.Adapter, s string) []string {
 	t.Helper()
 	metas, err := a.List(context.Background())
@@ -35,7 +34,6 @@ func storeHolds(t *testing.T, a docstore.Adapter, s string) []string {
 	return out
 }
 
-// folderWorld has a top folder holding a subfolder (named secret) with a document in it.
 func folderWorld(t *testing.T) (s *Saver, mem *lockable, top, sec, doc string) {
 	t.Helper()
 	ctx := context.Background()
@@ -88,11 +86,9 @@ func TestConfidentialFolderHidesItsNameKeepsTheShape(t *testing.T) {
 	if n, _ := s.RevealFolder(ctx, "m", top); n != "Work" {
 		t.Errorf("%q", n)
 	}
-	// Documents inside are NOT made confidential by it.
 	if e, _ := s.Get(ctx, "m", doc); e.Protection != ProtectionServer || e.Name != "Plain doc" || e.Folder != sec {
 		t.Errorf("%+v", e)
 	}
-	// Locked: no key opens the record, the placeholder stays.
 	mem.locked.Store(true)
 	if _, err := s.RevealFolder(ctx, "m", sec); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("%v", err)
@@ -102,7 +98,6 @@ func TestConfidentialFolderHidesItsNameKeepsTheShape(t *testing.T) {
 	}
 	mem.locked.Store(false)
 
-	// Rename writes into the record; the catalog does not change.
 	before := catalogText(t, s)
 	if err := s.RenameFolder(ctx, "m", sec, "Hiring xango2"); err != nil {
 		t.Fatal(err)
@@ -119,7 +114,6 @@ func TestConfidentialFolderHidesItsNameKeepsTheShape(t *testing.T) {
 	if got := storeHolds(t, mem, secretFolder); len(got) != 0 {
 		t.Errorf("the old name is still stored: %v", got)
 	}
-	// Move: the shape changes, the name stays hidden.
 	other, _ := s.CreateFolder(ctx, "m", "", "Other")
 	if err := s.MoveFolder(ctx, "m", sec, other.ID); err != nil {
 		t.Fatal(err)
@@ -132,7 +126,6 @@ func TestConfidentialFolderHidesItsNameKeepsTheShape(t *testing.T) {
 	if got := storeHolds(t, mem, "Hiring xango2"); len(got) != 1 {
 		t.Errorf("%v", got)
 	}
-	// Back to server: the name comes out, the record goes.
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionServer, false); err != nil {
 		t.Fatal(err)
 	}
@@ -172,12 +165,10 @@ func TestConfidentialFolderCheckHookAndOrder(t *testing.T) {
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
-	// To e2ee the re-key runs before the name is written into the record.
 	if !slices.Equal(calls, []string{"rekey-e2ee-secret:absent"}) {
 		t.Errorf("%v", calls)
 	}
 	calls = nil
-	// A rename asserts the keys again before it writes.
 	if err := s.RenameFolder(ctx, "m", sec, "New xango3"); err != nil {
 		t.Fatal(err)
 	}
@@ -185,11 +176,9 @@ func TestConfidentialFolderCheckHookAndOrder(t *testing.T) {
 		t.Errorf("%v", calls)
 	}
 	calls = nil
-	// The same level again runs the hook (retry), changes nothing.
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err != nil || len(calls) != 1 {
 		t.Errorf("%v %v", err, calls)
 	}
-	// To server the name moves out first, then the hook runs.
 	calls = nil
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionServer, false); err != nil {
 		t.Fatal(err)
@@ -197,7 +186,6 @@ func TestConfidentialFolderCheckHookAndOrder(t *testing.T) {
 	if !slices.Equal(calls, []string{"rekey-server-secret:absent"}) {
 		t.Errorf("%v", calls)
 	}
-	// A failing hook to e2ee leaves the folder as it was, the name unmoved.
 	s.Rekey = func(context.Context, string, string, string) error { return errors.New("disk") }
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err == nil {
 		t.Fatal("expected the failure")
@@ -219,7 +207,6 @@ func TestSetFolderProtectionRecursive(t *testing.T) {
 		t.Fatal(err)
 	}
 	outside, _ := s.Save(ctx, "m", docfile.Open, docWithText("Outside", "y"))
-	// Not recursive: documents keep their level.
 	if err := s.SetFolderProtection(ctx, "m", top, ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +263,6 @@ func TestRebuildKeepsAConfidentialFolderLockedOrNot(t *testing.T) {
 			t.Fatalf("%s: %+v %v", when, e, err)
 		}
 	}
-	// A stranger (no key) rebuilds from the files: the folder is where it was, by its placeholder.
 	mem.locked.Store(true)
 	if err := s.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -331,7 +317,6 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 	if err := s.SetFolderProtection(ctx, "m", sec, ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
-	// Without Seal: the folder goes with the placeholder name, and the export says so.
 	var plain bytes.Buffer
 	var warned []PackIssue
 	if _, err := s.ExportPack(ctx, "m", "", &plain, PackOptions{Warn: func(i PackIssue) { warned = append(warned, i) }}); err != nil {
@@ -350,7 +335,6 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 		t.Errorf("an unsealed pack makes a confidential folder under the placeholder, never a plain one named so: %+v", fs[i])
 	}
 
-	// With Seal the name travels sealed and comes back confidential with Open.
 	var sealed bytes.Buffer
 	if _, err := s.ExportPack(ctx, "m", "", &sealed, PackOptions{Seal: fakeSeal}); err != nil {
 		t.Fatal(err)
@@ -370,7 +354,6 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 			t.Errorf("%+v", f)
 		}
 	}
-	// No Open: left under the placeholder with a needs-key warning, the document still comes.
 	d2 := newDst()
 	rep, err = d2.ImportPack(ctx, "dst", bytes.NewReader(sealed.Bytes()), int64(sealed.Len()), ImportOptions{})
 	if err != nil || rep.Folders != 2 || rep.Documents != 1 || len(rep.NeedsKey) != 1 || rep.NeedsKey[0].ID != sec {
@@ -382,7 +365,6 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 	if fs, _ := d2.Folders(ctx, "dst"); !slices.ContainsFunc(fs, func(f Folder) bool { return f.ID == sec && f.Protection == ProtectionE2EE }) {
 		t.Errorf("a folder whose name cannot be opened stays confidential: %+v", fs)
 	}
-	// With Open: a confidential folder again, under its real name.
 	d3 := newDst()
 	rep, err = d3.ImportPack(ctx, "dst", bytes.NewReader(sealed.Bytes()), int64(sealed.Len()), ImportOptions{Open: fakeOpen})
 	if err != nil || rep.Folders != 2 || len(rep.NeedsKey) != 0 || len(rep.Failed) != 0 {
@@ -398,14 +380,12 @@ func TestPackSealsConfidentialFolderNames(t *testing.T) {
 	if got := storeHolds(t, d3.Targets[0].Adapter, secretFolder); len(got) != 1 || got[0] != FolderSecretKey(sec) {
 		t.Errorf("%v", got)
 	}
-	// A refusing ConfidentialCheck makes that folder fail, its documents go to the parent.
 	d4 := newDst()
 	d4.ConfidentialCheck = func(context.Context, string, string) error { return errors.New("no recovery key") }
 	rep, _ = d4.ImportPack(ctx, "dst", bytes.NewReader(sealed.Bytes()), int64(sealed.Len()), ImportOptions{Open: fakeOpen})
 	if len(rep.Failed) != 1 || rep.Folders != 1 {
 		t.Errorf("%+v", rep)
 	}
-	// A failing Seal stops the export.
 	boom := errors.New("no recipients")
 	if _, err := s.ExportPack(ctx, "m", sec, &bytes.Buffer{}, PackOptions{Seal: func(context.Context, string, []byte) ([]byte, error) { return nil, boom }}); !errors.Is(err, boom) {
 		t.Errorf("%v", err)
@@ -423,11 +403,9 @@ func TestSessionShowsFolderPlaceholdersUntilRevealed(t *testing.T) {
 	if err := ss.SetFolderProtection(ctx, sec, ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
-	// Just made confidential here: the person knows the name, so it is shown.
 	if n := ss.Docs().AllFolders; n[slices.IndexFunc(n, func(f components.DocFolder) bool { return f.ID == sec })].Name != secretFolder {
 		t.Fatalf("%+v", n)
 	}
-	// A new session (a fresh load) shows the placeholder everywhere: list, move menu, breadcrumb.
 	ss2 := NewSession(s, func() docfile.Document { return docfile.Document{} }, nil)
 	ss2.Pending.Inline = true
 	if err := ss2.SetTarget(ctx, "m"); err != nil {
@@ -454,7 +432,6 @@ func TestSessionShowsFolderPlaceholdersUntilRevealed(t *testing.T) {
 	if ss2.folderName(sec) != ConfidentialFolderName {
 		t.Error("the pack's name would be the real one")
 	}
-	// Reveal needs a key.
 	mem.locked.Store(true)
 	if err := ss2.RevealFolder(ctx, sec); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("%v", err)
@@ -483,8 +460,6 @@ func TestSessionShowsFolderPlaceholdersUntilRevealed(t *testing.T) {
 	}
 }
 
-// lockedRecords is a store whose folder records are encrypted and locked (an adapter whose
-// Skip does not leave them readable).
 type lockedRecords struct {
 	docstore.Adapter
 	locked bool
@@ -521,8 +496,6 @@ func TestRebuildListsALockedFolderRecordUnderThePlaceholderInItsPlace(t *testing
 	}
 }
 
-// A crafted pack can give a folder the ID of an existing document; the folder must not share
-// the document's key record (encrypt.DocID maps "folder-secret/<ID>" to it).
 func TestImportPackFolderWithADocumentIDIsRemapped(t *testing.T) {
 	ctx := context.Background()
 	s, _, _, _, doc := folderWorld(t) // doc is a document in s
@@ -557,7 +530,6 @@ func TestImportPackFolderWithADocumentIDIsRemapped(t *testing.T) {
 	if slices.Contains(checked, doc) || slices.Contains(rekeyed, doc) {
 		t.Errorf("the hooks ran on the document: %v %v", checked, rekeyed)
 	}
-	// And the direct entry points refuse a document's ID.
 	if _, err := s.createFolderLevel(ctx, "m", doc, "", "x", true); !errors.Is(err, ErrFolderID) {
 		t.Errorf("%v", err)
 	}

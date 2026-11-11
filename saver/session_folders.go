@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-// revealFolders puts the real names of the confidential folders opened in this session into a
-// list read from the catalog, which lists the placeholder; one not opened here keeps it. A
-// folder that is not confidential any more or is gone drops out of the memory (call with the
-// lock held).
 func (s *Session) revealFolders(list []Folder) []Folder {
 	out := make([]Folder, len(list))
 	seen := map[string]bool{}
@@ -29,7 +25,6 @@ func (s *Session) revealFolders(list []Folder) []Folder {
 	return out
 }
 
-// rememberFolder keeps the real name of a confidential folder for the list.
 func (s *Session) rememberFolder(id, name string) {
 	s.set(func() {
 		if s.revealedFolders == nil {
@@ -50,10 +45,6 @@ func (s *Session) concealedFolders(list []Folder) []Folder {
 	return out
 }
 
-// SetFolderProtection makes a folder confidential (its name moves into an encrypted record,
-// the catalog lists the placeholder) or ProtectionServer again, and shows its real name in the
-// list while it is openable here. With recursive the folders and documents inside get the
-// same level; without it they keep theirs.
 func (s *Session) SetFolderProtection(ctx context.Context, id, to string, recursive bool) error {
 	s.op.Lock()
 	defer s.op.Unlock()
@@ -72,8 +63,6 @@ func (s *Session) SetFolderProtection(ctx context.Context, id, to string, recurs
 	return s.after(ctx, msg("saver.folderNotConfidential", "%s is no longer a confidential folder", name))
 }
 
-// RevealFolder shows the real name of a confidential folder in the list, if it can be opened
-// here.
 func (s *Session) RevealFolder(ctx context.Context, id string) error {
 	name, err := s.Saver.RevealFolder(ctx, s.targetName(), id)
 	if err != nil {
@@ -85,7 +74,6 @@ func (s *Session) RevealFolder(ctx context.Context, id string) error {
 	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
 }
 
-// OpenFolder shows a folder ("" for the top level); a new document is saved in it.
 func (s *Session) OpenFolder(ctx context.Context, id string) error {
 	s.mu.Lock()
 	known := id == "" || slices.ContainsFunc(s.folders, func(f Folder) bool { return f.ID == id })
@@ -109,8 +97,7 @@ func (s *Session) NewFolder(ctx context.Context, name string) error {
 	return s.after(ctx, msg("saver.created", "%s created", name))
 }
 
-// RenameFolder renames a folder. The new name of a confidential folder goes into its
-// encrypted record, and is shown here since the person just typed it.
+// RenameFolder renames a folder.
 func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 	if err := s.Saver.RenameFolder(ctx, s.targetName(), id, name); err != nil {
 		return storageFull(err)
@@ -123,8 +110,6 @@ func (s *Session) RenameFolder(ctx context.Context, id, name string) error {
 	return s.after(ctx, msg("saver.renamed", "%s renamed", name))
 }
 
-// DeleteFolder removes an empty folder; if it is the one being shown, the one
-// above it is shown instead.
 func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 	name := s.names([]string{id})
 	purged, err := s.Saver.DeleteFolderReport(ctx, s.targetName(), id)
@@ -143,7 +128,6 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 	s.mu.Unlock()
 	line := msg("saver.deleted", "%s deleted", name)
 	if len(purged) > 0 {
-		// Say what else went, so nothing disappears unexplained.
 		shown := purged
 		if len(shown) > 5 {
 			shown = append(append([]string(nil), purged[:5]...), "…")
@@ -153,7 +137,6 @@ func (s *Session) DeleteFolder(ctx context.Context, id string) error {
 	return s.after(ctx, line)
 }
 
-// MoveDocs puts documents in a folder ("" for the top level).
 func (s *Session) MoveDocs(ctx context.Context, ids []string, folder string) error {
 	name := s.names(ids)
 	if err := s.Saver.Move(ctx, s.targetName(), folder, ids...); err != nil {
@@ -169,7 +152,6 @@ func docFolderOf(f Folder) components.DocFolder {
 	return components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent, Confidential: f.Protection == ProtectionE2EE}
 }
 
-// docFolder is docFolderOf with what the session knows (call with the lock held).
 func (s *Session) docFolder(f Folder) components.DocFolder {
 	d := docFolderOf(f)
 	_, ok := s.revealedFolders[f.ID]
