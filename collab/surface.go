@@ -8,37 +8,25 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// A Surface is a part of the canvas other than the text -- the pages'
-// headers and footers, floating text, tables and images -- shared as small
-// whole-value records, one per element, last writer wins.
-//
-// Surfaces are polled, not subscribed to: the session asks Read for the
-// current records now and then (see Bridge.SyncSurfaces), and sends the ones
-// that changed once they have held still for a moment, so dragging an object
-// shares where it was dropped, not every step on the way.
+// A Surface is a part of the canvas other than the text.
 type Surface interface {
-	// Owns reports whether the record id belongs to this surface.
+	// Owns reports whether record id belongs to this surface.
 	Owns(id string) bool
-	// Read returns the records for the surface's current state.
+	// Read returns the surface's current records.
 	Read() map[string]string
-	// Write applies records received from others (only this surface's).
-	// Records for elements that do not exist here are ignored, and elements
-	// without a record keep their state.
+	// Write applies records received from others.
 	Write(records map[string]string)
 }
 
-// Sharing says what a session shares beyond the default (the flow's text,
-// its comments, notes and styles).
+// Sharing says what a session shares beyond the default.
 type Sharing struct {
-	// NoText leaves the flow's text, comments, notes and styles alone: only
-	// Surfaces are shared.
+	// NoText leaves the flow's text unshared.
 	NoText bool
 	// Surfaces are shared as well.
 	Surfaces []Surface
 }
 
-// Configure sets what the bridge shares. Call it before Seed or the first
-// Apply.
+// Configure sets what the bridge shares; call before connecting.
 func (b *Bridge) Configure(sh Sharing) {
 	b.surfaces = slices.Clone(sh.Surfaces)
 	b.noText = sh.NoText
@@ -67,9 +55,7 @@ func (b *Bridge) surfaceRecords() map[string]string {
 	return out
 }
 
-// pullSurfaces hands each surface the replica's records for it, then takes
-// what it reads back as agreed: an element that normalises what it was
-// given must not send the normalised form back and start an echo.
+// pullSurfaces gives each surface the replica's records for it.
 func (b *Bridge) pullSurfaces() {
 	if len(b.surfaces) == 0 {
 		return
@@ -90,7 +76,7 @@ func (b *Bridge) pullSurfaces() {
 		for id, v := range sf.Read() {
 			b.side.synced[id] = v
 		}
-		for id, v := range recs { // records for elements missing here stay as they are
+		for id, v := range recs {
 			if _, ok := b.side.synced[id]; !ok {
 				b.side.synced[id] = v
 			}
@@ -99,9 +85,7 @@ func (b *Bridge) pullSurfaces() {
 	b.seen = ""
 }
 
-// SyncSurfaces shares what changed in the surfaces, once it has held still
-// for two calls; call it at the polling interval. It reports nothing and
-// does nothing when there are no surfaces or the bridge is not ready.
+// SyncSurfaces shares what changed in the surfaces.
 func (b *Bridge) SyncSurfaces() {
 	if len(b.surfaces) == 0 || !b.ready || b.detached || b.applying {
 		return
@@ -127,9 +111,7 @@ func (b *Bridge) SyncSurfaces() {
 	b.pushSurfaces(want)
 }
 
-// PushSurfaces shares the surfaces' records the document does not have, or
-// has differently, at once: for a replica that has just received the
-// document and may edit.
+// PushSurfaces shares the surfaces' records the document lacks.
 func (b *Bridge) PushSurfaces() {
 	if len(b.surfaces) == 0 || !b.ready || b.detached {
 		return

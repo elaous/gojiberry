@@ -148,7 +148,6 @@ func TestPresenceAndPeerCursors(t *testing.T) {
 	if b.Pending() != 0 {
 		t.Fatal("nothing waiting")
 	}
-	// The cursor follows the text when b types in front of it.
 	click(b.Bridge.Flow, 0)
 	b.Bridge.Flow.InsertText(">>")
 	waitFor(t, "the peer cursor to move", func() bool {
@@ -178,8 +177,6 @@ func TestRolesAreEnforced(t *testing.T) {
 	viewer := r.connect("v", "viewer", newFlow())
 	waitFor(t, "viewer has the text", func() bool { return text(viewer.Bridge.Flow) == "the text" && viewer.Role == wire.Viewer }, owner, viewer)
 
-	// A viewer's text edit is refused, and the owner never sees it. The
-	// viewer's session repairs itself: its flow goes back to the server's text.
 	click(viewer.Bridge.Flow, 3)
 	viewer.Bridge.Flow.InsertText("X")
 	waitFor(t, "the viewer's session to repair itself", func() bool {
@@ -194,7 +191,6 @@ func TestRolesAreEnforced(t *testing.T) {
 		t.Fatalf("a viewer changed the text: %q", text(owner.Bridge.Flow))
 	}
 
-	// A fresh viewer can comment: a comment mark on the text plus new comment records.
 	v2 := r.connect("v2", "viewer", newFlow())
 	waitFor(t, "v2 has the text", func() bool { return text(v2.Bridge.Flow) == "the text" }, owner, v2)
 	v2.Bridge.Flow.SetCursors([]canvas.Cursor{{Anchor: 0, Caret: 3}})
@@ -264,7 +260,6 @@ func TestReconnectResyncsAndSendsWhatWaited(t *testing.T) {
 	waitFor(t, "both to reconnect and converge", func() bool {
 		return text(a.Bridge.Flow) == ">one two!" && normalized(a.Bridge.Flow) == normalized(b.Bridge.Flow)
 	}, a, b)
-	// The others may see an edit a moment before its sender hears it accepted.
 	waitFor(t, "nothing left waiting", func() bool { return a.Conn.Pending() == 0 }, a, b)
 }
 
@@ -276,8 +271,6 @@ func TestConnectRefusesUnsupportedContent(t *testing.T) {
 	}
 }
 
-// Edits a hub acknowledged are gone if it restarts without them; the client
-// sends its whole document again when it reconnects to a poorer one.
 func TestClientResendsWhatARestartedHubLost(t *testing.T) {
 	var cur atomic.Pointer[hub.Hub]
 	cur.Store(hub.New(hub.Config{}))
@@ -325,8 +318,7 @@ func TestNoRepairLeavesTheErrorForTheCaller(t *testing.T) {
 	waitFor(t, "the manual repair", func() bool { return viewer.Bridge.Ready() && text(viewer.Bridge.Flow) == "the text" }, owner, viewer)
 }
 
-// TestOverWebSockets runs the session scenarios again over the WebSocket
-// transport: everything the HTTP transport does, the socket does too.
+// TestOverWebSockets runs the session scenarios over WebSockets.
 func TestOverWebSockets(t *testing.T) {
 	testTransport = ws.WebSockets()
 	defer func() { testTransport = HTTPEndpoints() }()

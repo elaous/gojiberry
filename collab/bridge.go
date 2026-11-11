@@ -17,32 +17,17 @@ import (
 const block = "doc"
 
 // Bridge keeps a TextFlow and a crdt.Doc replica in step.
-//
-//   - A local edit (the flow's OnChange) is diffed against the replica: the
-//     text difference becomes character operations and the format difference
-//     becomes marks, one per changed run. They wait in the outbox (Drain).
-//   - Remote operations (Apply) are merged into the replica and the flow's
-//     content is rebuilt from it, with each cursor moved so that it stays
-//     beside the same character.
-//   - Comments, footnotes and named styles travel as whole-value records.
-//
-// Use New to start a document from the flow's content, or Join to receive
-// one that exists elsewhere.
 type Bridge struct {
-	// Doc is the replica. Send Drain's ops to the others, give Apply what
-	// they send, and onboard a newcomer with Snapshot.
+	// Doc is the replica; send Drain's operations to the others.
 	Doc  *crdt.Doc
 	Flow *canvas.TextFlow
 
-	// Outgoing, if set, is called with the operations each local change
-	// produced (see Drain); wire it to client.Conn.Send.
+	// Outgoing, if set, receives each operation made locally.
 	Outgoing func([]crdt.Op)
 
-	// OnConflict, if set, is called when other people's changes land on a paragraph this replica edited a
-	// moment ago (see conflictWindow): the paragraph as it was here and the replicas that changed it. The
-	// merge has already kept both changes; this is for telling the person.
+	// OnConflict, if set, runs when others changed the paragraph being edited.
 	OnConflict func(Conflict)
-	// ConflictWindow is how long a paragraph counts as being edited here (DefaultConflictWindow when zero).
+	// ConflictWindow is how long a paragraph counts as recently edited.
 	ConflictWindow time.Duration
 
 	replica string
@@ -58,16 +43,16 @@ type Bridge struct {
 	err      error
 	side     sideSync
 
-	// Per-user undo (see undo.go): the inverse of each of your own changes.
+	// Per-user undo records the inverse of each local change.
 	undo, redo []entry
-	recordTo   *[]entry // where the change being made is recorded; nil: the undo stack
+	recordTo   *[]entry
 }
 
 func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	if _, err := atomsFromItems(f.ContentItems()); err != nil {
 		return nil, err
 	}
-	// Comments and notes made here get IDs no other replica can mint.
+	// Comments and notes get replica-unique IDs.
 	if f.Comments == nil {
 		f.Comments = canvas.NewCommentSet()
 	}
@@ -82,9 +67,7 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return b, nil
 }
 
-// New starts a shared document from the flow's current content, as
-// replica. It fails if the flow has content the bridge cannot carry (see
-// ErrUnsupported).
+// New starts a shared document from the flow's current content.
 func New(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	b, err := attach(replica, f)
 	if err != nil {
@@ -96,16 +79,12 @@ func New(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return b, nil
 }
 
-// Join connects a flow to a document that exists elsewhere: the flow's own
-// content is replaced by the first operations received (typically the
-// other side's Snapshot), and local edits are not shared before then.
+// Join connects a flow to an existing shared document.
 func Join(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	return attach(replica, f)
 }
 
-// Detach stops the bridge sharing: later edits to the flow stay local and
-// undo goes back to the flow's own history. A replacement bridge attached to
-// the same flow takes over (see Session.Repair).
+// Detach stops sharing; later edits stay local.
 func (b *Bridge) Detach() {
 	b.surfaces = nil
 	b.detached = true
@@ -113,10 +92,7 @@ func (b *Bridge) Detach() {
 	b.Flow.UndoHook = nil
 }
 
-// seedReplica names the replica the starting content is written under: "seed"
-// and a hash of that content, so identical content gets identical ids (and
-// merges into one copy) while different content gets different ids (and is
-// kept in full, not interleaved by id).
+// seedReplica names the replica that holds the starting content.
 func seedReplica(atoms []atom, extra map[string]string) string {
 	h := fnv.New64a()
 	ids := make([]string, 0, len(extra))
@@ -142,14 +118,7 @@ func seedReplica(atoms []atom, extra map[string]string) string {
 	return fmt.Sprintf("seed-%016x", h.Sum64())
 }
 
-// Seed makes a joined bridge share the flow's own content as the start of
-// the document (when the server turned out to have none).
-//
-// The content is written under a replica id made from the content itself,
-// not this replica's: two clients that open an empty document at the same
-// moment and start from the same content then produce the same operations,
-// which merge into one copy instead of two. (Different content from the two
-// sides is kept in full, one after the other.)
+// Seed makes a joined bridge share the flow's content.
 func (b *Bridge) Seed() {
 	replica, outgoing := b.Doc, b.Outgoing
 	var atoms []atom
@@ -170,28 +139,22 @@ func (b *Bridge) Seed() {
 	}
 }
 
-// Ready reports whether the bridge is sharing yet: always after New, after
-// the first Apply after Join.
+// Ready reports whether the bridge is sharing yet.
 func (b *Bridge) Ready() bool { return b.ready }
 
-// Err returns the last error that stopped a local change being shared (flow
-// content the bridge cannot carry), or nil.
+// Err returns the last error that stopped a local change from sharing.
 func (b *Bridge) Err() error { return b.err }
 
-// Drain returns the operations produced locally since the last call.
+// Drain returns the operations made locally since the last drain.
 func (b *Bridge) Drain() []crdt.Op { return b.Doc.Drain() }
 
 // Snapshot returns the whole document, to onboard a replica.
 func (b *Bridge) Snapshot() []crdt.Op { return b.Doc.Snapshot() }
 
-// Sync shares side data (comments, notes, styles) that changed without a
-// text edit. Commands that change them call TextFlow.Touch, which gets
-// here through OnChange; call Sync after changing them yourself.
+// Sync shares side data such as comments, notes and styles.
 func (b *Bridge) Sync() { b.pushLocal() }
 
-// read returns the replica's document as atoms. A non-text atom (paragraph
-// format, break, object) keeps only its payload: character formatting
-// marks that happen to span it mean nothing for it.
+// read returns the replica's document as atoms.
 func (b *Bridge) read() []atom {
 	var out []atom
 	for _, run := range b.Doc.Runs(block) {
@@ -216,13 +179,10 @@ type edit struct {
 	ins     []rune
 }
 
-// maxLCS bounds the work of finding the differences between the changed
-// middles of two texts; beyond it the middle is replaced whole.
+// maxLCS bounds the work of finding differences between texts.
 const maxLCS = 4_000_000
 
-// diffRunes returns the edits turning old into new (ascending, in old's
-// indexes): common ends are trimmed, the middle is matched by longest
-// common subsequence.
+// diffRunes returns the edits turning old into new, ascending.
 func diffRunes(old, cur []rune) []edit {
 	pre := 0
 	for pre < len(old) && pre < len(cur) && old[pre] == cur[pre] {
@@ -289,11 +249,7 @@ func diffRunes(old, cur []rune) []edit {
 	return out
 }
 
-// slideEdit moves a single insertion or deletion within a run of equal
-// characters to where the caret says it happened. Deleting one of two
-// equal letters in "ll" looks the same whichever is meant, and the diff
-// alone would always pick the same one; the caret, left at the place of the
-// change, knows which was.
+// slideEdit moves a single insertion or deletion within equal text.
 func slideEdit(old, cur []rune, e edit, caret int) edit {
 	switch {
 	case e.del > 0 && len(e.ins) == 0:
@@ -323,8 +279,7 @@ func slideEdit(old, cur []rune, e edit, caret int) edit {
 	return e
 }
 
-// pushLocal shares what changed in the flow since the replica last agreed
-// with it.
+// pushLocal shares local changes since the last push.
 func (b *Bridge) pushLocal() {
 	if b.applying || !b.ready || b.detached {
 		return
@@ -399,8 +354,7 @@ func (b *Bridge) flush() {
 	}
 }
 
-// pushFormats turns the differences between the replica's attributes (have)
-// and the flow's (want) into marks, one per changed run and key.
+// pushFormats shares format differences between the replica and the flow.
 func (b *Bridge) pushFormats(have, want []atom, rec *entry) {
 	if len(have) != len(want) {
 		b.err = errors.New("collab: internal error: the replica and the flow disagree about the text")
@@ -449,8 +403,7 @@ func (b *Bridge) pushFormats(have, want []atom, rec *entry) {
 	}
 }
 
-// cursorAnchor remembers where a caret was as the id of the character just
-// before it (none for the very start), plus the flow's After flag.
+// cursorAnchor returns the id of the character at a caret.
 type cursorAnchor struct {
 	id    crdt.Timestamp
 	start bool
@@ -475,9 +428,7 @@ func (b *Bridge) offsetOf(a cursorAnchor, atoms []atom) int {
 	return streamCount(atoms[:min(pos, len(atoms))])
 }
 
-// Apply merges operations received from other replicas and brings the flow
-// up to date. Cursors stay beside the characters they were beside; the undo
-// history is cleared (see canvas.TextFlow.SetRemoteContent).
+// Apply merges operations received from other replicas.
 func (b *Bridge) Apply(ops ...crdt.Op) {
 	if b.noText {
 		b.Doc.Apply(ops...)

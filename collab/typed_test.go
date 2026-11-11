@@ -8,7 +8,7 @@ import (
 	"github.com/elaous/gojiberry/collab/hub"
 )
 
-// What somebody else types shows in their colour for a moment, at the place the characters are, and goes back.
+// Other people's typing shows in their colour for a while.
 func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	r := newRig(t, hub.Config{})
 	a := r.connect("a", "", newFlow(canvas.Chars{Text: "hello world"}))
@@ -32,7 +32,6 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	if len(got) != 1 || got[0].From != 5 || got[0].To != 11 || got[0].Name != "Ana" || got[0].Color != "#f00" {
 		t.Fatalf("the typed ranges: %+v", got)
 	}
-	// b types in front: Ana's text moves, her colour stays on it.
 	click(b.Bridge.Flow, 0)
 	b.Bridge.Flow.InsertText(">>")
 	b.RefreshPeers()
@@ -45,7 +44,6 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	if len(b.Bridge.Flow.TypedRanges) != 0 {
 		t.Fatalf("still tinted: %+v", b.Bridge.Flow.TypedRanges)
 	}
-	// And a person's own typing is never tinted for them.
 	if len(a.Bridge.Flow.TypedRanges) != 0 {
 		t.Fatal("a's own text")
 	}
@@ -59,7 +57,7 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	}
 }
 
-// An object (a picture here) that somebody else changes is shown in their colour for the moment, over the character it is.
+// An object changed by someone else is marked.
 func TestAnObjectOthersChangedIsInTheirColourForAMoment(t *testing.T) {
 	r := newRig(t, hub.Config{})
 	img := canvas.NewImage(urlSource{"https://img.example/cat.png"}, 0, 0)

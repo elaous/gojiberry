@@ -7,13 +7,13 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// DefaultTypedFor is how long text somebody else typed stays in their colour.
+// DefaultTypedFor is how long others' typed text stays marked.
 const DefaultTypedFor = 4 * time.Second
 
-// maxTyped bounds the characters remembered as just typed; a larger paste is not worth a colour.
+// maxTyped bounds the characters remembered as just typed.
 const maxTyped = 2000
 
-// typedChar is a character another person inserted, and when it arrived.
+// typedChar is a character another person inserted, and when.
 type typedChar struct {
 	id      crdt.Timestamp
 	replica string
@@ -27,15 +27,12 @@ func (s *Session) clock() time.Time {
 	return time.Now()
 }
 
-// seen records the newest character each replica is known to have made, from a snapshot or from operations, so that a
-// character repeated by the hub, or part of the document that arrived late, is not taken for somebody typing.
+// seen records the newest character each replica is known to have.
 func (s *Session) seen(ops []crdt.Op, note bool) {
 	if s.maxSeen == nil {
 		s.maxSeen = map[string]uint64{}
 	}
 	now := s.clock()
-	// The first characters to arrive are the document being loaded (a hub may send it as operations after an empty
-	// snapshot), not somebody typing.
 	if !s.loaded {
 		for _, op := range ops {
 			for _, c := range op.CharOps {
@@ -47,8 +44,7 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 	for _, op := range ops {
 		for _, c := range op.CharOps {
-			// A character somebody typed, or an object (a picture, a table, a field) somebody changed: a change of an
-			// object is a new value for its control mark, over the one character the object is.
+			// A typed character, or an object, with its author.
 			var stamp crdt.Timestamp
 			var at crdt.Timestamp // the character to show
 			switch {
@@ -81,12 +77,10 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 }
 
-// noteTyped remembers the characters in ops that other people inserted, to show them in their colour for a moment. A
-// snapshot is only recorded as seen: it is the document, not somebody typing.
+// noteTyped remembers characters other people inserted in ops.
 func (s *Session) noteTyped(ops []crdt.Op) { s.seen(ops, true) }
 
-// typedRanges drops what was typed longer ago than TypedFor and returns the rest as stretches of the flow, one colour
-// each, at the places the characters are now.
+// typedRanges drops text typed longer ago than TypedFor.
 func (s *Session) typedRanges() []canvas.TypedRange {
 	if len(s.typed) == 0 {
 		return nil
@@ -120,7 +114,7 @@ func (s *Session) typedRanges() []canvas.TypedRange {
 		}
 	}
 	var out []canvas.TypedRange
-	done := map[crdt.Timestamp]bool{} // an object that was put in and then filled in is shown once
+	done := map[crdt.Timestamp]bool{}
 	for _, t := range live {
 		if done[t.id] {
 			continue

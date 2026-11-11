@@ -11,21 +11,10 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Side data -- comments, their replies, footnote texts and named styles --
-// is a set of small whole-value records, each its own crdt block merged
-// last-writer-wins (so two people replying at once both keep their reply,
-// but two edits of the same comment's text keep one):
-//
-//	comment:<id>        the comment without its replies
-//	reply:<id>:<key>    one reply
-//	note:<id>           a footnote's text
-//	style:<name>        a named style
-//
-// A Surface adds records of its own (page headers, floating objects) beside
-// these; see Sharing.
+// Side data: comments, replies, footnotes and named styles.
 const sideKind = crdt.LWWKindPrefix + ":side"
 
-// sideSync remembers each record's last agreed value, to send only changes.
+// sideSync remembers each record's last agreed value.
 type sideSync struct {
 	synced map[string]string
 }
@@ -34,8 +23,7 @@ func replyKey(r docfile.Reply) string {
 	return fmt.Sprintf("%d-%s", r.Created, r.Author)
 }
 
-// desiredSide lists the records the flow (unless its text is not shared) and
-// the surfaces hold now.
+// desiredSide lists the records the flow should hold.
 func (b *Bridge) desiredSide() map[string]string {
 	out := map[string]string{}
 	for _, sf := range b.surfaces {
@@ -67,9 +55,7 @@ func (b *Bridge) desiredSide() map[string]string {
 	return out
 }
 
-// ownsSideRecord reports whether id is a kind of record this bridge models.
-// Others (a newer client's, or one that failed to parse here) are not ours to
-// delete just because the flow does not hold them.
+// ownsSideRecord reports whether this flow owns record id.
 func (b *Bridge) ownsSideRecord(id string) bool {
 	for _, sf := range b.surfaces {
 		if sf.Owns(id) {
@@ -107,15 +93,14 @@ func (b *Bridge) pushRecords(want map[string]string) {
 		}
 	}
 	for id := range b.side.synced {
-		if _, ok := want[id]; !ok && b.ownsSideRecord(id) && !b.surfaceOwns(id) { // a surface's record is never deleted: it may only be missing from view
+		if _, ok := want[id]; !ok && b.ownsSideRecord(id) && !b.surfaceOwns(id) {
 			b.Doc.Delete(id)
 			delete(b.side.synced, id)
 		}
 	}
 }
 
-// pullSide rebuilds the flow's comments, notes and styles from the
-// replica's records.
+// pullSide rebuilds the flow's comments, notes and styles from records.
 func (b *Bridge) pullSide() {
 	if b.noText {
 		b.pullSurfaces()
@@ -177,8 +162,7 @@ func (b *Bridge) pullSide() {
 		}
 		return comments[i].ID < comments[j].ID
 	})
-	// A reply belongs to the comment whose id begins its key (the longest
-	// such id: an id may itself contain a colon).
+	// A reply belongs to the comment whose id begins its record id.
 	replies := map[string][]docfile.Reply{}
 	for _, pr := range pendingReplies {
 		best := ""
