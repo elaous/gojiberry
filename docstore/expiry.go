@@ -11,25 +11,13 @@ import (
 	"time"
 )
 
-// ExpiryPrefix is the keyspace of the deadline records an ExpiringAdapter keeps beside the
-// documents: "expiry:<id>" holds the instant (RFC 3339, UTC) after which document <id> is gone.
-// Server reserves it from the document API.
-//
-// The record is a single line, the deadline and nothing else, exactly the format every earlier
-// build wrote and parses (it reads the whole body with time.Parse), so a rollback to an older
-// build keeps working. The creation time (for MaxAge) is a sibling record,
-// ExpiryCreatedPrefix+<id>, which older builds neither read nor write.
+// ExpiryPrefix is the keyspace of deadline records.
 const ExpiryPrefix = "expiry:"
 
-// ExpiryCreatedPrefix is the keyspace of the creation-time records ("expiry-created:<id>", RFC 3339,
-// UTC) an ExpiringAdapter keeps for MaxAge. It is a separate key, not a second line of the
-// deadline record, so a build that predates it still parses every deadline record. It is a system
-// keyspace like ExpiryPrefix: reserved from the document API and never a document.
+// ExpiryCreatedPrefix is the keyspace of creation-time records.
 const ExpiryCreatedPrefix = "expiry-created:"
 
-// ExpiryPolicy decides how long a document lives after a write. TTL answers for id at time now:
-// the lifetime, and whether the document expires at all (false: it lives until deleted).
-// Alternative policies (per tenant, per size, by id prefix) plug in here.
+// ExpiryPolicy decides how long a document lives.
 type ExpiryPolicy interface {
 	TTL(id string, now time.Time) (time.Duration, bool)
 }
@@ -40,10 +28,7 @@ type ExpiryPolicyFunc func(id string, now time.Time) (time.Duration, bool)
 // TTL implements ExpiryPolicy.
 func (f ExpiryPolicyFunc) TTL(id string, now time.Time) (time.Duration, bool) { return f(id, now) }
 
-// The keyspaces other parts of the program keep in the same store as the documents. They are
-// listed here, in one place, and nowhere else in this file: IsDocumentKey is the rule and
-// TestSystemPrefixesCoverEveryPrefixConstant keeps it complete (every Prefix constant in the
-// repository must be listed here or be declared irrelevant there).
+// Keyspaces other parts of the program keep in the store.
 const (
 	collabPrefix     = "collab:"      // shared-editing hub state (collab/hub.StoreKey)
 	collabGonePrefix = "collab-gone:" // the hub's marks of documents closed as expired (collab/hub)
@@ -54,46 +39,29 @@ const (
 	fontsPrefix      = "fonts/"       // the font library (fonts.KeyPrefix, saver.FontPrefix)
 )
 
-// The keyspaces of the public (anonymous) offer, see package docstore/public. Neither expires by
-// itself: the records under PublicPrefix that belong to one document (its metadata and view-id
-// record) are deleted by the public service's own sweep once the document is gone, and its
-// tombstones (PublicPrefix+"tomb/") and the reports (ReportPrefix) have a TTL of their own that
-// the same sweep enforces. Both are reserved from the /docs API.
+// Keyspaces of the public (anonymous) offer.
 const (
 	PublicPrefix = "public/" // document metadata, view-id records and tombstones of the public offer
 	ReportPrefix = "report/" // abuse reports about public documents
 )
 
-// The keyspaces of the shared sign-in sessions (auth/sessionstore). They hold the signed-in user of
-// each session and the OpenID Connect login states, under "<prefix><bucket>/<hash of the token>".
-// Reserved from the /docs API in every mode (a client that could write one could forge a session),
-// no expiry deadline (the store sweeps its own), not documents. Not in encrypt.DefaultSkip: they
-// carry names and e-mail addresses, so an encrypting adapter encrypts them.
+// Keyspaces of shared sign-in sessions.
 const (
 	SessionPrefix    = "auth/session/" // bearer sessions, "auth/session/<expiry hour>/<hash>"
 	LoginStatePrefix = "auth/state/"   // OpenID Connect login states, "auth/state/<expiry minute>/<hash>"
 )
 
-// systemPrefixes are the keyspaces that are not documents: they never expire by themselves (the
-// ones that belong to a document go with it, see DefaultRelated).
-// RevokedSignerPrefix is where docstore/encrypt keeps the manifest of a removed owner signer's frames
-// ("revoked-signer/<fingerprint>"), written by RevokeSigner in the clear and signed by the key that stays.
+// systemPrefixes are keyspaces that are not documents.
 const RevokedSignerPrefix = "revoked-signer/"
 
 var systemPrefixes = []string{ExpiryPrefix, ExpiryCreatedPrefix, aclKeyPrefix, collabPrefix, collabGonePrefix, catalogPrefix, versionsPrefix, DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, DeviceUsePrefix, SessionPrefix, LoginStatePrefix, passkeyPrefix, keysPrefix, fontsPrefix, FolderSecretPrefix, PublicPrefix, ReportPrefix, RevokedSignerPrefix}
 
-// IsDocumentKey reports whether key is a plain document: what the saver writes ("<id>~<gen><ext>"
-// generation keys) or a client PUTs under a plain id. It is an allowlist of the document
-// keyspace: a key in any system keyspace (access lists, hub state, catalogs, versions, the
-// directory, passkeys, wrapped keys, fonts, the deadline records) is not one, and neither is any
-// key whose first path segment contains a colon ("name:..." is the namespace style the system
-// keyspaces use, so an unknown one is assumed to be a system key). ExpiryPolicy implementations
-// that give some documents a lifetime should answer "no TTL" for every key this rejects; FixedTTL does.
+// IsDocumentKey reports whether key is a plain document key.
 func IsDocumentKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	lower := strings.ToLower(key) // a backend that folds case would alias them
+	lower := strings.ToLower(key)
 	for _, p := range systemPrefixes {
 		if strings.HasPrefix(lower, p) {
 			return false
@@ -103,8 +71,7 @@ func IsDocumentKey(key string) bool {
 	return !strings.Contains(first, ":")
 }
 
-// FixedTTL is the policy "every document lives d after its last write". Only plain documents
-// (IsDocumentKey) get a lifetime; every other key lives until deleted.
+// FixedTTL gives every document the same lifetime.
 func FixedTTL(d time.Duration) ExpiryPolicy {
 	return ExpiryPolicyFunc(func(id string, _ time.Time) (time.Duration, bool) {
 		if !IsDocumentKey(id) {
@@ -114,18 +81,15 @@ func FixedTTL(d time.Duration) ExpiryPolicy {
 	})
 }
 
-// Expirer is an optional capability of an Adapter: it knows when documents expire. Server uses it
-// to answer X-Gojiberry-Expires and the "expires" field of listings. ExpiringAdapter has it.
+// Expirer is an optional capability of an adapter.
 type Expirer interface {
-	// Expiry returns the instant document id expires, and false if it does not.
+	// Expiry returns the instant document id expires.
 	Expiry(ctx context.Context, id string) (time.Time, bool, error)
-	// Expiries returns the deadline of every document that has one.
+	// Expiries returns the deadline of every document.
 	Expiries(ctx context.Context) (map[string]time.Time, error)
 }
 
-// logicalID is the document a key belongs to: the key without its codec extension and without the
-// saver's "~<generation>" suffix ("a.docx", "a.pdf" and "a~1f2e3d4c5b6a.docx" are all "a"). An id
-// with a slash is its own logical id, so a nested id never reaches beyond itself.
+// logicalID is the document a key belongs to.
 func logicalID(id string) string {
 	if strings.Contains(id, "/") {
 		return id
@@ -140,9 +104,7 @@ func logicalID(id string) string {
 	return s
 }
 
-// relatedSets splits what belongs to document id: the "own" records are keyed by the exact id, the
-// "group" ones by the logical id, which siblings (a.docx and a.pdf, or two generations of one
-// document) share.
+// relatedSets splits what belongs to document id into sets.
 func relatedSets(id string) (own, ownPrefixes, group, groupPrefixes []string) {
 	own = []string{aclKeyPrefix + id, collabPrefix + id, keysPrefix + id}
 	logical := logicalID(id)
@@ -153,106 +115,37 @@ func relatedSets(id string) (own, ownPrefixes, group, groupPrefixes []string) {
 	return own, ownPrefixes, group, []string{versionsPrefix + logical + "/"}
 }
 
-// DefaultRelated lists what belongs to document id and goes with it: its access list, shared-editing
-// state and wrapped keys (acl:, collab:, keys:, under the exact id and, for a saver generation key
-// or an id with an extension, under the id without them) and its version history
-// ("versions/<id>/", and "versions/<id without extension>/", the saver's layout).
-//
-// Prefixes name direct children only ("versions/a/1.open", not "versions/a/b/1.open": the
-// history of the document "a/b"), and an id with a slash never reaches beyond "versions/<id>/".
-// DefaultRelated assumes nobody else owns the shared names; ExpiringAdapter (with Related unset)
-// also checks that no other live document with the same logical id exists before it deletes them.
+// DefaultRelated lists what belongs to a document.
 func DefaultRelated(id string) (exact, prefixes []string) {
 	own, ownP, group, groupP := relatedSets(id)
 	return append(own, group...), append(ownP, groupP...)
 }
 
-// ExpiringAdapter gives any Adapter documents that expire: a document lives for the TTL its
-// Policy names after its last Save ("delete 24 hours after the last edit"). Save and SaveIf renew;
-// Load and List do not, so reading cannot keep a document alive. An expired document is invisible
-// at once (Load and Delete answer ErrNotFound, List leaves it out) even before Sweep deletes it.
-//
-// It is storage-agnostic: the deadline of document <id> is a small record "expiry:<id>" in the
-// same store, written through the same adapter, so it works over memory, local files, SQLite and
-// every backend, and over a stored deadline surviving a restart. Optional capabilities of the
-// inner adapter are passed through: ConditionalAdapter (SaveIf, else ErrConditionalUnsupported),
-// Locker (else a no-op lock), PrefixLister and QuotaReporter.
-//
-// Order and crash safety. Save writes the deadline record first, then the document; Sweep
-// deletes the document (and what Related names), then the record last. So a crash can leave only
-// two things, both harmless and both repaired by Sweep:
-//   - a record whose document is missing (crash inside Save, or after the sweep's delete): it is
-//     an orphan, dropped by the sweep once its deadline has passed (not before, since another
-//     process may be in the middle of its Save);
-//   - never a document that should expire but has no record, except documents that were in the
-//     store before it was wrapped, or ones the policy did not cover when written. A document
-//     without a record never expires on its own. The first Sweep after construction adopts every
-//     such document (that the policy covers). By default it gets a full grace period (deadline
-//     now + TTL), so turning expiry on over a non-empty store deletes nothing for one TTL; with
-//     AdoptUpdatedAt it gets UpdatedAt + TTL instead and what is already past that is deleted by
-//     that sweep. The number adopted is logged.
-//
-// A Save that fails after the record was written puts the previous record back, so a failed or
-// conflicting write does not extend a document's life. Writes and sweeps of one ExpiringAdapter
-// are serialized per process, so a renewal cannot be lost to a concurrent sweep; two processes
-// sharing one store can still race at the instant of expiry (a Save at the very second of the
-// deadline may be deleted), which for a 24-hour life is immaterial.
-//
-// Clocks. A deadline is compared with the clock of whichever process looks at it; processes
-// sharing one store must keep their clocks within seconds of each other (NTP). Skew shifts a
-// document's life by that much and nothing else.
-//
-// Caching. Listings (List, ListPrefix, Expiries) read the deadlines from an in-memory copy that
-// this process's own writes invalidate and that is at most DeadlineCacheTTL old (5 seconds by
-// default). A write by another process shows in this one's listings, and its renewal of a document
-// this process saw expire, after at most that long; Load, Expiry, Save, Delete and Sweep always
-// read the record itself, so the bound only concerns listings.
+// ExpiringAdapter gives any Adapter documents that expire.
 type ExpiringAdapter struct {
 	Inner  Adapter
 	Policy ExpiryPolicy
-	// Now is the clock (time.Now when nil); tests inject a fake one.
+	// Now is the clock; time.Now when nil.
 	Now func() time.Time
-	// Related names what is deleted along with a document (DefaultRelated when nil): exact ids
-	// and id prefixes.
+	// Related names what is deleted along with a document.
 	Related func(id string) (exact, prefixes []string)
-	// OnError receives the errors of Run's sweeps (the log when nil).
+	// OnError receives the errors of Run's sweeps.
 	OnError func(error)
-	// OnExpired, when set, is told how many documents a sweep deleted (when it deleted any); the audit log uses it.
+	// OnExpired, when set, is told how many documents expired.
 	OnExpired func(deleted int)
-	// AdoptUpdatedAt makes the first sweep give a document that has no deadline record
-	// UpdatedAt + TTL, so old ones are deleted at once. The default is now + TTL: a full grace
-	// period, which is what you want when expiry is switched on over documents people still use.
+	// AdoptUpdatedAt makes the first sweep adopt update times.
 	AdoptUpdatedAt bool
-	// DeadlineCacheTTL is how long listings may reuse the deadlines they read (5 seconds when
-	// zero; negative: never reuse).
+	// DeadlineCacheTTL is how long listings may be reused.
 	DeadlineCacheTTL time.Duration
-	// MaxAge, when positive, is an absolute cap on a document's life, counted from its creation
-	// (the first Save after it was absent, expired or swept): renewals (Save, SaveIf, Touch)
-	// never move the deadline past creation + MaxAge, so a document that is edited forever still
-	// expires. Zero (the default) means no cap. It bounds how long junk edits can keep a
-	// document of a public offer alive. The creation time is kept in the deadline record
-	// (a second line; records written before it existed read as "created when next renewed").
-	// A Save of a document that has reached MaxAge starts a new document (what an expired one
-	// would get): the old content, versions and access list are purged first.
+	// MaxAge, when positive, caps a document's absolute age.
 	MaxAge time.Duration
-	// OnSave, when set, is called after every successful Save and SaveIf with the id and the size
-	// of what was written (not for Touch). It must be quick and must not call back into the
-	// adapter. The public offer uses it to count version snapshots as they are written. Set it
-	// before the adapter is in use.
+	// OnSave, when set, is called after every save.
 	OnSave func(id string, size int)
-	// Guard, when set, is asked before every Save and SaveIf (nothing is renewed or written if it
-	// refuses): a non-nil error refuses the write and is returned as it is. A non-nil done is called
-	// when the write ended, with whether it was stored. It must be quick and must not call back
-	// into the adapter. The public offer uses it to refuse a version snapshot that would pass its
-	// byte budget, and to count the ones it lets through. Set it before the adapter is in use.
+	// Guard, when set, is asked before every write.
 	Guard func(id string, size int) (done func(stored bool), err error)
-	// OnDelete, when set, is called after a version snapshot ("versions/...") was deleted by Delete,
-	// with its id and the size it had (0 if the store could not say). It must be quick and must not
-	// call back into the adapter. The public offer uses it to subtract the snapshot at once.
+	// OnDelete, when set, is called after a document is deleted.
 	OnDelete func(id string, size int)
-	// Orphans, when set, makes Sweep also delete the shared-editing state ("collab:<id>") of a
-	// document that does not exist in the store (see OrphanPolicy). Nil (the default) leaves
-	// such entries alone.
+	// Orphans, when set, makes Sweep also delete orphaned records.
 	Orphans OrphanPolicy
 
 	badMu sync.Mutex      // guards bad
@@ -272,11 +165,7 @@ func NewExpiringAdapter(inner Adapter, policy ExpiryPolicy) *ExpiringAdapter {
 	return &ExpiringAdapter{Inner: inner, Policy: policy}
 }
 
-// Renewer is what a collaborative editor calls to say "document id was edited": the deadline of
-// a live document moves to now + TTL without the document itself being written. It is
-// ErrNotFound for a document that does not exist or has expired (a Renewer never revives one).
-// ExpiringAdapter implements it (Touch), and HTTPAdapter does over POST /docs/{id}/renew, so
-// a collaboration hub in another process renews through the docstore server.
+// Renewer is what a collaborative editor calls to renew a document.
 type Renewer interface {
 	Renew(ctx context.Context, docID string) error
 }
@@ -301,7 +190,7 @@ func isExpiryKey(id string) bool {
 	return strings.HasPrefix(id, ExpiryPrefix) || strings.HasPrefix(id, ExpiryCreatedPrefix)
 }
 
-// capped is deadline limited by MaxAge counted from created (no cap when either is unset).
+// capped is deadline limited by MaxAge counted from creation.
 func (e *ExpiringAdapter) capped(deadline, created time.Time) time.Time {
 	if e.MaxAge > 0 && !created.IsZero() {
 		if c := created.Add(e.MaxAge); c.Before(deadline) {
@@ -311,12 +200,10 @@ func (e *ExpiringAdapter) capped(deadline, created time.Time) time.Time {
 	return deadline
 }
 
-// effective is the instant a record's document expires: its deadline, or the MaxAge cap if that
-// is sooner.
+// effective is the instant a record's document expires.
 func (e *ExpiringAdapter) effective(r expiryRecord) time.Time { return e.capped(r.deadline, r.created) }
 
-// liveSibling reports whether a document other than id with the same logical id is live (not
-// past its deadline): it shares the version history and the per-document records with id.
+// liveSibling reports whether a document other than id is live.
 func (e *ExpiringAdapter) liveSibling(ctx context.Context, id, logical string) (bool, error) {
 	metas, err := ListPrefix(ctx, e.Inner, logical)
 	if err != nil {
@@ -337,8 +224,7 @@ func (e *ExpiringAdapter) liveSibling(ctx context.Context, id, logical string) (
 	return false, nil
 }
 
-// relatedFor is what goes with document id: Related when set, else the default rule, in which
-// the records of the logical id are kept while another live document shares it.
+// relatedFor is what goes with document id.
 func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, prefixes []string, err error) {
 	if e.Related != nil {
 		exact, prefixes = e.Related(id)
@@ -353,16 +239,10 @@ func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, pre
 	return append(own, group...), append(ownP, groupP...), nil
 }
 
-// errRenewed is purgeLocked's answer when another process renewed or changed the document while it
-// was being expired: nothing else was deleted, and the document and its record are as that process
-// left them.
+// errRenewed is purgeLocked's answer when another process renewed.
 var errRenewed = errors.New("docstore: the document was renewed while it was being expired")
 
-// deleteExpired deletes the expired document id. On a store with conditional deletes it deletes what
-// it read: the content is loaded, the deadline record is read again (a process that renewed the
-// document before the load shows here), and the delete applies only to the digest loaded, so a
-// save by another process after that is kept (errRenewed). The in-process lock cannot do that:
-// it serializes one process, not two. A store without DeleteIf deletes unconditionally, as before.
+// deleteExpired deletes the expired document id.
 func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found bool, err error) {
 	cd, ok := e.Inner.(ConditionalDeleter)
 	if !ok {
@@ -393,8 +273,6 @@ func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found b
 	case errors.Is(err, ErrConflict):
 		return false, errRenewed
 	case errors.Is(err, ErrConditionalUnsupported):
-		// The store has the method but not the guarantee (an S3-compatible service that ignores
-		// If-Match on delete): delete as on a store without it.
 		if err := e.Inner.Delete(ctx, id); errors.Is(err, ErrNotFound) {
 			return false, nil
 		} else if err != nil {
@@ -406,11 +284,7 @@ func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found b
 	}
 }
 
-// purgeLocked deletes document id, what Related names and, last, its record. e.mu is held.
-// It reports whether the document itself was there. The record goes last on purpose: a crash or
-// failure anywhere before it leaves the record, so the next Sweep finishes the job. With expired
-// set the document is known to be past its deadline and is deleted on the content that was read
-// (deleteExpired): if another process changed it meanwhile, errRenewed, and nothing else is touched.
+// purgeLocked deletes document id and what Related lists.
 func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bool) (bool, error) {
 	var found bool
 	if expired {
@@ -443,7 +317,7 @@ func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bo
 			}
 			for _, m := range metas {
 				if strings.Contains(strings.TrimPrefix(m.ID, p), "/") {
-					continue // another document's history ("versions/a/b/..." is not that of "a")
+					continue
 				}
 				if err := e.Inner.Delete(ctx, m.ID); err != nil && !errors.Is(err, ErrNotFound) {
 					return found, err
@@ -454,9 +328,7 @@ func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bo
 	return found, e.deleteRecord(ctx, id)
 }
 
-// renewed runs write (the inner Save) with the new deadline recorded before it. An expired
-// document that was never swept is purged first, so a new document does not inherit the old
-// one's versions. If write fails the previous record is put back.
+// renewed runs write with the renewal applied.
 func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() error) error {
 	if isExpiryKey(id) {
 		return fmt.Errorf("docstore: %q is in the reserved expiry keyspace", id)
@@ -471,8 +343,6 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 	if had && !now.Before(e.effective(prev)) {
 		switch _, err := e.purgeLocked(ctx, id, true); {
 		case errors.Is(err, errRenewed):
-			// another process renewed it while this one was clearing it: it is live now, so this
-			// write extends it like any other
 			if prev, had, err = e.readRecordFull(ctx, id); err != nil {
 				return err
 			}
@@ -514,7 +384,7 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 	return nil
 }
 
-// Save implements Adapter: it stores the document and renews its deadline.
+// Save implements Adapter; it stores the document with its deadline.
 func (e *ExpiringAdapter) Save(ctx context.Context, id string, data []byte) error {
 	done, err := e.guard(id, len(data))
 	if err != nil {
@@ -529,7 +399,6 @@ func (e *ExpiringAdapter) Save(ctx context.Context, id string, data []byte) erro
 	return nil
 }
 
-// guard asks Guard; the done it returns is never nil.
 func (e *ExpiringAdapter) guard(id string, size int) (func(bool), error) {
 	if e.Guard == nil {
 		return func(bool) {}, nil
@@ -550,7 +419,7 @@ func (e *ExpiringAdapter) saved(id string, size int) {
 	}
 }
 
-// SaveIf implements ConditionalAdapter over an inner one; an expired document counts as absent.
+// SaveIf implements ConditionalAdapter.
 func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
 	c, ok := e.Inner.(ConditionalAdapter)
 	if !ok {
@@ -572,25 +441,7 @@ func (e *ExpiringAdapter) SaveIf(ctx context.Context, id string, data []byte, pr
 // Renew implements Renewer; it is Touch.
 func (e *ExpiringAdapter) Renew(ctx context.Context, id string) error { return e.Touch(ctx, id) }
 
-// Touch renews document id as a Save would, without writing the document: the deadline record
-// becomes now + TTL (never past the MaxAge cap, never earlier than it was) and nothing else
-// changes. It is for edits that are kept elsewhere (the collaboration hub keeps its state under
-// "collab:<id>", which is not a document and never expires by itself).
-//
-// It is ErrNotFound when no such document exists or its deadline has passed: a dead document is
-// never revived (nor purged here; Sweep does that), and a record with no document (the crash
-// leftover described on ExpiringAdapter) does not count. id names a document key. Exact name
-// first: if a live document has exactly that key, only it is renewed. Only when there is none
-// are the saver's "<id>~<generation>.<ext>" keys of that logical id considered, and then only
-// the newest live generation (by UpdatedAt, with every key of that same generation, such as the
-// same save in two codecs) is renewed: the saver deletes the generations it replaces, and one
-// that its failed cleanup left behind must not be kept alive for ever by renewals meant for the
-// current one; it expires on its own deadline. A document the policy gives no lifetime is live
-// and unchanged (nil).
-//
-// Order: the only write is the record, so there is nothing to undo; a crash or failure leaves
-// either the old deadline or the new one, and the document is never touched. Like Save, it is
-// serialized with Sweep and other writes of this ExpiringAdapter.
+// Touch renews document id as a Save would.
 func (e *ExpiringAdapter) Touch(ctx context.Context, id string) error {
 	if isExpiryKey(id) {
 		return fmt.Errorf("docstore: %q is in the reserved expiry keyspace", id)
@@ -656,7 +507,7 @@ func (e *ExpiringAdapter) Touch(ctx context.Context, id string) error {
 	return nil
 }
 
-// generationOf is the saver's "~<generation>" token of a key ("" when it has none).
+// generationOf reads the saver's generation tag.
 func generationOf(id string) string {
 	s := strings.TrimSuffix(id, path.Ext(id))
 	if i := strings.LastIndex(s, "~"); i > 0 && i < len(s)-1 && strings.Trim(s[i+1:], "0123456789abcdef") == "" {
@@ -665,7 +516,7 @@ func generationOf(id string) string {
 	return ""
 }
 
-// touchLocked moves the deadline record of the live document key to now + TTL (e.mu held).
+// touchLocked moves the deadline record of the document.
 func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.Time) error {
 	ttl, ok := e.Policy.TTL(key, now)
 	if !ok {
@@ -679,11 +530,11 @@ func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.
 	if !has {
 		rec.created, newCreated = now, true
 	} else if rec.created.IsZero() {
-		rec.created, newCreated = now, true // a record from before creation times were kept: the cap starts now
+		rec.created, newCreated = now, true
 	}
 	want := e.capped(now.Add(ttl), rec.created)
 	if has && !want.After(e.effective(rec)) {
-		return nil // never shorten a life by renewing it (the cap can only be that already)
+		return nil
 	}
 	rec.deadline = now.Add(ttl)
 	if newCreated {
@@ -692,10 +543,7 @@ func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.
 	return e.writeDeadline(ctx, key, rec.deadline)
 }
 
-// DeleteIf implements ConditionalDeleter for the keys that are not documents (system records
-// such as "ratelimit/", which have no deadline of their own to clean up) over an inner adapter
-// that has it; a document key is ErrConditionalUnsupported, since deleting one also removes its
-// deadline and related records.
+// DeleteIf implements ConditionalDeleter for the expiring store.
 func (e *ExpiringAdapter) DeleteIf(ctx context.Context, id string, prev string) error {
 	c, ok := e.Inner.(ConditionalDeleter)
 	if !ok || IsDocumentKey(id) {
@@ -704,7 +552,7 @@ func (e *ExpiringAdapter) DeleteIf(ctx context.Context, id string, prev string) 
 	return c.DeleteIf(ctx, id, prev)
 }
 
-// Load implements Adapter. It does not renew; an expired document is ErrNotFound.
+// Load implements Adapter; it does not renew.
 func (e *ExpiringAdapter) Load(ctx context.Context, id string) (Document, error) {
 	if isExpiryKey(id) {
 		return Document{}, ErrNotFound
@@ -719,9 +567,7 @@ func (e *ExpiringAdapter) Load(ctx context.Context, id string) (Document, error)
 	return e.Inner.Load(ctx, id)
 }
 
-// LoadHead implements HeadReader with the rules of Load: a deadline record is not found, an
-// expired document is not found (the deadline is read first), and only then the inner store is
-// asked for the first n bytes (by its own LoadHead, or by Load and a cut).
+// LoadHead implements HeadReader with the expiry rules.
 func (e *ExpiringAdapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
 	if isExpiryKey(id) {
 		return nil, ErrNotFound
@@ -740,7 +586,7 @@ func (e *ExpiringAdapter) LoadHead(ctx context.Context, id string, n int) ([]byt
 	return head, err
 }
 
-// visible drops the deadline records and the expired documents from metas.
+// visible drops the deadline records and the expired documents.
 func (e *ExpiringAdapter) visible(ctx context.Context, metas []Meta) ([]Meta, error) {
 	deadlines, err := e.deadlines(ctx)
 	if err != nil {
@@ -759,7 +605,7 @@ func (e *ExpiringAdapter) visible(ctx context.Context, metas []Meta) ([]Meta, er
 	return out, nil
 }
 
-// List implements Adapter, leaving out expired documents and the deadline records. It does not renew.
+// List implements Adapter, leaving out expired documents.
 func (e *ExpiringAdapter) List(ctx context.Context) ([]Meta, error) {
 	metas, err := e.Inner.List(ctx)
 	if err != nil {
@@ -768,7 +614,7 @@ func (e *ExpiringAdapter) List(ctx context.Context) ([]Meta, error) {
 	return e.visible(ctx, metas)
 }
 
-// ListPrefix implements PrefixLister (through the inner one's when it has it).
+// ListPrefix implements PrefixLister, leaving out expired documents.
 func (e *ExpiringAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, error) {
 	if isExpiryKey(prefix) {
 		return nil, nil
