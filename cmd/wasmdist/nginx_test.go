@@ -24,7 +24,7 @@ func startNginx(t *testing.T, dir string) string {
 		}
 		t.Skip("nginx is not installed")
 	}
-	block, err := os.ReadFile(filepath.Join("..", "..", "examples", "canvas-editor-showcase", "nginx.conf"))
+	block, err := os.ReadFile(filepath.Join("testdata", "nginx.conf"))
 	if err != nil {
 		t.Fatal(err)
 	}

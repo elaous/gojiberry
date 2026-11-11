@@ -10,7 +10,7 @@ import (
 )
 
 func TestLazyPacksAreComplete(t *testing.T) {
-	files, _ := filepath.Glob("../examples/canvas-editor-showcase/static/lang-*.json")
+	files, _ := filepath.Glob("testdata/lang-*.json")
 	if len(files) < 4 {
 		t.Fatalf("lazy packs: %v", files)
 	}
