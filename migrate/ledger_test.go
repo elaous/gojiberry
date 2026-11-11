@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// stubSource lists two files whose modified times a test moves, and serves versions of the first.
 type stubSource struct {
 	t        *testing.T
 	modified map[string]time.Time
@@ -54,7 +53,6 @@ func TestARunLeavesWhatAnEarlierRunBroughtAndTakesWhatChanged(t *testing.T) {
 	if err != nil || rep.Imported != 2 || rep.Skipped != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// The same files again: nothing is fetched.
 	led, err := NewSaverLedger(ctx, sv, "mem")
 	if err != nil {
 		t.Fatal(err)
@@ -64,20 +62,17 @@ func TestARunLeavesWhatAnEarlierRunBroughtAndTakesWhatChanged(t *testing.T) {
 	if err != nil || rep.Imported != 0 || rep.Skipped != 2 || len(src.fetched) != 0 {
 		t.Fatalf("%+v %v fetched %v", rep, err, src.fetched)
 	}
-	// One of them changed at the source since: only that one comes again.
 	src.modified["b"] = time.Unix(2000, 0)
 	items, _ = src.List(ctx, "")
 	rep, err = Run(ctx, src, items, sink, Options{Ledger: led})
 	if err != nil || rep.Imported != 1 || rep.Skipped != 1 || len(src.fetched) != 1 || src.fetched[0] != "b" {
 		t.Fatalf("%+v %v fetched %v", rep, err, src.fetched)
 	}
-	// Asked to bring everything again, the ledger is not consulted.
 	src.fetched = nil
 	rep, err = Run(ctx, src, items, sink, Options{Ledger: led, Again: true})
 	if err != nil || rep.Imported != 2 || rep.Skipped != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// A file from another platform with the same ID is not the same file.
 	if _, ok := led.Brought(tagOf("Other Drive") + ":a"); ok {
 		t.Error("another platform's file is known")
 	}
@@ -111,7 +106,6 @@ func TestEarlierVersionsComeAlongAsHistory(t *testing.T) {
 	if len(sink.docs["B"].History) != 0 {
 		t.Error("a document with no versions has no history")
 	}
-	// Not asked for: not fetched.
 	sink = &captureSink{}
 	if rep, _ = Run(ctx, src, items, sink, Options{}); rep.Versions != 0 || len(sink.docs["A"].History) != 0 {
 		t.Errorf("%+v", rep)
@@ -158,8 +152,6 @@ func TestGoogleDocsRevisionsAreExportedNewestFewOldestFirstAndTheTokenStaysHome(
 	var _ Versioned = g
 }
 
-// The session reads what the target holds, leaves what is there, says so, and offers the history choice only for a
-// platform that has one.
 func TestSessionSkipsWhatIsThereAndOffersHistoryForGoogleDocs(t *testing.T) {
 	srv := fakeDrive(t)
 	sink, sv := newSink(t)
@@ -200,7 +192,6 @@ func TestWordFilesFromTheComputerCarryNoOriginAndAreNeverSkipped(t *testing.T) {
 	if tags := sink.docs["a"].Tags(); len(tags) != 0 {
 		t.Errorf("tags %v", tags)
 	}
-	// Another file in the same position is not "already brought".
 	rep, err := Run(ctx, Files{{Name: "b.docx", Data: wordFile(t, "b")}}, items, sink, Options{Ledger: MapLedger{OriginKey(files, items[0]): time.Now()}})
 	if err != nil || rep.Imported != 1 || rep.Skipped != 0 {
 		t.Errorf("%+v %v", rep, err)

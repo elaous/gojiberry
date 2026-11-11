@@ -20,7 +20,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// wordFile is a real .docx with the text in it.
 func wordFile(t testing.TB, text string) []byte {
 	t.Helper()
 	doc := docfile.Document{Title: text, Content: []docfile.Item{{Chars: &docfile.Chars{Text: text}}}}
@@ -31,8 +30,6 @@ func wordFile(t testing.TB, text string) []byte {
 	return data
 }
 
-// fakeDrive serves a tiny Google Drive: root has the folder "Work" and the doc
-// "Plan"; Work has "Budget" (and a second page of results).
 func fakeDrive(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +131,6 @@ func TestMigrateFromGoogleDocsKeepsFoldersAndReportsFailures(t *testing.T) {
 			t.Errorf("%s holds %q", e.Name, docText(d))
 		}
 	}
-	// Migrating again into the same place reuses the folder and makes new documents.
 	sink2 := &SaverSink{Saver: s, Target: "mem"}
 	if _, err := Run(ctx, src, top[:1], sink2, Options{}); err != nil {
 		t.Fatal(err)
@@ -218,13 +214,11 @@ func TestMigrateWordFilesFromTheComputerAndLimits(t *testing.T) {
 		t.Error("names")
 	}
 
-	// Cancelling stops the run.
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := Run(cctx, files, items, sink, Options{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("%v", err)
 	}
-	// Too many files: truncated.
 	many := make(Files, MaxFiles+5)
 	for i := range many {
 		many[i].Name = "x.docx"
@@ -270,7 +264,6 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	if !p.Connected || p.Error != "" || len(p.Items) != 2 || p.Items[0].Name != "Work" || len(p.Path) != 0 {
 		t.Fatalf("%+v", p)
 	}
-	// Into the folder and back up.
 	p.OnOpenFolder("f1")
 	p = s.Props(nil)
 	if len(p.Path) != 1 || p.Path[0].Name != "Work" || len(p.Items) != 2 {
@@ -280,7 +273,6 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	if p = s.Props(nil); len(p.Path) != 0 || len(p.Items) != 2 {
 		t.Fatalf("%+v", p)
 	}
-	// Select only the document at the top and migrate it.
 	p.OnToggle("d1")
 	if p = s.Props(nil); !p.Items[1].Selected || p.Items[0].Selected {
 		t.Fatalf("%+v", p.Items)
@@ -294,7 +286,6 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	if len(live) != 1 || live[0].Name != "Plan" || !slices.Contains(live[0].Tags, "google-docs") {
 		t.Errorf("%+v", live)
 	}
-	// Converted to .open unless another format is chosen.
 	if p.Format != "open" || len(p.Formats) != 4 || live[0].Format.Name() != "open" || !strings.HasSuffix(live[0].Key, ".open") {
 		t.Errorf("format %q of %d, stored as %v %q", p.Format, len(p.Formats), live[0].Format.Name(), live[0].Key)
 	}
@@ -311,9 +302,8 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 		t.Errorf("%d documents in JSON", inJSON)
 	}
 	s.Props(nil).OnFormat("open")
-	// Nothing selected: everything listed, folders walked.
 	s.Props(nil).OnToggle("d1") // unselect it
-	s.Props(nil).OnStart()      // nothing selected: Work and Plan, so Budget and Plan come, Notes fails
+	s.Props(nil).OnStart()
 	if p = s.Props(nil); p.Imported != 2 || len(p.Failed) != 1 {
 		t.Errorf("%+v", p)
 	}
@@ -323,7 +313,6 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	if p = s.Props(nil); p.Imported != 1 || len(p.Failed) != 1 {
 		t.Errorf("%+v", p)
 	}
-	// Word files from the computer.
 	if err := s.ImportFiles(context.Background(), Files{{"Mine.docx", wordFile(t, "mine")}}); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +324,6 @@ func TestSessionBrowsesSelectsAndMigrates(t *testing.T) {
 	}
 }
 
-// manyFolders is a source whose top holds a thousand empty folders.
 type manyFolders struct{ lists int }
 
 func (*manyFolders) Label() string { return "many" }
@@ -450,7 +438,6 @@ func TestSessionPackNeedsNoStoreSink(t *testing.T) {
 	if err := s.ImportFiles(ctx, Files{{"One.docx", wordFile(t, "one")}}); err != nil || len(data) == 0 {
 		t.Fatalf("%v %d", err, len(data))
 	}
-	// Into a store, a missing Sink is still an error.
 	s.SetFormat(docfile.Open.Name())
 	if err := s.ImportFiles(ctx, Files{{"One.docx", wordFile(t, "one")}}); err == nil {
 		t.Error("nowhere to put the documents")
@@ -474,7 +461,6 @@ func TestSessionCancelledPackRunIsNotDeliveredAndSaysPartial(t *testing.T) {
 	if p := s.Props(nil); !p.Partial || !p.Reported {
 		t.Errorf("the report says the pack is partial: %+v", p)
 	}
-	// The next run starts clean.
 	if err := s.ImportFiles(context.Background(), Files{{"One.docx", wordFile(t, "one")}}); err != nil || !delivered {
 		t.Fatalf("%v %v", err, delivered)
 	}
