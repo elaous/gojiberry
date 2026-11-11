@@ -22,15 +22,6 @@ type ProgressProps struct {
 	Label         string          // optional accessible label
 }
 
-// Progress renders a linear bar or a circular ring showing Value
-// percent complete, or an indeterminate animation when the actual
-// completion isn't known yet. The circle variant is drawn with a CSS
-// conic-gradient rather than an <svg>: domrt's client-side Mount/Update
-// creates elements with plain createElement, which produces the wrong
-// (HTML, not SVG) element for an <svg>/<circle> tag, so an SVG-based
-// ring would silently fail to render once mounted (server-rendered
-// HTML wouldn't show the bug -- the browser's HTML parser switches
-// namespace for a parsed <svg> tag on its own).
 func Progress(props ProgressProps) xango.Node {
 	if props.Variant == ProgressCircle {
 		return progressCircle(props)

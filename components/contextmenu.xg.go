@@ -22,16 +22,9 @@ type ContextMenuProps struct {
 	Open  bool
 	X, Y  float64 // viewport position to render at -- see html.Element.OnContextMenu
 
-	// OnClose is called after an item is selected, and when the
-	// full-viewport backdrop behind the menu is clicked (a click
-	// anywhere outside it).
 	OnClose func()
 }
 
-// ContextMenu renders a positioned menu (typically opened from a
-// right-click -- see html.Element.OnContextMenu) plus a full-viewport
-// backdrop that closes it on an outside click. Renders nothing when
-// !Open.
 func ContextMenu(props ContextMenuProps) xango.Node {
 	if !props.Open {
 		return xango.Frag()

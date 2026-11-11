@@ -1,13 +1,5 @@
 package components // import "github.com/elaous/gojiberry/components"
 
-Package components is a small library of ready-made xango components:
-plain Go functions taking a typed props struct and returning a xango.Node,
-the same shape as any other component in this framework (see the root README's
-"Components" section). None of them import domrt or syscall/js directly --
-interactive ones take the current state and On* event handlers as props (the
-same controlled-component pattern the wasm-counter example uses), so a single
-component works unchanged for SSR-only pages and for a WASM page driving it with
-domrt.Mount/Update.
 
 CONSTANTS
 
@@ -91,28 +83,11 @@ func Accordion(props AccordionProps) xango.Node
 
 func AddCaption(track string, d CaptionDraft) (string, string)
 func Alert(props AlertProps) xango.Node
-    Alert is a Dialog preset for a single acknowledgment, rendered with
-    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
-    instead of Dialog's default role="dialog".
-
 func Announcer(message string) xango.Node
 func Avatar(props AvatarProps) xango.Node
-    Avatar renders a profile picture, or a colored circle of Initials when Src
-    is empty (e.g. the user hasn't uploaded one).
-
 func BookmarkList(props BookmarksProps) xango.Node
 func Box(props BoxProps) xango.Node
-    Box is a layout container, normally full height, split into however many
-    sub-boxes Divisions describes -- each independently sized by percentage,
-    a fixed unit value, or left flexible to fill whatever height its siblings
-    don't claim. Built on CSS Grid's grid-template-rows, which already handles
-    exactly this mix of units in one declaration.
-
 func Breadcrumbs(props BreadcrumbsProps) xango.Node
-    Breadcrumbs renders a trail of links with the last item marked as the
-    current page (aria-current, and rendered as plain text even if it has an
-    Href -- you're already there).
-
 func Button(props ButtonProps) xango.Node
     Button renders a styled <button>.
 
@@ -120,116 +95,39 @@ func Capacity(p CapacityProps) xango.Node
 func CapacityAdvice(pct float64) string
 func CaptionEditor(p CaptionEditorProps) xango.Node
 func Carousel(props CarouselProps) xango.Node
-    Carousel renders a single active slide, prev/next arrows, and a dot per
-    slide for direct navigation. All slides are rendered (the inactive ones
-    aria-hidden) so this works before any client-side hydration runs, with CSS
-    choosing which one shows.
-
 func CheckPanel(p CheckPanelProps) xango.Node
 func Checkbox(props CheckboxProps) xango.Node
-    Checkbox renders a single labeled checkbox, the label wrapping the input so
-    clicking the text toggles it too (same zero-JS trick FileUploader's dropzone
-    label uses).
-
 func CheckboxGroup(props CheckboxGroupProps) xango.Node
-    CheckboxGroup renders a set of independent checkboxes -- unlike RadioGroup,
-    any number (including all or none) may be checked at once.
-
 func Chip(props ChipProps) xango.Node
-    Chip renders a small labeled pill, optionally with a leading icon and a
-    remove button.
-
 func ChordFromKey(k xango.KeyData) (chord string, ok bool)
 func Collab(props CollabProps) xango.Node
-    Collab wraps a shared document's content and, based on Role's capabilities,
-    gates what the current collaborator can see and do with it: viewers get
-    read-only Content plus a "View only" badge and nothing else; editors
-    also get Actions and Comments; owners also get Delete/Share. Collab has
-    no networking or persistence of its own -- it's a pure permission gate,
-    the same "current state + On* callbacks" pattern every interactive component
-    in this package already uses. Pair it with your own real-time sync (e.g.
-    domrt/browser.Socket) to make Content/Comments actually collaborative;
-    see examples/collab-editor-app for one way to wire that up.
-
-    Collab only gates the affordances *around* Content -- Actions/
-    Delete/Share/Comments -- since Content is an opaque []xango.Node it
-    can't reach into. The gj-collab-readonly class it adds when !CanEdit
-    is purely cosmetic (a slight opacity change); if Content includes a
-    real input/textarea, making it genuinely non-interactive for a viewer
-    (not just visually muted) is the caller's job, e.g. Textarea's own
-    Disabled field driven off the same CapabilitiesForRole(Role) call.
-    examples/collab-editor-app does exactly this.
-
 func ColorPicker(props ColorPickerProps) xango.Node
-    ColorPicker renders a styled native color input, letting the browser handle
-    the actual color-picker UI.
-
 func CommandMaterial(command string) string
 func CommentCard(props CommentCardProps) xango.Node
 func CommentList(props CommentListProps) xango.Node
 func Confirm(props ConfirmProps) xango.Node
-    Confirm is a Dialog preset for a yes/no decision, rendered with
-    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
-    instead of Dialog's default role="dialog".
-
 func ConsolePanel(p ConsoleProps) xango.Node
 func ContextMenu(props ContextMenuProps) xango.Node
-    ContextMenu renders a positioned menu (typically opened from a right-click
-    -- see html.Element.OnContextMenu) plus a full-viewport backdrop that closes
-    it on an outside click. Renders nothing when !Open.
-
 func ContextProvider(parent context.Context, key *ContextKey, value any, render func(ctx context.Context) xango.Node) xango.Node
 func ContextValue[T any](ctx context.Context, key *ContextKey) (T, bool)
 func DataTable(props DataTableProps) xango.Node
-    DataTable renders a sortable, optionally-selectable, optionally-
-    searchable/paginated table -- see components/datatable.css.
-
 func DatePicker(props DatePickerProps) xango.Node
-    DatePicker renders a styled native date input, letting the browser handle
-    the actual calendar UI/locale formatting/keyboard input.
-
 func Dialog(props DialogProps) xango.Node
     Dialog is Modal with the common title/body/footer-actions shape.
 
 func DocList(p DocListProps) xango.Node
 func DocumentView(props DocumentViewProps) xango.Node
 func Dropdown(props DropdownProps) xango.Node
-    Dropdown renders a closed control button and, when Open, a listbox of
-    options below it (the ARIA listbox pattern). Keyboard: Down or Up on the
-    button opens the list and goes to its first or last option; Up, Down,
-    Home and End move among the options, Enter or Space chooses one, Escape
-    closes the list with the focus back on the button, Tab closes it and leaves
-    (see listboxkeys.go).
-
 func ErrorView(id string, err error) xango.Node
 func FidelityPanel(p FidelityPanelProps) xango.Node
 func FileUploader(props FileUploaderProps) xango.Node
-    FileUploader renders a dropzone that's also a native file-input label
-    (clicking anywhere on it opens the file browser, no JS needed for that part)
-    plus an optional progress bar.
-
 func FindReplace(p FindReplaceProps) xango.Node
 func Floating(props FloatingProps) xango.Node
-    Floating makes Children float above the surrounding content at a fixed
-    corner/edge position -- a formalized version of the "wrap one or more Toasts
-    in your own position:fixed container" idiom Toast's own doc comment already
-    describes, generalized to any content: a floating action button, a badge,
-    a persistent status widget, or a Toast stack.
-
 func FolderPicker(p FolderPickerProps) xango.Node
 func FontSelector(props FontSelectorProps) xango.Node
 func FootnoteList(props FootnoteListProps) xango.Node
 func FormatChord(chord string, mac bool) string
 func Grid(props GridProps) xango.Node
-    Grid is a plain CSS Grid layout container: arranges Children into a grid,
-    normally filling its parent's own width, with Columns/Gap controlling
-    track sizing and the spacing between cells -- Box's own sibling for a
-    two-dimensional layout instead of Box's single-axis stacked divisions. This
-    is a layout primitive, not a data-display component: it has no notion of
-    rows, selection, sorting, or pagination at all -- reach for DataTable when
-    what's actually being browsed is tabular data, Grid when the job is just
-    arranging an arbitrary set of already-built children into a responsive grid.
-
 func HasMaterial(name string) bool
     HasMaterial says whether Material knows the name.
 
@@ -238,41 +136,17 @@ func HeadingBreadcrumb(entries []canvas.OutlineEntry, index int) string
 
 func HeadingPath(entries []canvas.OutlineEntry, index int) []string
 func Icon(props IconProps) xango.Node
-    Icon renders a small inline glyph, sized and colored via CSS. It's
-    deliberately text (a Unicode character), not an inline <svg>: domrt's
-    client-side Mount/Update create elements with plain createElement, which
-    builds the wrong (HTML, not SVG) namespace element for <svg>/ <path>/etc.,
-    so any such tree silently fails to render once mounted client-side even
-    though it looks fine in server-rendered HTML (see Progress's circle variant,
-    and domrt/svg's own doc comment, for the same constraint solved the same
-    way elsewhere in this package). For a real vector icon that must render
-    client-side, build it yourself with domrt/svg.CreateElement and pass it
-    through one of this package's existing Icon *xango.Node slots (Chip,
-    Dropdown, ContextMenu) instead.
-
 func IconToolbar(p IconToolbarProps) xango.Node
 func ImageZoom(props ImageZoomProps) xango.Node
-    ImageZoom renders a thumbnail that, when Zoomed, also shows a full-viewport
-    overlay with the same image enlarged -- a Modal-style backdrop (see Modal's
-    doc comment for why backdrop and content are DOM siblings, not nested:
-    so a click on the enlarged image itself can't be mistaken for a click on the
-    backdrop behind it).
-
 func KeyBindings(props KeyBindingsProps) xango.Node
 func LanguagePanel(p LanguagePanelProps) xango.Node
 func Link(props LinkProps) xango.Node
-    Link renders a styled <a>. A disabled link renders as a non-interactive
-    <span> instead of an <a> without an href, since an anchor's disabled-looking
-    states aren't real disabled controls to assistive tech the way a <button
-    disabled> is.
+    Link renders a styled <a>.
 
 func LinkHost(raw string) string
 func LinkPreview(props LinkPreviewProps) xango.Node
 func List[T any](props ListProps[T]) xango.Node
 func Loader(props LoaderProps) xango.Node
-    Loader renders a spinning indicator for an in-progress operation with no
-    known completion percentage -- see Progress for one that has one.
-
 func MarkdownText(text string) xango.Node
 func Material(name string) xango.Node
 func MaterialNames() []string
@@ -282,46 +156,23 @@ func Menu(props MenuProps) xango.Node
 func MenuBar(props MenuBarProps) xango.Node
 func Migrate(p MigrateProps) xango.Node
 func Modal(props ModalProps) xango.Node
-    Modal renders a full-viewport backdrop plus a centered content box. Renders
-    nothing when !Open. This is the base Dialog (and, through it, Confirm and
-    Alert) builds on; use it directly for fully custom modal content.
+    Modal renders a full-viewport backdrop plus a centered content box.
 
 func ModalKeys(onClose func()) xango.Attr
 func NoteCounter(used, max int) string
 func OTPInput(props OTPInputProps) xango.Node
-    OTPInput renders Length single-character text boxes for entering a
-    one-time-passcode/verification code.
-
 func OpenDownloadDialog(d OpenDownload) xango.Node
 func Outline(props OutlineProps) xango.Node
 func OutlineDown(es []canvas.OutlineEntry, i int) int
 func OutlineUp(es []canvas.OutlineEntry, i int) int
 func PageSetupPanel(props PageSetupProps) xango.Node
 func Pagination(props PaginationProps) xango.Node
-    Pagination renders Prev/Next buttons plus page-number buttons, with an
-    ellipsis collapsing the middle of a long run so it stays a constant width
-    regardless of TotalPages. Renders nothing when TotalPages < 1.
-
 func ParseCaptionTime(s string) (float64, bool)
 func Passkey(p PasskeyProps) xango.Node
 func People(p PeopleProps) xango.Node
 func Popover(props PopoverProps) xango.Node
-    Popover renders Trigger, and, when Open, a panel of Content anchored
-    to it plus a full-viewport backdrop that closes it on an outside click.
-    Unlike Tooltip (pure CSS hover), Popover is click-triggered and can hold
-    interactive content of its own.
-
 func Presence(props PresenceProps) xango.Node
 func Progress(props ProgressProps) xango.Node
-    Progress renders a linear bar or a circular ring showing Value percent
-    complete, or an indeterminate animation when the actual completion isn't
-    known yet. The circle variant is drawn with a CSS conic-gradient rather
-    than an <svg>: domrt's client-side Mount/Update creates elements with plain
-    createElement, which produces the wrong (HTML, not SVG) element for an
-    <svg>/<circle> tag, so an SVG-based ring would silently fail to render once
-    mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
-    parser switches namespace for a parsed <svg> tag on its own).
-
 func ProposalPanel(p ProposalPanelProps) xango.Node
 func ProposalSentence(p canvas.Proposal) string
 func RadioGroup(props RadioGroupProps) xango.Node
@@ -332,11 +183,6 @@ func RegisterErrorGroups(g ...ErrorGroup)
 func RemovedNotice(files int) string
 func Saver(props SaverProps) xango.Node
 func Search(props SearchProps) xango.Node
-    Search renders a text input plus, when Open, a listbox of Suggestions below
-    it -- a basic implementation of the ARIA combobox pattern (role/aria-*
-    attributes only, no keyboard navigation of its own, the same scope
-    RadioGroup/Dropdown/etc. keep to elsewhere in this package).
-
 func SizeText(n int64) string
 func Slider(props SliderProps) xango.Node
     Slider renders a styled native range input.
@@ -348,11 +194,6 @@ func StylePicker(props StylePickerProps) xango.Node
 func Suggestions(p SuggestionsProps) xango.Node
 func SuggestionsControl(id string, s SuggestState) []xango.Attr
 func Switch(props SwitchProps) xango.Node
-    Switch renders a toggle switch: a native checkbox (visually hidden but still
-    keyboard/screen-reader accessible) styled as a sliding track and thumb via
-    the CSS :checked sibling selector, the same "real control, custom look"
-    approach FileUploader's hidden file input uses.
-
 func SymbolCategories(symbols []Symbol) []string
     SymbolCategories lists the categories of symbols, in first-seen order.
 
@@ -360,50 +201,16 @@ func SymbolPicker(props SymbolPickerProps) xango.Node
 func TabIndex(selected bool) xango.Attr
 func TabKeys(index, count int, onSelect func(index int)) xango.Attr
 func Tabs(props TabsProps) xango.Node
-    Tabs renders a tab strip plus the active tab's content. The caller owns
-    which tab is active (see OnSelect), the same controlled-component pattern
-    every interactive component in this package uses.
+    Tabs renders a tab strip plus the active tab's content.
 
 func TagFilter(p TagFilterProps) xango.Node
 func Textarea(props TextareaProps) xango.Node
-    Textarea renders a styled native <textarea>. Value is set via a "value"
-    attribute rather than child text content, the same controlled-input
-    convention Slider/DatePicker/ColorPicker already use: domrt patches
-    "value" as a real DOM property (see its propAttrs), which is what keeps
-    a <textarea> genuinely controlled on the client. A "value" attribute has
-    no meaning in the HTML spec for <textarea> though (initial content there
-    only ever comes from child text) -- harmless for domrt-mounted pages,
-    but if you render this with xango.Render for pure static HTML with no client
-    hydration, the initial content won't show up; use xango.El("textarea", ...,
-    xango.Text(props.Value)) directly for that case instead.
+    Textarea renders a styled native <textarea>.
 
 func Theme(props ThemeProps) xango.Node
-    Theme scopes which --gj-* design-token palette applies to its own
-    Children -- requires components/base.css, which carries both palettes
-    (:root/.gj-theme-light's own light values, .gj-theme-dark's own dark
-    overrides). This needs no Go-level context machinery of its own the way
-    ContextProvider's own open design question describes: it's a plain wrapping
-    <div> carrying a class (or inline custom-property overrides), and CSS
-    custom properties already cascade to every descendant element regardless
-    of DOM depth -- exactly the same body.dark class-toggle idea OnDesign's own
-    applyConfig uses (see that repo's editor/index.html), just scoped to this
-    wrapper instead of body, so it composes: a Theme nested inside another Theme
-    re-scopes from that point down.
-
 func ThemeEditor(p ThemeEditorProps) xango.Node
 func Toast(props ToastProps) xango.Node
-    Toast renders a single transient notification -- unlike Modal/Dialog,
-    it has no backdrop and doesn't block interaction with the rest of the page.
-    It has no opinion on where it sits on screen (no fixed positioning of its
-    own); wrap one or more in your own position:fixed container to stack them.
-    Auto-dismissal, if wanted, is the caller's job too (e.g. Window.SetTimeout),
-    the same way FileUploader leaves progress tracking to the caller.
-
 func Tooltip(props TooltipProps) xango.Node
-    Tooltip wraps Children with a bubble that shows Content on hover or keyboard
-    focus. Pure CSS (:hover/:focus-within) -- no JS, no positioning logic to
-    keep in sync with anything.
-
 func Transfer(props TransferProps) xango.Node
 func Trash(p TrashProps) xango.Node
 func TypingLive(message string, n int) xango.Node
@@ -411,9 +218,6 @@ func VersionDiff(p VersionDiffProps) xango.Node
 func Versions(p VersionsProps) xango.Node
 func WhereSentence(name, text string, anchor, caret int, has bool) string
 func Wizard(props WizardProps) xango.Node
-    Wizard renders a multi-step form flow: a step header strip, the active
-    step's content, and Back/Next actions.
-
 
 TYPES
 
@@ -496,10 +300,7 @@ type AccordionItem struct {
 
 type AccordionProps struct {
 	Items []AccordionItem
-	// Open holds which item indices are currently expanded. To allow
-	// only one open at a time, clear the others in OnToggle before
-	// setting the clicked index -- Accordion itself just renders
-	// whatever Open says.
+	// Open holds which item indices are currently expanded.
 	Open     map[int]bool
 	OnToggle func(index int) // called when an item's header is clicked
 }
@@ -558,23 +359,13 @@ type BookmarksProps struct {
     BookmarksProps configures BookmarkList.
 
 type BoxDivision struct {
-	// Height sizes this division: a percentage ("30%"), a fixed unit
-	// value ("200px", "10rem", ...), or "" to make it flexible --
-	// stretching to fill whatever height the other divisions don't
-	// claim (like CSS Grid's fr unit, which is exactly what it
-	// compiles to). Divisions can mix all three: e.g. a "48px" header,
-	// a "" flexible body, and a "30%" footer.
 	Height  string
 	Content []xango.Node
 }
     BoxDivision is one of Box's sub-boxes.
 
 type BoxProps struct {
-	// Height sizes the box itself; "" defaults to "100%" (fill the
-	// parent), per Box's purpose as a full-height layout container.
-	Height string
-	// Divisions splits Box into len(Divisions) stacked sub-boxes, top
-	// to bottom, each sized by its own Height.
+	Height    string
 	Divisions []BoxDivision
 }
     BoxProps configures Box.
@@ -583,10 +374,6 @@ type BreadcrumbItem struct {
 	Label string
 	Href  string // "" renders a plain (non-link) span instead of an <a>
 
-	// OnClick fires alongside a real navigation to Href -- e.g. to
-	// drive client-side routing (see domrt/browser.Router) instead of
-	// a full page load. Call e.PreventDefault() in it to suppress the
-	// browser's own navigation.
 	OnClick xango.EventHandler
 }
     BreadcrumbItem is one entry in a Breadcrumbs trail.
@@ -597,11 +384,7 @@ type BreadcrumbsProps struct {
     BreadcrumbsProps configures Breadcrumbs.
 
 type ButtonProps struct {
-	Label string
-	// Content overrides Label with arbitrary child nodes (e.g. an icon
-	// beside the text) when set -- the same "override the plain-text
-	// default with real markup" shape DialogProps' own Body/Actions
-	// already take.
+	Label    string
 	Content  []xango.Node
 	Variant  ButtonVariant // defaults to ButtonPrimary
 	Type     string        // "button" (default), "submit", or "reset"
@@ -734,27 +517,17 @@ type CollabCapabilities struct {
 	CanComment bool
 }
     CollabCapabilities is the set of things a collaborator may do.
-    CapabilitiesForRole gives each CollabRole's default set; pass a custom
-    CollabCapabilities via CollabProps.Capabilities for anything finer-grained.
 
 func CapabilitiesForRole(role CollabRole) CollabCapabilities
-    CapabilitiesForRole returns the default capabilities for role: owner can
-    edit/view/delete/share/comment; editor can edit/view/ comment; viewer can
-    only view/comment. An unrecognized role gets no capabilities at all (fails
-    closed, not open).
 
 type CollabProps struct {
-	Role CollabRole
-	// Capabilities overrides CapabilitiesForRole(Role) when set, for a
-	// custom permission set beyond the three built-in roles.
+	Role         CollabRole
 	Capabilities *CollabCapabilities
 
 	Content []xango.Node // the document itself; shown whenever CanView
 
 	Actions []xango.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
 
-	// OnDelete/OnShare, if set, each render as a button gated on
-	// CanDelete/CanShare respectively.
 	OnDelete func()
 	OnShare  func()
 
@@ -773,7 +546,6 @@ const (
 type ColorPickerProps struct {
 	Value    string // "#rrggbb"
 	Disabled bool
-	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
 	Label    string
 	OnChange func(value string)
 }
@@ -872,9 +644,6 @@ type ContextMenuProps struct {
 	Open  bool
 	X, Y  float64 // viewport position to render at -- see html.Element.OnContextMenu
 
-	// OnClose is called after an item is selected, and when the
-	// full-viewport backdrop behind the menu is clicked (a click
-	// anywhere outside it).
 	OnClose func()
 }
     ContextMenuProps configures ContextMenu.
@@ -890,45 +659,22 @@ type DataTableProps struct {
 	Columns []DataTableColumn
 	Rows    []DataTableRow
 
-	// Selectable shows a checkbox column -- one per row plus a
-	// select-all checkbox in the header -- reusing the same plain
-	// checkbox markup Checkbox/CheckboxGroup already render rather
-	// than a new selection primitive.
 	Selectable     bool
 	Selected       []string // currently-checked Rows' own IDs
 	OnSelectChange func(id string, checked bool)
 	OnSelectAll    func(checked bool)
 
-	// SortKey/SortDesc/OnSort: DataTable only shows which column (if
-	// any) is currently sorted and which direction, and fires OnSort
-	// with the clicked column's own Key -- actually reordering Rows
-	// (and deciding whether clicking an already-sorted column flips
-	// SortDesc or clears it) is the caller's job, the same
-	// caller-drives-it split every controlled component in this
-	// package already takes.
 	SortKey  string
 	SortDesc bool
 	OnSort   func(key string)
 
-	// Search, if non-nil, renders a Search bar above the table --
-	// filtering Rows against its own Value is, again, the caller's job.
 	Search *SearchProps
 
-	// RowActions, given a row's own ID, returns its own per-row action
-	// buttons (edit/delete/...) as one trailing column -- present only
-	// when RowActions is non-nil.
 	RowActions func(id string) []xango.Node
 
-	// Pagination, if non-nil, renders Pagination (already exists)
-	// below the table. Infinite scroll instead is the caller's own
-	// job: an IntersectionObserver has no xango.Event of its own to
-	// declare here (the same "needs a real DOM reference" split
-	// OTPInput/FileUploader/ContextMenu already take), so DataTable
-	// only ever wires the page-number variant directly.
+	// Pagination, if non-nil, renders Pagination (already exists) below the table.
 	Pagination *PaginationProps
 
-	// Empty replaces the table body with a single full-width message
-	// when Rows is empty -- "No data" is used if nil.
 	Empty *xango.Node
 }
     DataTableProps configures DataTable.
@@ -937,15 +683,7 @@ type DataTableRow struct {
 	ID    string
 	Cells []xango.Node
 }
-    DataTableRow is one already-rendered row. DataTable has no notion of the
-    caller's own row type -- there's no way to write a generic component's own
-    type parameter into the .xg tag syntax every other component here is invoked
-    through (`<DataTable columns=... />`), so (like Tabs' own Tab.Content,
-    DropdownOption's own Icon) the caller turns each real row into one of these
-    instead: ID is this row's own stable identity (selection tracking, and the
-    keyed <tr> reconciliation DataTable's own render gives each row for free),
-    Cells is the row's own already-rendered content, one per Columns entry,
-    in the same order.
+    DataTableRow is one already-rendered row.
 
 type DataView[T any] struct {
 	Page     int
@@ -1003,7 +741,6 @@ type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
 	Disabled bool
-	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
 	Label    string
 	OnChange func(value string)
 }
@@ -1141,16 +878,10 @@ type DropdownProps struct {
 
 	OnToggleOpen func(open bool) // called when the control is clicked
 
-	// OnSelect is called when an option is clicked. For single-select,
-	// it should replace Selected and close the dropdown; for
-	// multi-select, it should add/remove value from Selected and
-	// typically leave it open.
+	// OnSelect is called when an option is clicked.
 	OnSelect func(value string)
 }
-    DropdownProps configures Dropdown. There's no native <select> equivalent
-    that supports per-option icons, so both single- and multi-select modes use
-    the same custom widget here (a native <select> is a better fit when icons
-    aren't needed).
+    DropdownProps configures Dropdown.
 
 type ErrorGroup struct {
 	Kind        ErrorKind
@@ -1240,15 +971,6 @@ type FileUploaderProps struct {
 }
     FileUploaderProps configures FileUploader.
 
-    xango.Event carries no file data (see xango.Event's doc comment: Value is
-    only ever a string/bool/similar simple payload), so reading the actual
-    selected/dropped files is the caller's job, done through domrt/html directly
-    on the client: look the input up by InputID and call its AsInput().Files(),
-    or attach domrt/html's own Element.OnDrop to the dropzone by DropzoneID
-    for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
-    FileUploader itself only renders the widget and prevents the browser's
-    default drag-over/drop navigation.
-
 type FindReplaceProps struct {
 	Query, Replacement          string
 	MatchCase, WholeWord, Regex bool
@@ -1265,8 +987,6 @@ type FindReplaceProps struct {
     FindReplaceProps configures FindReplace.
 
 type FloatingPosition string
-    FloatingPosition selects which corner/edge of the viewport (or nearest
-    positioned ancestor, see FloatingProps.Fixed) Floating's children stick to.
 
 const (
 	FloatingTopLeft      FloatingPosition = "top-left"
@@ -1279,11 +999,6 @@ const (
 type FloatingProps struct {
 	Position FloatingPosition // defaults to FloatingBottomRight
 	Offset   int              // px gap from the chosen edge(s); 0 uses the CSS default (1em)
-	// Absolute positions relative to the nearest positioned ancestor
-	// (position:absolute) instead of the viewport, for floating within
-	// a scrolling container rather than over the whole page. Defaults
-	// to false (position:fixed, relative to the viewport), the more
-	// common "float over the whole page" case.
 	Absolute bool
 	Children []xango.Node
 }
@@ -1367,19 +1082,8 @@ type GrammarIssue struct {
 }
 
 type GridProps struct {
-	// Width sizes the grid itself; "" defaults to "100%" (fill the
-	// parent), the same default Box's own Height takes, for the same
-	// reason -- a layout container should fill its parent unless told
-	// otherwise.
-	Width string
-	// Columns is a CSS grid-template-columns value (e.g. "1fr 1fr 1fr",
-	// "repeat(3, 1fr)", "200px 1fr auto"); "" defaults to a responsive
-	// auto-fill of 200px-minimum tracks, so a Grid with no explicit
-	// Columns still lays out sensibly regardless of how many Children
-	// it gets.
-	Columns string
-	// Gap is the space between grid cells (e.g. "1rem", "16px"); ""
-	// means no gap at all, CSS's own default.
+	Width    string
+	Columns  string
 	Gap      string
 	Children []xango.Node
 }
@@ -1401,16 +1105,11 @@ const (
 	IconStar         IconName = "star"
 )
 type IconProps struct {
-	Name IconName // one of the built-in names above; ignored if Glyph is set
-	// Glyph overrides Name with any caller-supplied character (or short
-	// string) -- an easy escape hatch for a symbol not in the built-in
-	// set, styled the same way as a built-in one.
+	Name  IconName // one of the built-in names above; ignored if Glyph is set
 	Glyph string
 	Size  int    // px, defaults to 20
 	Color string // defaults to inheriting the surrounding text color
-	// Label is the icon's accessible name. "" marks it as decorative
-	// (aria-hidden) -- the right default when it sits next to text
-	// that already says the same thing, e.g. a Button's label.
+	// Label is the icon's accessible name.
 	Label string
 }
     IconProps configures Icon.
@@ -1425,12 +1124,9 @@ type IconToolbarProps struct {
     IconToolbarProps configures IconToolbar.
 
 type ImageZoomProps struct {
-	Src    string
-	Alt    string
-	Zoomed bool
-	// OnToggle is called with true when the thumbnail is clicked, and
-	// with false when the zoomed overlay (or its backdrop) is
-	// clicked, closing it.
+	Src      string
+	Alt      string
+	Zoomed   bool
 	OnToggle func(zoomed bool)
 }
     ImageZoomProps configures ImageZoom.
@@ -1620,13 +1316,10 @@ type MigrateProps struct {
     MigrateProps configures Migrate.
 
 type ModalProps struct {
-	Open bool
-	Role string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
-	// Label is used as the modal's aria-label (e.g. its title text).
+	Open    bool
+	Role    string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
 	Label   string
 	Content []xango.Node
-	// OnClose is called when the backdrop is clicked; nil disables
-	// backdrop-click-to-close.
 	OnClose func()
 }
     ModalProps configures Modal.
@@ -1650,13 +1343,6 @@ func (n *NoteEditor) Open() bool
     Open reports whether the dialog is open.
 
 type OTPInputProps struct {
-	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
-	// FileUploaderProps.InputID, this exists so a caller can reach a
-	// specific box through domrt/html: xango.Event carries no reference
-	// to the input element itself, so advancing focus to the next box
-	// after a digit is typed (or back after a backspace on an empty
-	// one) is done by the consuming app, calling html.Element.Focus()
-	// on the box with the next/previous id from inside OnChange.
 	ID       string
 	Length   int
 	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
@@ -1783,8 +1469,6 @@ type PeopleProps struct {
     PeopleProps configures People.
 
 type PopoverPlacement string
-    PopoverPlacement selects which side of the trigger Popover's panel appears
-    on.
 
 const (
 	PopoverBottom PopoverPlacement = "bottom"
@@ -1797,10 +1481,7 @@ type PopoverProps struct {
 	Placement PopoverPlacement // defaults to PopoverBottom
 
 	OnToggleOpen func(open bool) // called when Trigger is clicked
-	// OnClose is called when the full-viewport backdrop behind the
-	// panel is clicked -- a click anywhere outside it, the same
-	// backdrop trick ContextMenu uses.
-	OnClose func()
+	OnClose      func()
 }
     PopoverProps configures Popover.
 
@@ -1954,14 +1635,8 @@ type SearchProps struct {
 	Open        bool // whether the suggestion list is shown
 	Disabled    bool
 
-	// OnChange fires on every keystroke. Filtering Suggestions (and
-	// any debouncing of a remote lookup) is the caller's job -- Search
-	// itself has no fetch/timer logic of its own, the same
-	// "consumer drives the async part" split FileUploader uses for
-	// reading files.
+	// OnChange fires on every keystroke.
 	OnChange func(value string)
-	// OnSelect fires when a suggestion is clicked; the caller typically
-	// sets Value to it and closes the list (Open: false).
 	OnSelect func(suggestion string)
 }
     SearchProps configures Search.
@@ -1970,9 +1645,8 @@ type SliderProps struct {
 	Min, Max, Value float64
 	Step            float64 // 0 leaves the browser's default step (1)
 	Disabled        bool
-	// Label is the accessible name of the slider (what a screen reader says; a visible <label> may do instead).
-	Label    string
-	OnChange func(value float64) // called continuously while dragging
+	Label           string
+	OnChange        func(value float64) // called continuously while dragging
 }
     SliderProps configures Slider.
 
@@ -2156,14 +1830,7 @@ const (
 	ThemeDark  ThemeMode = "dark"
 )
 type ThemeProps struct {
-	// Mode selects a built-in palette: "" or ThemeLight restates
-	// :root's own values (letting a Theme re-light a subtree nested
-	// inside a dark one), ThemeDark switches to components/base.css's
-	// own .gj-theme-dark overrides.
-	Mode ThemeMode
-	// Custom overrides individual --gj-* tokens on top of Mode's own
-	// palette, e.g. Custom: map[string]string{"--gj-accent": "#10b981"}
-	// for a single custom brand color without a whole new Mode.
+	Mode     ThemeMode
 	Custom   map[string]string
 	Children []xango.Node
 }
@@ -2204,8 +1871,6 @@ func CommandToolbarItems(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bo
 	state func(canvas.Command) (toggle, pressed, disabled bool), run func(canvas.Command)) []ToolbarItem
 
 type TooltipPlacement string
-    TooltipPlacement selects which side of the trigger Tooltip's bubble appears
-    on.
 
 const (
 	TooltipTop    TooltipPlacement = "top"

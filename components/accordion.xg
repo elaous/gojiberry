@@ -11,10 +11,7 @@ type AccordionItem struct {
 // AccordionProps configures Accordion.
 type AccordionProps struct {
 	Items []AccordionItem
-	// Open holds which item indices are currently expanded. To allow
-	// only one open at a time, clear the others in OnToggle before
-	// setting the clicked index -- Accordion itself just renders
-	// whatever Open says.
+	// Open holds which item indices are currently expanded.
 	Open     map[int]bool
 	OnToggle func(index int) // called when an item's header is clicked
 }

@@ -1,12 +1,3 @@
-// Package components is a small library of ready-made xango components:
-// plain Go functions taking a typed props struct and returning a
-// xango.Node, the same shape as any other component in this framework
-// (see the root README's "Components" section). None of them import
-// domrt or syscall/js directly -- interactive ones take the current
-// state and On* event handlers as props (the same controlled-component
-// pattern the wasm-counter example uses), so a single component works
-// unchanged for SSR-only pages and for a WASM page driving it with
-// domrt.Mount/Update.
 package components
 
 import "github.com/elaous/gojiberry/xango"
@@ -19,10 +10,7 @@ type LinkProps struct {
 	Children []xango.Node
 }
 
-// Link renders a styled <a>. A disabled link renders as a
-// non-interactive <span> instead of an <a> without an href, since an
-// anchor's disabled-looking states aren't real disabled controls to
-// assistive tech the way a <button disabled> is.
+// Link renders a styled <a>.
 func Link(props LinkProps) xango.Node {
 	if props.Disabled {
 		return <span class="gj-link gj-link-disabled" aria-disabled="true">{props.Children}</span>

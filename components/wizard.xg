@@ -22,8 +22,6 @@ type WizardProps struct {
 	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
 }
 
-// Wizard renders a multi-step form flow: a step header strip, the
-// active step's content, and Back/Next actions.
 func Wizard(props WizardProps) xango.Node {
 	var headers []xango.Node
 	for i, s := range props.Steps {

@@ -19,8 +19,6 @@ type AvatarProps struct {
 	Size     AvatarSize // defaults to AvatarMd
 }
 
-// Avatar renders a profile picture, or a colored circle of Initials
-// when Src is empty (e.g. the user hasn't uploaded one).
 func Avatar(props AvatarProps) xango.Node {
 	size := props.Size
 	if size == "" {

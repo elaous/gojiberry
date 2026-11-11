@@ -17,10 +17,7 @@ type TabsProps struct {
 	OnSelect func(index int) // called when a tab is clicked, or reached with the arrow keys, Home or End
 }
 
-// Tabs renders a tab strip plus the active tab's content. The caller
-// owns which tab is active (see OnSelect), the same
-// controlled-component pattern every interactive component in this
-// package uses.
+// Tabs renders a tab strip plus the active tab's content.
 func Tabs(props TabsProps) xango.Node {
 	var buttons []xango.Node
 	for i, t := range props.Tabs {

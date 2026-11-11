@@ -18,10 +18,6 @@ type CarouselProps struct {
 	OnSelect func(index int) // called when a dot is clicked
 }
 
-// Carousel renders a single active slide, prev/next arrows, and a dot
-// per slide for direct navigation. All slides are rendered (the
-// inactive ones aria-hidden) so this works before any client-side
-// hydration runs, with CSS choosing which one shows.
 func Carousel(props CarouselProps) xango.Node {
 	var slideNodes []xango.Node
 	for i, s := range props.Slides {

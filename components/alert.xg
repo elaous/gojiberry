@@ -11,9 +11,6 @@ type AlertProps struct {
 	OnClose func()
 }
 
-// Alert is a Dialog preset for a single acknowledgment, rendered with
-// role="alertdialog" (per ARIA, for a dialog demanding an immediate
-// response) instead of Dialog's default role="dialog".
 func Alert(props AlertProps) xango.Node {
 	okLabel := props.OKLabel
 	if okLabel == "" {
