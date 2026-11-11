@@ -18,24 +18,16 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 )
 
-// fakeOIDCProvider wraps oidctest.Server (discovery + keys) with a
-// /token endpoint of its own -- oidctest.Server doesn't implement one,
-// so a real end-to-end exercise of Manager's own code-exchange path
-// (which calls oauth2Config.Exchange, a real POST to /token) needs
-// this small addition.
+// fakeOIDCProvider adds a /token endpoint to oidctest.Server.
 type fakeOIDCProvider struct {
 	srv        *httptest.Server
 	oidcServer *oidctest.Server
 	priv       *rsa.PrivateKey
 	keyID      string
 
-	// nextIDToken, if set, is returned verbatim as the id_token in the
-	// next /token response -- lets a test swap in a token signed with
-	// unexpected claims (e.g. the wrong audience) without needing a
-	// second server.
+	// nextIDToken, if set, is the id_token of the next response.
 	nextIDToken string
-	// nonce is put into the id_token like a provider echoing the login's
-	// nonce parameter; tests set it from the login redirect.
+	// nonce is echoed in the id_token, as a provider does.
 	nonce string
 }
 
@@ -151,10 +143,7 @@ func TestLoginRedirectsToProvider(t *testing.T) {
 	}
 }
 
-// TestCallbackFullFlow drives the whole login round trip: a /login
-// request to mint real server-side state, then a /callback request
-// carrying that state plus a fake authorization code, and checks the
-// session it produces actually works against /auth/me and /auth/logout.
+// TestCallbackFullFlow drives a whole login: /login, then /callback.
 func TestCallbackFullFlow(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)

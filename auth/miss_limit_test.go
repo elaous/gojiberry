@@ -27,8 +27,7 @@ func bearerFrom(m *Manager, addr, token string) bool {
 	return ok
 }
 
-// A client that sends tokens that are not sessions spends from its budget; over it, its requests are no
-// longer looked up in the store, another client is unaffected, and the budget comes back.
+// Over-budget clients skip store lookups; other clients are unaffected.
 func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)
@@ -49,7 +48,7 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if got := store.reads.Load(); got != 5 {
 		t.Fatalf("%d reads for 5 misses", got)
 	}
-	// the 6th miss is read (it is the one that finds the budget spent), the next ones are not
+	// the 6th miss reads the store; later ones do not.
 	bearerFrom(m, "198.51.100.1:1000", "guess-6")
 	before := store.reads.Load()
 	for range 50 {
@@ -60,11 +59,11 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if got := store.reads.Load(); got != before {
 		t.Errorf("a client over its budget still cost %d reads", got-before)
 	}
-	// even its valid token is not looked up while blocked (the stated cost of a shared budget)
+	// a valid token is not looked up while blocked.
 	if bearerFrom(m, "198.51.100.1:1000", good) {
 		t.Error("a blocked client's request was authenticated")
 	}
-	// another client is fine, and valid tokens are not counted as misses
+	// other clients unaffected; valid tokens are not misses.
 	if !bearerFrom(m, "203.0.113.9:2000", good) {
 		t.Error("another client was affected")
 	}
@@ -76,7 +75,7 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if n := lim.seen["miss|203.0.113.9"]; n != 0 {
 		t.Errorf("valid tokens spent %d from the miss budget", n)
 	}
-	// the limiter said wait 2.3s: the block lasts about that long, then reads resume
+	// the block lasts the limiter's wait, then reads resume.
 	m.missMu.Lock()
 	m.missBlocked["198.51.100.1"] = time.Now().Add(-time.Millisecond)
 	m.missMu.Unlock()

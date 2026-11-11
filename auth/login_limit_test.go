@@ -125,8 +125,7 @@ func TestLoginUnlimitedByDefault(t *testing.T) {
 	}
 }
 
-// A clientIP that cannot tell (it answers "") must not put every client in one budget: the
-// connection's address is used then.
+// Empty clientIP answers fall back to the remote address.
 func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)
@@ -141,8 +140,7 @@ func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *te
 	}
 }
 
-// Addresses inside one IPv6 /64 share a login budget (a subscriber holds a whole /64, so rotating through its
-// addresses buys nothing); another /64 and an IPv4 address have their own.
+// IPv6 /64 prefixes share one login budget.
 func TestLoginLimiterGroupsAnIPv6SubscriberByItsSlash64(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)

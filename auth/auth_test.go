@@ -98,8 +98,7 @@ func TestNewManagerRequiresBaseURL(t *testing.T) {
 	}
 }
 
-// A server that signs people in with passkeys only has no OpenID Connect provider but still
-// needs the Manager for its sessions.
+// Passkey-only servers have a session-only Manager.
 func TestNewManagerWithoutProvidersIsASessionOnlyManager(t *testing.T) {
 	m, err := NewManager(context.TODO(), Config{BaseURL: "https://example.com"})
 	if err != nil {
@@ -135,8 +134,7 @@ func TestUserFromClaimsKeepsUsernamePictureAndMakesAPerson(t *testing.T) {
 	}
 }
 
-// "anon" is reserved for anonymous sessions: a provider by that name would make its subjects
-// look like them.
+// "anon" is reserved for anonymous users.
 func TestProviderNameAnonIsReserved(t *testing.T) {
 	_, err := NewManager(context.Background(), Config{BaseURL: "https://x.example", Providers: []Provider{{Name: AnonProvider, IssuerURL: "https://issuer.invalid", ClientID: "c"}}})
 	if err == nil || !strings.Contains(err.Error(), "reserved") {

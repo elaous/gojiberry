@@ -12,20 +12,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Routes returns an http.Handler serving:
-//
-//	GET  /auth/providers          -- []ProviderInfo, every configured provider
-//	GET  /auth/{provider}/login   -- redirects to that provider's own consent screen (429 with
-//	                                 Retry-After over the per-client budget of SetLoginLimiter, if set)
-//	GET  /auth/{provider}/callback -- the provider's own redirect_uri target
-//	GET  /auth/me                 -- the signed-in User for this request's own bearer token, or 401
-//	POST /auth/logout             -- invalidates this request's own bearer token
-//
-// Mount this under a server that already answers CORS preflight
-// (OPTIONS) requests and includes "Authorization" in its own
-// Access-Control-Allow-Headers -- see docstore's own corsMiddleware
-// and this package's top doc comment for why a bearer token, not a
-// cookie, carries the session.
+// Routes returns an http.Handler for the auth endpoints.
 func (m *Manager) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/providers", m.handleProviders)
@@ -47,11 +34,7 @@ func (m *Manager) handleProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m.Providers())
 }
 
-// handleLoginFor returns the /auth/{name}/login handler for the
-// already-resolved provider name -- Routes builds one per configured
-// provider rather than a single handler parsing {name} back out of
-// the path, since http.ServeMux has no path-parameter support on the
-// Go version this module targets.
+// handleLoginFor returns the login handler for one provider name.
 func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -84,17 +67,7 @@ func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 	}
 }
 
-// handleCallbackFor returns the /auth/{name}/callback handler --
-// exchanges the provider's own authorization code for tokens,
-// verifies the ID token (signature, issuer, audience, expiry --
-// everything oidc.IDTokenVerifier.Verify checks), mints a session,
-// and redirects the browser back to state's own ReturnTo with the new
-// session token in the URL fragment (#auth_token=..., never a query
-// parameter, so it doesn't end up in server access logs on whatever
-// page loads next) for the client's own JS to pick up -- see
-// identity.go's own doc comment on the OnDesign side for how that
-// half works. ReturnTo defaults to BaseURL itself when LoginURL's own
-// caller didn't supply one.
+// handleCallbackFor returns the callback handler for one provider name.
 func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := m.byName[name]
@@ -191,7 +164,7 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token, ok := bearerToken(r); ok {
-		// A failed delete leaves the session valid: say so, so the client tries again.
+		// Delete failure is reported so the client retries.
 		if err := m.store.DeleteSession(r.Context(), token); err != nil {
 			log.Printf("auth: deleting a session: %v", err)
 			http.Error(w, "auth: session store unavailable", http.StatusServiceUnavailable)
@@ -201,10 +174,7 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// CurrentUser resolves r's own "Authorization: Bearer <token>" header
-// to a signed-in User, if any -- the primitive a document's own
-// sharing/permission checks (still unbuilt) will call directly rather
-// than going through handleMe's own JSON response.
+// CurrentUser returns the signed-in user for r's bearer token, if any.
 func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	token, ok := bearerToken(r)
 	if !ok {
@@ -214,7 +184,7 @@ func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	if m.missLimiter != nil {
 		ip = m.missKey(r)
 		if m.missBlockedNow(ip) {
-			return User{}, false // over the budget of misses: no read of the store
+			return User{}, false // over the miss budget: no store read
 		}
 	}
 	u, ok, err := m.store.GetSession(r.Context(), token)
@@ -245,5 +215,5 @@ func bearerToken(r *http.Request) (string, bool) {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v) // a write failure here means the client disconnected -- nothing actionable to do about it, the same posture docstore's own handlers already take
+	_ = json.NewEncoder(w).Encode(v)
 }
