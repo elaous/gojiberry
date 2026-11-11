@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// solid is a picture of one colour with a rectangle of another in its left half.
 func solid(w, h int, base, patch [3]byte, patchLeftFrac float64) Pixels {
 	px := make([]byte, w*h*4)
 	for y := range h {
