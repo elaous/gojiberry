@@ -1,4 +1,3 @@
-// Command voiceserver runs text-to-speech and speech recognition.
 package main
 
 import (
