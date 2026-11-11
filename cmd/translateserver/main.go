@@ -1,4 +1,3 @@
-// Command translateserver runs the translation server.
 package main
 
 import (
