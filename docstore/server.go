@@ -436,6 +436,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ready": ready})
 }
 
+// counts and sizes only: never an id, a name or a content
 type usageResponse struct {
 	Documents int           `json:"documents"`
 	Records   int           `json:"records"`
@@ -507,6 +508,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	// the reserved ACL keyspace never appears in a listing
 	var deadlines map[string]time.Time
 	if x, ok := s.adapter.(Expirer); ok {
 		deadlines, _ = x.Expiries(r.Context())

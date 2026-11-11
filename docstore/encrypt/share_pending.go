@@ -193,6 +193,7 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 					return n, nil, nil, fmt.Errorf("%w: %w: %s"+unsignedHint, ErrUnsignedAfterFlip, ErrForgedFrame, named)
 				}
 			}
+			// tidying never fails a re-key that worked
 			if err := s.clearUnsignedLate(ctx, docID); err != nil {
 				log.Printf("encrypt: %s: the unsigned-late mark could not be checked and was kept: %v", docID, err)
 			}

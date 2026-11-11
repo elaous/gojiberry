@@ -28,6 +28,7 @@ type Comment struct {
 
 // CommentSet holds a document's comments.
 type CommentSet struct {
+	// per replica: two people commenting never mint the same ID
 	IDPrefix string
 	Roster   Roster
 
@@ -189,6 +190,7 @@ func CommentSummary(text string, max int) string {
 	return s
 }
 
+// IDs never contain a comma
 func commentList(s string) []string {
 	if s == "" {
 		return nil

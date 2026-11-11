@@ -153,6 +153,7 @@ func remoteRenewer(baseURL, token string) *docstore.HTTPAdapter {
 	return remote
 }
 
+// never holds the raw URL: it may carry credentials
 func renewStartupMessage(renewURL string) string {
 	return "collabhub: collaborators' edits renew documents at " + docstore.RedactURL(renewURL)
 }

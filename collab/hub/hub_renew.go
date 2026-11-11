@@ -44,6 +44,7 @@ func (h *Hub) clearStoreTombstone(id string) {
 	}
 }
 
+// rm.mu held
 func (h *Hub) renewDue(rm *room) bool {
 	if h.cfg.Renewer == nil {
 		return false

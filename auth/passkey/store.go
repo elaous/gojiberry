@@ -28,8 +28,9 @@ func (c Credential) ID() string { return base64.RawURLEncoding.EncodeToString(c.
 
 // Account is a person who can sign in with passkeys.
 type Account struct {
-	ID          string       `json:"id"`
-	Handle      []byte       `json:"handle"`
+	ID     string `json:"id"`
+	Handle []byte `json:"handle"`
+	// a label only: never the session's identity
 	Email       string       `json:"email,omitempty"`
 	Name        string       `json:"name,omitempty"`
 	Credentials []Credential `json:"credentials"`
@@ -224,6 +225,7 @@ func (s *AdapterStore) putLocked(ctx context.Context, a *Account) error {
 	if err != nil {
 		return err
 	}
+	// account first, then handle: failure never leaves a dangling handle
 	if err := s.Adapter.Save(ctx, accountKey(a.ID), data); err != nil {
 		return err
 	}

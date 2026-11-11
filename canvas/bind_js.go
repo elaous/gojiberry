@@ -183,6 +183,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return e.X - r.Left, e.Y - r.Top
 	}
 
+	// set while a click focuses the input: must not start editing
 	focusByPointer := false
 	focusInput := func() {
 		focusByPointer = true

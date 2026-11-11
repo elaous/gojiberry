@@ -242,6 +242,7 @@ func MarkdownFromItems(items []Item) string {
 	return strings.Join(out, "\n")
 }
 
+// already Markdown: must not be marked again
 const rawRun = "\x00"
 
 func inlineMarkdown(in Inline) (md string, block bool) {

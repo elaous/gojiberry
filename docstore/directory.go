@@ -443,6 +443,7 @@ const (
 	maxLogScan             = 500
 )
 
+// one shared key would be a compare-and-set hotspot
 const lookupShards = 16
 
 type directoryLimits struct {

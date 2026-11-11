@@ -124,6 +124,7 @@ func (r *Registry) AddCommand(name Command, title, chord string, fn CommandFunc)
 	}
 }
 
+// Target is nil when nothing is being edited
 func (r *Registry) AddGlobalCommand(name Command, title, chord string, fn CommandFunc) {
 	r.AddCommand(name, title, chord, fn)
 	if r.global == nil {

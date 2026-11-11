@@ -53,6 +53,7 @@ func (b *Bridge) surfaceRecords() map[string]string {
 	return out
 }
 
+// an element that normalises its input must not echo it back
 func (b *Bridge) pullSurfaces() {
 	if len(b.surfaces) == 0 {
 		return

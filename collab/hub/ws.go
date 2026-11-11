@@ -30,6 +30,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 		return // Accept has answered
 	}
 	defer func() { _ = c.CloseNow() }()
+	// over MaxBody: 413 reject; the library limit closes the socket
 	c.SetReadLimit(min(4*h.cfg.MaxBody, h.cfg.MaxBody+1<<20))
 	s, snapshot, peers, ok := h.join(rm, role, r, replica)
 	if !ok {
@@ -42,6 +43,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out := make(chan event, 64) // Answers to client frames, written by the loop.
 	incoming := make(chan struct{})
+	// gives up when done: a non-reading client must not park it
 	send := func(e event) bool {
 		select {
 		case out <- e:
@@ -63,6 +65,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			switch f.Event {
 			case "ops", "presence":
+				// checked on every frame: a downgraded user must not write
 				if h.role(r, id) != role {
 					_ = c.Close(websocket.StatusPolicyViolation, "access changed")
 					return

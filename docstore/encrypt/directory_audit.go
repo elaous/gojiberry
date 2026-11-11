@@ -87,6 +87,7 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 	for _, e := range entries {
 		bySeq[e.Seq] = e
 	}
+	// voids validated first: a void follows the entry it cancels
 	voidBad := map[int64]string{}
 	for _, e := range entries {
 		if e.Op != OpVoid || !mine[e.Address] {
@@ -158,6 +159,7 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 			bad(e, "the entry is dated before an earlier entry of the log: the times of the chain went back")
 		}
 		if !opt.Now.IsZero() {
+			// seconds, not Duration: a huge gap would overflow
 			gap := e.At - opt.Now.Unix()
 			switch {
 			case gap > int64(future/time.Second):

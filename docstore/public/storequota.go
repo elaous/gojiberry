@@ -66,6 +66,7 @@ type quotaRecord struct {
 	Used int64 `json:"used"`
 }
 
+// a refund never goes below 0 and always fits
 func (q *StoreQuota) charge(ctx context.Context, key string, delta, win int64) (bool, error) {
 	cas, ok := q.Store.(docstore.ConditionalAdapter)
 	if !ok {

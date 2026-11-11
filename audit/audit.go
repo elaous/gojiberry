@@ -117,6 +117,7 @@ func (e Event) Valid() bool {
 	return true
 }
 
+// keyed HMAC: a pseudonym is not reversible without the key
 func Pseudonym(key []byte, subject string) Ref {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte(subject))

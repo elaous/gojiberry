@@ -23,6 +23,7 @@ type DeviceUse struct {
 // MaxDeviceLabel is the longest device label kept.
 const MaxDeviceLabel = 60
 
+// hashed: fingerprint text never becomes part of a file name
 func deviceUseID(fp string) (string, error) {
 	if fp == "" || len(fp) > 256 || strings.TrimSpace(fp) != fp || strings.ContainsFunc(fp, unicode.IsControl) {
 		return "", errors.New("encrypt: not a key fingerprint")

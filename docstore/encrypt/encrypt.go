@@ -94,6 +94,7 @@ type Adapter struct {
 	afterBind     func()
 	beforeBinding func()
 
+	// serialises Save with re-keys, which hold it from read to write
 	mu sync.Mutex
 }
 
@@ -174,6 +175,7 @@ func (a *Adapter) binds(id string) bool {
 	return ok && DocID(id) != ""
 }
 
+// a confidential document is never sealed unsigned
 func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) ([]byte, error) {
 	if len(rs) == 0 {
 		return nil, ErrNoRecipients

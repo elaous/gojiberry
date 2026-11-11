@@ -101,6 +101,7 @@ var (
 	factories = map[string]func() Element{}
 )
 
+// panics on a duplicate tag
 func Register(tag string, factory func() Element) {
 	regMu.Lock()
 	defer regMu.Unlock()

@@ -66,6 +66,7 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string, rk rekeyOpts) error {
 	return docstore.ErrConflict
 }
 
+// all files opened and checked first: none written if any fails
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 	done, _, err := a.rekeyGroupFiles(ctx, ids, rekeyOpts{})
 	return len(done), err
@@ -152,6 +153,7 @@ func groupOf(id string) string {
 	return id
 }
 
+// caller holds the lock
 func (a *Adapter) filesOf(ctx context.Context, g string) ([]string, error) {
 	metas, err := a.Inner.List(ctx)
 	if err != nil {

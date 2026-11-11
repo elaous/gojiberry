@@ -68,6 +68,7 @@ type Service struct {
 	acctLim    Limiter
 	clientIP   func(*http.Request) string
 
+	// serialises read-modify-write when the Store has no Updater
 	acctMu      sync.Mutex
 	HasOtherWay func(ctx context.Context, accountID string) bool
 }

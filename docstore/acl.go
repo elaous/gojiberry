@@ -73,6 +73,7 @@ func ownerKey(u auth.User) string {
 	return u.ID
 }
 
+// reserved keyspace: never reachable through the document API
 const aclKeyPrefix = "acl:"
 
 func aclKey(id string) string {
@@ -286,6 +287,7 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 const telemetryKeyspace = "telemetry:"
 
 func isReservedDocID(id string) bool {
+	// hub and directory keyspaces: never reachable through the document API
 	lower := strings.ToLower(id)
 	for _, p := range []string{aclKeyPrefix, "collab:", DirectoryPrefix, DirectoryLogPrefix, DirectoryEnrollPrefix, RateLimitPrefix, ConfigPrefix, SessionPrefix, LoginStatePrefix, ExpiryPrefix, ExpiryCreatedPrefix, PublicPrefix, ReportPrefix, telemetryKeyspace, usageKeyspace} {
 		if strings.HasPrefix(lower, p) {

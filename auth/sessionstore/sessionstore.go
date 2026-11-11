@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	// the token is never in a record name or body
 	SessionPrefix    = docstore.SessionPrefix
 	LoginStatePrefix = docstore.LoginStatePrefix
 )
@@ -35,10 +36,12 @@ const (
 
 	sessionBucket = time.Hour
 	stateBucket   = time.Minute
-	sweepGrace    = time.Minute
+	// replicas' clocks differ
+	sweepGrace = time.Minute
 
 	recordVersion = 1
 
+	// bounds expiry: a huge TTL would overflow bucket numbers
 	maxTTL  = 100 * 365 * 24 * time.Hour
 	maxUnix = 1 << 40
 
@@ -61,8 +64,9 @@ type Store struct {
 
 	sessions, states atomic.Int64
 	sessionsNet      atomic.Int64
-	statesNet        atomic.Int64
-	sweeping         sync.Mutex
+	// never reset: Sweep keeps what moved during its listing
+	statesNet atomic.Int64
+	sweeping  sync.Mutex
 }
 
 func New(store docstore.Adapter) (*Store, error) {
@@ -132,6 +136,7 @@ func dec(c *atomic.Int64) {
 	}
 }
 
+// seconds, not Duration: nanoseconds overflow int64 past 2262
 func (k kind) bucketOf(expires time.Time) int64 {
 	b := int64(k.bucket / time.Second)
 	n := expires.Unix()
@@ -216,6 +221,7 @@ func (s *Store) put(ctx context.Context, k kind, expires time.Time, body func() 
 	}
 	bucket := k.bucketOf(expires)
 	for range 3 {
+		// an existing name is a collision: never overwrite
 		token, err := k.newToken(bucket)
 		if err != nil {
 			return "", err
@@ -249,6 +255,7 @@ func (s *Store) PutSession(ctx context.Context, u auth.User, ttl time.Duration) 
 
 const DefaultMissFor = time.Second
 
+// at the bound the map is emptied: a flood costs reads
 const maxCached = 4096
 
 type cachedSession struct {

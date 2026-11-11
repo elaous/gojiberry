@@ -114,6 +114,7 @@ func (t *Table) deleteRow(at int) {
 	t.shift(at, 0, -1, 0)
 }
 
+// the last column is cleared, never removed
 func (t *Table) deleteColumn(at int) {
 	if at < 0 || at >= t.Cols() {
 		return

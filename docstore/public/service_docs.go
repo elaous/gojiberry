@@ -183,6 +183,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	defer unlock()
 	view := viewIDOf(docID)
 	meta := docMeta{Owner: sess.User().ID, ViewID: view, Created: s.now().UTC(), Versions: 1, Bytes: len(data)}
+	// records first, document last: a failure never orphans a document
 	rollback := func() {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
@@ -212,6 +213,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !has {
+		// no deadline from the store: never keep a document for ever
 		rollback()
 		s.alarmNoDeadline()
 		s.fail(w, errNoDeadline)
@@ -300,6 +302,7 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	} else if !live {
+		// an expired document must not be brought back by an edit
 		http.Error(w, "this document expired; create a new one", http.StatusNotFound)
 		return
 	}
@@ -404,6 +407,7 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// never renews the expiry; shows only content and deadline
 func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")

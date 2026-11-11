@@ -112,6 +112,7 @@ func esc(s string) string {
 	return b.String()
 }
 
+// renamed over the destination only when whole: no partial file
 type output struct {
 	f   *os.File
 	dst string
@@ -184,6 +185,7 @@ func packCmd(args []string, out outWriter) error {
 	if err != nil {
 		return err
 	}
+	// the output and what it replaces are never packed
 	skip := []string{o.f.Name(), dst}
 	done := false
 	defer func() {

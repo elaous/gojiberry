@@ -37,6 +37,7 @@ func init() {
 	})
 }
 
+// _id holds the document ID directly, never an ObjectID
 type mongoDoc struct {
 	ID        string    `bson:"_id"`
 	Data      []byte    `bson:"data"`

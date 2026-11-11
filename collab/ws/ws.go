@@ -89,6 +89,7 @@ func (c *Conn) Status() client.Status {
 	return c.status
 }
 
+// c.mu held
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))

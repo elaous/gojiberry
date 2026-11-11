@@ -230,6 +230,7 @@ func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
 	if err != nil {
 		return rep, err
 	}
+	// complete a crash-orphaned owner-state entry now, not later
 	if n, err := d.ReconcileEnrollments(ctx); err != nil {
 		return rep, err
 	} else if n > 0 {

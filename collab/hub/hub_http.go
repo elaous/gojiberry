@@ -94,6 +94,7 @@ func (h *Hub) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ops)
 }
 
+// rm.mu held
 func (rm *room) broadcast(from string, e event) {
 	for s := range rm.subs {
 		if s.replica == from && from != "" {
@@ -113,6 +114,7 @@ func jsonEvent(name string, v any) event {
 	return event{name: name, data: b}
 }
 
+// rm.mu held; one signed-in user per replica id
 func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	if replica == "" || h.cfg.User == nil {
 		return true
@@ -265,6 +267,7 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	return nil
 }
 
+// rm.mu held
 func (h *Hub) prunePresence(rm *room) {
 	cutoff := h.now().Add(-h.cfg.PresenceTTL)
 	for id, e := range rm.pres {
@@ -275,6 +278,7 @@ func (h *Hub) prunePresence(rm *room) {
 	}
 }
 
+// rm.mu held; at most one send per PresenceInterval
 func (h *Hub) setPresence(rm *room, p Presence) {
 	if len(p.Holding) > MaxHolding { // a name of an object, not a message
 		p.Holding = ""

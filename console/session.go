@@ -16,8 +16,9 @@ type Session struct {
 	PickFiles func(add func(name string, data []byte))
 	Before    func()
 	OnDone    func(err error)
-	OnChange  func()
-	Pending   *components.Pending
+	// possibly from another goroutine
+	OnChange func()
+	Pending  *components.Pending
 
 	mu       sync.Mutex
 	lines    []components.ConsoleLine

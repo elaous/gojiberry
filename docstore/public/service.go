@@ -295,6 +295,7 @@ func (s *Service) Handler() http.Handler {
 	return s.headers(mux)
 }
 
+// no indexing, caching, sniffing or referrer: view links must not leak
 func (s *Service) headers(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if d := s.cfg.RequestTimeout; d > 0 {
@@ -322,6 +323,7 @@ const ExposedHeaders = docstore.ExposedHeaders
 
 func docKey(docID string) string { return docKeyPrefix + docID }
 
+// the document ID is never shown to a viewer
 func viewIDOf(docID string) string {
 	h := sha256.Sum256([]byte("gojiberry/public/view/v1\x00" + docID))
 	return base64.RawURLEncoding.EncodeToString(h[:16])
@@ -400,6 +402,7 @@ func (s *Service) removed(ctx context.Context, docID string) (bool, error) {
 	return s.getJSON(ctx, tombPrefix+viewIDOf(docID), &t)
 }
 
+// an expired document is invisible at once, before its sweep
 func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	key := docKey(docID)
 	if x, ok := s.store.(docstore.Expirer); ok {

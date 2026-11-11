@@ -197,6 +197,7 @@ func (d *AdapterDirectory) enrollNames(email string) []string {
 
 var errEnrollmentCorrupt = errors.New("encrypt: the owner enrollment of this address cannot be read or verified")
 
+// an unreadable or unverifiable record is an error, never none
 func (d *AdapterDirectory) readEnrollment(ctx context.Context, email string) (*enrollRecord, string, error) {
 	want := normalizeEmail(email)
 	for _, id := range d.enrollNames(want) {

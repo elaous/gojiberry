@@ -57,6 +57,7 @@ type Provider struct {
 	AssumeEmailVerified bool
 }
 
+// ClientSecret never leaves the server
 type ProviderInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
@@ -173,6 +174,7 @@ func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 	}
 	ip := remote
 	if m.clientIP != nil {
+		// empty clientIP falls back to the connection address
 		if v := m.clientIP(r); v != "" {
 			ip = v
 		}
@@ -337,6 +339,7 @@ func (s *tokenStore[T]) put(value T, ttl time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.entries) >= pruneAt {
+		// sweep at most once a second: puts stay cheap
 		if now := time.Now(); now.Sub(s.swept) >= time.Second {
 			s.swept = now
 			for k, e := range s.entries {
@@ -358,6 +361,7 @@ const (
 	maxEntries = 100000
 )
 
+// a live record is never evicted to make room
 var ErrStoreFull = errors.New("auth: too many pending logins or sessions")
 
 var errStoreFull = ErrStoreFull
@@ -373,6 +377,7 @@ func (s *tokenStore[T]) get(token string) (T, bool) {
 	return e.value, true
 }
 
+// consumes: a replayed state value must fail
 func (s *tokenStore[T]) take(token string) (T, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

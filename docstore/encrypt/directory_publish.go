@@ -24,6 +24,7 @@ func (d *AdapterDirectory) Publish(ctx context.Context, user auth.User, key Reci
 	return err
 }
 
+// refuses unless the e-mail is explicitly verified
 func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key Recipient, opt PublishOptions) (PublishedKey, error) {
 	if d.Signer == nil {
 		return PublishedKey{}, ErrDirectoryOff

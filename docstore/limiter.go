@@ -254,6 +254,7 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 			st = limitState{Tokens: float64(l.Burst), At: now.UnixNano()}
 		}
 		if st.At > now.UnixNano()+int64(maxClockSkew) {
+			// a far-ahead replica clock must not lock the others out
 			fixed := limitState{Tokens: st.Tokens, At: now.UnixNano(), Full: now.UnixNano()}
 			if l.PerMinute > 0 {
 				fixed.Full += int64((float64(l.Burst) - st.Tokens) / l.PerMinute * float64(time.Minute))
@@ -273,6 +274,7 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 			}
 		}
 		at := max(st.At, now.UnixNano())
+		// never move a record's time backwards (within the skew)
 		tokens := refill(st.Tokens, time.Duration(now.UnixNano()-st.At), l.PerMinute, l.Burst)
 		if tokens < 1 {
 			return false, waitFor(tokens, l.PerMinute)

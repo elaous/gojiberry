@@ -245,6 +245,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	cursor := st.Cursor
 	if cursor == 0 || (st.Filtered && cursor > st.Seq) {
+		// a filtered cursor never passes the saved head
 		cursor = st.Seq
 	}
 	fromSeen := func(filtered bool) int64 {
@@ -395,6 +396,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		if !found {
 			return rep, fmt.Errorf("%w: entry %d", ErrOwnEntryMissing, seq)
 		}
+		// a server-chosen number must not pick the pinned address
 		if why := madeMismatch(m, e); why != "" {
 			rep.Violations = append(rep.Violations, encrypt.AuditViolation{Seq: seq, Why: why})
 			continue
@@ -520,6 +522,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 
 	if filtered {
 		st.Seq, st.Hash = head.Seq, head.Hash
+		// never past the signed head: later entries are read again
 		st.Cursor = min(max(read.next, cursor), head.Seq)
 	} else if lastSeq > 0 {
 		st.Seq, st.Hash, st.Cursor = lastSeq, lastHash, lastSeq

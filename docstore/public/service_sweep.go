@@ -45,6 +45,7 @@ func versionDoc(key string) (string, bool) {
 	return id, validID(id)
 }
 
+// creation writes the records first
 const recordGrace = time.Minute
 
 // Sweep removes what the ExpiringAdapter does not.

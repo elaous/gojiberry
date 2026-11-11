@@ -153,6 +153,7 @@ func (b *budget) releaseExtra(n int64) {
 	b.unholdLocked(n)
 }
 
+// never more than the document's entry holds as snapshots
 func (b *budget) subExtra(doc string, n int64) {
 	if n <= 0 {
 		return
@@ -296,6 +297,7 @@ func (r *reportStats) add(n int, bytes int64, reporter string) {
 		}
 	}
 	if n > 0 {
+		// only growth is remembered; a short listing loses nothing
 		for _, w := range r.windows {
 			w.n += n
 			w.bytes += bytes
@@ -356,8 +358,10 @@ func (r *reportStats) held(reporter string) (all, mine int) {
 
 const reconcileBackoff = 15 * time.Second
 
+// own context: the starting request's disconnect must not fail it
 const reconcileTimeout = 2 * time.Minute
 
+// the budget must not start from zero after a restart
 func (s *Service) ensureCounters(ctx context.Context) bool {
 	if _, done := s.bytes.get(); done {
 		return true
@@ -521,6 +525,7 @@ func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info 
 	return evicted
 }
 
+// under the document's lock
 func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
 	if !validID(docID) || reportID == "" {
 		return

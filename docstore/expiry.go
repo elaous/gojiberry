@@ -275,6 +275,7 @@ func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found b
 	}
 }
 
+// e.mu held; record goes last so a crash is retried
 func (e *ExpiringAdapter) purgeLocked(ctx context.Context, id string, expired bool) (bool, error) {
 	var found bool
 	if expired {
@@ -388,6 +389,7 @@ func (e *ExpiringAdapter) Save(ctx context.Context, id string, data []byte) erro
 	return nil
 }
 
+// the done it returns is never nil
 func (e *ExpiringAdapter) guard(id string, size int) (func(bool), error) {
 	if e.Guard == nil {
 		return func(bool) {}, nil
@@ -504,6 +506,7 @@ func generationOf(id string) string {
 	return ""
 }
 
+// e.mu held
 func (e *ExpiringAdapter) touchLocked(ctx context.Context, key string, now time.Time) error {
 	ttl, ok := e.Policy.TTL(key, now)
 	if !ok {

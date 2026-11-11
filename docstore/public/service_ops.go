@@ -49,6 +49,7 @@ func (s *Service) loadTaken(ctx context.Context) error {
 	return nil
 }
 
+// only the digest is kept, never the content
 func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	d, err := s.store.Load(ctx, docKey(docID))
 	if err != nil {
@@ -62,6 +63,7 @@ func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	}
 }
 
+// a panic in Notify is caught
 func (s *Service) tell(rep Report) {
 	defer func() {
 		if r := recover(); r != nil {

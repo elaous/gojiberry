@@ -227,6 +227,7 @@ func (sh *Shell) ask(question string) bool {
 		return true
 	}
 	if sh.Script {
+		// the next script line is a command, not an answer
 		sh.printf("%s\nnot confirmed: a script needs -y to answer yes\n", question)
 		return false
 	}

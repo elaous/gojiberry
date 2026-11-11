@@ -66,6 +66,7 @@ func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 	return nil
 }
 
+// an alias is never dropped
 func (d *AdapterDirectory) recordAliases(ctx context.Context) error {
 	if d.Signer == nil {
 		return nil

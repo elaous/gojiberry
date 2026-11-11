@@ -39,6 +39,7 @@ func parseRecord(b []byte) (expiryRecord, error) {
 	return r, nil
 }
 
+// unparseable counts as absent: never fails Load or Save
 func (e *ExpiringAdapter) readRecordFull(ctx context.Context, id string) (expiryRecord, bool, error) {
 	d, err := e.Inner.Load(ctx, ExpiryPrefix+id)
 	if errors.Is(err, ErrNotFound) {
@@ -85,6 +86,7 @@ func (e *ExpiringAdapter) readRecord(ctx context.Context, id string) (time.Time,
 	return e.effective(r), true, nil
 }
 
+// creation time first, then deadline: a crash never reverses them
 func (e *ExpiringAdapter) writeRecord(ctx context.Context, id string, r expiryRecord) error {
 	defer e.invalidate()
 	if r.created.IsZero() {
@@ -102,6 +104,7 @@ func (e *ExpiringAdapter) writeDeadline(ctx context.Context, id string, deadline
 	return e.Inner.Save(ctx, ExpiryPrefix+id, expiryRecord{deadline: deadline}.deadlineBytes())
 }
 
+// deadline last: a crash leaves it for the next sweep
 func (e *ExpiringAdapter) deleteRecord(ctx context.Context, id string) error {
 	defer e.invalidate()
 	if err := e.Inner.Delete(ctx, ExpiryCreatedPrefix+id); err != nil && !errors.Is(err, ErrNotFound) {
@@ -138,6 +141,7 @@ func (e *ExpiringAdapter) readDeadlines(ctx context.Context) (map[string]time.Ti
 	return out, err
 }
 
+// unreadable ids are skipped, never an error
 func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]time.Time, bad []string, err error) {
 	recs, err := ListPrefix(ctx, e.Inner, ExpiryPrefix)
 	if err != nil {
@@ -159,6 +163,7 @@ func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]
 	return out, bad, nil
 }
 
+// e.mu held; re-reads the record before repairing
 func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	var first error
 	for _, id := range bad {
@@ -196,6 +201,7 @@ func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	return first
 }
 
+// the cached map is shared: never modify it
 func (e *ExpiringAdapter) deadlines(ctx context.Context) (map[string]time.Time, error) {
 	ttl := e.DeadlineCacheTTL
 	if ttl == 0 {

@@ -187,6 +187,7 @@ type presenceEntry struct {
 	timer    *time.Timer
 }
 
+// rm.mu held
 func (rm *room) dropPresence(replica string) {
 	if e, ok := rm.pres[replica]; ok {
 		if e.timer != nil {
@@ -240,6 +241,7 @@ func (h *Hub) openRoom(r *http.Request, id string, role Role) (*room, error) {
 	}
 	h.mu.Unlock()
 	if !ok {
+		// detached from the first requester: its leaving must not fail waiters
 		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		rm.loadErr = h.load(lctx, rm)
 		cancel()
@@ -291,6 +293,7 @@ func (h *Hub) role(r *http.Request, id string) Role {
 	return h.cfg.Roles(r, id)
 }
 
+// serialised per document: snapshot taken on its turn
 func (h *Hub) save(rm *room) error {
 	if h.cfg.Store == nil {
 		return nil
@@ -317,6 +320,7 @@ func (h *Hub) save(rm *room) error {
 	return err
 }
 
+// rm.mu held
 func (h *Hub) markDirty(rm *room) {
 	if h.cfg.Store == nil || rm.dirty || rm.dead {
 		return

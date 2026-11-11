@@ -46,6 +46,7 @@ func (s *Sharing) loadSignerManifest(ctx context.Context, fp string) (*signerMan
 	}
 	var m signerManifest
 	if json.Unmarshal(d.Data, &m) != nil || m.Key != fp || !bytes.Equal(m.Signer, s.Signer.Public()) {
+		// a removed key can delete a manifest, never forge one
 		return nil, nil
 	}
 	if sig, err := base64.StdEncoding.DecodeString(m.Sig); err != nil || !VerifySigned(m.Signer, m.message(), sig) {

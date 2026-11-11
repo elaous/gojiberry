@@ -46,6 +46,7 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 				delete(live, m.ID)
 				continue
 			}
+			// never keep stale text for a document that no longer reads
 			r.Skipped = append(r.Skipped, m.ID)
 			continue
 		}

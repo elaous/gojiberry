@@ -29,6 +29,7 @@ func toJSError(v js.Value) error {
 	return e
 }
 
+// not for a JS callback: it must not block
 func await(ctx context.Context, p js.Value) (js.Value, error) {
 	type result struct {
 		v   js.Value

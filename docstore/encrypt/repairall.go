@@ -344,6 +344,7 @@ func (s *Sharing) repairGroup(ctx context.Context, group string, ids []string) (
 	return n, nil
 }
 
+// any other answer, a store failure included, is false
 func (s *Sharing) allGone(ctx context.Context, ids []string) bool {
 	for _, id := range ids {
 		if _, _, err := docstore.LoadHead(ctx, s.Adapter.Inner, id, 1); !errors.Is(err, docstore.ErrNotFound) {
@@ -398,6 +399,7 @@ type frameScan struct {
 	err      error // set when the document cannot be judged
 }
 
+// the frame header sits inside the age stream: read enough
 var repairHeadBytes = 128 << 10
 
 func (a *Adapter) scanFrames(ctx context.Context, ids []string, encryptPlain bool) frameScan {

@@ -26,6 +26,7 @@ import (
 // ChallengeTTL is how long a challenge can be answered.
 const ChallengeTTL = 2 * time.Minute
 
+// a replay stays refused while the token could be valid
 const popGrace = time.Minute
 
 const attestSkew = 10 * time.Minute
@@ -82,6 +83,7 @@ func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText 
 	return docstore.DirectoryChallenge{Token: token, Encrypted: base64.StdEncoding.EncodeToString(enc.Bytes()), Expires: exp}, nil
 }
 
+// 16 random bytes in hex
 const nonceLen = 32
 
 // ErrNotAChallenge is returned by OpenChallenge for a non-challenge.
@@ -163,6 +165,7 @@ func (d *AdapterDirectory) createOnly(ctx context.Context, id string, data []byt
 	return d.Store.Save(ctx, id, data)
 }
 
+// not atomic across processes without a conditional write
 func (d *AdapterDirectory) saveIf(ctx context.Context, id string, data []byte, prev string) error {
 	if c, ok := d.Store.(docstore.ConditionalAdapter); ok {
 		err := c.SaveIf(ctx, id, data, prev)

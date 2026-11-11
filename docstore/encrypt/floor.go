@@ -281,6 +281,7 @@ func (f *FileSeqFloor) RaiseMany(_ context.Context, seqs map[string]uint64) erro
 	return nil
 }
 
+// skipped where a directory cannot be synced (Windows, js/wasm)
 var syncDir = func(dir string) error {
 	if runtime.GOOS == "windows" || runtime.GOOS == "js" {
 		return nil

@@ -34,6 +34,7 @@ func storage() js.Value {
 	return storageFn
 }
 
+// a failure is returned, never raised
 type localStorageKV struct{}
 
 func call(op, key, value string) (res js.Value, err error) {

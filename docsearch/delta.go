@@ -31,6 +31,7 @@ func (ix *Index) DeltaFor(res Result) Delta {
 	return d
 }
 
+// the nonce the base was sealed with
 func baseID(base []byte) ([]byte, error) {
 	n := len(magic) + 12
 	if len(base) < n {

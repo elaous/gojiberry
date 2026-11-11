@@ -610,6 +610,7 @@ func (d Document) Get(key string) (string, bool) {
 // Set sets a Meta key.
 func (d *Document) Set(key, value string) {
 	d.Meta = slices.Clone(d.Meta)
+	// Document is passed by value: never write through to the caller's slice
 	for i := range d.Meta {
 		if d.Meta[i].Key == key {
 			d.Meta[i].Value = value

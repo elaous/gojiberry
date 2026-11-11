@@ -26,6 +26,7 @@ func (f *TextFlow) typedOverlaps(from, to int) bool {
 	return false
 }
 
+// a run whose text does not match its offsets is never tinted
 func (f *TextFlow) typedColour(r Run, rs []rune, i int) (string, bool) {
 	if len(f.TypedRanges) == 0 || len(rs) != r.End-r.Start {
 		return "", false

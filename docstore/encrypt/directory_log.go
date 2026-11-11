@@ -158,6 +158,7 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 		} else if !errors.Is(err, docstore.ErrNotFound) {
 			return 0, err
 		}
+		// never dated before the previous entry: replica clocks differ
 		when := at.Unix()
 		if head.Seq > 0 {
 			pe, found, err := d.readEntry(ctx, head.Seq)
@@ -197,6 +198,7 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 }
 
 func (d *AdapterDirectory) voidLog(ctx context.Context, email string, ref int64, fingerprint string, at time.Time) {
+	// detached: the caller's context may be what failed
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := d.appendLog(vctx, logInput{Op: OpVoid, Email: email, Fingerprint: fingerprint, Ref: ref}, at); err != nil {

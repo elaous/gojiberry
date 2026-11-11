@@ -40,6 +40,7 @@ type mparser struct {
 	pos int
 }
 
+// unbalanced braces are closed leniently: any text gives a tree
 func parseMath(formula string) *mnode {
 	p := &mparser{src: []rune(formula)}
 	return p.row(false)

@@ -105,6 +105,7 @@ func (f furniture) Write(recs map[string]string) {
 	}
 }
 
+// a Key shares it under that key: others never shift it
 type objects struct{ in finder }
 
 type floatRec struct {

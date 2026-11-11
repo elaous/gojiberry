@@ -78,6 +78,7 @@ func (a *Adapter) checkDocumentByID(ctx context.Context, docID string, r Binding
 	return a.checkFiles(ctx, docID, []string{docID, docstore.FolderSecretPrefix + docID}, r)
 }
 
+// store listing order and times are not evidence
 func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []string, r Binding) error {
 	if docID == "" || !a.binds(docID) {
 		return nil

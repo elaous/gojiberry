@@ -364,6 +364,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	addr := strings.ToLower(strings.TrimSpace(email))
 	var pinned string
 	havePin := false
+	// pin the key this client made, never the server's answer
 	if c.Pins != nil {
 		pinned, havePin = c.Pins.Get(email)
 	}

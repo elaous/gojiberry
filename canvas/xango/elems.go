@@ -439,6 +439,7 @@ func (e *floatElem) Close() { e.ft.SetFlow(nil) }
 // Close implements Closer.
 func (e *tableElem) Close() { e.v.SetFlow(nil) }
 
+// uncomparable values report false: a change is never missed
 func sameValue(a, b any) (same bool) {
 	defer func() {
 		if recover() != nil {

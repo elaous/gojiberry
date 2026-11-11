@@ -145,6 +145,7 @@ var ErrUncomparableRecipient = errors.New("encrypt: a recipient's key cannot be 
 
 type recipID struct{ id, fp string }
 
+// fails closed: a tag-only match counts as a server key
 func (r recipID) isServer(server map[string][]string) bool {
 	for _, fp := range server[r.id] {
 		if r.fp == "" || fp == "" || fp == r.fp {

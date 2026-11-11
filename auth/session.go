@@ -20,6 +20,7 @@ type SessionStore interface {
 	GetSession(ctx context.Context, token string) (User, bool, error)
 	DeleteSession(ctx context.Context, token string) error
 	PutState(ctx context.Context, s LoginState, ttl time.Duration) (token string, err error)
+	// consumes: at most one concurrent caller gets ok
 	TakeState(ctx context.Context, token string) (LoginState, bool, error)
 }
 

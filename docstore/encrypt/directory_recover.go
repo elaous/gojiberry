@@ -13,6 +13,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
+// the log entry is written first, the record second
 const reconcileGrace = 2 * time.Minute
 
 func (d *AdapterDirectory) grace() time.Duration {

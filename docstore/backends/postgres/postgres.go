@@ -167,6 +167,7 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
 }
 
+// backslash is the LIKE escape character
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // ListPrefix implements docstore.PrefixLister.

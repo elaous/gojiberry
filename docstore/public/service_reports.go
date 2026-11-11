@@ -97,6 +97,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	addr := s.clientIP(r)
 	reporter, err := s.reporterHash(ctx, ClientKey(addr))
 	if err != nil {
+		// no salt: refuse the report rather than take it half-way
 		w.Header().Set("Retry-After", "10")
 		http.Error(w, "reports cannot be taken right now; try again shortly", http.StatusServiceUnavailable)
 		return
@@ -145,6 +146,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"reportId": reportID})
 }
 
+// rewording must not split one reporter and category
 func reportKey(reporter, category string) string {
 	h := sha256.Sum256([]byte(reporter + "\x00" + categoryOf(category)))
 	return base64.RawURLEncoding.EncodeToString(h[:9])
@@ -152,6 +154,7 @@ func reportKey(reporter, category string) string {
 
 const saltRetryMax = 30 * time.Second
 
+// never made up per process on a store failure
 func (s *Service) reporterSalt(ctx context.Context) ([]byte, error) {
 	s.saltMu.Lock()
 	defer s.saltMu.Unlock()
@@ -221,6 +224,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 	return nil, errors.New("the reporter salt kept changing while it was being created")
 }
 
+// read back after saving: raced replicas converge on the last writer
 func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]byte, error) {
 	if err := s.store.Save(ctx, saltKey, raw); err != nil {
 		return nil, err
@@ -238,6 +242,7 @@ func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]by
 	return rec.Salt, nil
 }
 
+// HMAC under ReportKey, never stored: no address is held
 func (s *Service) reporterHash(ctx context.Context, client string) (string, error) {
 	salt, err := s.reporterSalt(ctx)
 	if err != nil {

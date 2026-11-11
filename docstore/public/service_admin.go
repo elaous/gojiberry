@@ -16,6 +16,7 @@ func (s *Service) AdminHandler() http.Handler {
 	return s.headers(mux)
 }
 
+// token checked in constant time; passes are never counted
 func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
 	if s.admin != nil && s.admin.Allow(r) {
 		return true

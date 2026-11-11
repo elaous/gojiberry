@@ -372,6 +372,7 @@ func (c *Conn) dropSent(n int) {
 	c.mu.Unlock()
 }
 
+// c.mu held
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))

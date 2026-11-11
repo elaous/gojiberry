@@ -274,6 +274,7 @@ func (m *StoreSessions) Create(ctx context.Context, key string, s Session, now t
 	return nil
 }
 
+// mu held
 func (m *StoreSessions) note(s Session, sign int) {
 	m.counts.add(s, sign)
 	if m.refreshing {

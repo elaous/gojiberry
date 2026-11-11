@@ -138,6 +138,7 @@ func putPoint(s []UsagePoint, p UsagePoint, limit int) []UsagePoint {
 			return s
 		}
 		if p.Time.Before(last) {
+			// the clock went back: never reorder or rewrite the past
 			return s
 		}
 	}

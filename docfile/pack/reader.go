@@ -296,6 +296,7 @@ func (r *Reader) Read(id string) (docfile.Document, error) {
 	return r.ReadWith(id, nil)
 }
 
+// the pack holds no keys and imports no cryptography
 func (r *Reader) ReadWith(id string, open func(envelope []byte) ([]byte, error)) (docfile.Document, error) {
 	data, err := r.ReadRaw(id)
 	if err != nil {

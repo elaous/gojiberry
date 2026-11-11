@@ -28,6 +28,7 @@ func newRunner(ctx *cxango.Context, sess *collab.Session, flow *canvas.TextFlow,
 	return r
 }
 
+// called on the canvas goroutine: must not wait for the loop
 func (r *runner) stop() {
 	close(r.quit)
 	r.sess.Bridge.Detach()

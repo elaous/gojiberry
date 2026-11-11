@@ -19,14 +19,17 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
+// system keyspace: hidden from document API, never given a deadline
 const ChallengePrefix = "passkey/challenge/"
 
 var ErrNotConditional = errors.New("passkey: a shared challenge store needs a store with conditional writes (docstore.ConditionalAdapter)")
 
 const (
+	// replicas' clocks differ
 	storeChallengeGrace = time.Minute
 
-	challengeBucket  = time.Minute
+	challengeBucket = time.Minute
+	// bounds Expires: a huge value would overflow bucket numbers
 	maxChallengeTTL  = 100 * 365 * 24 * time.Hour
 	maxChallengeUnix = 1 << 40
 	maxTokenLen      = 128
@@ -39,6 +42,7 @@ type StoreChallenges struct {
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 
+	// a bound, not exact: Put and Take race Sweep
 	approx   atomic.Int64
 	net      atomic.Int64
 	sweeping sync.Mutex
@@ -73,6 +77,7 @@ func (s *StoreChallenges) cas() (docstore.ConditionalAdapter, error) {
 	return c, nil
 }
 
+// seconds, not Duration: nanoseconds overflow int64 past 2262
 func bucketOf(expires time.Time) int64 {
 	b := int64(challengeBucket / time.Second)
 	n := expires.Unix()
@@ -168,6 +173,7 @@ func (s *StoreChallenges) Put(ctx context.Context, c Challenge) (string, error) 
 		return "", err
 	}
 	for range 3 {
+		// an existing name is a collision: never overwrite
 		token, err := newToken(bucket)
 		if err != nil {
 			return "", err

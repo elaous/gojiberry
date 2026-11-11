@@ -9,7 +9,8 @@ type Doc struct {
 	blocks   map[string]stamped
 	outbox   []Op
 	strategy MergeStrategy
-	texts    map[string]*Text
+	// nil unless MergeCharCRDT; nil-map reads are fine
+	texts map[string]*Text
 }
 
 type stamped struct {
