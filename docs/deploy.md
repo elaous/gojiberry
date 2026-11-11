@@ -1,7 +1,7 @@
 # Deploying a wasm app: size, compression and caching
 
-A Go wasm app is one large file. The editor showcase's `main.wasm` is about 28 MB raw and 6.9 MB as gzip
-(the budget is in [wasm-budget.txt](wasm-budget.txt); `make wasm-size` checks it). On a slow link or a
+A Go wasm app is one large file. The editor showcase's `main.wasm` (now the [OpenDocs](https://github.com/elaous/opendocs) app) is about 28 MB raw and 6.9 MB as gzip.
+On a slow link or a
 weak device the first load is the whole cost, so how the file is served matters as much as how it is
 built. This page is the recipe for the showcase; it applies to any app built the same way. Roadmap item
 82 is the backlog behind it. Nothing here needs an account or a credential: the output is a directory
@@ -9,11 +9,8 @@ of static files.
 
 ## 1. Build and compress
 
-```
-make showcase-dist            # dist/showcase, or SHOWCASE_DIST=some/dir make showcase-dist
-```
-
-This builds `main.wasm`, copies `index.html` and `wasm_exec.js` beside it, and runs
+The OpenDocs repository builds its app into a directory (see its README for the command).
+That build produces `main.wasm`, copies `index.html` and `wasm_exec.js` beside it, and runs
 [`cmd/wasmdist`](../cmd/wasmdist), which writes a `.gz` next to every compressible file (wasm,
 scripts, styles, pages, JSON, SVG) of at least 1 KiB that it shrinks, at the strongest level, once:
 
@@ -59,7 +56,7 @@ Upload the directory. Set the types and caching above in the host's own configur
 
 ### nginx
 
-[`examples/canvas-editor-showcase/nginx.conf`](../examples/canvas-editor-showcase/nginx.conf) is the
+[`nginx.conf`](https://github.com/elaous/opendocs/blob/main/nginx.conf) in the OpenDocs repository is the
 whole server block: `gzip_static on` (sends `main.wasm.gz`), `gzip on` for what has no `.gz`, the wasm
 type inside a `location` so the other types stay as nginx knows them, `Cache-Control: no-cache`, and a
 404 for missing scripts. For `.br` files add `brotli_static on;` and an nginx with the
@@ -69,8 +66,8 @@ the Dockerfile writes only `.gz`.
 The Docker image does all of it:
 
 ```
-docker build -f examples/canvas-editor-showcase/Dockerfile -t showcase .
-docker run --rm -p 8080:80 showcase
+docker build -t opendocs https://github.com/elaous/opendocs.git
+docker run --rm -p 8080:80 opendocs
 ```
 
 (`nginx.conf` and the Caddy block below are run by tests against the real servers, with a directory that
@@ -126,10 +123,9 @@ request after a rebuild from waiting on the strongest compression.
 
 The showcase is two programs: `main.wasm` (about 26 MB, 6.4 MB gzipped), which every visitor downloads, and
 `files.wasm` (about 9.5 MB, 2.7 MB gzipped) with `files-worker.js`, which a web worker loads the first time a file
-is imported or exported (Word, OpenDocument, PDF, RTF, EPUB, HTML). Both are built by `make showcase-dist` and the
+is imported or exported (Word, OpenDocument, PDF, RTF, EPUB, HTML). Both are built by the OpenDocs build and its
 Dockerfile, both are precompressed by `wasmdist`, and nothing else is needed on the server: the page asks for
-`files-worker.js` and `files.wasm` next to `index.html`. `make wasm-size` checks each program against its own
-budget in [wasm-budget.txt](wasm-budget.txt).
+`files-worker.js` and `files.wasm` next to `index.html`.
 
 ### The service worker (repeat visits and no connection)
 
@@ -149,8 +145,6 @@ worker out for that visit. To remove a worker from a browser, unregister it in t
   and the validators.
 - In the browser's network panel the wasm should transfer about 7 MB (gzip) or 6 MB (brotli), and a
   reload should show it as `304` or "from cache".
-- `make wasm-size` keeps the build inside the budget in [wasm-budget.txt](wasm-budget.txt); raise a number
-  only on purpose.
 
 ## What is not done
 

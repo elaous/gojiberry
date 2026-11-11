@@ -189,7 +189,7 @@ blocked), see [status.md](status.md); this file keeps the history of each item.
    documents with signed recipient lists, the passkey as a recipient and as a way in, and
    (step 5) encrypted records in packs, confidential catalog entries (`saver` protection
    level, placeholder name, `Reveal`, `SetProtection`, `encrypt.ConfidentialCheck`). Left:
-   1. **Done in the showcase** (`examples/canvas-editor-showcase`, `encstore`; encryption stays off unless
+   1. **Done in the showcase** (the OpenDocs repository, `encstore`; encryption stays off unless
       turned on; section 5.7 of the design): "Encrypt this store" in the Save tab (a local passkey through PRF, an
       SSH public key, a recovery key shown before it is committed; unlock state in memory only, a Lock button that
       closes the open document), lock marks and "Make (not) confidential" with a question for documents and
@@ -567,7 +567,7 @@ a way to avoid hitting the limit meanwhile.
     signer was in the list, with no backtracking, so a dead-end first match could hide a reachable link and an
     unlock could fail after many key changes. Now it searches depth first over all links out of each list with a
     visited set of digests (a circle ends), and returns the path to the target.
-    `examples/canvas-editor-showcase/encstore/bind.go`.
+    `encstore/bind.go` in the OpenDocs repository.
 23. **Done (this PR): a `WatchState` in the old `made` format, or damaged, is refused whole.** Was: the
     `people-keys-demo` ignored the decode error, so `localStorage` state saved before `made` became records half-loaded
     and the half that loaded hid what the other half would have caught. Now `directoryclient.ParseWatchState` returns
@@ -771,7 +771,7 @@ New entries:
 43. **A link can be replayed past the 32-link window or when it was made before links carried a nonce.** Kind:
     inherent (register entry already exists: [item 12](limits-register.md#clients-and-storage)). Plan: none beyond
     a larger `Config.Links` for a store that changes keys often. Priority: low. Where:
-    `examples/canvas-editor-showcase/encstore` (`Config.Links`, `walk`).
+    `encstore` in the OpenDocs repository (`Config.Links`, `walk`).
 44. **An SSH-only store with no signed document file yet is undetected.** Kind: inherent, documented residual
     ([limits register item 12](limits-register.md#clients-and-storage); the first owner list is trust on first
     use). Priority: low. Plan to reduce the exposure: [inherent-limits-plan.md](inherent-limits-plan.md#44-an-ssh-only-store-with-no-signed-document-file-yet-is-undetected). Done in part (this PR), plan steps 1 and 2: with `Store.ConfirmFirstUse` (the showcase sets it) the first unlock with an SSH key of a list nothing on this device sealed stops with `*FirstUseError` and shows the list's fingerprint (`ListFingerprint`, 128 bits in eight groups); the person compares it with the one the keys panel shows where the store was made and confirms (`TrustList`; the confirmed digests are kept in this browser, a known-hosts file for stores); a list made or changed on this device, or opened by a passkey or recovery key through the chain of seals, is trusted without the question. Tests: `TestFirstUnlockWithAnSSHKeyAsksForTheListsFingerprint`, `TestFirstSSHUnlockOnANewBrowserAsksForTheListFingerprint`. Left: step 3 (the digest in the key directory log or a second store), and the docs' advice to unlock a new store with a passkey first.
@@ -821,7 +821,7 @@ New entries:
     headings are in the screen-reader copy, so `heading-order` is disabled in the test (`axeDisabled`) until the
     levels are decided; (3) axe over the other examples and the states it cannot reach by clicking (dialogs, the
     colour picker, a table cell menu); (4) the canvas itself with a screen reader (item 49). Priority: high (first of
-    the accessibility group). Where: `components`, `examples/canvas-editor-showcase`, the browser e2e.
+    the accessibility group). Where: `components`, the OpenDocs repository, the browser e2e.
     Also done: heading levels in the panels. The side panel now starts with a hidden level 3 heading (the tab's name), so the titles inside it (level 3 and 4) follow the page's level 2 without a skip; the axe test no longer disables `heading-order`, and runs over 21 tabs instead of 7 (the wider run found an empty table header in the statistics table, now a hidden "Measure" label). A long submenu (the display preferences grew past a short window with the 1000-step entry) now scrolls instead of running off the screen (`menu.css`). The one place the rule is still off is the Check tab test with a deliberately skipped heading in the document.
     Also done (this PR), the arrow-key model for every picker. The keyboard model of each kind of widget is now one thing, not several: a button that opens a list (dropdown, font selector) opens it with Down or Up and the options move with Up, Down, Home and End (`listboxkeys.go`); menus and the tab list have their own arrow keys (menu bar, `tablist.go`); the suggestion list is a combobox that keeps the focus in the input (`suggestions.go`); and a grid, row or column of choices (the symbol picker with its category chips, the style gallery) is one tab stop with the arrow keys moving by what is seen: left and right to the neighbour in the row, up and down to the choice above or below (`MoveFocus` got `FocusUp` and `FocusDown`, found by the choices' places on the screen, not wrapping), Home and End to the first and last, Tab leaving the set (`gridkeys.go`; before it, a hundred symbols took a hundred Tab presses). The chips are a toolbar with a name. The colour and date pickers are the browser's own inputs with the browser's own keys, labelled by their `Label`. Tests: `TestSymbolPickerHasOneTabStop`, `TestStylePickerEntersAtTheCurrentStyle`, `TestMoveFocusIsAHookTheBrowserFills`, and in the browser `TestSymbolPickerArrowKeys`; the axe run over the 21 tabs passes with the symbols tab's new roles. Item 48 is done.
 49. **Screen-reader output while typing (voice-over).** Kind: fixable in part (the canvas is not DOM text). What: an
@@ -1070,7 +1070,7 @@ unless stated.
     3. Add visible focus rings that meet contrast rules, and skip links (to the canvas, the toolbar, the comments).
     4. Build the cheat sheet from the one shortcut table, with remapping stored in the preferences (51, 52).
     5. An e2e that drives the whole editor without a pointer.
-    Where: `components`, `examples/canvas-editor-showcase`, the browser e2e. Priority: high. Dependencies: 48; remapping
+    Where: `components`, the OpenDocs repository, the browser e2e. Priority: high. Dependencies: 48; remapping
     needs 51. Done in part (this PR): the option lists have a keyboard model (`components/listboxkeys.go`): Down or Up on the button of a `Dropdown` or `FontSelector` opens the list and goes to an option (the search field first, for fonts), the arrows, Home and End move among the options, Enter or Space chooses with the focus back on the button, Escape closes with the focus back, Tab closes and leaves; the options are focusable but out of the Tab order. Tests: `TestDropdownKeyboard`, `TestFontSelectorKeyboard`. The colour and date pickers are native inputs, so the browser already gives them the keyboard. 
     Also done: skip links. `components.DocumentView` starts with a `Skip links` navigation, the first stops for the keyboard: "Skip to the document" and "Skip to the side panel" (out of sight until focused; choosing one moves the focus to the document area or the side panel, by script, because a link to `#id` does not work under the page's `<base href>`). Translated in de, fr and es; `TestSkipLinksAreTheFirstStopAndMoveTheFocus`.
     Also done (this PR), the rest of the plan: the inventory of how every part is reached and the gaps it found is [keyboard.md](keyboard.md), kept true by tests. Walking the page by keyboard found four real gaps, all fixed: the debug dump of the state was a scrollable region with a Tab stop (`TestTabOrderIsACleanCycle` now checks every stop is visible, none repeats, the first two are the skip links, and Shift+Tab walks back); a submenu was walked two entries at a time (a handled key went on to the entry holding the submenu: `StopPropagation` in `menuItemKey`; `TestEveryMenuEntryIsReachableByKeyboard` walks all 218 entries and every submenu); in edit mode the keyboard could not start editing without a click (`Stage.FocusIn`, `TextFlow.FocusIn`: the editor's input taking the focus starts editing); and a hundred symbols took a hundred Tab presses (item 48's grid model). The cheat sheet is the Keys tab and the remapping is kept (see keyboard.md). `TestTheEditorWithoutAPointer` drives the editor start to finish with keys only: skip link, edit mode, typing, a menu entry, the side panel's tabs, naming and saving a document. Item 59 is done.
@@ -1494,7 +1494,7 @@ unless stated.
     splitting, caching and a low-memory mode. Why it matters: slow first load excludes people on slow links and weak
     devices. Plan: (1) measure size and load per build and record a budget; (2) `WebAssembly.compileStreaming` with
     correct headers and compression; (3) split rarely used parts; (4) service-worker caching with versioned keys; (5)
-    a low-memory mode that limits history and caches. Where: `examples/canvas-editor-showcase`, the build, `domrt`.
+    a low-memory mode that limits history and caches. Where: the OpenDocs repository, the build, `domrt`.
     Done in part (#230), step 1: `make wasm-size` (`.github/scripts/wasm-size.sh`, a CI step) builds the showcase and
     fails when its raw or gzip size is over the budget in `docs/wasm-budget.txt` (now 28,000,000 and 7,200,000 bytes,
     about 5% above today's 26.7 MB and 6.7 MB); raising a number is a deliberate edit. Also done (#232), step 2 as a library:
@@ -1527,7 +1527,7 @@ unless stated.
     `collab-editor-app` moved from the deprecated `nhooyr.io/websocket` to its successor `github.com/coder/websocket`
     v1.8.15 (same API; the same module and version as the root `go.mod` and `collab/hub`). unused (18, native pass only): one test helper with no caller was deleted; the rest are used only by
     the js/wasm entry points, so they moved into js/wasm-only files (`canvas-editor-app/model_browser.go`,
-    `canvas-editor-showcase/sample_wasm.go`, `canvas-xango-demo/lorem_wasm.go`) with no change to their code. A
+    `the OpenDocs repository's `sample_wasm.go``, `canvas-xango-demo/lorem_wasm.go`) with no change to their code. A
     planted unchecked error in a root-module and a nested example makes `make lint` and `make lint-modules` fail.
     Where: `.golangci.yml`, `Makefile`, `examples`. Dependencies: none.
 
@@ -1603,5 +1603,5 @@ unless stated.
     `TestS3DeleteIfProbeFailureIsNotRemembered`, `TestSweepWhenTheStoreDeclinesConditionalDeleteStillDeletes`; the real
     services were not reachable from here, so what is now guaranteed is the probe, not that any particular service
     passes it; (5) the passkey PRF path, the age and SSH usage and the signed-frame format have
-    tests but no independent review. Priority: (1) medium, the rest low. Where: `examples/canvas-editor-showcase`
+    tests but no independent review. Priority: (1) medium, the rest low. Where: the OpenDocs repository
     (`encowner.go`, `encdir.go`), `docstore/directoryclient`, `docs/encryption-and-passkeys.md`.

@@ -1397,7 +1397,7 @@ generated code.
   move, Alt+Shift+Up/Down copy, Ctrl/Cmd+Shift+K delete) and Markdown copy
   and paste (Ctrl/Cmd+Shift+C / V), page and column breaks (Ctrl/Cmd+Enter,
   with Shift). The `TextFlow` is editable in edit mode, and
-  `examples/canvas-editor-showcase` registers everything -- the xango canvas
+  the [OpenDocs](https://github.com/elaous/opendocs) editor registers everything -- the xango canvas
   tree, the features, the style editor and font selector -- in one editor. Each registers commands and default key
   chords; leave one out of `Stage.Features` (or `<canvas.Canvas features=...>`)
   to switch it off, or add your own. The status of everything built and what
@@ -1407,8 +1407,9 @@ generated code.
   no Chromium is found): `examples/canvas-table-demo`,
   `examples/canvas-flow-demo`, `examples/canvas-image-demo`,
   `examples/canvas-scroll-demo`, `examples/canvas-document-demo`,
-  `examples/canvas-xango-demo`, `examples/canvas-editor-showcase` (run one with
-  `make -C examples/<name> run`).
+  `examples/canvas-xango-demo` (run one with
+  `make -C examples/<name> run`). The full editor, with every feature on, is
+  [OpenDocs](https://github.com/elaous/opendocs).
 
 - `examples/wasm-canvas-demo` — `domrt/html`'s `Context2D`/`Context3D`:
   fills a 2D canvas with a solid color and draws a full-viewport quad
@@ -1987,8 +1988,8 @@ not on pull-request builds or feature-branch pushes, since only
 shown here can't silently drift from what `make coverage` itself would
 print.
 
-`make showcase-dist` builds the editor showcase into `dist/showcase` with a
-precompressed `.gz` (and `.br`) beside each file, ready to upload to any static
+`cmd/wasmdist` writes a precompressed `.gz` (and `.br`) beside each file of a
+built wasm app (the [OpenDocs](https://github.com/elaous/opendocs) showcase builds with it), ready to upload to any static
 host or to serve with `wasmserve`; [docs/deploy.md](docs/deploy.md) has the
 recipe and the cache and compression settings (no credentials needed).
 

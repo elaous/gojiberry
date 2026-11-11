@@ -1,8 +1,8 @@
 # Plan: porting opendocs into gojiberry (as opendocs V1)
 
 opendocs is old and "didn't quite work"; V1 replaces it and is part of the
-showcase (`examples/canvas-editor-showcase`). Work happens here, not in the
-opendocs repo. Rule: **port the clean pieces first, as components** (a Go
+showcase. The showcase moved to the opendocs repository (https://github.com/elaous/opendocs), where work now happens;
+this plan is historical. Rule: **port the clean pieces first, as components** (a Go
 package or `components` element with its own tests), and rewrite the rest
 against `canvas`. Never copy code that is tied to opendocs' own engine
 (`editor/model`); rewrite it on `canvas.TextFlow`.
