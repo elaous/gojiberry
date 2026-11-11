@@ -1,7 +1,4 @@
-// Package addons is the neutral side of the page's add-on registry (window.addons, see docs/addons.md): the names of
-// the add-ons the page knows, the method each must offer before the page counts it as present, and the shape of the
-// models an add-on may keep. The registry itself is JavaScript and lives in the page; this package holds what is
-// decided without a browser, so it can be tested.
+// Package addons lists the page's add-ons and their required methods.
 package addons
 
 import (
@@ -17,15 +14,15 @@ import (
 type Spec struct {
 	// Name is the property of window.addons.
 	Name string
-	// Method is the method the page needs: an add-on without it counts as absent.
+	// Method is the method the page needs from the add-on.
 	Method string
 	// Purpose is a sentence in English about what it is for.
 	Purpose string
-	// Models says the add-on keeps models that are downloaded on request (it offers models, install and remove).
+	// Models reports whether the add-on has downloadable models.
 	Models bool
 }
 
-// Known lists the add-ons the page has a use for, in the order a list shows them.
+// Known lists the add-ons the page uses, in display order.
 var Known = []Spec{
 	{Name: "piper", Method: "synthesize", Purpose: "Reader voices that run in the page", Models: false},
 	{Name: "whisper", Method: "transcribe", Purpose: "Dictation on this device", Models: true},
@@ -47,16 +44,15 @@ func Find(name string) (Spec, bool) {
 	return Spec{}, false
 }
 
-// Model is something an add-on keeps and the person may download or remove: a speech model, a dictionary, a language
-// pair.
+// Model is a download an add-on keeps: a speech model, dictionary or language pair.
 type Model struct {
-	// ID is what install and remove are told; Label is how a person is told about it.
+	// ID is passed to install and remove; Label is shown to people.
 	ID, Label string
 	// Lang is the BCP 47 tag it serves, "" for any (or none).
 	Lang string
 	// Size is what installing downloads, in bytes (0 when not known).
 	Size int64
-	// Licence is where its terms are written: an https address or a short name ("MIT"); "" when not said.
+	// Licence is an https address or a short name such as "MIT".
 	Licence string
 	// Installed says it is on the device.
 	Installed bool
@@ -64,9 +60,7 @@ type Model struct {
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:\-]{0,119}$`)
 
-// ParseModels reads what an add-on's models() returned, as JSON: [{"id","label","lang","size","licence","installed"}].
-// A model without a usable id is left out; a label defaults to the id; a licence that looks like an address must be
-// https (anything else is shown as text, never as a link).
+// ParseModels reads an add-on's models() JSON; it drops models without an id.
 func ParseModels(data []byte) ([]Model, error) {
 	var raw []struct {
 		ID        string  `json:"id"`
@@ -101,7 +95,7 @@ func ParseModels(data []byte) ([]Model, error) {
 	return out, nil
 }
 
-// LicenceLink is the address to link a licence to: only an https address is one.
+// LicenceLink returns the licence as a link, only for https addresses.
 func (m Model) LicenceLink() (string, bool) {
 	u, err := url.Parse(m.Licence)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
@@ -110,7 +104,7 @@ func (m Model) LicenceLink() (string, bool) {
 	return m.Licence, true
 }
 
-// ErrNoAddon: the page has no such add-on, or it lacks the method the page needs.
+// ErrNoAddon: the page has no such add-on or method.
 var ErrNoAddon = errors.New("addons: the page has no such add-on")
 
 // Size writes a size in bytes in megabytes or gigabytes.
