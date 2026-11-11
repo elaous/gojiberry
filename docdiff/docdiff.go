@@ -1,4 +1,3 @@
-// Package docdiff compares two versions of a document, block by block.
 package docdiff
 
 import (
@@ -10,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/export"
 )
 
-// Op says what happened to a block or a run of words.
 type Op int
 
 const (
@@ -44,7 +42,6 @@ type Change struct {
 	Runs []Run
 }
 
-// maxCells bounds the work of the block comparison.
 const maxCells = 4_000_000
 
 type blockText struct {
@@ -108,7 +105,6 @@ func equal(b blockText) Change {
 	return Change{Op: Equal, Kind: b.kind, Level: b.level, Text: b.text}
 }
 
-// step is one position of the edit script.
 type step struct {
 	op Op
 	a  blockText // for Delete
@@ -126,7 +122,6 @@ func middle(a, b []blockText) []step {
 		}
 		return out
 	}
-	// longest common subsequence
 	n, m := len(a), len(b)
 	lcs := make([][]int32, n+1)
 	for i := range lcs {
@@ -171,7 +166,6 @@ func middle(a, b []blockText) []step {
 	return out
 }
 
-// pair turns a run of deletes and inserts into changes.
 func pair(steps []step) []Change {
 	var out []Change
 	for i := 0; i < len(steps); {
@@ -208,7 +202,6 @@ func pair(steps []step) []Change {
 	return out
 }
 
-// similar says two blocks are one block edited.
 func similar(a, b blockText) bool {
 	wa, wb := words(a.text), words(b.text)
 	if len(wa) == 0 || len(wb) == 0 {
@@ -227,7 +220,6 @@ func edit(a, b blockText) Change {
 	return Change{Op: Edit, Kind: b.kind, OldKind: a.kind, Level: b.level, Text: b.text, Runs: wordRuns(words(a.text), words(b.text))}
 }
 
-// words splits text into words, keeping their spacing.
 func words(s string) []string {
 	var out []string
 	start := 0
@@ -246,7 +238,6 @@ func words(s string) []string {
 	return out
 }
 
-// wordRuns compares two word lists and returns runs.
 func wordRuns(a, b []string) []Run {
 	n, m := len(a), len(b)
 	if n*m > maxCells {
