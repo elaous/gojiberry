@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// Site is a wasm example built for GOOS=js GOARCH=wasm and served from a temp
-// directory with its index.html and wasm_exec.js.
 type Site struct {
 	URL string
 	dir string
@@ -29,8 +27,6 @@ type siteHandler struct {
 	h      http.Handler
 }
 
-// Handle makes the site's server answer requests whose path starts with prefix with h (a server's
-// API routes, next to the static files).
 func (s *Site) Handle(prefix string, h http.Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -40,15 +36,8 @@ func (s *Site) Handle(prefix string, h http.Handler) {
 // Dir is the directory the site serves its files from.
 func (s *Site) Dir() string { return s.dir }
 
-// UseLocalhost makes the site's URL http://localhost:PORT instead of the loopback address: a page
-// that uses WebAuthn needs a domain name (an IP address is not a valid relying party ID), and
-// localhost is a secure context.
 func (s *Site) UseLocalhost() { s.URL = strings.Replace(s.URL, "127.0.0.1", "localhost", 1) }
 
-// NewSite builds the package in the current directory (the example's own
-// directory, which is what `go test` uses as the working directory) and serves
-// it, with any extra files (globs) next to index.html. A page at /d/{doc} or /f/{folder} is served index.html too, for documents addressed by
-// path. It is closed when the test ends.
 func NewSite(t testing.TB, extra ...string) *Site {
 	t.Helper()
 	dir := t.TempDir()
@@ -57,7 +46,6 @@ func NewSite(t testing.TB, extra ...string) *Site {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building main.wasm: %v\n%s", err, out)
 	}
-	// A second program for the web worker some pages start (./files, with files-worker.js beside the page).
 	if st, err := os.Stat("files"); err == nil && st.IsDir() {
 		build := exec.Command("go", "build", "-o", filepath.Join(dir, "files.wasm"), "./files")
 		build.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
@@ -87,8 +75,6 @@ func NewSite(t testing.TB, extra ...string) *Site {
 			t.Fatal(err)
 		}
 	}
-	// A static/ directory beside the example holds files the page fetches by name (language packs):
-	// copied next to index.html.
 	if ents, err := os.ReadDir("static"); err == nil {
 		for _, e := range ents {
 			if e.IsDir() {
@@ -103,7 +89,6 @@ func NewSite(t testing.TB, extra ...string) *Site {
 			}
 		}
 	}
-	// Extra files (globs) the page needs, copied next to index.html.
 	for _, pattern := range extra {
 		matches, err := filepath.Glob(pattern)
 		if err != nil || len(matches) == 0 {
@@ -142,9 +127,6 @@ func NewSite(t testing.TB, extra ...string) *Site {
 	return site
 }
 
-// NewPageSite serves the given pages (path to HTML, such as "/page.html") and nothing else, with no wasm
-// build: for testing helpers that work on any page (the screen reader in internal/screenreader).
-// Open them with OpenURL.
 func NewPageSite(t testing.TB, pages map[string]string) *Site {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
