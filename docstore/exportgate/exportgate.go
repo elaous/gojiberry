@@ -1,4 +1,3 @@
-// Package exportgate checks documents before they are exported.
 package exportgate
 
 import (
@@ -64,7 +63,6 @@ func DecideSealed(data []byte, open func([]byte) ([]byte, error), mode a11ycheck
 	return Decide(plain, mode)
 }
 
-// read decodes a stored document in whichever format it has.
 func read(data []byte) (docfile.Document, bool) {
 	if len(data) == 0 {
 		return docfile.Document{}, false
@@ -127,7 +125,6 @@ func Wrap(next http.Handler, mode a11ycheck.GateMode) http.Handler {
 	})
 }
 
-// capture holds an answer so the gate can inspect it.
 type capture struct {
 	header http.Header
 	status int
@@ -138,7 +135,6 @@ func (c *capture) Header() http.Header         { return c.header }
 func (c *capture) WriteHeader(code int)        { c.status = code }
 func (c *capture) Write(p []byte) (int, error) { return c.body.Write(p) }
 
-// flush sends the captured answer as the response.
 func (c *capture) flush(w http.ResponseWriter, method string) {
 	dst := w.Header()
 	for k, v := range c.header {
