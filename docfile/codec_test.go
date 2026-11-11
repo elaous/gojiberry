@@ -47,7 +47,6 @@ func TestInlineImageSurvivesSaveAndOpen(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// With no loader the image comes back as a placeholder that saves as the same image.
 		back := ToItems(d.Content)
 		again := FromItems(back)
 		if len(again) != 3 || again[1].Image == nil || again[1].Image.URL != "data:image/png;base64,AAAA" || again[1].Image.Width != 80 || again[1].Image.Alpha != 0.5 || again[1].Image.ClipBottom != 5 {

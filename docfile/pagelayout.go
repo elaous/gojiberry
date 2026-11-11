@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// The Meta keys the print layout of a document is kept under.
+// The Meta keys for a document's print layout.
 const (
 	PageHeaderKey   = "page.header"
 	PageFooterKey   = "page.footer"

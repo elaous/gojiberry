@@ -104,7 +104,7 @@ func TestFlowRoundTrip(t *testing.T) {
 	}
 }
 
-// The mirrors must carry every field of the canvas types they stand for.
+// The mirrors must carry every field of the type.
 func TestMirrorsCoverCanvasTypes(t *testing.T) {
 	for _, p := range []struct{ mirror, canvas reflect.Type }{
 		{reflect.TypeFor[Format](), reflect.TypeFor[canvas.Format]()},
@@ -178,7 +178,7 @@ func TestCommentsRoundTripThroughFlow(t *testing.T) {
 	}
 }
 
-// A proposed change (suggestion mode) is part of the text and survives every saved form.
+// A proposed change is saved as a proposal.
 func TestProposalMarksRoundTrip(t *testing.T) {
 	mark := canvas.ProposalMark{Kind: canvas.ProposalDelete, ID: "ab12", Author: "ana@example.com", Time: time.Unix(1_700_000_000, 0)}.String()
 	f := &canvas.TextFlow{Items: []canvas.Item{
@@ -209,7 +209,7 @@ func TestNotesRoundTrip(t *testing.T) {
 		canvas.Chars{Text: "text", Format: canvas.Format{Index: "term", Bookmark: "b"}},
 		canvas.Inline{Object: &canvas.FootnoteRef{ID: "n1"}},
 		canvas.Inline{Object: &canvas.IndexObject{}, Block: true},
-		canvas.Inline{Object: oddObject{}, Block: true}, // objects without a saved form are dropped
+		canvas.Inline{Object: oddObject{}, Block: true}, // Objects without a saved form are skipped.
 	}}
 	f.Footnotes = canvas.NewFootnoteSet(canvas.Footnote{ID: "n1", Text: "the note"})
 	for _, c := range Formats() {
@@ -301,7 +301,6 @@ func TestTableMergesAndStylesRoundTrip(t *testing.T) {
 			t.Fatalf("%s: got %v %+v %+v, want %v %+v %+v", c.Name(), got.Cells, got.Merges, got.Styles, tbl.Cells, tbl.Merges, tbl.Styles)
 		}
 	}
-	// A file with merges that do not fit the grid loads without them.
 	bad := ToItems([]Item{{Table: &TableItem{Rows: []TableRow{{Cells: []string{"a", "b"}}},
 		Merges: []TableMerge{{Row: 0, Col: 1, Rows: 2, Cols: 2}, {Row: -1, Col: 0, Rows: 2, Cols: 1}, {Row: 0, Col: 0, Rows: 1, Cols: 1}}}}})
 	if m := bad[0].(canvas.Inline).Object.(*canvas.TableObject).View.Table.Merges; len(m) != 0 {
