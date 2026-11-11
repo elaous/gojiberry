@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-flow-demo shows canvas.TextFlow: text flowed into a
-// page of a given size with configurable font metrics (family, size,
-// weight, style, line height) and 1-3 columns. In edit mode, drag the
-// grip above a column gap to resize the neighbouring columns. #state
-// mirrors the layout as JSON (the e2e test reads it).
 package main
 
 import (

@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestEndToEnd drives the demo in headless Chromium: font metrics change the
-// layout, columns flow text across, and in edit mode the gap grip can be dragged
-// to resize neighbouring columns (view mode can't).
 func TestEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	near := func(a, b, eps float64) bool { return math.Abs(a-b) < eps }
@@ -28,7 +25,6 @@ func TestEndToEnd(t *testing.T) {
 	})()`)
 	d.OK(ink > 200, fmt.Sprintf("text is actually painted on the canvas (%d dark pixels)", ink))
 
-	// Font metrics feed the layout.
 	linesBefore := d.Int(`JSON.parse(document.getElementById('state').textContent).lines.length`)
 	d.Select("#weight", "700")
 	d.Select("#style", "italic")
@@ -49,7 +45,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Fill("#leading", "22")
 	d.Dispatch("#leading", "change")
 
-	// Columns.
 	d.Select("#cols", "3")
 	s = d.State()
 	d.OK(d.Is("s.columns.length === 3 && Math.abs(s.columns.reduce((x, y) => x + y, 0) + 2 * s.gap - 840) < 1e-6"), "three equal columns fill the page")
@@ -61,7 +56,6 @@ func TestEndToEnd(t *testing.T) {
 	}
 	gapCenter := 30 + cols()[0] + s.Num("gap")/2
 
-	// View mode: the grip isn't there.
 	d.CanvasDrag(gapCenter, 30, gapCenter+40, 30)
 	c := cols()
 	d.OK(near(c[0], c[1], 1e-6), "view mode ignores gap drags")
@@ -72,7 +66,6 @@ func TestEndToEnd(t *testing.T) {
 	c = cols()
 	d.OK(near(c[0], widths[0]+40, 1.5) && near(c[1], widths[1]-40, 1.5), fmt.Sprint("dragging the grip resizes the two neighbours: ", c))
 	d.OK(near(c[0]+c[1], widths[0]+widths[1], 1e-6) && c[2] == widths[2], "combined width and the third column are unchanged")
-	// The 1px guide straddles two pixel columns, so it is anti-aliased.
 	guide := d.Pixel(int(gapCenter+40), 200)
 	d.OK(guide[0] < 250 && guide[2] > guide[0], fmt.Sprint("the gap guide line is drawn in edit mode: ", guide))
 
