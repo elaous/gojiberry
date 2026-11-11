@@ -13,14 +13,6 @@ import (
 	"github.com/elaous/gojiberry/tokens"
 )
 
-// Templates, styles and design-token themes can be shared between people as a bundle: one small
-// JSON file that one person exports and another imports, over any channel they like (a link, a
-// message, a file). Nothing is shared on the server: no person can read another's items, and an
-// import is a plain write into the importer's own store. Fonts are not bundled, because their
-// licence decides whether they may be passed on.
-
-// Kinds of item that can be shared; an item's kind is the part of its name before the first ".":
-// "template.report", "style.dyslexia-friendly", "tokens.high-contrast".
 const (
 	KindTemplate = "template"
 	KindStyle    = "style"
@@ -35,11 +27,8 @@ const (
 )
 
 var (
-	// ErrNotShareable means an item of a kind that is not shared (settings, fonts, anything else).
 	ErrNotShareable = errors.New("userconfig: only templates, styles and themes can be shared (names template.*, style.* and tokens.*)")
-	// ErrBadBundle means a file that is not a share bundle, is damaged, or holds something the
-	// importer refuses. The message says why in words and never repeats the file's content.
-	ErrBadBundle = errors.New("userconfig: the shared file cannot be used")
+	ErrBadBundle    = errors.New("userconfig: the shared file cannot be used")
 )
 
 type bundle struct {
@@ -52,7 +41,6 @@ type bundle struct {
 	Data    []byte `json:"data"`
 }
 
-// Info says what a bundle holds, for showing to the person before they import it.
 type Info struct {
 	Kind, Name, Note string
 	Size             int
@@ -70,8 +58,6 @@ func kindOf(name string) (string, bool) {
 	return "", false
 }
 
-// Export wraps one of the user's templates, styles or themes in a bundle. note is a line for the
-// person who imports it (who made it, what it is for).
 func (s *Store) Export(ctx context.Context, name, note string) ([]byte, error) {
 	_, ok := kindOf(name)
 	if !ok {
@@ -84,8 +70,6 @@ func (s *Store) Export(ctx context.Context, name, note string) ([]byte, error) {
 	return Bundle(name, it.Data, note)
 }
 
-// Bundle wraps data, the content of an item called name, in a share bundle: the same file Export makes, for
-// a caller that keeps its items somewhere other than a Store (the client's local copy on a device).
 func Bundle(name string, data []byte, note string) ([]byte, error) {
 	kind, ok := kindOf(name)
 	if !ok {
@@ -98,8 +82,6 @@ func Bundle(name string, data []byte, note string) ([]byte, error) {
 	return json.Marshal(bundle{Tag: bundleTag, Version: bundleVersion, Kind: kind, Name: name, Note: note, SHA256: hex.EncodeToString(sum[:]), Data: data})
 }
 
-// OpenBundle reads a bundle with every check Inspect makes and returns what it holds besides: the item's name
-// and content, for a caller that stores them itself.
 func OpenBundle(b []byte) (Info, []byte, error) {
 	bu, info, err := parseBundle(b)
 	if err != nil {
@@ -108,7 +90,6 @@ func OpenBundle(b []byte) (Info, []byte, error) {
 	return info, bu.Data, nil
 }
 
-// Inspect reads a bundle and checks everything an import would check, writing nothing.
 func Inspect(b []byte) (Info, error) {
 	_, info, err := parseBundle(b)
 	return info, err
@@ -158,9 +139,7 @@ func parseBundle(b []byte) (bundle, Info, error) {
 	return bu, Info{Kind: kind, Name: bu.Name, Note: bu.Note, Size: len(bu.Data)}, nil
 }
 
-// Import writes a bundle into the user's own store. It never replaces an item: if the name is taken
-// the item is stored as "<name>-2", "-3" and so on. as, when not empty, names it (it must keep the
-// same kind prefix). The ordinary limits apply.
+// Import writes a bundle into the user's own store.
 func (s *Store) Import(ctx context.Context, b []byte, as string) (Item, error) {
 	bu, _, err := parseBundle(b)
 	if err != nil {

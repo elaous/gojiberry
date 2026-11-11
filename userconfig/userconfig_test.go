@@ -32,7 +32,6 @@ func TestPutGetRevisionsAndConflicts(t *testing.T) {
 	if err != nil || string(got.Data) != `{"font":18}` || got.Rev != 1 || got.Name != "prefs" || got.Updated.IsZero() {
 		t.Fatalf("%+v %v", got, err)
 	}
-	// device B still thinks the item does not exist; device C is on revision 1
 	cur, err := s.Put(ctx, "prefs", []byte("b"), 0)
 	if !errors.Is(err, ErrConflict) || cur.Rev != 1 || string(cur.Data) != `{"font":18}` {
 		t.Fatalf("a stale write is refused and shows the current item: %+v %v", cur, err)
@@ -51,7 +50,6 @@ func TestUpdateMergesAcrossDevices(t *testing.T) {
 	if _, err := s.Put(ctx, "tags", []byte("a"), 0); err != nil {
 		t.Fatal(err)
 	}
-	// every device appends its own letter; two goroutines racing must both land
 	var wg sync.WaitGroup
 	for _, l := range []string{"b", "c", "d"} {
 		wg.Add(1)
@@ -68,7 +66,6 @@ func TestUpdateMergesAcrossDevices(t *testing.T) {
 	if len(got.Data) != 4 || got.Rev != 4 || !strings.HasPrefix(string(got.Data), "a") {
 		t.Fatalf("%q rev %d: every device's change must survive", got.Data, got.Rev)
 	}
-	// a new item through Update, and a failing merge writes nothing
 	if it, err := s.Update(ctx, "fresh", func(cur Item) ([]byte, error) { return []byte("x"), nil }); err != nil || it.Rev != 1 {
 		t.Fatalf("%+v %v", it, err)
 	}
@@ -76,7 +73,6 @@ func TestUpdateMergesAcrossDevices(t *testing.T) {
 	if _, err := s.Update(ctx, "fresh", func(Item) ([]byte, error) { return nil, boom }); !errors.Is(err, boom) {
 		t.Fatalf("%v", err)
 	}
-	// a merge that never settles gives up
 	n := 0
 	_, err := s.Update(ctx, "fresh", func(cur Item) ([]byte, error) {
 		n++
@@ -100,7 +96,6 @@ func TestQuotaNamesAndListing(t *testing.T) {
 	if _, err := s.Put(ctx, "a", []byte("12345"), 0); err != nil {
 		t.Fatal(err)
 	}
-	// the envelope adds bytes, so the total limit is reached by the stored size, not the payload
 	if _, err := s.Put(ctx, "b", []byte("123456789"), 0); !errors.Is(err, ErrQuota) {
 		t.Fatalf("over the total: %v", err)
 	}
@@ -210,7 +205,6 @@ func TestStoreErrorsAndCorruptItems(t *testing.T) {
 	}
 }
 
-// the document API and expiry treat the keyspace as the system's
 func TestConfigKeysAreSystemKeys(t *testing.T) {
 	if docstore.IsDocumentKey(docstore.ConfigPrefix + "abc/prefs") {
 		t.Fatal("config items must never get a document lifetime")

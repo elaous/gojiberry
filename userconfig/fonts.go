@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-// Fonts are stored as items whose names start with "font." (for example "font.atkinson-regular").
-// An item like that is a container: the font file and the licence note that goes with it. A font
-// without a licence note is refused (a person who brings a font should be able to say under what
-// terms they may use and share it), the file must be a TrueType, OpenType or WOFF file, and fonts
-// have their own larger limits that do not eat into the room for settings.
-
-// Limits for fonts, applied when the Store sets none of its own.
 const (
 	DefaultMaxFont  = 4 << 20  // one font file
 	DefaultMaxFonts = 16 << 20 // all of the user's fonts
@@ -23,15 +16,13 @@ const (
 var (
 	// ErrNoLicense means a font was offered without a licence note.
 	ErrNoLicense = errors.New("userconfig: a font needs a licence note (who made it and under what terms it may be used)")
-	// ErrNotAFont means the bytes are not a TrueType, OpenType or WOFF font file.
-	ErrNotAFont = errors.New("userconfig: the file is not a TrueType, OpenType or WOFF font")
+	ErrNotAFont  = errors.New("userconfig: the file is not a TrueType, OpenType or WOFF font")
 )
 
 func isFont(name string) bool { return strings.HasPrefix(name, "font.") }
 
 // Font is a decoded font item.
 type Font struct {
-	// Format is "ttf", "otf", "woff" or "woff2", from the file's own first bytes.
 	Format  string
 	License string
 	Data    []byte
@@ -39,8 +30,6 @@ type Font struct {
 
 var fontMagic = []byte("GJF1")
 
-// EncodeFont packs a font file and its licence note into the form a "font." item holds. It checks
-// the same things the store does.
 func EncodeFont(data []byte, license string) ([]byte, error) {
 	license = strings.TrimSpace(license)
 	if license == "" {
@@ -79,7 +68,6 @@ func DecodeFont(b []byte) (Font, error) {
 	return Font{Format: format, License: license, Data: append([]byte(nil), data...)}, nil
 }
 
-// fontFormat names a font file by its signature.
 func fontFormat(b []byte) (string, bool) {
 	if len(b) < 12 {
 		return "", false
@@ -97,7 +85,6 @@ func fontFormat(b []byte) (string, bool) {
 	return "", false
 }
 
-// PutFont stores a font under "font."+name with its licence note (base is the revision read, 0 for new).
 func (s *Store) PutFont(ctx context.Context, name string, data []byte, license string, base int) (Item, error) {
 	blob, err := EncodeFont(data, license)
 	if err != nil {
