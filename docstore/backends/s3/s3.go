@@ -31,7 +31,6 @@ type Config struct {
 	ForcePathStyle *bool  `json:"forcePathStyle"`
 }
 
-// resolvePathStyle decides between path and virtual-host addressing.
 func resolvePathStyle(cfg Config, backendDefault bool) bool {
 	if cfg.ForcePathStyle != nil {
 		return *cfg.ForcePathStyle
@@ -39,7 +38,6 @@ func resolvePathStyle(cfg Config, backendDefault bool) bool {
 	return backendDefault
 }
 
-// newS3AdapterFactory builds the docstore.Adapter factory for S3.
 func newS3AdapterFactory(backendPathStyleDefault bool) docstore.AdapterFactory {
 	return func(ctx context.Context, raw json.RawMessage) (docstore.Adapter, error) {
 		var cfg Config
@@ -71,7 +69,6 @@ func init() {
 	docstore.RegisterAdapter("minio", newS3AdapterFactory(true))
 }
 
-// s3API is the part of the S3 client the adapter uses.
 type s3API interface {
 	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
@@ -86,7 +83,7 @@ type Adapter struct {
 	prefix string
 
 	probeMu  sync.Mutex
-	deleteIf int // 0: not probed, 1: the service honours If-Match on DeleteObject, 2: it does not
+	deleteIf int
 }
 
 // New wraps an already-configured *s3.Client.
@@ -178,7 +175,6 @@ func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) er
 	return nil
 }
 
-// honoursDeleteIf says whether the service refuses a conditional delete.
 func (a *Adapter) honoursDeleteIf(ctx context.Context) (bool, error) {
 	a.probeMu.Lock()
 	defer a.probeMu.Unlock()
@@ -198,7 +194,6 @@ func (a *Adapter) honoursDeleteIf(ctx context.Context) (bool, error) {
 	return ok, nil
 }
 
-// probeDeleteIf checks whether the service honours conditional deletes.
 func (a *Adapter) probeDeleteIf(ctx context.Context) (bool, error) {
 	var raw [8]byte
 	_, _ = rand.Read(raw[:])
@@ -211,7 +206,6 @@ func (a *Adapter) probeDeleteIf(ctx context.Context) (bool, error) {
 	}()
 	_, err := a.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(key), IfMatch: aws.String(`"gojiberry-no-such-etag"`)})
 	if err != nil && !isS3Conflict(err) && !isS3NotFound(err) {
-		// Other errors are returned as they are.
 		var api smithy.APIError
 		if errors.As(err, &api) && api.ErrorCode() == "NotImplemented" {
 			return false, nil

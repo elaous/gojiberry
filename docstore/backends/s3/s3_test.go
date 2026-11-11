@@ -178,7 +178,6 @@ func TestS3DeleteIf(t *testing.T) {
 	}
 }
 
-// racingDelete runs a write just before the conditional DeleteObject.
 type racingDelete struct {
 	*fakeS3
 	before func()
