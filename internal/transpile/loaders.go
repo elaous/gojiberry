@@ -18,7 +18,7 @@ type LoaderInput struct {
 }
 
 type LoaderResult struct {
-	Decls string
+	Decls      string
 	GoImports  []string
 	ImportPath string
 }
