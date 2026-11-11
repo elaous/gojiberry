@@ -5,9 +5,7 @@ import (
 	"testing"
 )
 
-// Box at (100, 100), 200x100, padding 8: text starts at (108, 108);
-// 8px runes, 22px lines; 184px is 23 runes per line. Toolbar (y 72..94):
-// Move x100-144, B 148-176, I 180-208, A- 212-244, A+ 248-280, Wrap 284-332.
+// Test box: 200x100 at (100, 100), padding 8, 8px runes.
 
 func newFloat(text string) (*FloatingText, *fakePainter) {
 	p := &fakePainter{}
@@ -17,7 +15,7 @@ func newFloat(text string) (*FloatingText, *fakePainter) {
 	return ft, p
 }
 
-// click focuses the box with the caret at rune offset i of a one-line text.
+// click focuses the box, caret at rune offset i.
 func click(ft *FloatingText, i int) {
 	ft.MouseDown(108+float64(i)*8, 112)
 	ft.MouseUp(0, 0)

@@ -5,13 +5,11 @@ import (
 	"strings"
 )
 
-// FloatingText is an EditTarget (the features' view of it) and edits at
-// several cursors at once.
+// FloatingText is an EditTarget that edits at several cursors.
 
 var _ Editable = (*FloatingText)(nil)
 
-// EditTarget implements Editable: the box itself while it is being
-// edited, else nil.
+// EditTarget returns the box while it is being edited, else nil.
 func (ft *FloatingText) EditTarget() EditTarget {
 	if ft.mode != ModeEdit || !ft.editing {
 		return nil
@@ -19,15 +17,12 @@ func (ft *FloatingText) EditTarget() EditTarget {
 	return ft
 }
 
-// EditText implements EditTarget.
 func (ft *FloatingText) EditText() string { return ft.Text() }
 
-// Cursors implements EditTarget: the primary cursor first.
 func (ft *FloatingText) Cursors() []Cursor {
 	return append([]Cursor{{Anchor: ft.anchor, Caret: ft.caret}}, ft.extra...)
 }
 
-// SetCursors implements EditTarget.
 func (ft *FloatingText) SetCursors(cs []Cursor) {
 	if len(cs) == 0 {
 		return
@@ -42,7 +37,6 @@ func (ft *FloatingText) SetCursors(cs []Cursor) {
 	ft.caretOn = true
 }
 
-// Slice implements EditTarget.
 func (ft *FloatingText) Slice(from, to int) []Item {
 	from, to = min(max(from, 0), len(ft.runes)), min(max(to, 0), len(ft.runes))
 	var items []Item
@@ -71,7 +65,6 @@ func itemRunes(items []Item) []fRune {
 	return out
 }
 
-// Replace implements EditTarget.
 func (ft *FloatingText) Replace(edits []Edit) {
 	es := slices.Clone(edits)
 	slices.SortFunc(es, func(a, b Edit) int { return b.From - a.From }) // last first
@@ -98,9 +91,7 @@ func (ft *FloatingText) formatBefore(o int) Format {
 	return Format{}
 }
 
-// editAll replaces, at every cursor in document order, the range gen
-// picks with the runes gen returns, and leaves a plain cursor after each
-// insertion.
+// editAll applies gen at every cursor, in document order.
 func (ft *FloatingText) editAll(gen func(c Cursor) (from, to int, ins []fRune)) {
 	cs := normalize(ft.Cursors())
 	type ed struct {
@@ -126,8 +117,7 @@ func (ft *FloatingText) editAll(gen func(c Cursor) (from, to int, ins []fRune)) 
 	ft.changed()
 }
 
-// multiInsert types s at every cursor, replacing selections. Typed
-// characters are inserted as they are (no auto-closing).
+// multiInsert types s at every cursor, replacing selections.
 func (ft *FloatingText) multiInsert(s string) {
 	s = strings.ReplaceAll(s, "\r", "")
 	ft.editAll(func(c Cursor) (int, int, []fRune) {
@@ -142,8 +132,7 @@ func (ft *FloatingText) multiInsert(s string) {
 	ft.closeSuggestions()
 }
 
-// multiPaste pastes text: one line per cursor when the counts match,
-// else the whole text at each.
+// multiPaste pastes one line per cursor when counts match.
 func (ft *FloatingText) multiPaste(text string) {
 	text = strings.ReplaceAll(text, "\r", "")
 	cs := normalize(ft.Cursors())
@@ -259,8 +248,7 @@ func (ft *FloatingText) multiKey(key string, shift bool) bool {
 	return true
 }
 
-// MouseDownMods implements ModMouseDowner: Ctrl/Cmd+click adds a
-// cursor before the clicked character.
+// MouseDownMods: Ctrl/Cmd+click adds a cursor.
 func (ft *FloatingText) MouseDownMods(x, y float64, m Mods) bool {
 	if (m.Ctrl || m.Meta) && ft.mode == ModeEdit && ft.editing && ft.whatAt(x, y) == "text" {
 		ft.sync()

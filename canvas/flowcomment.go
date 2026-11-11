@@ -10,8 +10,7 @@ func (f *TextFlow) commentResolved(id string) bool {
 	return ok && c.Resolved
 }
 
-// commentsOpen reports whether any of the comments in a Format.Comment value
-// is not resolved (the text is highlighted while one is).
+// commentsOpen reports whether any comment in the value is unresolved.
 func (f *TextFlow) commentsOpen(value string) bool {
 	for _, id := range commentList(value) {
 		if !f.commentResolved(id) {
@@ -21,8 +20,7 @@ func (f *TextFlow) commentsOpen(value string) bool {
 	return false
 }
 
-// commentAt returns the comment ID of the run at (x, y) and the run's
-// rectangle, or "".
+// commentAt returns the comment ID and rectangle of the run at (x, y).
 func (f *TextFlow) commentAt(x, y float64) (string, [4]float64) {
 	if f.Comments.Len() == 0 {
 		return "", [4]float64{}
@@ -81,9 +79,7 @@ func wrapWords(text string, n int) []string {
 	return lines
 }
 
-// drawCommentTip draws the tip for the hovered comment: its author, the
-// summary (Markdown stripped) wrapped to a few lines, and how many
-// replies it has.
+// drawCommentTip draws the tip for the hovered comment.
 func (f *TextFlow) drawCommentTip() {
 	if f.hoverComment == "" || f.Painter == nil {
 		return
@@ -154,8 +150,7 @@ func (f *TextFlow) drawCommentTip() {
 	}
 }
 
-// CommentRange returns the stream range [from, to) of the text the
-// comment is on (from its first character to its last).
+// CommentRange returns the stream range of text the comment is on.
 func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
 	ids := charComments(f.ContentItems())
 	from, to = -1, 0
@@ -170,8 +165,7 @@ func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
 	return max(from, 0), to, from >= 0
 }
 
-// CommentExcerpts returns, for every comment that is on some text, that
-// text (the characters carrying its ID, in order).
+// CommentExcerpts returns the text each comment is on.
 func (f *TextFlow) CommentExcerpts() map[string]string {
 	out := map[string]string{}
 	for _, it := range f.ContentItems() {

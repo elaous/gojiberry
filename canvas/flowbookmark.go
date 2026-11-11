@@ -2,10 +2,7 @@ package canvas
 
 import "sort"
 
-// Bookmarks are named places in the text: Format.Bookmark on a stretch of
-// text (a word, a selection, or one character) names it, so the place
-// follows the text through edits. A link to "#name" jumps to one;
-// Bookmarks lists them for a DOM component (components.Bookmarks).
+// Bookmarks are named places: Format.Bookmark marks a stretch of text.
 
 // Bookmark is a named stretch of text.
 type Bookmark struct {
@@ -49,8 +46,7 @@ func (f *TextFlow) Bookmarks() []Bookmark {
 	return out
 }
 
-// GotoBookmark moves the caret to the start of the named bookmark (see
-// GotoOffset) and reports whether there is one.
+// GotoBookmark moves the caret to the named bookmark and reports success.
 func (f *TextFlow) GotoBookmark(name string) bool {
 	for _, b := range f.Bookmarks() {
 		if b.Name == name {
@@ -80,11 +76,10 @@ func (f *TextFlow) RemoveBookmark(name string) bool {
 	return found
 }
 
-// BookmarkMarkColor is the colour of the mark drawn in the text where a bookmark starts (edit mode only).
+// BookmarkMarkColor is the colour of the bookmark mark.
 const BookmarkMarkColor = "#b8860b"
 
-// drawBookmarks marks where each bookmark starts, so a place that only had a name can be seen: a ribbon in the margin
-// edge of the line. It is drawn while editing and never exported.
+// drawBookmarks marks where each bookmark starts.
 func (f *TextFlow) drawBookmarks() {
 	if f.mode != ModeEdit || f.Painter == nil {
 		return

@@ -1,11 +1,6 @@
 package canvas
 
-// Auto-closing pairs and word completion for the TextFlow, like the
-// FloatingText's, but working at every cursor (pairs) and at the primary
-// one (the completion popup).
-//
-// Both are off until asked for: set AutoClose (DefaultAutoClose is the
-// code-editor set) and Complete, Completer or Vocabulary.
+// Auto-closing pairs and completion for TextFlow, as in FloatingText.
 
 func (f *TextFlow) isCloser(r rune) bool {
 	for _, c := range f.AutoClose {
@@ -16,10 +11,7 @@ func (f *TextFlow) isCloser(r rune) bool {
 	return false
 }
 
-// typePaired types one character at every cursor with auto-closing: it
-// wraps a selection in a pair, overtypes a closer already ahead of the
-// caret, or inserts a pair -- except where that would be annoying: a
-// quote after a letter (an apostrophe) or an opener in front of a word.
+// typePaired types one character at every cursor, auto-closing.
 func (f *TextFlow) typePaired(d *flowData, r rune) {
 	closer, isOpener := f.AutoClose[r]
 	rs := textRunes(f)
@@ -67,8 +59,6 @@ func (f *TextFlow) typePaired(d *flowData, r rune) {
 	f.SetCursors(out)
 }
 
-// --- completion ---------------------------------------------------------
-
 func (f *TextFlow) completionOn() bool {
 	return f.Complete || f.Completer != nil || len(f.Vocabulary) > 0
 }
@@ -83,9 +73,7 @@ func (f *TextFlow) wordBeforeCaret() (string, int) {
 	return string(rs[start:caret]), start
 }
 
-// defaultComplete suggests the longer words in the text and Vocabulary
-// that start with prefix: the ranking of package complete, shared with the
-// apps' own suggestion lists.
+// defaultComplete suggests longer words that start with prefix.
 func (f *TextFlow) defaultComplete(prefix string) []string {
 	return completeWords(string(textRunes(f)), f.Vocabulary, prefix)
 }
@@ -107,8 +95,7 @@ func (f *TextFlow) closeSuggestions() {
 	}
 }
 
-// updateSuggestions recomputes the completion popup for the word before
-// the caret (one cursor, nothing selected).
+// updateSuggestions recomputes the completion popup for the caret word.
 func (f *TextFlow) updateSuggestions() {
 	f.closeSuggestions()
 	if !f.completionOn() || !f.Editing() || len(f.extra) > 0 || f.sel.caret != f.sel.anchor || f.Painter == nil {
@@ -150,8 +137,7 @@ func (f *TextFlow) acceptSuggestion(word string) {
 	caret := f.sel.caret
 	items := []Item{Chars{Text: word, Format: format}}
 	if f.proposalsOn() {
-		// while suggesting, the completion is a proposal like any other typing: the typed letters are
-		// struck and the whole word follows them
+		// While suggesting, completion is a proposal like other typing.
 		repl, at := f.proposalRewrite(d, Cursor{Anchor: caret, Caret: caret}, f.suggFrom, caret, items)
 		f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: repl}})
 		f.SetCursors([]Cursor{At(f.suggFrom + at)})
@@ -172,12 +158,10 @@ func (f *TextFlow) Suggestions() []string {
 // SuggestionMenu returns the completion popup's menu.
 func (f *TextFlow) SuggestionMenu() *Menu { return f.suggestMenu() }
 
-// SetViewport implements ViewportSetter: the popup stays inside the
-// visible part.
+// SetViewport keeps the popup inside the visible part.
 func (f *TextFlow) SetViewport(x, y, w, h float64) { f.viewport = [4]float64{x, y, w, h} }
 
-// suggestKey drives an open completion popup: Up/Down choose, Tab or
-// Enter accept, Escape dismisses. It reports whether it used the key.
+// suggestKey drives the popup: arrows choose, Tab or Enter accept, Escape dismisses.
 func (f *TextFlow) suggestKey(key string) bool {
 	if !f.suggestionsOpen() {
 		return false

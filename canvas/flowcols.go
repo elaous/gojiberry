@@ -1,8 +1,6 @@
 package canvas
 
-// SetColumnsAt makes cfg the column layout from text offset (in runes) on, until
-// the next ColumnConfig: a new region starts there. Any ColumnConfig already at
-// exactly that offset is replaced. It is one undoable change.
+// SetColumnsAt sets the column layout from an offset until the next config.
 func (f *TextFlow) SetColumnsAt(offset int, cfg ColumnConfig) {
 	f.materialize()
 	off := 0
@@ -11,7 +9,7 @@ func (f *TextFlow) SetColumnsAt(offset int, cfg ColumnConfig) {
 		switch v := it.(type) {
 		case ColumnConfig:
 			if off == offset {
-				continue // replaced
+				continue
 			}
 		case Chars:
 			off += len([]rune(v.Text))
@@ -25,8 +23,7 @@ func (f *TextFlow) SetColumnsAt(offset int, cfg ColumnConfig) {
 	f.changed()
 }
 
-// ColumnsAt returns the column layout in force at offset: the last ColumnConfig
-// at or before it, or the flow's own Columns and Gap.
+// ColumnsAt returns the column layout in force at offset.
 func (f *TextFlow) ColumnsAt(offset int) ColumnConfig {
 	cfg := ColumnConfig{Widths: f.Columns, Gap: f.Gap}
 	off := 0

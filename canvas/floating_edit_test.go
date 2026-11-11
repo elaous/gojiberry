@@ -12,8 +12,7 @@ func typeText(ft *FloatingText, s string) {
 	}
 }
 
-// caretEnd puts the caret at the end of the text (a click only reaches
-// the end of a short line).
+// caretEnd puts the caret at the end of the text.
 func caretEnd(ft *FloatingText) { ft.caret, ft.anchor = len(ft.runes), len(ft.runes) }
 
 func editing(t *testing.T, text string) *FloatingText {
@@ -178,8 +177,6 @@ func TestTypedPairsKeepTheTypingFormat(t *testing.T) {
 	}
 }
 
-// --- completion ---
-
 func TestSuggestionsFromTheTextByFrequency(t *testing.T) {
 	ft := editing(t, "banana band banana bandana ")
 	typeText(ft, "b")
@@ -333,8 +330,6 @@ func TestSuggestionsStayInTheViewport(t *testing.T) {
 	}
 }
 
-// --- color palette ---
-
 func TestColorPaletteColorsTheSelection(t *testing.T) {
 	ft := editing(t, "hello world")
 	ft.HandleKey("Home", false)
@@ -457,8 +452,6 @@ func TestOverlayDrawsPopups(t *testing.T) {
 		t.Fatal("no overlay in view mode")
 	}
 }
-
-// --- commands, selection, clipboard ---
 
 func TestToggleDecorationsAndCommands(t *testing.T) {
 	ft := editing(t, "abcd")
