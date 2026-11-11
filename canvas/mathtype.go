@@ -6,12 +6,7 @@ import (
 	"unicode"
 )
 
-// The typesetter of the equation object. It reads the linear notation of package export (see its elements.go:
-// numbers, letters, + - * / = < > ( ) [ ] , ; : |, ^ and _ for scripts, {...} groups, sqrt{x}, frac{a}{b}, and the
-// names pi alpha beta gamma delta theta lambda mu sigma omega infty sum int) and draws it the way mathematics is
-// written: fractions over a rule, roots under a radical sign, raised and lowered scripts, letters in italics, numbers
-// and function names upright. The notation is read the same way as the MathML export reads it; a test keeps the
-// two on the same corpus.
+// The typesetter for equations; it reads package export's linear notation.
 
 type mkind int
 
@@ -32,8 +27,7 @@ type mnode struct {
 	kind mkind
 	text string
 	kids []*mnode
-	// limits puts the scripts of a sum (or lim) above and below it instead of beside it, as a formula on a line of
-	// its own is written; set by markLimits.
+	// limits puts sum or lim scripts above and below, not beside.
 	limits bool
 }
 
@@ -49,7 +43,7 @@ type mparser struct {
 	pos int
 }
 
-// parseMath reads a formula; a formula with unbalanced braces is closed leniently, so any text gives a tree.
+// parseMath reads a formula; unbalanced braces are closed leniently.
 func parseMath(formula string) *mnode {
 	p := &mparser{src: []rune(formula)}
 	return p.row(false)
@@ -70,8 +64,7 @@ func (p *mparser) nextIs(r rune) bool {
 	return false
 }
 
-// table reads the inside of matrix{a & b \\ c & d} (the opening brace is read): cells are separated by & and rows
-// by two backslashes.
+// table reads matrix{...} contents: cells split by &, rows by \\.
 func (p *mparser) table(kind string) *mnode {
 	t := &mnode{kind: mTable, text: kind}
 	row, cell := &mnode{kind: mRow}, &mnode{kind: mRow}
@@ -218,14 +211,13 @@ func (p *mparser) atom() *mnode {
 	return &mnode{kind: mOp, text: string(r)}
 }
 
-// mbox is a typeset piece: its width, how far it reaches above and below the baseline, and how to draw it with its
-// left edge at x and its baseline at y.
+// mbox is a typeset piece: width, ascent and descent.
 type mbox struct {
 	w, asc, desc float64
 	draw         func(p Painter, x, y float64)
 }
 
-// typeset lays n out at the font size (pixels) with the painter's text metrics.
+// typeset lays n out at the font size with the painter's metrics.
 func typeset(p Painter, n *mnode, size float64) mbox {
 	switch n.kind {
 	case mIdent, mNum, mFunc:
@@ -288,7 +280,7 @@ func typesetOp(p Painter, op string, size float64) mbox {
 	}}
 }
 
-// binary says a character is an operator with space around it when it stands between two things.
+// binary says a character is a spaced operator between operands.
 func binary(op string) bool { return strings.Contains("+-*=<>", op) }
 
 func typesetRow(p Painter, n *mnode, size float64) mbox {
@@ -405,8 +397,7 @@ func typesetSqrt(p Painter, n *mnode, size float64) mbox {
 	}
 }
 
-// MathSymbols lists the symbols of a formula in the order they are read (numbers, identifiers, operators, function
-// names, sum and integral signs), as the typesetter and the MathML export both see them.
+// MathSymbols lists the symbols of a formula in reading order.
 func MathSymbols(formula string) []string {
 	var out []string
 	var walk func(n *mnode)
@@ -433,8 +424,7 @@ func MathSymbols(formula string) []string {
 	return out
 }
 
-// markLimits sets the scripts of every sum and lim to be drawn above and below it: how a formula on a line of its own
-// is written (in a line of text they stay beside, to keep the line even).
+// markLimits sets sum and lim scripts to draw above and below.
 func markLimits(n *mnode) {
 	if n == nil {
 		return
@@ -447,7 +437,7 @@ func markLimits(n *mnode) {
 	}
 }
 
-// typesetLimits draws the base with the lower script centred under it and the upper one over it.
+// typesetLimits draws the base with scripts centred above and below.
 func typesetLimits(p Painter, n *mnode, base mbox, small float64) mbox {
 	var sub, sup *mbox
 	if n.kids[1] != nil {
@@ -489,8 +479,7 @@ func typesetLimits(p Painter, n *mnode, base mbox, small float64) mbox {
 	return out
 }
 
-// typesetTable lays out a matrix (cells centred in columns, a bracket on each side that grows with it) or aligned
-// equations (the first column to the right, the second to the left, so the signs meet).
+// typesetTable lays out a matrix, with a bracket on each side.
 func typesetTable(p Painter, n *mnode, size float64) mbox {
 	cols := 0
 	for _, r := range n.kids {
@@ -558,8 +547,7 @@ func typesetTable(p Painter, n *mnode, size float64) mbox {
 	return out
 }
 
-// drawBracket strokes a bracket of height h with its outer edge at x (left bracket: its left edge; right bracket: its
-// right edge).
+// drawBracket strokes a bracket of height h at x.
 func drawBracket(p Painter, kind string, x, top, h, size float64) {
 	d := 0.28 * size
 	dir := 1.0
@@ -592,8 +580,7 @@ func drawBracket(p Painter, kind string, x, top, h, size float64) {
 	p.Stroke()
 }
 
-// growBrackets replaces a matching ( ) or [ ] that holds something tall (a fraction, a stack of scripts) by a bracket
-// as tall as what it holds.
+// growBrackets enlarges brackets around tall content.
 func growBrackets(kids []*mnode, boxes []mbox, size float64) {
 	var open []int
 	for i, k := range kids {

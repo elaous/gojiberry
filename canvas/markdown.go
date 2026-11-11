@@ -16,8 +16,7 @@ type Markdown struct {
 	MarkBackground string     // ==highlight==, default "#fff3a3"
 	QuoteColor     string     // default "#5b616b"
 	QuoteBar       string     // the bar beside a block quote, default "#c4c7cd"
-	// Images turns ![alt](url) into an inline object. If nil, or if it
-	// returns nil, the alt text is shown in brackets instead.
+	// Images turns ![alt](url) into an object; nil or declined means alt text.
 	Images func(url, alt string) InlineObject
 }
 
@@ -55,7 +54,7 @@ func (m Markdown) Transform(src string) []Item {
 	var out []Item
 	text := func(s string, f Format) { out = append(out, Chars{Text: s, Format: f}) }
 
-	// isBlockStart reports whether line starts something other than paragraph text.
+	// isBlockStart reports whether a line starts a non-paragraph block.
 	isBlockStart := func(i int) bool {
 		l := lines[i]
 		return strings.TrimSpace(l) == "" || reHeading.MatchString(l) || reRule.MatchString(l) ||
@@ -63,8 +62,7 @@ func (m Markdown) Transform(src string) []Item {
 			strings.HasPrefix(l, `\`) && isDirective(l) || (strings.Contains(l, "|") && i+1 < len(lines) && reTableSep.MatchString(lines[i+1]))
 	}
 
-	// gap is the blank line that separates a block from the one after it
-	// -- but not from a directive or the end, where it would be wasted.
+	// gap is the blank line between blocks.
 	gap := func(i int) {
 		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
 			i++
@@ -218,7 +216,7 @@ func isDirective(line string) bool {
 	return d == `\pagebreak` || d == `\columnbreak` || reColumns.MatchString(d)
 }
 
-// trimTrailingNewlines drops the blank lines a final block leaves behind.
+// trimTrailingNewlines drops trailing blank lines.
 func trimTrailingNewlines(items []Item) []Item {
 	for len(items) > 0 {
 		c, ok := items[len(items)-1].(Chars)
@@ -270,8 +268,6 @@ func (m Markdown) plain(s string) string {
 	}
 	return b.String()
 }
-
-// --- inline ----------------------------------------------------------
 
 type mdState struct{ bold, italic, strike, under, sup, sub, mark bool }
 
@@ -441,8 +437,7 @@ func (m Markdown) inline(s string, base Format) []Item {
 	return out
 }
 
-// delimAt reports whether a formatting delimiter at r[i] opens or
-// closes formatting (toggling is up to the caller).
+// delimAt reports whether a delimiter at r[i] opens or closes emphasis.
 func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 	for _, tok := range mdDelims {
 		n := len(tok)

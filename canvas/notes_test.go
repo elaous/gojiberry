@@ -32,7 +32,6 @@ func TestFootnoteCommandsAndNumbering(t *testing.T) {
 	if runCmd(f, st, CmdFootnoteEdit, "x") || runCmd(f, st, CmdFootnoteDelete, "x") {
 		t.Fatal("no mark next to the caret")
 	}
-	// Delete removes mark and note; deleting only the mark (Backspace) hides the note.
 	f.SetCursors([]Cursor{At(6)})
 	if !runCmd(f, st, CmdFootnoteDelete, "x") || f.Footnotes.Len() != 1 || flowText(f) != "hello world# today" {
 		t.Fatalf("delete: %q %d", flowText(f), f.Footnotes.Len())
@@ -113,8 +112,7 @@ func TestFootnotesReserveABandAndDrawPerPage(t *testing.T) {
 	}
 }
 
-// The notes of a page are kept in a band that shrinks the text above; a note that does not fit goes on at the foot
-// of the next page; every page that has a mark shows the start of its note.
+// A page's notes sit in a band that shrinks the text above.
 func TestFootnotesPushTheTextAndContinueOnTheNextPage(t *testing.T) {
 	f := pagedFlow(Chars{Text: "aaaa\nbbbb\ncccc\ndddd\neeee"})
 	f.Footnotes = NewFootnoteSet()
@@ -122,7 +120,7 @@ func TestFootnotesPushTheTextAndContinueOnTheNextPage(t *testing.T) {
 	if len(before) != 3 {
 		t.Fatalf("three lines fit: %q", before)
 	}
-	// A mark in the first line, with a note of 3 lines (the line width is 180px, 22 fake runes).
+	// A mark on line one, with a three-line note.
 	f.Items = []Item{Chars{Text: "aa"}, Inline{Object: &FootnoteRef{ID: "x"}}, Chars{Text: "aa\nbbbb\ncccc\ndddd\neeee"}}
 	f.Footnotes.Add(Footnote{ID: "x", Text: "one two three four five six seven eight nine ten eleven twelve thirteen fourteen"})
 	lay := f.Layout()
@@ -143,7 +141,7 @@ func TestFootnotesPushTheTextAndContinueOnTheNextPage(t *testing.T) {
 			}
 		}
 	}
-	// All words of the note are shown somewhere, in order, across the pages.
+	// All words of a note appear in order across pages.
 	var all []string
 	for _, ls := range f.fnLines {
 		for _, l := range ls {
@@ -172,7 +170,7 @@ func TestFootnotesAreLimitedInSize(t *testing.T) {
 	if short.Text != "short" {
 		t.Fatal("a short note is untouched")
 	}
-	// A note at the limit still lays out and is shown in full across the pages without cutting.
+	// A note at the limit is shown in full across pages.
 	f := pagedFlow(Chars{Text: "x"}, Inline{Object: &FootnoteRef{ID: "big"}}, Chars{Text: "y\nbbbb\ncccc\ndddd"})
 	f.Footnotes = NewFootnoteSet()
 	f.Footnotes.Add(Footnote{ID: "big", Text: strings.Repeat("word ", 400)})
@@ -317,7 +315,7 @@ func tocFlow(t *testing.T) (*TextFlow, *TOCObject, *fakePainter) {
 	return f, f.items()[0].(Inline).Object.(*TOCObject), st.Painter.(*fakePainter)
 }
 
-// A table of contents has two looks (dotted leaders or none) and a depth.
+// A table of contents has leader and depth options.
 func TestTableOfContentsStyleAndDepth(t *testing.T) {
 	f, obj, p := tocFlow(t)
 	f.lastLay = Layout{Lines: []Line{{Start: 0, End: 40, Page: 0}}}
@@ -342,7 +340,7 @@ func TestTableOfContentsStyleAndDepth(t *testing.T) {
 	}
 }
 
-// A click on a row of the table goes to the heading it lists; the title and the empty space go nowhere.
+// A click on a table-of-contents row goes to its heading.
 func TestClickOnATableOfContentsGoesToTheHeading(t *testing.T) {
 	f, obj, _ := tocFlow(t)
 	f.Draw()
@@ -378,7 +376,7 @@ func TestClickOnATableOfContentsGoesToTheHeading(t *testing.T) {
 	}
 }
 
-// However many notes and however long, the layout settles and every page that has a mark shows the start of a note.
+// However long the notes, the layout settles and every page fits.
 func TestFootnoteLayoutAlwaysSettles(t *testing.T) {
 	for marks := 1; marks <= 6; marks++ {
 		for _, words := range []int{1, 8, 40, 200} {

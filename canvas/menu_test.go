@@ -15,8 +15,6 @@ func newMenu(log *[]string) (*Menu, *fakePainter) {
 	return m, p
 }
 
-// Item rows: One y 60-88, separator 88-97, Two 97-125, Three 125-153; x 50-220.
-
 func TestMenuHitTestAndActivate(t *testing.T) {
 	var log []string
 	m, _ := newMenu(&log)
