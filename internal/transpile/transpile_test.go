@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// mustFormat runs gofmt over got and fails the test with a readable diff
-// if the generated code isn't even syntactically valid Go.
 func mustFormat(t *testing.T, got string) string {
 	t.Helper()
 	src := "package p\nfunc f() {\n" + got + "\n}\n"
@@ -184,8 +182,6 @@ func TestLessThanAfterCloseParenIsNotATag(t *testing.T) {
 }
 
 func TestTagAfterReturnOnNewLineAfterCall(t *testing.T) {
-	// ASI: foo() ends a statement, so a tag on the next line is a fresh
-	// expression-statement, not "foo() < div".
 	got := transpileExpr(t, "foo()\nx := <div></div>")
 	want := "foo()\nx := xango.El(\"div\", nil)"
 	if strings.TrimSpace(got) != want {
@@ -210,14 +206,6 @@ func TestWhitespaceOnlyChildTextIsDropped(t *testing.T) {
 	}
 }
 
-// TestApostropheInChildTextDoesNotSwallowFollowingTag guards against a
-// real bug parseChildren once had: it called skipStringLiteral (meant
-// for scanning actual Go expressions) on plain JSX text content, so an
-// apostrophe in ordinary prose ("document's") was treated as opening a
-// string/rune literal and the scanner skipped everything -- including
-// real tags -- up to the next quote character (e.g. the apostrophe in a
-// following paragraph's "Couldn't"), silently merging both paragraphs
-// and the tag between them into one xango.Text call.
 func TestApostropheInChildTextDoesNotSwallowFollowingTag(t *testing.T) {
 	src := `return <div><p>Only this document's own.</p><p>Couldn't load.</p></div>`
 	got := transpileExpr(t, src)
@@ -234,13 +222,6 @@ func TestMismatchedCloseTagErrors(t *testing.T) {
 	}
 }
 
-// TestMultiWordEventAttrUsesRealDOMEventName guards against a real bug
-// eventNameFor once had: lowercasing only the first letter of a
-// multi-word event attribute (onKeyDown -> "keyDown") produces a name
-// no real DOM event ever fires under -- addEventListener("keyDown",
-// ...) silently never calls the handler, since the real event name is
-// "keydown", fully lowercase. onClick/onInput never caught this since
-// their event names have no second capital letter to get wrong.
 func TestMultiWordEventAttrUsesRealDOMEventName(t *testing.T) {
 	got := transpileExpr(t, `return <div onKeyDown={handleKey}>x</div>`)
 	want := `return xango.El("div", []xango.Attr{xango.On("keydown", handleKey)}, xango.Text("x"))`
@@ -285,11 +266,6 @@ func TestDataAndAriaAttrsAreAlwaysAllowed(t *testing.T) {
 	}
 }
 
-// TestComponentAttrsAreNotValidatedAsHTML guards against validating a
-// Component's attributes (its Props struct's own field names, which
-// can be anything the component declares) as if they were HTML
-// attributes -- "label" isn't a real HTML attribute, but <Button
-// label="Save"/> is completely ordinary, valid xango.
 func TestComponentAttrsAreNotValidatedAsHTML(t *testing.T) {
 	got := transpileExpr(t, `return <Button label="Save" onClick={handleSave}/>`)
 	want := `return Button(ButtonProps{Label: "Save", OnClick: handleSave})`
@@ -354,8 +330,6 @@ func TestGenericTypeArgsErrors(t *testing.T) {
 }
 
 func TestIndexingAfterAComponentNameStillWorks(t *testing.T) {
-	// An HTML element followed by '[' is not generic syntax (only
-	// Components take type arguments).
 	if _, err := (&parser{file: "t.xg"}).transpileChunk([]rune(`return <div[0]></div>`)); err == nil {
 		t.Error("<div[0]> should not parse as a generic tag")
 	}

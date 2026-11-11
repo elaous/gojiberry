@@ -185,15 +185,6 @@ type returnEdit struct {
 	replacement string
 }
 
-// wrapPageReturns locates every return statement in body's own
-// top-level control flow -- ifs, fors, switches, blocks -- and
-// reports a text edit wrapping each one's expression in
-// xango.Document{Title: ..., Head: ..., Body: wrapBody(<original
-// expression text, untouched>)}.Render(). It never descends into a
-// nested func literal: those returns belong to that closure, not to
-// the page component itself, and must be left alone (e.g. the
-// immediately-invoked closures this codebase already uses for
-// rendering a []xango.Node from a loop).
 func wrapPageReturns(fset *token.FileSet, src string, body *ast.BlockStmt, titleSrc, headSrc string, wrapBody func(string) string) []returnEdit {
 	var edits []returnEdit
 	var walkStmt func(ast.Stmt)

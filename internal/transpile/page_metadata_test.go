@@ -8,22 +8,12 @@ import (
 	"testing"
 )
 
-// setupModuleWithXango is setupModule plus a replace directive pointing
-// back at this repo, for tests whose generated code imports the real
-// xango package (xango.Document{}.Render() needs a real xango.Node tree to
-// wrap, not just a resource-import string binding).
 func setupModuleWithXango(t *testing.T) (pkgDir string) {
 	t.Helper()
 	repoRoot, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The test module's own `go` directive must be at least as new as
-	// gojiberry's (its go.mod declares go 1.24.7): otherwise Go's
-	// minimum-version-selection refuses to build ("updates to go.mod
-	// needed") even though the replace is purely a local filesystem
-	// path with no real version to resolve. Read the real directive
-	// instead of hardcoding a version that could drift out of sync.
 	repoGoMod, err := os.ReadFile(filepath.Join(repoRoot, "go.mod"))
 	if err != nil {
 		t.Fatal(err)
@@ -244,12 +234,6 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-// TestPageMetadataDoesNotWrapNestedClosureReturns covers the idiom
-// this codebase already uses for rendering a []xango.Node from a loop
-// (see examples/ssr-demo's ItemList): the immediately-invoked
-// closure's own "return" produces a []xango.Node, not a xango.Node, and
-// must not be rewritten into a xango.Document -- only the annotated
-// function's own top-level return should be.
 func TestPageMetadataDoesNotWrapNestedClosureReturns(t *testing.T) {
 	dir := setupModuleWithXango(t)
 	src := `package main
