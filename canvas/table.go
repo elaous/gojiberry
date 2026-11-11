@@ -8,23 +8,19 @@ import (
 	"strings"
 )
 
-// Table is the data behind a TableView: a rectangular grid of strings
-// whose first row is the header. It always has at least one row and one
-// column, and every row always has the same number of cells.
+// Table is the data behind a TableView: a grid of cell strings.
 type Table struct {
 	Cells [][]string
-	// Merges are blocks of cells shown as one: each owner cell (top left of
-	// its block) spans several rows and columns, and the cells it covers are
-	// empty. Styles are per-cell formatting. See table_cells.go.
+	// Merges are blocks of cells shown as one, keyed by owner cell.
 	Merges []Merge
 	Styles map[CellPos]CellStyle
-	// Fields are the cells that are form fields (see table_fields.go); the text of such a cell is the field's words.
+	// Fields are the cells that are form fields (see table_fields.go).
 	Fields map[CellPos]*FormFieldObject
-	// ColWidths and RowHeights are sizes set by dragging a grip (0 or missing: the table's own, see table_sizes.go).
+	// ColWidths and RowHeights are sizes set by dragging a grip.
 	ColWidths, RowHeights []float64
 }
 
-// NewTable returns a table of rows x cols empty cells (minimum 1x1).
+// NewTable returns a rows x cols table of empty cells (minimum 1x1).
 func NewTable(rows, cols int) *Table {
 	rows, cols = max(rows, 1), max(cols, 1)
 	t := &Table{Cells: make([][]string, rows)}
@@ -34,8 +30,7 @@ func NewTable(rows, cols int) *Table {
 	return t
 }
 
-// NewTableFrom builds a table from rows, padding short rows with empty
-// cells so the grid is rectangular. The input is copied.
+// NewTableFrom builds a table from rows, padding short rows.
 func NewTableFrom(rows [][]string) *Table {
 	cols := 1
 	for _, r := range rows {
@@ -88,8 +83,7 @@ func (t *Table) AddRow() { t.InsertRow(t.Rows()) }
 // AddColumn appends an empty column.
 func (t *Table) AddColumn() { t.InsertColumn(t.Cols()) }
 
-// InsertRow inserts an empty row so it becomes row index at (clamped to
-// [0, Rows()]).
+// InsertRow inserts an empty row at index, clamped to range.
 func (t *Table) insertRow(at int) {
 	at = min(max(at, 0), t.Rows())
 	t.Cells = append(t.Cells, nil)
@@ -99,8 +93,7 @@ func (t *Table) insertRow(at int) {
 	t.shift(at, 0, 1, 0)
 }
 
-// InsertColumn inserts an empty column so it becomes column index at
-// (clamped to [0, Cols()]).
+// InsertColumn inserts an empty column at index, clamped to range.
 func (t *Table) insertColumn(at int) {
 	at = min(max(at, 0), t.Cols())
 	for r, row := range t.Cells {
@@ -113,8 +106,7 @@ func (t *Table) insertColumn(at int) {
 	t.shift(0, at, 0, 1)
 }
 
-// DeleteRow removes row index at. The last remaining row is never
-// removed (it is cleared instead), keeping the table non-empty.
+// DeleteRow removes row index; the last row is never removed.
 func (t *Table) deleteRow(at int) {
 	if at < 0 || at >= t.Rows() {
 		return
@@ -130,8 +122,7 @@ func (t *Table) deleteRow(at int) {
 	t.shift(at, 0, -1, 0)
 }
 
-// DeleteColumn removes column index at. The last remaining column is
-// never removed (it is cleared instead).
+// DeleteColumn removes column index; the last column is never removed.
 func (t *Table) deleteColumn(at int) {
 	if at < 0 || at >= t.Cols() {
 		return
@@ -151,8 +142,7 @@ func (t *Table) deleteColumn(at int) {
 	t.shift(0, at, 0, -1)
 }
 
-// MoveRow moves row from so it ends up at index to (both must be in
-// range; otherwise it's a no-op).
+// MoveRow moves row from to index to; both must be in range.
 func (t *Table) moveRow(from, to int) {
 	if from < 0 || from >= t.Rows() || to < 0 || to >= t.Rows() || from == to {
 		return
@@ -167,8 +157,7 @@ func (t *Table) moveRow(from, to int) {
 	t.Cells[to] = row
 }
 
-// MoveColumn moves column from so it ends up at index to (both must be
-// in range; otherwise it's a no-op).
+// MoveColumn moves column from to index to; both must be in range.
 func (t *Table) moveColumn(from, to int) {
 	if from < 0 || from >= t.Cols() || to < 0 || to >= t.Cols() || from == to {
 		return
@@ -208,9 +197,7 @@ func (t *Table) duplicateRow(at int) {
 	}
 }
 
-// SortByColumn stably sorts the body rows (every row but the header)
-// by column col. Cells that both parse as numbers compare numerically;
-// anything else compares case-insensitively as text.
+// SortByColumn stably sorts body rows by column.
 func (t *Table) sortByColumn(col int, desc bool) {
 	if col < 0 || col >= t.Cols() {
 		return
@@ -285,34 +272,18 @@ func moved(i, from, to int) int {
 	return i
 }
 
-// InsertRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) InsertRow(at int) { t.keepScheme(func() { t.insertRow(at) }) }
 
-// InsertColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) InsertColumn(at int) { t.keepScheme(func() { t.insertColumn(at) }) }
 
-// DeleteRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) DeleteRow(at int) { t.keepScheme(func() { t.deleteRow(at) }) }
 
-// DeleteColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) DeleteColumn(at int) { t.keepScheme(func() { t.deleteColumn(at) }) }
 
-// MoveRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) MoveRow(from, to int) { t.keepScheme(func() { t.moveRow(from, to) }) }
 
-// MoveColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) MoveColumn(from, to int) { t.keepScheme(func() { t.moveColumn(from, to) }) }
 
-// DuplicateRow changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) DuplicateRow(at int) { t.keepScheme(func() { t.duplicateRow(at) }) }
 
-// SortByColumn changes the table's rows or columns as its own doc says; a table dressed in one of the styles stays dressed in it
-// (see keepScheme).
 func (t *Table) SortByColumn(col int, desc bool) { t.keepScheme(func() { t.sortByColumn(col, desc) }) }

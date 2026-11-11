@@ -2,33 +2,20 @@ package canvas
 
 import "slices"
 
-// Named styles. A StyleDef bundles a character Format and a paragraph
-// ParaFormat under a name. Text gets a style by name: Format.Style for
-// characters ("Emphasis") and ParaFormat.Style for a paragraph
-// ("Heading 1"), whose Format applies to all of the paragraph's text.
-// What a run looks like is, from weakest to strongest: the flow's base
-// Style, the paragraph style's Format, the character style's Format, then
-// the formatting set directly on the text -- so a style is a default that
-// local formatting overrides, and redefining the style (TextFlow.
-// DefineStyle) restyles every use of it.
+// Named styles: a StyleDef bundles character and paragraph formatting.
 
 // StyleDef is a named style.
 type StyleDef struct {
 	Name string
-	// Format is the character formatting the style gives. For a paragraph
-	// style it applies to the whole paragraph's text.
+	// Format is the character formatting the style gives.
 	Format Format
-	// Para is the paragraph formatting a paragraph style gives (its own
-	// Style field is ignored).
+	// Para is the paragraph formatting a paragraph style gives.
 	Para ParaFormat
-	// Paragraph says the style is applied to paragraphs; otherwise it is
-	// a character style.
+	// Paragraph says the style applies to paragraphs, not characters.
 	Paragraph bool
 }
 
-// DefaultStyles is a small starter set: Normal, Title, Subtitle, Heading
-// 1-6, Quote and Code (paragraph styles), Emphasis and Strong (character
-// styles).
+// DefaultStyles is a small starter set: Normal, Title, Subtitle, Headings.
 func DefaultStyles() []StyleDef {
 	return []StyleDef{
 		{Name: "Normal", Paragraph: true},
@@ -47,7 +34,7 @@ func DefaultStyles() []StyleDef {
 	}
 }
 
-// mergeFormat lays over on top of under: a field of over that is set wins.
+// mergeFormat lays over on top of under; set fields of over win.
 func mergeFormat(under, over Format) Format {
 	out := under
 	if over.FontFamily != "" {
@@ -102,7 +89,7 @@ func mergeFormat(under, over Format) Format {
 	return out
 }
 
-// mergePara lays over on top of under (a set field of over wins).
+// mergePara lays over on top of under; set fields of over win.
 func mergePara(under, over ParaFormat) ParaFormat {
 	out := under
 	if over.Align != AlignLeft {
@@ -152,8 +139,7 @@ func (f *TextFlow) StyleByName(name string) (StyleDef, bool) {
 	return StyleDef{}, false
 }
 
-// DefineStyle adds a style or replaces the one of the same name; every
-// use of it is restyled.
+// DefineStyle adds or replaces a named style everywhere it is used.
 func (f *TextFlow) DefineStyle(def StyleDef) {
 	for i, s := range f.Styles {
 		if s.Name == def.Name {
@@ -175,8 +161,7 @@ func (f *TextFlow) styleNames(paragraph bool) []string {
 	return slices.Clone(out)
 }
 
-// expand resolves fm's character style, over the paragraph style's
-// format base.
+// expand resolves fm's character style over its paragraph style's format.
 func (f *TextFlow) expand(base, fm Format) Format {
 	out := base
 	if fm.Style != "" {
@@ -187,9 +172,7 @@ func (f *TextFlow) expand(base, fm Format) Format {
 	return mergeFormat(out, fm)
 }
 
-// expandPara resolves pf's paragraph style: the style's paragraph and
-// character formatting, under pf's own. The format is the paragraph
-// style's character format ("" style: none).
+// expandPara resolves pf's paragraph style.
 func (f *TextFlow) expandPara(pf ParaFormat) (ParaFormat, Format) {
 	if pf.Style == "" {
 		return pf, Format{}
