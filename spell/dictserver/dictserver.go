@@ -1,25 +1,3 @@
-// Package dictserver serves Hunspell dictionaries (.aff and .dic files) to the editor, which loads the one for a
-// document's language on demand (spell.Remote) instead of carrying every language in its program. It is a small
-// http.Handler over a directory of the dictionaries the operator chose to host: the licences of the dictionaries
-// are their own (LibreOffice's dictionaries are GPL, LGPL, MPL and others by language), which is why none but
-// English is embedded.
-//
-// The directory holds one folder per language, named by its tag with an underscore ("de_DE", "fr_FR", "pt_BR"), as
-// LibreOffice's dictionary packages are laid out:
-//
-//	de_DE/de_DE.aff   de_DE/de_DE.dic   (or de_DE.aff.gz / de_DE.dic.gz, kept compressed on disk)
-//	fr_FR/fr_FR.aff   fr_FR/fr_FR.dic
-//	names.json        optional: {"de_DE": "Deutsch (Deutschland)"} names for people
-//
-// Routes (under the prefix the handler is mounted at, "/dict/" by convention):
-//
-//	GET index.json        [{"lang":"de_DE","name":"Deutsch (Deutschland)","bytes":4300000}] for the languages that have both files
-//	GET <lang>.aff        the affix file
-//	GET <lang>.dic        the word list
-//
-// Files carry an ETag (a hash of the content) and a day's Cache-Control, so a browser asks again only to be told it
-// has the current one. A file kept compressed on disk is sent compressed to a client that accepts gzip and
-// decompressed for one that does not.
 package dictserver
 
 import (
@@ -38,13 +16,11 @@ import (
 	"sync"
 )
 
-// Server serves the dictionaries of FS. The zero value of the other fields is fine.
+// Server serves the dictionaries of FS.
 type Server struct {
-	FS fs.FS
-	// MaxBytes refuses a dictionary file bigger than this (decompressed); 64 MiB if 0.
+	FS       fs.FS
 	MaxBytes int64
-	// Names gives a language a name for people; names.json in FS adds to it.
-	Names map[string]string
+	Names    map[string]string
 
 	mu    sync.Mutex
 	cache map[string]*file
@@ -108,7 +84,6 @@ func (s *Server) Languages() ([]Language, error) {
 	return out, nil
 }
 
-// stat finds the file of a language (plain or .gz) and its size as stored.
 func (s *Server) stat(lang, ext string) (size int64, gz bool, err error) {
 	for _, name := range []string{path.Join(lang, lang+"."+ext), path.Join(lang, lang+"."+ext+".gz")} {
 		if fi, err := fs.Stat(s.FS, name); err == nil && !fi.IsDir() {
@@ -143,7 +118,6 @@ func (s *Server) load(lang, ext string) (*file, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The size limit is on the content, whatever the disk holds.
 	if gz {
 		zr, err := gzip.NewReader(bytes.NewReader(data))
 		if err != nil {
@@ -167,7 +141,7 @@ func (s *Server) load(lang, ext string) (*file, error) {
 	return out, nil
 }
 
-// ServeHTTP implements http.Handler. Mount it with http.StripPrefix so the paths are index.json and <lang>.aff.
+// ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -198,7 +172,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8") // the bytes may be another encoding: the affix file says (SET)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("ETag", f.etag)
 	w.Header().Set("Cache-Control", "public, max-age=86400")
