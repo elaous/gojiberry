@@ -23,38 +23,20 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Proof of possession and attestation: what keeps the server alone from inventing a binding of a
-// key to an address that the key's holder never made.
-//
-//   - Proof of possession. Before publishing, the user asks for a challenge for the key
-//     (Challenge): a random nonce encrypted to that key (an age file, for an age, passkey or SSH
-//     recipient alike), and a token the server signed that binds the nonce's keyed hash to the
-//     user, address and key and expires in ChallengeTTL. Only the holder of the private key can
-//     decrypt the nonce (OpenChallenge); publishing with the token and the nonce (Held) proves
-//     the publisher held the key just then. A token works once.
-//   - Attestation. An ssh-ed25519 key can also sign the binding itself, "directory-binding|
-//     <address>|<fingerprint>|<unix time>" (Attest). The signature is stored in the record and
-//     is checkable by anyone with the public key (VerifyAttestation), including a client that
-//     does not trust the server's signature.
-//
-// Neither says the key is safe or that its holder is who the address names; see
-// docs/encryption-and-passkeys.md, step 4b.
+// Proof of possession and attestation.
 
 // ChallengeTTL is how long a challenge can be answered.
 const ChallengeTTL = 2 * time.Minute
 
-// popGrace is how long a used challenge's record is kept past its expiry (clock skew between
-// replicas), so a replay stays refused for as long as the token could have been valid.
+// popGrace is how long a used challenge's record is kept.
 const popGrace = time.Minute
 
-// attestSkew is how far an attestation's time may be from the server's.
+// attestSkew is how far an attestation's time may be off.
 const attestSkew = 10 * time.Minute
 
 var errBadPublicKey = errors.New("not a public key")
 
-// challengeToken is the payload of a challenge's token: the challenge ID, the key that signed
-// it, who it is for (user ID, address, key fingerprint), when it expires, and H, the keyed hash
-// of the nonce under the server's secret (so the nonce cannot be computed from the token).
+// challengeToken is the payload of a challenge's token.
 type challengeToken struct {
 	ID    string `json:"id"`
 	Kid   string `json:"kid"`
@@ -71,10 +53,7 @@ func challengeMessage(payload []byte) []byte {
 
 func popHash(id, nonce string) string { return "pop:" + id + ":" + nonce }
 
-// Challenge makes a proof-of-possession challenge for user and the public key keyText: a fresh
-// nonce encrypted to the key, with the signed token that Publish takes back with the nonce. It
-// refuses a user who could not publish (ErrNotPublishable) and a key that is not a public key.
-// It stores nothing: the token carries everything and is used up when a publish consumes it.
+// Challenge makes a proof-of-possession challenge for a user.
 func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText string) (docstore.DirectoryChallenge, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryChallenge{}, ErrDirectoryOff
@@ -108,22 +87,13 @@ func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText 
 	return docstore.DirectoryChallenge{Token: token, Encrypted: base64.StdEncoding.EncodeToString(enc.Bytes()), Expires: exp}, nil
 }
 
-// nonceLen is the length of a challenge's nonce: 16 random bytes in hex.
+// nonceLen is the length of a challenge's nonce.
 const nonceLen = 32
 
-// ErrNotAChallenge is returned by OpenChallenge for a "challenge" whose plaintext is not a nonce.
+// ErrNotAChallenge is returned by OpenChallenge for a non-challenge.
 var ErrNotAChallenge = errors.New("encrypt: this is not a directory challenge: it decrypts to something other than a nonce, so nothing was sent back")
 
-// OpenChallenge is the client's half: it decrypts the challenge's nonce with the identity of the
-// key being published (an age identity, an SSH identity from ParseSSHIdentity, or a passkey's)
-// and returns the proof to send with the publish request.
-//
-// What it opens is chosen by the server, and what it returns goes back to the server, so it must
-// not be a way to have the server's ciphertext decrypted: a directory (or anything that can speak
-// for one) could present, as a "challenge", an envelope made for this very key, such as a stored
-// document, and read the answer. So the plaintext is read only up to a nonce's length, and unless
-// it is exactly a nonce (hex, as Challenge makes it) ErrNotAChallenge is returned and no part of it
-// leaves the client.
+// OpenChallenge is the client's half: it decrypts a challenge.
 func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.DirectoryProof, error) {
 	b, err := base64.StdEncoding.DecodeString(c.Encrypted)
 	if err != nil {
@@ -143,9 +113,7 @@ func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.Dir
 	return docstore.DirectoryProof{Token: c.Token, Nonce: string(nonce)}, nil
 }
 
-// checkProof verifies a proof for user and key r at time now, without using it up: the token is
-// the server's (the current key's signature, not a retired one's), not expired, for this user, address and
-// key, and the nonce is the one it was made for.
+// checkProof verifies a proof for a user and key at a time.
 func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce string, now time.Time) (challengeToken, error) {
 	bad := func(why string) (challengeToken, error) {
 		return challengeToken{}, fmt.Errorf("%w: %s", ErrBadProof, why)
@@ -160,8 +128,7 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
-	// Only the current key's challenges are honoured: a retired key may be one that leaked, and a
-	// challenge lives two minutes, so there is nothing to carry over a rotation.
+	// Only the current key's challenges are honoured.
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, challengeMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}
@@ -178,10 +145,7 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	return tok, nil
 }
 
-// claimChallenge uses the challenge up: a record "directory/pop/<id>" is created, and a second
-// claim finds it there (ErrBadProof). With a store that is a ConditionalAdapter the creation is
-// atomic across replicas; without one the check and the write are one step only inside this
-// process.
+// claimChallenge uses a challenge up, so it cannot be reused.
 func (d *AdapterDirectory) claimChallenge(ctx context.Context, tok challengeToken) error {
 	data, _ := json.Marshal(map[string]int64{"exp": tok.Exp})
 	err := d.createOnly(ctx, popPrefix+tok.ID, data)
@@ -191,8 +155,7 @@ func (d *AdapterDirectory) claimChallenge(ctx context.Context, tok challengeToke
 	return err
 }
 
-// createOnly saves data under id only if there is no such record: docstore.ErrConflict if there
-// is one.
+// createOnly saves data under id only if none exists.
 func (d *AdapterDirectory) createOnly(ctx context.Context, id string, data []byte) error {
 	if c, ok := d.Store.(docstore.ConditionalAdapter); ok {
 		err := c.SaveIf(ctx, id, data, "")
@@ -210,8 +173,7 @@ func (d *AdapterDirectory) createOnly(ctx context.Context, id string, data []byt
 	return d.Store.Save(ctx, id, data)
 }
 
-// saveIf replaces the record id when it still has digest prev ("" for none), as SaveIf does, and
-// without the atomicity (inside this process only) when the store has no conditional write.
+// saveIf replaces record id when it still has the digest.
 func (d *AdapterDirectory) saveIf(ctx context.Context, id string, data []byte, prev string) error {
 	if c, ok := d.Store.(docstore.ConditionalAdapter); ok {
 		err := c.SaveIf(ctx, id, data, prev)
@@ -235,16 +197,12 @@ func (d *AdapterDirectory) saveIf(ctx context.Context, id string, data []byte, p
 	return d.Store.Save(ctx, id, data)
 }
 
-// AttestationMessage is what an ssh-ed25519 key signs to attest that it belongs to an address:
-// "directory-binding|<address>|<fingerprint>|<unix seconds>", the address lower-cased and
-// trimmed.
+// AttestationMessage is what an ssh-ed25519 key signs.
 func AttestationMessage(email, fingerprint string, at int64) []byte {
 	return []byte("directory-binding|" + normalizeEmail(email) + "|" + fingerprint + "|" + strconv.FormatInt(at, 10))
 }
 
-// Attest signs the binding of the key whose private half is priv to email, dated at: the
-// attestation to send with a publish request. The fingerprint is the SHA256 one of the matching
-// ssh-ed25519 public key.
+// Attest signs the binding of the key with its private half.
 func Attest(priv ed25519.PrivateKey, email string, at time.Time) (docstore.DirectoryAttestation, error) {
 	pub, err := ssh.NewPublicKey(priv.Public())
 	if err != nil {
@@ -254,8 +212,7 @@ func Attest(priv ed25519.PrivateKey, email string, at time.Time) (docstore.Direc
 	return docstore.DirectoryAttestation{At: at.Unix(), Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, msg))}, nil
 }
 
-// AttestSSH is Attest for an unencrypted OpenSSH ed25519 private key (the PEM of an
-// ssh-ed25519 identity); it also returns the key's public text, which is what to publish.
+// AttestSSH is Attest for an unencrypted OpenSSH ed25519 key.
 func AttestSSH(pem []byte, email string, at time.Time) (publicKey string, att docstore.DirectoryAttestation, err error) {
 	raw, err := ssh.ParseRawPrivateKey(pem)
 	if err != nil {
@@ -278,7 +235,7 @@ func AttestSSH(pem []byte, email string, at time.Time) (publicKey string, att do
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))), att, err
 }
 
-// sshEd25519Public is the Ed25519 public key inside an "ssh-ed25519 AAAA..." line.
+// sshEd25519Public is the Ed25519 public key inside an SSH key.
 func sshEd25519Public(text string) (ed25519.PublicKey, bool) {
 	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(text)))
 	if err != nil || pub.Type() != "ssh-ed25519" {
@@ -292,10 +249,7 @@ func sshEd25519Public(text string) (ed25519.PublicKey, bool) {
 	return k, ok
 }
 
-// VerifyAttestation says att is a valid signature, by the ssh-ed25519 public key keyText, of the
-// binding of that key to email at att.At. It checks the signature only (not how recent it is),
-// and needs nothing from the server: a client calls it on a lookup row's key and attestation
-// when it does not want to rest on the server's signature.
+// VerifyAttestation says att is a valid signature by the key.
 func VerifyAttestation(keyText, email string, att docstore.DirectoryAttestation) bool {
 	pub, ok := sshEd25519Public(keyText)
 	if !ok {

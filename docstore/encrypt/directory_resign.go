@@ -15,51 +15,27 @@ import (
 
 // ResignReport is what Resign did and found.
 type ResignReport struct {
-	// Records is how many directory records it looked at (challenge claims excluded).
+	// Records is how many directory records it looked at.
 	Records int
-	// Resigned were moved to the current key (the old copy deleted).
+	// Resigned were moved to the current key.
 	Resigned int
-	// Current were signed by the current key under its name already.
+	// Current were signed by the current key already.
 	Current int
-	// Skipped have a valid signature of a known key but no log entry behind them (Seq 0, or an
-	// entry that is not theirs): they are left as they are, under the old name, and not endorsed
-	// by the current key. A record forged with a compromised retired key looks like this.
+	// Skipped have a valid signature of a known key.
 	Skipped int
-	// Unverified carry a signature that no known key makes valid, under a name the server knows.
+	// Unverified carry a signature that no known key verifies.
 	Unverified int
-	// Unknown are named under a key the server does not know: nothing can find them (a wrong
-	// directory key, or a retired one missing from GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV).
+	// Unknown are named under a key the server does not know.
 	Unknown int
-	// Dropped are tombstones past the revoke window, deleted.
+	// Dropped are tombstones past the revoke window.
 	Dropped int
-	// Enrollments are owner enrollment records moved to the current key.
+	// Enrollments are owner enrollment records moved.
 	Enrollments int
-	// Contended were left because another replica kept changing them.
+	// Contended were left because another replica changed them.
 	Contended int
 }
 
-// Resign moves records that a retired key signed or named to the current key, after a rotation
-// (GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV). A record is moved only if it is worth endorsing:
-//
-//   - its signature verifies, it is named for its own address and key, and
-//   - a log entry stands behind it (backedEntry: its Seq names a validly signed entry for the same
-//     address, fingerprint and operation), so a record forged with a compromised retired key
-//     (which cannot be told from a real one by its signature) is not laundered into one the
-//     current key signed. Such a record is left under the old name, counted as Skipped, and
-//     stays as unverified as it was (a lookup marks a record that a retired key signed Verified
-//     only when it has a log entry too).
-//
-// If the old key was compromised, do not rotate through it: remove it from the PREV list instead
-// (and republish what matters), so what it signed is no longer believed at all.
-//
-// Each record is moved under the lock of its address and written conditionally on what was read
-// (a create if there is no record under the current name, a replace of the digest read
-// otherwise), with the newest copy of the key across all names deciding: if a newer copy exists
-// (a tombstone Revoke wrote while this ran, in a rolling deploy) the old one is dropped, never
-// written over it. The old copy is deleted only if it is still the one that was read. Nothing the
-// publisher proved is touched (the proof flag, attestation, owner signature and log number are
-// copied), and nothing is logged. Expired tombstones are dropped on the way. Run it before
-// serving (AdapterDirectory.Startup does).
+// Resign re-signs records a retired key signed.
 func (d *AdapterDirectory) Resign(ctx context.Context) (ResignReport, error) {
 	var rep ResignReport
 	if d.Signer == nil {
@@ -157,11 +133,9 @@ func (d *AdapterDirectory) resignOne(ctx context.Context, id string, rep *Resign
 			}
 		}
 		if ours == nil {
-			return nil // deleted meanwhile
+			return nil
 		}
 		if newest := state.best[r.Fingerprint]; newest.id != ours.id {
-			// A newer (or equal, under the current name) copy exists: this one is stale. Drop it
-			// only if the newer one is a record this server stands behind.
 			if d.signedBy(newest, email) {
 				if err := d.deleteIf(ctx, id, ours.digest); err != nil && !errors.Is(err, docstore.ErrNotFound) && !errors.Is(err, docstore.ErrConflict) {
 					return err
@@ -193,7 +167,7 @@ func (d *AdapterDirectory) resignOne(ctx context.Context, id string, rep *Resign
 	return nil
 }
 
-// resignEnrollments moves owner enrollment records to the current key's name and signature.
+// resignEnrollments moves owner enrollment records to the current key.
 func (d *AdapterDirectory) resignEnrollments(ctx context.Context, rep *ResignReport) error {
 	metas, err := docstore.ListPrefix(ctx, d.Store, docstore.DirectoryEnrollPrefix)
 	if err != nil {
@@ -246,14 +220,8 @@ func (d *AdapterDirectory) resignEnrollments(ctx context.Context, rep *ResignRep
 	return nil
 }
 
-// Startup is what a server runs before it serves: Resign (moving records of a retired key to the
-// current one, and counting what it found) and the census /health shows. It returns the report;
-// a caller logs it, in particular Unknown, which counts records named under keys this server does
-// not have: a wrong GOJIBERRY_DOCSTORE_DIRECTORY_KEY, or a retired key missing from
-// GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV, leaves every such record unfindable.
+// Startup is what a server runs before it serves.
 func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
-	// The pseudonyms under keys that were retired and removed come first (loadAliases), and the
-	// ones of the keys still listed are recorded before they can be removed (recordAliases).
 	if err := d.loadAliases(ctx); err != nil {
 		return ResignReport{}, err
 	}
@@ -264,8 +232,6 @@ func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	// An owner-state entry a crash left without its record is completed now, not at the next
-	// owner operation (an address that is never touched again would show a violation for good).
 	if n, err := d.ReconcileEnrollments(ctx); err != nil {
 		return rep, err
 	} else if n > 0 {
@@ -276,7 +242,7 @@ func (d *AdapterDirectory) Startup(ctx context.Context) (ResignReport, error) {
 	return rep, nil
 }
 
-// Health is the census of the last Startup (zero before one ran).
+// Health is the census of the last Startup.
 func (d *AdapterDirectory) Health() docstore.DirectoryHealth {
 	if h := d.report.Load(); h != nil {
 		return *h
@@ -284,7 +250,7 @@ func (d *AdapterDirectory) Health() docstore.DirectoryHealth {
 	return docstore.DirectoryHealth{}
 }
 
-// Summary is a one line account of the report, for the start-up log.
+// Summary is a one-line account of the report.
 func (r ResignReport) Summary() string {
 	s := fmt.Sprintf("%d directory records: %d re-signed, %d already current, %d skipped (no log entry behind them), %d unverified, %d dropped (expired)",
 		r.Records, r.Resigned, r.Current, r.Skipped, r.Unverified, r.Dropped)
@@ -294,12 +260,7 @@ func (r ResignReport) Summary() string {
 	return s
 }
 
-// CheckStore decides whether the store can carry the directory's log and challenge claims for the
-// number of server processes declared (GOJIBERRY_DOCSTORE_REPLICAS). Those claims are atomic
-// across processes only on a store with a conditional write (docstore.ConditionalAdapter, probed
-// here, since a wrapper may have the method and not the capability); on any other they are atomic
-// within one process. With more than one replica on such a store it returns an error: do not
-// enable the directory there. With one replica it logs a warning and returns nil.
+// CheckStore decides whether the store can carry the directory.
 func (d *AdapterDirectory) CheckStore(ctx context.Context, replicas int) error {
 	if docstore.SupportsConditional(ctx, d.Store) {
 		return nil

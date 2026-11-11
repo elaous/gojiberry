@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Shared is a key a document is shared with, as the list shows it.
+// Shared is a key a document is shared with.
 type Shared struct {
 	Label       string
 	Type        string
@@ -23,50 +23,27 @@ type Shared struct {
 	Added       time.Time
 }
 
-// sharedRecord is the signed payload.
+// sharedRecord is the signed payload of a share record.
 type sharedRecord struct {
 	V   int    `json:"v"`
 	Doc string `json:"doc"`
-	// Seq grows with each change, so a reader that remembers the last one it saw can notice a
-	// signed record being put back.
+	// Seq grows with each change, so readers can spot stale records.
 	Seq uint64 `json:"seq"`
-	// Pending means the files of the document may not all be encrypted to Recipients yet (a
-	// change was saved and its re-key did not finish): Remove, Add and Repair finish it.
+	// Pending means the document's files may not be consistent yet.
 	Pending bool `json:"pending,omitempty"`
-	// Protection is the document's protection level ("" for server, ProtectionE2EE for end to
-	// end), signed with the list: it is what ConfidentialKeyring trusts to know that a
-	// document's files must be wrapped for people's keys only. The catalog and the document
-	// say it too, but the keyring reads this one, which a store writer cannot forge (it can
-	// still put back an older signed record: see SeqFloor and C.5).
+	// Protection is the document's protection level.
 	Protection string `json:"protection,omitempty"`
-	// Signed says every stored file of the document was last written, or re-keyed, with a signed
-	// frame (v3): set when a re-key that a signing adapter ran finished (pending cleared). From
-	// then on an unsigned frame in the document is ErrForgedFrame, whatever it claims, and
-	// whoever saves it must sign (ErrNoFrameSigner). A document whose record does not say it
-	// still accepts older unsigned frames, with a warning, until Sharing.Repair upgrades it.
+	// Signed says every stored file of the document was signed.
 	Signed bool `json:"signed,omitempty"`
-	// PendingSince is when Pending was set (Unix seconds), so a re-key that never finished can be
-	// told from one in progress (Sharing.PendingStatus).
-	PendingSince int64 `json:"pendingSince,omitempty"`
-	// UnsignedLate names the files the re-key's second look found unsigned after it wrote the
-	// record (ErrUnsignedAfterFlip), and UnsignedLateSince is when (Unix seconds). The record
-	// is not Pending then, so this is what keeps the document in Sharing.UnsignedDocs until
-	// the owner settles it (Repair or Recover with AcceptUnsigned, which clears it). Older
-	// builds ignore the fields when they read the record, and drop them when they write it:
-	// the files are refused as forged either way, so only the listing is lost.
-	//
-	// The ids are capped (unsignedLateCap, the first ones by id) because they come from the
-	// store's listing, which a store writer can grow: UnsignedLateCount is how many files there
-	// were in all. Each mark replaces the one before and keeps its UnsignedLateSince.
+	// PendingSince is when Pending was set, in Unix seconds.
+	PendingSince      int64         `json:"pendingSince,omitempty"`
 	UnsignedLate      []string      `json:"unsignedLate,omitempty"`
 	UnsignedLateCount int           `json:"unsignedLateCount,omitempty"`
 	UnsignedLateSince int64         `json:"unsignedLateSince,omitempty"`
 	Recipients        []sharedEntry `json:"recipients"`
 }
 
-// binding is the Binding the record gives its document's files: level, seq, pending, and a
-// hash of the recipient list (the type and key of each entry, sorted: the entries' own order
-// and labels do not matter). exists says the record was found.
+// binding is the Binding the record gives its document.
 func (r sharedRecord) binding(exists bool) Binding {
 	b := Binding{Exists: exists, Seq: r.Seq, Pending: r.Pending, Signed: r.Signed}
 	if r.Protection == ProtectionE2EE {
@@ -100,15 +77,14 @@ type signedRecord struct {
 type sharedEntry struct {
 	Label string `json:"label,omitempty"`
 	Type  string `json:"type"`
-	// Fingerprint is for people reading the record; it is recomputed from Key, never trusted.
+	// Fingerprint is for people reading the record.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Key         string `json:"key"`
 	Hint        string `json:"hint,omitempty"`
 	Added       int64  `json:"added,omitempty"`
 }
 
-// parseShared reads an entry's key and returns the Recipient, with the fingerprint and type
-// computed from the key itself.
+// parseShared reads an entry's key and returns the record.
 func parseShared(e sharedEntry) (Recipient, error) {
 	switch e.Type {
 	case "age-x25519", TypePasskey:
@@ -132,15 +108,13 @@ func parseShared(e sharedEntry) (Recipient, error) {
 	return r, nil
 }
 
-// verifyRecord checks a stored record's signature against the owners' signing keys and
-// returns its payload.
+// verifyRecord checks a stored record's signature.
 func verifyRecord(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, error) {
 	rec, _, err := verifyRecordBy(raw, docID, owners)
 	return rec, err
 }
 
-// verifyRecordBy is verifyRecord that also says which of owners signed the record. The record's
-// own "signer" field is only a hint and is not used: the key is the one whose signature verifies.
+// verifyRecordBy is verifyRecord that also says which key signed.
 func verifyRecordBy(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, ed25519.PublicKey, error) {
 	var rec sharedRecord
 	var sr signedRecord
@@ -167,11 +141,7 @@ func verifyRecordBy(raw []byte, docID string, owners []ed25519.PublicKey) (share
 	return rec, by, nil
 }
 
-// loadRecord reads and verifies a document's record. A document with no record has no
-// shared keys; one that has a record that does not verify is an error (fail closed).
-//
-// With a floor, a record whose seq is below the highest seen for the document is refused
-// (ErrStaleRecord), and so is a missing one where a record was seen; a good one raises it.
+// loadRecord reads and verifies a document's record.
 func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owners []ed25519.PublicKey, floor SeqFloor) (rec sharedRecord, digest string, err error) {
 	d, err := store.Load(ctx, KeysPrefix+docID)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -206,32 +176,25 @@ func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owner
 	return rec, docstore.Digest(d.Data), nil
 }
 
-// StoreKeyring is a Keyring whose recipients are the owner's keys and, for each document, the
-// keys it is shared with, kept in signed "keys:<ID>" records in Store. Store is the store
-// itself (not the encrypting adapter: the records are readable).
+// StoreKeyring is a Keyring whose recipients are the owners.
 type StoreKeyring struct {
 	Store docstore.Adapter
-	// Owners are always recipients of everything; Keys are the private keys that open it.
+	// Owners are always recipients of everything.
 	Owners []age.Recipient
 	Keys   []age.Identity
-	// OwnerSigners are the public signing keys (Signer.Public) of the owner's keys: a
-	// record is used only if one of them signed it. With none, a document that has a record
-	// cannot be saved (fail closed).
+	// OwnerSigners are the public signing keys trusted for records.
 	OwnerSigners []ed25519.PublicKey
-	// SeqFloor, when set, refuses a record older than the highest one seen for the document
-	// (ErrStaleRecord). Nil means none.
+	// SeqFloor, when set, refuses a record older than the floor.
 	SeqFloor SeqFloor
 }
 
-// Recipients implements Keyring. A record that is missing its signature, or has a wrong
-// one, is an error, never a shorter or longer list.
+// Recipients implements Keyring.
 func (k StoreKeyring) Recipients(ctx context.Context, id string) ([]age.Recipient, error) {
 	rs, _, err := k.Bind(ctx, id)
 	return rs, err
 }
 
-// Bind implements Binder: the recipients (the owners' keys and the signed list's) and the
-// record's Binding, from one read.
+// Bind implements Binder: the recipients and Binding of a record.
 func (k StoreKeyring) Bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	out := append([]age.Recipient(nil), k.Owners...)
 	doc := DocID(id)
