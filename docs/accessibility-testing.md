@@ -13,12 +13,12 @@ What it checks, in the canvas editor showcase (OpenDocs):
 
 | Test | What it covers |
 | --- | --- |
-| `TestNoAccessibilityViolationsAxe` | axe-core (4.10, vendored in `internal/e2etest/axe`) over the document, every tab of the side panel, every menu open, and the find bar |
+| `TestNoAccessibilityViolationsAxe` | axe-core (4.10, vendored in `e2etest/axe`) over the document, every tab of the side panel, every menu open, and the find bar |
 | `TestNoAccessibilityViolationsAxeInTheKeyDirectory` | axe-core over the encryption panels and the key directory (owner key, backup, pinned log keys, owner keys to confirm) |
 | `TestAccessibilityAndTranslation`, `TestScreenReaderCopyFollowsStructure`, `TestImageDescriptionIsInTheReadingCopy`, `TestSelectionLanguageReachesTheReadingCopy` | the screen-reader copy of the canvas: headings, lists, tables, images with their description, the language of a run, the live region |
 | `TestMenuEntryChosenWithTheKeyboard`, `TestMenusAreOperatedWithTheArrowKeys`, `TestSidePanelTabsAreOperatedWithTheArrowKeys`, `TestDialogFocusIsTrappedAndReturned`, `TestFontSelectorKeyboard` | operating menus, tabs, dialogs and option lists with the keyboard alone, focus trapped in a dialog and returned |
 | `TestDisplayPreferencesAreApplied`, `TestDisplayPreferencesMenu` | text size, spacing, contrast and motion preferences |
-| `TestWordSuggestions`, `TestGhostTextIsAcceptedByTabAlone`, `TestGhostTextIsAnnouncedPolitely`, `TestGhostTextEscapeAndEnter`, `TestGhostTextNeverCoversText`, `TestGhostTextIsOffByDefault` | the word list as an ARIA combobox and listbox, and the ghost-text suggestion: off by default, hidden from the accessibility tree, announced once and politely, inserted by Tab alone (checked with `internal/screenreader`) |
+| `TestWordSuggestions`, `TestGhostTextIsAcceptedByTabAlone`, `TestGhostTextIsAnnouncedPolitely`, `TestGhostTextEscapeAndEnter`, `TestGhostTextNeverCoversText`, `TestGhostTextIsOffByDefault` | the word list as an ARIA combobox and listbox, and the ghost-text suggestion: off by default, hidden from the accessibility tree, announced once and politely, inserted by Tab alone (checked with `screenreader`) |
 
 ### The baseline
 
@@ -79,9 +79,9 @@ Copy this table into the release notes (or the release issue) for each release.
 | | | JAWS + Chrome | | | |
 | | | VoiceOver + Safari | | | |
 
-## 3. The test screen reader: `internal/screenreader`
+## 3. The test screen reader: `screenreader`
 
-`internal/screenreader` reads a page the way a screen reader's browse mode does, from the browser's
+`screenreader` reads a page the way a screen reader's browse mode does, from the browser's
 accessibility tree (the same tree NVDA, JAWS and VoiceOver consume), through chromedp. A test can
 move by heading, landmark, link, button, table or form field, read the whole page, press Tab and hear
 what gets focus, and watch live regions. Each stop is a phrase such as `Name, edit text, Ana, required`.

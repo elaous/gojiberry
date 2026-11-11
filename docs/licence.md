@@ -46,7 +46,7 @@ These are carried or downloaded by the project and keep the licence their author
   download ([reader-voices.md](reader-voices.md)).
 - **Map data and tiles**: © OpenStreetMap contributors (ODbL), shown on every map ([osmmap](../osmmap)).
 - **Icons** (Material Symbols): Apache-2.0.
-- **Test tools** such as axe-core (`internal/e2etest/axe`): their own licence file is beside them.
+- **Test tools** such as axe-core (`e2etest/axe`): their own licence file is beside them.
 
 A repository split ([repo-split.md](repo-split.md)) copies `LICENSE`, `NOTICE` and `COMMERCIAL.md` into each new repository,
 or gives it a more permissive licence of its own if it is meant to be used as a library (a decision per repository).

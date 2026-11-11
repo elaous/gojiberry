@@ -45,7 +45,7 @@ Each row: what to port, how, test that comes with it. Sizes as in
 | 12 | `plugin.go`, `pluginapi.go` | Worker-sandboxed scripting over a small `canvas` command API | L | Only once the command surface is stable. |
 | 13 | `telemetry`, `debuglog` | opt-in logger fed from `#state` | S | |
 | 14 | `electron/`, `Dockerfile`, `deploy/`, `.github` hooks | compare with `.github/workflows/ci.yml`; copy only what is missing | S | Licence check on `COMMERCIAL-LICENSE.md` first. |
-| 15 | cdp e2e kit (`cdptestkit_test.go`, `*_cdp_test.go`) | `internal/e2etest` chromedp driver | M + L | See known-limits plan, section C. |
+| 15 | cdp e2e kit (`cdptestkit_test.go`, `*_cdp_test.go`) | `e2etest` chromedp driver | M + L | See known-limits plan, section C. |
 
 ## Rewrite or drop
 

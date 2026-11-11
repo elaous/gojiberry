@@ -128,7 +128,7 @@ None of these change behaviour; they only skip. Run each with `-v` and check tha
 | Test | Needs | How to run |
 | --- | --- | --- |
 | `docstore/backends/mongo`: `TestMongoAdapterConformance`, `TestMongoAdapterSaveIf` and four more | A MongoDB server, `TEST_MONGO_URI` (optional `TEST_MONGO_DB`, default `docstore_test`) | See "MongoDB-backed tests" above. CI runs them in the `mongo-backend` job and fails on a skip. |
-| `internal/e2etest` browser tests (used by `examples/canvas-*-demo`, `domrt-bench` and others) | A Chromium or Chrome binary: `CHROMIUM` or `PLAYWRIGHT_CHROMIUM`, `/opt/pw-browsers/chromium`, or `chromium`/`google-chrome` on `PATH` | `CHROMIUM=/path/to/chromium go test -count=1 -v ./...` in the example's directory. |
+| `e2etest` browser tests (used by `examples/canvas-*-demo`, `domrt-bench` and others) | A Chromium or Chrome binary: `CHROMIUM` or `PLAYWRIGHT_CHROMIUM`, `/opt/pw-browsers/chromium`, or `chromium`/`google-chrome` on `PATH` | `CHROMIUM=/path/to/chromium go test -count=1 -v ./...` in the example's directory. |
 | `examples/wasm-components-demo`: `TestScreenshot` | Opt-in, not a service: `OUT_FILE` and a Chromium | `make screenshot` in that directory (it sets `OUT_FILE`). |
 
 Other `t.Skip` calls in the repo depend on the platform or a rare condition (`docstore/localfs_test.go` on

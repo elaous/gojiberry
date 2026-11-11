@@ -3,12 +3,13 @@
 package e2etest
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,6 +17,9 @@ import (
 
 //go:embed selector_loader.js
 var selectorLoader string
+
+//go:embed selector/main.go selector/native.go selector/pure.go
+var selectorSources embed.FS
 
 var (
 	selectorOnce   sync.Once
@@ -29,23 +33,18 @@ func selectorScript() (string, error) {
 }
 
 func buildSelectorScript() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("e2etest: cannot find the source of the selector helper")
-	}
-	dir, err := selectorDir(file)
-	if err != nil {
-		return "", err
-	}
 	tmp, err := os.MkdirTemp("", "e2e-selector-")
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
+	if err := writeSelectorModule(tmp); err != nil {
+		return "", err
+	}
 	out := filepath.Join(tmp, "selector.wasm")
-	build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", out, "./selector")
-	build.Dir = dir
-	build.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm", "CGO_ENABLED=0")
+	build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", out, ".")
+	build.Dir = tmp
+	build.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm", "CGO_ENABLED=0", "GOFLAGS=", "GO111MODULE=on")
 	if msg, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building the selector helper: %v\n%s", err, msg)
 	}
@@ -65,15 +64,24 @@ func buildSelectorScript() (string, error) {
 	return strings.Replace(script, "/*WASM_B64*/", base64.StdEncoding.EncodeToString(wasm), 1), nil
 }
 
-func selectorDir(file string) (string, error) {
-	if dir := filepath.Dir(file); filepath.IsAbs(dir) {
-		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return dir, nil
+func writeSelectorModule(dir string) error {
+	gomod := "module selector\n"
+	if v := strings.TrimPrefix(runtime.Version(), "go"); versionPattern.MatchString(v) {
+		gomod += "\ngo " + v + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0o644); err != nil {
+		return err
+	}
+	for _, name := range []string{"main.go", "native.go", "pure.go"} {
+		src, err := selectorSources.ReadFile("selector/" + name)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), src, 0o644); err != nil {
+			return err
 		}
 	}
-	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "github.com/elaous/gojiberry/internal/e2etest").Output()
-	if err != nil {
-		return "", fmt.Errorf("e2etest: cannot find the source of the selector helper: %v", err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return nil
 }
+
+var versionPattern = regexp.MustCompile(`^\d+\.\d+(\.\d+)?$`)

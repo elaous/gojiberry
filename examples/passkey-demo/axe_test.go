@@ -9,7 +9,7 @@ import (
 
 	"github.com/elaous/gojiberry/auth"
 	"github.com/elaous/gojiberry/auth/passkey"
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 func TestNoAccessibilityViolationsAxe(t *testing.T) {

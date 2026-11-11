@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 const benchIterations = 500

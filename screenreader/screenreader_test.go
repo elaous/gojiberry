@@ -9,8 +9,8 @@ import (
 
 	"github.com/chromedp/chromedp/kb"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
-	"github.com/elaous/gojiberry/internal/screenreader"
+	"github.com/elaous/gojiberry/e2etest"
+	"github.com/elaous/gojiberry/screenreader"
 )
 
 const page = `<!doctype html><html lang="en"><head><title>Test page</title></head><body>

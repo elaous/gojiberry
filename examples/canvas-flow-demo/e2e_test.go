@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 func TestEndToEnd(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/elaous/gojiberry/internal/e2etest"
+	"github.com/elaous/gojiberry/e2etest"
 )
 
 const intrudes = `((lines, lineH, [x, y, w, h]) => lines.some((l) => l.Y < y + h && l.Y + lineH > y && l.X < x + w && l.X + l.W > x))`
