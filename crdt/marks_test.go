@@ -10,7 +10,6 @@ import (
 
 func newCharDoc(replica string) *Doc { return NewDocWithStrategy(replica, MergeCharCRDT) }
 
-// describe renders runs compactly: [text|key=value].
 func describe(runs []Run) string {
 	var parts []string
 	for _, r := range runs {
@@ -42,7 +41,6 @@ func sortedKeys(m map[string]string) []string {
 	return ks
 }
 
-// pair returns two replicas starting from the same text.
 func pair(text string) (*Doc, *Doc) {
 	seed := newCharDoc("seed")
 	seed.Put(Block{ID: "d", Content: text})
@@ -165,7 +163,6 @@ func TestMarkBeforeItsCharactersAndOutOfOrderInserts(t *testing.T) {
 	if describe(c.Runs("d")) != describe(a.Runs("d")) {
 		t.Fatalf("c=%q a=%q", describe(c.Runs("d")), describe(a.Runs("d")))
 	}
-	// Inserts delivered with origins missing wait for them.
 	var tx Text
 	tx.apply(CharOp{Kind: CharInsert, ID: Timestamp{3, "r"}, Origin: Timestamp{2, "r"}, Value: 'c'})
 	tx.apply(CharOp{Kind: CharInsert, ID: Timestamp{2, "r"}, Origin: Timestamp{1, "r"}, Value: 'b'})
@@ -176,7 +173,6 @@ func TestMarkBeforeItsCharactersAndOutOfOrderInserts(t *testing.T) {
 	if tx.String() != "abc" || len(tx.pending) != 0 {
 		t.Fatalf("placed once the origin arrived: %q %d", tx.String(), len(tx.pending))
 	}
-	// A delete that arrives before its insert is held.
 	var ty Text
 	ty.apply(CharOp{Kind: CharDelete, ID: Timestamp{2, "r"}})
 	ty.apply(CharOp{Kind: CharInsert, ID: Timestamp{2, "r"}, Origin: Timestamp{1, "r"}, Value: 'b'})
@@ -184,7 +180,6 @@ func TestMarkBeforeItsCharactersAndOutOfOrderInserts(t *testing.T) {
 	if ty.String() != "a" {
 		t.Fatalf("early delete: %q", ty.String())
 	}
-	// A duplicate pending insert is queued once.
 	var tz Text
 	op := CharOp{Kind: CharInsert, ID: Timestamp{5, "r"}, Origin: Timestamp{4, "r"}, Value: 'z'}
 	tz.apply(op)
@@ -218,7 +213,6 @@ func TestMarksAreIdempotentAndSnapshotted(t *testing.T) {
 	}
 }
 
-// Random edits and formats on three replicas converge.
 func TestMarksConvergeUnderRandomDelivery(t *testing.T) {
 	keys := []string{"bold", "italic", "color", "link"}
 	vals := []string{"1", "2", ""}
@@ -311,7 +305,6 @@ func BenchmarkLoadSnapshot(b *testing.B) {
 	}
 }
 
-// Typing in the middle of a long text stays cheap.
 func BenchmarkTypeInMiddle(b *testing.B) {
 	for _, n := range []int{10000, 100000} {
 		d := newCharDoc("x")
@@ -358,7 +351,6 @@ func TestSpliceAndPositions(t *testing.T) {
 	if cur, _ := c.Get("new"); cur.Content != "hi" {
 		t.Fatal(cur)
 	}
-	// Positions survive edits and deletions.
 	ids := a.VisibleIDs("d")
 	if len(ids) != len(">> hello there") {
 		t.Fatal(len(ids))

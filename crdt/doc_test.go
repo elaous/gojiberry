@@ -2,7 +2,6 @@ package crdt
 
 import "testing"
 
-// syncOnce exchanges each doc's pending outbox with the other.
 func syncOnce(a, b *Doc) {
 	aOps := a.Drain()
 	bOps := b.Drain()

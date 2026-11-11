@@ -74,7 +74,6 @@ func TestCharCRDTConvergesRegardlessOfApplyOrder(t *testing.T) {
 	aOps := a.Drain()
 	bOps := b.Drain()
 
-	// Apply in opposite order on each side.
 	a.Apply(bOps...)
 	b.Apply(aOps...)
 
@@ -220,7 +219,6 @@ func TestCharCRDTBlockLevelDeleteStillTombstonesWhole(t *testing.T) {
 }
 
 func TestCharCRDTOutOfOrderDeleteBeforeInsertConverges(t *testing.T) {
-	// Exercises the pending-tombstone path directly.
 	var text Text
 	insertOp := CharOp{Kind: CharInsert, ID: Timestamp{Counter: 1, Replica: "a"}, Value: 'x'}
 	deleteOp := CharOp{Kind: CharDelete, ID: Timestamp{Counter: 1, Replica: "a"}}
@@ -245,7 +243,6 @@ func TestDocStrategySwitch(t *testing.T) {
 	}
 }
 
-// randomEdit returns s with one small random insertion or deletion.
 func randomEdit(rng *rand.Rand, s string) string {
 	runes := []rune(s)
 	pos := rng.Intn(len(runes) + 1)
@@ -273,7 +270,6 @@ func randomEdit(rng *rand.Rand, s string) string {
 	return string(out)
 }
 
-// TestCharCRDTRandomizedConvergence checks random edits converge.
 func TestCharCRDTRandomizedConvergence(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 

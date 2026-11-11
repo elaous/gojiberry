@@ -26,8 +26,7 @@ const (
 type CharOp struct {
 	Kind CharOpKind
 	// ID is the character's globally unique id.
-	ID Timestamp
-	// Origin is the id of the character this one was typed after.
+	ID     Timestamp
 	Origin Timestamp
 	// Value is the inserted character.
 	Value rune
@@ -35,7 +34,6 @@ type CharOp struct {
 	Mark *Mark `json:",omitempty"`
 }
 
-// char is one element of a Text's converged sequence.
 type char struct {
 	id      Timestamp
 	origin  Timestamp
@@ -43,25 +41,19 @@ type char struct {
 	deleted bool
 }
 
-// maxPending bounds the out-of-order inserts a Text holds.
 const maxPending = 1 << 16
 
 // Text is a per-character CRDT sequence.
 type Text struct {
-	chars []char
-	// tombstoned records ids deleted before their insert arrived.
+	chars      []char
 	tombstoned map[Timestamp]bool
-	// pending holds inserts whose origin has not arrived.
-	pending []CharOp
-	// marks are the formatting spans, in arrival order.
-	marks   []Mark
-	markIDs map[Timestamp]bool
-	// pos caches each character id's index.
-	pos      map[Timestamp]int
-	posValid int
+	pending    []CharOp
+	marks      []Mark
+	markIDs    map[Timestamp]bool
+	pos        map[Timestamp]int
+	posValid   int
 }
 
-// indexOf returns the position of character id in chars.
 func (t *Text) indexOf(id Timestamp) int {
 	if t.pos == nil {
 		t.pos = make(map[Timestamp]int, len(t.chars))
@@ -75,7 +67,6 @@ func (t *Text) indexOf(id Timestamp) int {
 	return -1
 }
 
-// invalidateFrom marks the position cache stale from an index.
 func (t *Text) invalidateFrom(i int) {
 	if i < t.posValid {
 		t.posValid = i
@@ -86,7 +77,6 @@ func (t *Text) hasID(id Timestamp) bool {
 	return t.indexOf(id) >= 0
 }
 
-// visible returns the current non-tombstoned characters.
 func (t *Text) visible() (runes []rune, ids []Timestamp) {
 	for _, c := range t.chars {
 		if !c.deleted {
@@ -103,7 +93,6 @@ func (t *Text) String() string {
 	return string(runes)
 }
 
-// insert places a character at its converged position.
 func (t *Text) insert(id, origin Timestamp, value rune) {
 	if t.hasID(id) {
 		return
@@ -157,7 +146,6 @@ func (t *Text) insert(id, origin Timestamp, value rune) {
 	t.placePending(id)
 }
 
-// placePending places held inserts whose origin has arrived.
 func (t *Text) placePending(id Timestamp) {
 	for i := 0; i < len(t.pending); i++ {
 		p := t.pending[i]
@@ -170,7 +158,6 @@ func (t *Text) placePending(id Timestamp) {
 	}
 }
 
-// delete tombstones a character by id, or records it as pending.
 func (t *Text) delete(id Timestamp) {
 	if i := t.indexOf(id); i >= 0 {
 		t.chars[i].deleted = true
@@ -182,7 +169,6 @@ func (t *Text) delete(id Timestamp) {
 	t.tombstoned[id] = true
 }
 
-// apply performs one received CharOp on this Text.
 func (t *Text) apply(op CharOp) {
 	switch op.Kind {
 	case CharInsert:
@@ -196,7 +182,6 @@ func (t *Text) apply(op CharOp) {
 	}
 }
 
-// snapshotOps returns the CharOps that rebuild the text.
 func (t *Text) snapshotOps() []CharOp {
 	ops := make([]CharOp, 0, len(t.chars)*2)
 	for _, c := range t.chars {
@@ -228,7 +213,6 @@ func (t *Text) snapshotOps() []CharOp {
 	return ops
 }
 
-// editKind is one step of a diffRunes edit script.
 type editKind int
 
 const (
@@ -237,14 +221,12 @@ const (
 	editDelete
 )
 
-// editStep is one diffRunes instruction.
 type editStep struct {
 	kind     editKind
 	oldIndex int
 	r        rune
 }
 
-// diffRunes computes a minimal edit script from old to new.
 func diffRunes(old, new []rune) []editStep {
 	n, m := len(old), len(new)
 	dp := make([][]int, n+1)

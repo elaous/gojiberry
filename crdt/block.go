@@ -1,4 +1,3 @@
-// Package crdt is an offline-first sync engine for block documents.
 package crdt
 
 import "sort"
@@ -9,7 +8,6 @@ type Timestamp struct {
 	Replica string
 }
 
-// after reports whether t happened after other.
 func (t Timestamp) after(other Timestamp) bool {
 	if t.Counter != other.Counter {
 		return t.Counter > other.Counter
@@ -17,7 +15,6 @@ func (t Timestamp) after(other Timestamp) bool {
 	return t.Replica > other.Replica
 }
 
-// Block is one unit of the document: a heading, paragraph or similar.
 type Block struct {
 	ID      string
 	Kind    string
@@ -56,7 +53,6 @@ func OrderEnd(blocks []Block) float64 {
 	return max + 1
 }
 
-// sortBlocks orders visible blocks for rendering.
 func sortBlocks(blocks []Block) {
 	sort.Slice(blocks, func(i, j int) bool {
 		if blocks[i].Order != blocks[j].Order {

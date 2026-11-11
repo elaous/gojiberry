@@ -2,9 +2,6 @@ package crdt
 
 import "sort"
 
-// Marks are formatting spans over a block's Text.
-
-// Side says which side of a character an Anchor sits on.
 type Side uint8
 
 const (
@@ -14,27 +11,23 @@ const (
 	After
 )
 
-// Anchor names a gap in a Text, on one side of a character.
 type Anchor struct {
 	ID   Timestamp
 	Side Side
 }
 
-// Mark is a formatting span: Key is Value over a range.
 type Mark struct {
 	ID         Timestamp
 	Key, Value string
 	Start, End Anchor
 }
 
-// Run is a stretch of visible text with the same formatting.
 type Run struct {
 	Text string
 	// Attrs holds the keys whose winning mark has a value.
 	Attrs map[string]string
 }
 
-// addMark records m; a known mark (same ID) is ignored.
 func (t *Text) addMark(m Mark) {
 	if t.markIDs[m.ID] {
 		return
@@ -46,7 +39,6 @@ func (t *Text) addMark(m Mark) {
 	t.marks = append(t.marks, m)
 }
 
-// gap returns the index of the gap an anchor names.
 func (t *Text) gap(a Anchor) (int, bool) {
 	if a.ID == (Timestamp{}) {
 		if a.Side == After {
@@ -64,7 +56,6 @@ func (t *Text) gap(a Anchor) (int, bool) {
 	return i, true
 }
 
-// anchorsFor chooses the anchors of a mark over the visible text.
 func (t *Text) anchorsFor(from, to int, growEnd bool) (start, end Anchor, ok bool) {
 	_, ids := t.visible()
 	if from < 0 || to > len(ids) || from >= to {
@@ -82,13 +73,11 @@ func (t *Text) anchorsFor(from, to int, growEnd bool) (start, end Anchor, ok boo
 	return start, end, true
 }
 
-// resolved is a mark placed on the character array.
 type resolved struct {
 	m          Mark
 	start, end int
 }
 
-// Runs returns the visible text split into runs of equal format.
 func (t *Text) Runs() []Run {
 	var marks []resolved
 	for _, m := range t.marks {

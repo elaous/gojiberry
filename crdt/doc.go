@@ -9,8 +9,7 @@ type Doc struct {
 	blocks   map[string]stamped
 	outbox   []Op
 	strategy MergeStrategy
-	// texts holds each block's per-character CRDT state.
-	texts map[string]*Text
+	texts    map[string]*Text
 }
 
 type stamped struct {
@@ -36,13 +35,11 @@ func (d *Doc) Strategy() MergeStrategy {
 // Clock is the highest Lamport counter seen.
 func (d *Doc) Clock() uint64 { return d.clock }
 
-// tick advances the local clock and returns a stamp.
 func (d *Doc) tick() Timestamp {
 	d.clock++
 	return Timestamp{Counter: d.clock, Replica: d.replica}
 }
 
-// observe advances the local clock past ts.
 func (d *Doc) observe(ts Timestamp) {
 	if ts.Counter > d.clock {
 		d.clock = ts.Counter
@@ -71,7 +68,6 @@ func (d *Doc) putLWW(b Block) Op {
 	return op
 }
 
-// putCharCRDT diffs the block's content into per-character edits.
 func (d *Doc) putCharCRDT(b Block) Op {
 	ts := d.tick()
 	text := d.textFor(b.ID)
@@ -125,7 +121,6 @@ func (d *Doc) Format(id string, from, to int, key, value string, growEnd bool) (
 	return op, true
 }
 
-// Runs returns block id's visible text as runs of equal formatting.
 func (d *Doc) Runs(id string) []Run {
 	if text, ok := d.texts[id]; ok {
 		return text.Runs()
@@ -136,7 +131,6 @@ func (d *Doc) Runs(id string) []Run {
 	return nil
 }
 
-// textFor returns the Text for a block ID, creating it if needed.
 func (d *Doc) textFor(id string) *Text {
 	t, ok := d.texts[id]
 	if !ok {
@@ -170,7 +164,6 @@ func (d *Doc) Apply(ops ...Op) {
 	}
 }
 
-// isLWWBlock reports whether a stored block merges last-writer-wins.
 func (d *Doc) isLWWBlock(id string) bool {
 	s, ok := d.blocks[id]
 	return ok && LWWKind(s.block.Kind)
@@ -250,7 +243,6 @@ func (d *Doc) Get(id string) (Block, bool) {
 	return s.block, ok
 }
 
-// Splice replaces del visible characters of block id starting at pos.
 func (d *Doc) Splice(id string, at, del int, ins []rune) (Op, bool) {
 	if d.strategy != MergeCharCRDT {
 		return Op{}, false
