@@ -51,6 +51,7 @@ func (r Resend) Send(ctx context.Context, m Message) error {
 	}
 	_, err = c.Emails.SendWithContext(ctx, &resend.SendEmailRequest{From: from, To: to, Subject: m.Subject, Text: m.Text, Html: m.HTML})
 	if err != nil {
+		// the library's error can carry the request: give only the reason
 		return fmt.Errorf("mail: Resend did not accept the message: %s", briefError(err))
 	}
 	return nil

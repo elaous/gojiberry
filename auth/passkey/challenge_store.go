@@ -32,8 +32,9 @@ const (
 	// bounds Expires: a huge value would overflow bucket numbers
 	maxChallengeTTL  = 100 * 365 * 24 * time.Hour
 	maxChallengeUnix = 1 << 40
-	maxTokenLen      = 128
-	oldChallengeAge  = 24 * time.Hour
+	// bounds a token before it is hashed or parsed (ours are about 40 bytes)
+	maxTokenLen     = 128
+	oldChallengeAge = 24 * time.Hour
 )
 
 type StoreChallenges struct {
@@ -105,6 +106,7 @@ func newToken(bucket int64) (string, error) {
 
 func challengeID(token string) string {
 	i := strings.LastIndexByte(token, '.')
+	// base64url has no ".": a second dot is not a token of ours
 	if i <= 0 || i == len(token)-1 || len(token) > maxTokenLen || strings.IndexByte(token, '.') != i {
 		return ""
 	}
@@ -237,6 +239,7 @@ func (s *StoreChallenges) consume(ctx context.Context, cas docstore.ConditionalA
 			return false, err
 		}
 	}
+	// no conditional delete: claim by conditionally replacing with a used marker
 	marker, _ := json.Marshal(storedChallenge{Challenge: Challenge{Expires: sc.Expires}, Used: true})
 	switch err := cas.SaveIf(ctx, id, marker, prev); {
 	case err == nil:
@@ -304,6 +307,7 @@ func (s *StoreChallenges) sweepChallenges(ctx context.Context) (int, error) {
 			left++
 		}
 	}
+	// keep what this process did while listing: the listing may predate it
 	cur := int64(left) + s.net.Load() - before
 	if cur < 0 {
 		cur = 0

@@ -67,8 +67,9 @@ type Trainer interface {
 
 // Spec says which model to open.
 type Spec struct {
-	Backend  string // the registered backend
-	Path     string
+	Backend string // the registered backend
+	Path    string
+	// checked against SHA256 before the backend sees it
 	URL      string // for a backend that reaches a service
 	Token    string // optional bearer token for URL
 	SHA256   string // hex digest the model file must have; required with Path

@@ -179,6 +179,7 @@ func one(ctx context.Context, src Source, f file, sink Sink, imp func([]byte) (d
 		return fmt.Errorf("migrate: not a readable Word file: %w", err)
 	}
 	if v, ok := src.(Versioned); ok && o.History > 0 {
+		// unreadable versions are counted and left out: the document is not failed
 		versions, err := v.Versions(ctx, f.item, o.History)
 		if err != nil {
 			rep.VersionsFailed++
@@ -193,6 +194,7 @@ func one(ctx context.Context, src Source, f file, sink Sink, imp func([]byte) (d
 			rep.Versions++
 		}
 	}
+	// the document keeps where it came from, so a later run knows
 	if stable(src) {
 		doc.SetTags(append(doc.Tags(), OriginTag(src, f.item)))
 	}

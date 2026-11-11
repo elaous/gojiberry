@@ -168,6 +168,7 @@ func (k kind) newToken(bucket int64) (string, error) {
 
 func (k kind) id(token string) string {
 	i := strings.LastIndexByte(token, '.')
+	// base64url has no ".": a second dot is not a token of ours
 	if i <= 0 || i == len(token)-1 || len(token) > 128 || strings.IndexByte(token, '.') != i {
 		return ""
 	}
@@ -489,6 +490,7 @@ func (s *Store) sweep(ctx context.Context, sessions bool) (total int, sessionsLi
 				left++
 			}
 		}
+		// keep what this process did while listing: the listing may predate it
 		s.count(k).Store(max(int64(left)+s.net(k).Load()-before, 0))
 		if k.prefix == SessionPrefix {
 			sessionsListed = true

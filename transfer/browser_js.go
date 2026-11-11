@@ -16,6 +16,7 @@ func Download(filename, mime string, data []byte) {
 	a.Set("href", url)
 	a.Set("download", filename)
 	a.Call("click")
+	// not at once: some browsers cancel a download whose URL is revoked early
 	var revoke js.Func
 	revoke = js.FuncOf(func(this js.Value, args []js.Value) any {
 		js.Global().Get("URL").Call("revokeObjectURL", url)

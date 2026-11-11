@@ -24,6 +24,7 @@ func (e *JSError) AsJSException() js.Value { return e.Value }
 
 // NewJSErrorFromEvent builds a JSError from an ErrorEvent.
 func NewJSErrorFromEvent(ev js.Value) *JSError {
+	// a plain Event (a script that failed to load) is not an ErrorEvent
 	str := func(k string) string {
 		if v := ev.Get(k); v.Type() == js.TypeString {
 			return v.String()

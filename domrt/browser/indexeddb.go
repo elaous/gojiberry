@@ -95,6 +95,7 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 	case err := <-fail:
 		return nil, err
 	case <-time.After(openTimeout):
+		// neither success nor error: a "blocked" upgrade, another tab holds an older version
 		abandoned = true
 		return nil, errors.New("indexeddb: open timed out (another tab may be holding an older version open)")
 	}

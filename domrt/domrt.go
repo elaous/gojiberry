@@ -105,6 +105,7 @@ func createInner(n xango.Node) *renderedNode {
 	case xango.KindRaw:
 		return &renderedNode{kind: xango.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
 	case xango.KindHost:
+		// host nodes belong to another renderer: leave a hole
 		return &renderedNode{kind: xango.KindFragment}
 	case xango.KindFragment:
 		rn := &renderedNode{kind: xango.KindFragment}
@@ -323,6 +324,7 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	if rootEl.IsNull() || rootEl.IsUndefined() {
 		return false
 	}
+	// ":scope" alone names the widget element (querySelectorAll finds descendants)
 	var all []js.Value
 	if strings.TrimSpace(items) == ":scope" {
 		all = append(all, rootEl)

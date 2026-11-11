@@ -317,6 +317,7 @@ func (p *PostHog) post(ctx context.Context, evs []phEvent) error {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := p.cfg.Client.Do(req)
 	if err != nil {
+		// net/http's error repeats the URL: name only the cause
 		return phNetError{"observe: posthog: the request failed"}
 	}
 	defer resp.Body.Close()

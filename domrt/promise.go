@@ -9,6 +9,7 @@ import (
 
 // Await blocks the calling goroutine until the JS Promise settles.
 func Await(p js.Value) (js.Value, error) {
+	// a value that is not a promise is its own result (as await treats it)
 	if (p.Type() != js.TypeObject && p.Type() != js.TypeFunction) || p.Get("then").Type() != js.TypeFunction {
 		return p, nil
 	}

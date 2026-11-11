@@ -125,6 +125,7 @@ func (s *Service) put(ctx context.Context, p pending) (string, error) {
 	p.Expires = time.Now().Add(s.ttl)
 	tok, err := s.challenges.Put(ctx, p)
 	if err != nil && !errors.Is(err, ErrBusy) && ctx.Err() == nil {
+		// a store failure is the server's, not a bad request
 		return "", fmt.Errorf("%w: %w", errStore, err)
 	}
 	return tok, err
@@ -251,6 +252,7 @@ func (s *Service) RegistrationFinish(ctx context.Context, signedIn, token, label
 		c = add(acct)
 		if err := s.create(ctx, acct); err != nil {
 			if errors.Is(err, ErrExists) {
+				// another ceremony won the conditional create: nothing written for this one
 				return nil, nil, false, ErrAlreadyCreated
 			}
 			return nil, nil, false, err
@@ -361,6 +363,7 @@ func OtherWayFromProviders(providers []auth.ProviderInfo) func(ctx context.Conte
 	}
 }
 
+// no provider may be called that
 const accountPrefix = "passkey"
 
 // Credentials lists an account's passkeys.
@@ -465,6 +468,7 @@ func (s *Service) handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&in)
 	accountID := ""
 	if u, ok := s.sessions.CurrentUser(r); ok {
+		// signed in: the passkey links to this identity; the body's claim does not count
 		accountID = u.ID
 		in.Email, in.Name = u.Email, u.Name
 	}
@@ -538,6 +542,7 @@ func (s *Service) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 			jsonOut(w, http.StatusTooManyRequests, map[string]string{"error": ErrRateLimited.Error()})
 			return
 		}
+		// one answer for every failed sign-in: what went wrong is not for the caller
 		if errors.Is(err, ErrBadChallenge) {
 			fail(w, err)
 			return

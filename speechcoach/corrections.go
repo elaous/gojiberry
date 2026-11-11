@@ -152,6 +152,7 @@ func (c *Corrections) Suggest(text string) []Suggestion {
 			if k+n > len(toks) {
 				continue
 			}
+			// words must be adjacent, separated by spaces only
 			ok := true
 			for q := k; q < k+n-1; q++ {
 				if strings.TrimSpace(string(rs[toks[q].e:toks[q+1].s])) != "" {

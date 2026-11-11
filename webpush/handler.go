@@ -82,6 +82,7 @@ func Handler(cfg Config) (http.Handler, error) {
 			http.Error(w, "not allowed", http.StatusForbidden)
 			return
 		}
+		// only a subscription of this handle can be removed by it
 		mine, err := cfg.Store.For(context.Background(), req.Handle)
 		if err != nil {
 			http.Error(w, "could not read the subscriptions", http.StatusInternalServerError)

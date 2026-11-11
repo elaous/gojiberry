@@ -270,6 +270,7 @@ func (s *AdapterStore) Update(ctx context.Context, id string, fn func(*Account) 
 		}
 		if err := ca.SaveIf(ctx, accountKey(id), data, docstore.Digest(d.Data)); err != nil {
 			if errors.Is(err, docstore.ErrConflict) {
+				// someone else wrote: wait a little, more each time, and redo
 				select {
 				case <-ctx.Done():
 					return ctx.Err()

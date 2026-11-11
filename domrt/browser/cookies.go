@@ -60,6 +60,7 @@ func (cookieJar) Set(name, value string, opts CookieOptions) {
 	b.WriteString(name)
 	b.WriteString("=")
 	b.WriteString(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
+	// a space as %20, so a literal '+' stays one on the way back
 	if opts.Path != "" {
 		fmt.Fprintf(&b, "; path=%s", opts.Path)
 	}
