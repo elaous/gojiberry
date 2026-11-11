@@ -1,4 +1,3 @@
-// Package auth implements a minimal OpenID Connect login flow and bearer sessions.
 package auth
 
 import (
@@ -21,16 +20,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// User is the minimal identity: a stable ID, optional email, and display fields.
 type User struct {
 	// ID is "{provider}:{sub}", unique across providers.
 	ID string
 	// Email is set only when the provider verified it.
 	Email string
 	// VerifiedEmail is true only when the provider verified the address.
-	VerifiedEmail bool
-	Name          string
-	// Username and Picture are for display, when the provider gives them.
+	VerifiedEmail     bool
+	Name              string
 	Username, Picture string
 }
 
@@ -50,7 +47,6 @@ func (u User) IsAnonymous() bool { return strings.HasPrefix(u.ID, AnonProvider+"
 
 // Provider configures one OIDC identity provider; IssuerURL drives discovery.
 type Provider struct {
-	// Name is the provider's URL-safe identifier, used in routes and User.ID.
 	Name string
 	// DisplayName labels the sign-in button; defaults to Name.
 	DisplayName  string
@@ -61,7 +57,6 @@ type Provider struct {
 	AssumeEmailVerified bool
 }
 
-// ProviderInfo is the public part of a Provider; it omits secrets.
 type ProviderInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
@@ -70,8 +65,7 @@ type ProviderInfo struct {
 // Config is Manager's own construction-time configuration.
 type Config struct {
 	// BaseURL is this server's public base URL, used for redirect_uri.
-	BaseURL string
-	// Providers lists the OIDC providers a client can sign in through.
+	BaseURL   string
 	Providers []Provider
 	// SessionTTL is the session lifetime; zero means 720h.
 	SessionTTL time.Duration
@@ -81,7 +75,6 @@ type Config struct {
 	Sessions SessionStore
 }
 
-// resolvedProvider is a Provider after OIDC discovery.
 type resolvedProvider struct {
 	Provider
 	oauth2Config oauth2.Config
@@ -107,7 +100,7 @@ type Manager struct {
 	loginLimiter Limiter                    // nil: /auth/{provider}/login is not limited
 	clientIP     func(*http.Request) string // the client's address for loginLimiter (nil: the remote address)
 
-	missLimiter Limiter                    // nil: a token that is not a session is not counted
+	missLimiter Limiter
 	missIP      func(*http.Request) string // the client's address for missLimiter
 	missMu      sync.Mutex
 	missBlocked map[string]time.Time
@@ -123,7 +116,6 @@ func (m *Manager) SetLoginLimiter(l Limiter, clientIP func(*http.Request) string
 	m.loginLimiter, m.clientIP = l, clientIP
 }
 
-// maxMissBlocked bounds the blocked-client map.
 const maxMissBlocked = 4096
 
 // SetMissLimiter limits bearer tokens that are not sessions, per client.
@@ -144,7 +136,6 @@ func (m *Manager) missKey(r *http.Request) string {
 	return ip
 }
 
-// missBlockedNow reports whether the client is blocked for misses.
 func (m *Manager) missBlockedNow(ip string) bool {
 	m.missMu.Lock()
 	defer m.missMu.Unlock()
@@ -159,7 +150,6 @@ func (m *Manager) missBlockedNow(ip string) bool {
 	return true
 }
 
-// countMiss spends one miss; an exhausted client is blocked until the limiter allows.
 func (m *Manager) countMiss(ctx context.Context, ip string) {
 	ok, wait := m.missLimiter.Allow(ctx, "miss|"+clientkey.Of(ip))
 	if ok {
@@ -173,7 +163,6 @@ func (m *Manager) countMiss(ctx context.Context, ip string) {
 	m.missBlocked[ip] = time.Now().Add(max(wait, time.Second))
 }
 
-// allowLogin spends one login and returns the wait in seconds if refused.
 func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 	if m.loginLimiter == nil {
 		return true, 0
@@ -184,7 +173,6 @@ func (m *Manager) allowLogin(r *http.Request) (bool, int) {
 	}
 	ip := remote
 	if m.clientIP != nil {
-		// Empty clientIP answers fall back to the remote address.
 		if v := m.clientIP(r); v != "" {
 			ip = v
 		}
@@ -210,7 +198,6 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	if cfg.BaseURL == "" {
 		return nil, errors.New("auth: Config.BaseURL is required")
 	}
-	// Empty Providers is valid for passkey-only servers.
 	ttl := cfg.SessionTTL
 	if ttl <= 0 {
 		ttl = defaultSessionTTL
@@ -264,7 +251,6 @@ func NewManager(ctx context.Context, cfg Config) (*Manager, error) {
 	return m, nil
 }
 
-// StartSession signs u in and returns a bearer token for it.
 func (m *Manager) StartSession(u User) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionStoreTimeout)
 	defer cancel()
@@ -278,7 +264,6 @@ func (m *Manager) SetSessionStore(s SessionStore) {
 	}
 }
 
-// sessionStoreTimeout bounds store calls made without a request.
 const sessionStoreTimeout = 10 * time.Second
 
 // Providers returns the public info of each configured provider.
@@ -291,7 +276,6 @@ func (m *Manager) Providers() []ProviderInfo {
 	return out
 }
 
-// idTokenClaims holds the standard OIDC claims this package reads.
 type idTokenClaims struct {
 	Subject string `json:"sub"`
 	Email   string `json:"email"`
@@ -302,7 +286,6 @@ type idTokenClaims struct {
 	Picture           string `json:"picture"`
 }
 
-// safeReturnTo returns target when a login may redirect there, else empty.
 func (m *Manager) safeReturnTo(target string) string {
 	if target == "" {
 		return ""
@@ -312,7 +295,6 @@ func (m *Manager) safeReturnTo(target string) string {
 		return ""
 	}
 	if u.Scheme == "" && u.Host == "" {
-		// Bare paths only; reject "//host" and "/\\host".
 		if strings.HasPrefix(target, "/") && !strings.HasPrefix(target, "//") && !strings.HasPrefix(target, "/\\") {
 			return strings.TrimRight(m.baseURL, "/") + target
 		}
@@ -324,7 +306,6 @@ func (m *Manager) safeReturnTo(target string) string {
 	return ""
 }
 
-// randomToken returns a cryptographically random URL-safe token.
 func randomToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -333,7 +314,6 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// tokenStore is an expiring in-memory map from random tokens to values.
 type tokenStore[T any] struct {
 	mu      sync.Mutex
 	entries map[string]tokenEntry[T]
@@ -349,7 +329,6 @@ func newTokenStore[T any]() *tokenStore[T] {
 	return &tokenStore[T]{entries: make(map[string]tokenEntry[T])}
 }
 
-// put stores value under a fresh random token until ttl.
 func (s *tokenStore[T]) put(value T, ttl time.Time) (string, error) {
 	token, err := randomToken()
 	if err != nil {
@@ -358,7 +337,6 @@ func (s *tokenStore[T]) put(value T, ttl time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.entries) >= pruneAt {
-		// Sweep at most once a second, so floods of puts stay cheap.
 		if now := time.Now(); now.Sub(s.swept) >= time.Second {
 			s.swept = now
 			for k, e := range s.entries {
@@ -376,18 +354,14 @@ func (s *tokenStore[T]) put(value T, ttl time.Time) (string, error) {
 }
 
 const (
-	// pruneAt is the size at which put sweeps expired entries.
-	pruneAt = 1024
-	// maxEntries bounds a store: logins that never finish cannot grow it.
+	pruneAt    = 1024
 	maxEntries = 100000
 )
 
-// ErrStoreFull: the store is at its bound; live entries are never evicted.
 var ErrStoreFull = errors.New("auth: too many pending logins or sessions")
 
 var errStoreFull = ErrStoreFull
 
-// get returns the value of token if present and unexpired.
 func (s *tokenStore[T]) get(token string) (T, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -399,7 +373,6 @@ func (s *tokenStore[T]) get(token string) (T, bool) {
 	return e.value, true
 }
 
-// take is get plus delete: a login state is consumed once.
 func (s *tokenStore[T]) take(token string) (T, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -418,7 +391,6 @@ func (s *tokenStore[T]) delete(token string) {
 	s.mu.Unlock()
 }
 
-// userFromClaims maps verified ID token claims to a User.
 func userFromClaims(providerName string, c idTokenClaims, assumeVerified bool) User {
 	verified := c.EmailVerified != nil && *c.EmailVerified
 	if c.EmailVerified == nil && assumeVerified {
@@ -426,7 +398,7 @@ func userFromClaims(providerName string, c idTokenClaims, assumeVerified bool) U
 	}
 	email := c.Email
 	if !verified {
-		email = "" // an address the provider has not vouched for identifies no one
+		email = ""
 	}
 	return User{ID: providerName + ":" + c.Subject, Email: email, VerifiedEmail: verified && email != "", Name: c.Name, Username: c.PreferredUsername, Picture: c.Picture}
 }

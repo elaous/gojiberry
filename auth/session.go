@@ -15,15 +15,11 @@ type LoginState struct {
 
 // SessionStore keeps bearer sessions and login states between requests.
 type SessionStore interface {
-	// PutSession stores a session and returns its token; never evicts live ones.
 	PutSession(ctx context.Context, u User, ttl time.Duration) (token string, err error)
 	// GetSession returns the user of a live session.
 	GetSession(ctx context.Context, token string) (User, bool, error)
-	// DeleteSession ends a session; deleting an unknown token is not an error.
 	DeleteSession(ctx context.Context, token string) error
-	// PutState stores a login state for ttl and returns its OAuth state token.
 	PutState(ctx context.Context, s LoginState, ttl time.Duration) (token string, err error)
-	// TakeState consumes a login state; concurrent takes yield at most one hit.
 	TakeState(ctx context.Context, token string) (LoginState, bool, error)
 }
 

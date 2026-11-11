@@ -34,7 +34,6 @@ func (m *Manager) handleProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m.Providers())
 }
 
-// handleLoginFor returns the login handler for one provider name.
 func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -67,7 +66,6 @@ func (m *Manager) handleLoginFor(name string) http.HandlerFunc {
 	}
 }
 
-// handleCallbackFor returns the callback handler for one provider name.
 func (m *Manager) handleCallbackFor(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := m.byName[name]
@@ -164,7 +162,6 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token, ok := bearerToken(r); ok {
-		// Delete failure is reported so the client retries.
 		if err := m.store.DeleteSession(r.Context(), token); err != nil {
 			log.Printf("auth: deleting a session: %v", err)
 			http.Error(w, "auth: session store unavailable", http.StatusServiceUnavailable)
@@ -174,7 +171,6 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// CurrentUser returns the signed-in user for r's bearer token, if any.
 func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	token, ok := bearerToken(r)
 	if !ok {
@@ -189,7 +185,6 @@ func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	}
 	u, ok, err := m.store.GetSession(r.Context(), token)
 	if err != nil {
-		// Fail closed: a store that cannot answer signs nobody in.
 		log.Printf("auth: reading a session: %v", err)
 		return User{}, false
 	}

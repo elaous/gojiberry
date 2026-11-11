@@ -18,17 +18,14 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc/oidctest"
 )
 
-// fakeOIDCProvider adds a /token endpoint to oidctest.Server.
 type fakeOIDCProvider struct {
 	srv        *httptest.Server
 	oidcServer *oidctest.Server
 	priv       *rsa.PrivateKey
 	keyID      string
 
-	// nextIDToken, if set, is the id_token of the next response.
 	nextIDToken string
-	// nonce is echoed in the id_token, as a provider does.
-	nonce string
+	nonce       string
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -143,7 +140,6 @@ func TestLoginRedirectsToProvider(t *testing.T) {
 	}
 }
 
-// TestCallbackFullFlow drives a whole login: /login, then /callback.
 func TestCallbackFullFlow(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)
@@ -371,11 +367,9 @@ func TestUnverifiedEmailIsDropped(t *testing.T) {
 	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b", EmailVerified: &yes}, false); u.Email != "a@b" || !u.VerifiedEmail {
 		t.Fatalf("verified email lost: %+v", u)
 	}
-	// An absent claim is not verification: no Email, no VerifiedEmail.
 	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}, false); u.Email != "" || u.VerifiedEmail {
 		t.Fatalf("an absent email_verified claim was treated as verified: %+v", u)
 	}
-	// Only the per-provider opt-in accepts an absent claim.
 	if u := userFromClaims("p", idTokenClaims{Subject: "s", Email: "a@b"}, true); u.Email != "a@b" || !u.VerifiedEmail {
 		t.Fatalf("AssumeEmailVerified ignored: %+v", u)
 	}

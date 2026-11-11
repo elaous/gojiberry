@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// readCounting counts the session reads.
 type readCounting struct {
 	*MemorySessionStore
 	reads atomic.Int64
@@ -27,7 +26,6 @@ func bearerFrom(m *Manager, addr, token string) bool {
 	return ok
 }
 
-// Over-budget clients skip store lookups; other clients are unaffected.
 func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)
@@ -48,7 +46,6 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if got := store.reads.Load(); got != 5 {
 		t.Fatalf("%d reads for 5 misses", got)
 	}
-	// the 6th miss reads the store; later ones do not.
 	bearerFrom(m, "198.51.100.1:1000", "guess-6")
 	before := store.reads.Load()
 	for range 50 {
@@ -59,11 +56,9 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if got := store.reads.Load(); got != before {
 		t.Errorf("a client over its budget still cost %d reads", got-before)
 	}
-	// a valid token is not looked up while blocked.
 	if bearerFrom(m, "198.51.100.1:1000", good) {
 		t.Error("a blocked client's request was authenticated")
 	}
-	// other clients unaffected; valid tokens are not misses.
 	if !bearerFrom(m, "203.0.113.9:2000", good) {
 		t.Error("another client was affected")
 	}
@@ -75,7 +70,6 @@ func TestMissLimiterStopsReadsFromAClientThatKeepsGuessing(t *testing.T) {
 	if n := lim.seen["miss|203.0.113.9"]; n != 0 {
 		t.Errorf("valid tokens spent %d from the miss budget", n)
 	}
-	// the block lasts the limiter's wait, then reads resume.
 	m.missMu.Lock()
 	m.missBlocked["198.51.100.1"] = time.Now().Add(-time.Millisecond)
 	m.missMu.Unlock()
