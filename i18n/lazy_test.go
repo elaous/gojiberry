@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// The packs the showcase fetches on demand (static/lang-*.json) are as complete as the shipped ones: every
-// message there, the same verbs in the same order, and a text for every plural category the language uses.
 func TestLazyPacksAreComplete(t *testing.T) {
 	files, _ := filepath.Glob("../examples/canvas-editor-showcase/static/lang-*.json")
 	if len(files) < 4 {
@@ -34,8 +32,6 @@ func TestLazyPacksAreComplete(t *testing.T) {
 			if want := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "lang-"), ".json"); lang != want {
 				t.Errorf("%s holds %q", f, lang)
 			}
-			// A variant of English ("en-x-plain", plain words) only says what it says differently: the rest falls
-			// back to English. Its messages must be ones that exist and keep their verbs.
 			overlay := strings.HasPrefix(lang, "en-")
 			for id, es := range ref {
 				got, ok := msgs[id]
@@ -57,7 +53,6 @@ func TestLazyPacksAreComplete(t *testing.T) {
 				}
 				continue
 			}
-			// the plural categories the language uses, for every plural message
 			for id := range ref {
 				base, ok := strings.CutSuffix(id, "#other")
 				if !ok {
@@ -77,7 +72,6 @@ func TestLazyPacksAreComplete(t *testing.T) {
 			}
 		}
 	}
-	// the right-to-left ones are known as such
 	for _, l := range []string{"ar", "he"} {
 		if Direction(l) != "rtl" {
 			t.Errorf("%s is not right to left", l)

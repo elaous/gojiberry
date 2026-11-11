@@ -7,13 +7,9 @@ import (
 	"time"
 )
 
-// Locale-aware numbers and dates through one place, for the languages the packs ship (en, de, fr, es)
-// and English's way for the rest. They are plain functions of the language tag, so a page formats the
-// same on every browser and in tests; the browser's Intl is not needed.
-
 type numberFormat struct {
 	decimal, group string
-	minGroup       int // the digits before the point from which the group separator is used
+	minGroup       int
 }
 
 var numberFormats = map[string]numberFormat{
@@ -30,7 +26,6 @@ func formatFor(lang string) numberFormat {
 	return numberFormats["en"]
 }
 
-// Number formats n with the given decimals (fixed), grouping the thousands the way lang does.
 func Number(lang string, n float64, decimals int) string {
 	f := formatFor(lang)
 	if decimals < 0 {
@@ -61,7 +56,6 @@ func Number(lang string, n float64, decimals int) string {
 	return out
 }
 
-// Percent formats a ratio (0.25) as a percentage in lang ("25 %" in French and German, "25%" otherwise).
 func Percent(lang string, ratio float64) string {
 	s := Number(lang, ratio*100, 0)
 	switch base(normalize(lang)) {
@@ -96,9 +90,6 @@ var shortMonths = map[string][12]string{
 	"es": {"ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic"},
 }
 
-// Date formats the day of t (in t's own zone) in lang. Plain "en" and "en-US" are month-first
-// ("12/31/2026", "Dec 31, 2026", "December 31, 2026"); other English ("en-GB") is day-first, as are
-// French, Spanish ("31 de diciembre de 2026") and German ("31.12.2026", "31. Dezember 2026").
 func Date(lang string, t time.Time, style DateStyle) string {
 	lang = normalize(lang)
 	b := base(lang)
@@ -138,7 +129,6 @@ func Date(lang string, t time.Time, style DateStyle) string {
 	return strconv.Itoa(d) + " " + mn + " " + strconv.Itoa(y)
 }
 
-// Time formats the time of day of t: 12-hour with AM/PM for en-US and en, 24-hour otherwise.
 func Time(lang string, t time.Time) string {
 	lang = normalize(lang)
 	if lang == "en" || lang == "en-us" {
@@ -162,8 +152,6 @@ func two(n int) string {
 	return strconv.Itoa(n)
 }
 
-// Zone names the offset from UTC of t's own zone: "UTC", "UTC+2", "UTC-5", "UTC+5:30". It is the offset
-// at t, so a summer time and a winter time of one place read differently, as they should.
 func Zone(t time.Time) string {
 	_, off := t.Zone()
 	if off == 0 {
@@ -180,8 +168,6 @@ func Zone(t time.Time) string {
 	return "UTC" + sign + strconv.Itoa(h) + ":" + two(m)
 }
 
-// DateTime is the day and the time of t in lang, with the zone t is in: "Oct 14, 2026, 2:05 PM (UTC+2)",
-// "14. Okt. 2026, 14:05 (UTC+2)". Put t into the zone to show (t.In, t.Local) first.
 func DateTime(lang string, t time.Time) string {
 	return Date(lang, t, DateMedium) + ", " + Time(lang, t) + " (" + Zone(t) + ")"
 }
