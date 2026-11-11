@@ -1,4 +1,3 @@
-// Package complete suggests whole words for the word being typed.
 package complete
 
 import (
@@ -46,7 +45,6 @@ type Index struct {
 	providers []Provider
 }
 
-// IsWordRune reports whether r is part of a word: letters and digits.
 func IsWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) || r == '_' || r == '\'' || r == '’' || r == '-'
 }
@@ -139,7 +137,6 @@ func (ix *Index) sort() {
 	ix.dirty = false
 }
 
-// score ranks candidates: recent and frequent words first.
 func (e *entry) score(prefix string, clock int) float64 {
 	s := float64(e.vocab)
 	if e.count > 0 {
@@ -154,7 +151,6 @@ func (e *entry) score(prefix string, clock int) float64 {
 	return s
 }
 
-// Suggest returns up to Max whole words that start with prefix.
 func (ix *Index) Suggest(prefix string, o Options) []Suggestion {
 	if o.Max <= 0 {
 		o.Max = 5
@@ -214,7 +210,6 @@ func (ix *Index) Suggest(prefix string, o Options) []Suggestion {
 	return out
 }
 
-// matchCase gives word the capital of prefix's first letter.
 func matchCase(word, prefix string) string {
 	pr, wr := []rune(prefix), []rune(word)
 	if len(pr) == 0 || len(wr) == 0 {
