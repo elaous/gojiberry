@@ -5,15 +5,6 @@ import (
 	"strings"
 )
 
-// Document is the <html><head>...</head><body>...</body></html>
-// wrapper almost every top-level page needs, so individual pages don't
-// each hand-roll that boilerplate. Head holds extra <head> children
-// (e.g. a Style-injected stylesheet, <meta>, <link>); Body is the
-// single node rendered inside <body> -- use Frag to group multiple
-// top-level children there.
-//
-// The stylesheets registered by CSS imports (see RegisterStyle) go in the
-// head first, ahead of Head, so a page's own styles can override them.
 type Document struct {
 	Title string
 	Head  []Node
@@ -27,7 +18,6 @@ type Document struct {
 	Styles []string
 }
 
-// styleWanted reports whether a sheet with this ID is in the list.
 func styleWanted(id string, only []string) bool {
 	if only == nil {
 		return true
@@ -60,11 +50,7 @@ func (d Document) Render() Node {
 	)
 }
 
-// Style returns a <style> element injecting css verbatim -- e.g. the
-// string an xango CSS resource import binds -- for use in a Document's
-// Head. css is trusted content, but a "</style" inside it (in a string or a
-// comment) cannot end the element early: it is written as the equivalent
-// CSS escape "<\/style".
+// Style returns a <style> element injecting css verbatim -- e.g.
 func Style(css string) Node {
 	return El("style", nil, Raw(styleEnd.ReplaceAllString(css, `<\/$1`)))
 }

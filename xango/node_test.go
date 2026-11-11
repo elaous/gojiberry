@@ -11,8 +11,6 @@ func TestEventValue(t *testing.T) {
 		t.Errorf("EventValue[string] = %q, want %q", got, "hello")
 	}
 
-	// Reading as the wrong type returns the zero value rather than
-	// panicking -- e.g. a click event has no string payload.
 	click := NewEvent("click", nil, false, nil, nil)
 	if got := EventValue[string](click); got != "" {
 		t.Errorf("EventValue[string] on a payload-less event = %q, want \"\"", got)
@@ -43,8 +41,6 @@ func TestPreventDefault(t *testing.T) {
 		t.Error("PreventDefault did not invoke the underlying callback")
 	}
 
-	// An Event built without a preventDefault callback (e.g. from SSR,
-	// where events are always inert) must not panic when called.
 	noop := NewEvent("click", nil, false, nil, nil)
 	noop.PreventDefault()
 }
@@ -71,7 +67,6 @@ func TestWithKey(t *testing.T) {
 	if keyed.Key != "item-1" {
 		t.Errorf("keyed.Key = %q, want %q", keyed.Key, "item-1")
 	}
-	// Everything else about the node should be unchanged.
 	keyed.Key = ""
 	if !reflect.DeepEqual(keyed, original) {
 		t.Errorf("WithKey changed more than Key: got %+v, want %+v", keyed, original)
@@ -90,7 +85,6 @@ func TestHost(t *testing.T) {
 }
 
 func TestMoveFocusIsAHookTheBrowserFills(t *testing.T) {
-	// no hook (a test, the server): nothing happens
 	if NewEvent("keydown", nil, false, nil, nil).MoveFocus(".w", "li", FocusNext) {
 		t.Error("MoveFocus without a hook reported success")
 	}
