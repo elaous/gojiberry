@@ -1,15 +1,3 @@
-// Command terminal-demo is a text-mode document manager and editor: the same saver.Session
-// that stands behind the browser's document components (DocList, Saver, capacity meter)
-// drawn as text, with the console's command grammar for the file work (mv, tag, rm,
-// pack...) and a small line editor for a document's text. No browser, no raw terminal mode,
-// no dependencies: lines in, screens out.
-//
-//	go run ./examples/terminal-demo -store files:./docs
-//
-// Commands: ls cd mkdir mv cp tag rm restore purge pack unpack check usage help (see
-// docs/console.md), and: new NAME | open NAME | edit | save [NAME] | quit.
-// new, open, rm and purge ask first when that would lose unsaved text or the open document;
-// "new! NAME", "open! NAME", "rm! ..." and "purge! ..." go ahead.
 package main
 
 import (
@@ -38,7 +26,6 @@ func main() {
 	}
 }
 
-// app is the demo's state: the session, the console, and the text being edited.
 type app struct {
 	ctx   context.Context
 	s     *saver.Session
@@ -48,7 +35,7 @@ type app struct {
 	lines []string // the document being edited, a line each
 	dirty bool     // edited since it was last saved or opened
 	ansi  bool     // clear the screen between screens
-	note  string   // an error to show under the next screen, so redrawing does not erase it
+	note  string
 }
 
 func openStore(spec string) (saver.Target, error) {
@@ -89,12 +76,10 @@ func newApp(store string, in io.Reader, out io.Writer, ansi bool) (*app, error) 
 	return a, nil
 }
 
-// document is what the session saves: the lines as the text of one run.
 func (a *app) document() docfile.Document {
 	return docfile.Document{Content: []docfile.Item{{Chars: &docfile.Chars{Text: strings.Join(a.lines, "\n")}}}}
 }
 
-// load is called by the session when a document is opened.
 func (a *app) load(d docfile.Document) {
 	var b strings.Builder
 	for _, it := range d.Content {
@@ -108,8 +93,6 @@ func (a *app) load(d docfile.Document) {
 
 func (a *app) printf(format string, v ...any) { _, _ = fmt.Fprintf(a.out, format, v...) }
 
-// screen draws the document list, as text, from the session's props: the same data the
-// browser's DocList and Capacity are given.
 func (a *app) screen() {
 	if a.ansi {
 		a.printf("\x1b[2J\x1b[H")
@@ -180,7 +163,6 @@ func (a *app) command(line string) (quit bool, err error) {
 	if err != nil || len(words) == 0 {
 		return false, err
 	}
-	// A "!" after new, open, rm or purge says the warning was read.
 	force := false
 	switch words[0] {
 	case "new!", "open!", "rm!", "purge!":
@@ -240,7 +222,6 @@ func (a *app) command(line string) (quit bool, err error) {
 		a.dirty = false
 		return false, nil
 	}
-	// rm and purge of the document that is open would leave the editor saving it back.
 	closes := false
 	if (words[0] == "rm" || words[0] == "purge") && len(words) > 1 {
 		if cur := a.s.Props().Docs.Current; cur != "" {
@@ -255,13 +236,11 @@ func (a *app) command(line string) (quit bool, err error) {
 			}
 		}
 	}
-	// Everything else is the console's: mv, tag, rm, pack...
 	cerr := a.sh.Exec(a.ctx, words)
 	if cerr == nil && closes {
 		a.s.Detach()
 		a.lines, a.dirty = nil, false
 	}
-	// The list follows cd, and is redrawn from the store after an error too.
 	if err := a.s.OpenFolder(a.ctx, a.sh.Cwd()); err != nil && cerr == nil {
 		cerr = err
 	}
@@ -271,7 +250,6 @@ func (a *app) command(line string) (quit bool, err error) {
 	return false, cerr
 }
 
-// editor is a line editor: the text is shown with numbers, and commands start with a colon.
 func (a *app) editor() error {
 	for {
 		a.printf("\n-- editing %q (%d lines%s) --\n", a.s.Name(), len(a.lines), map[bool]string{true: ", unsaved", false: ""}[a.dirty])

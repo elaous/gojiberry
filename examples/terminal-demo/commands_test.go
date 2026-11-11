@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// newTestApp makes an app on a memory store that reads script (what the editor and prompts read).
 func newTestApp(t *testing.T, script string) (*app, *bytes.Buffer) {
 	t.Helper()
 	var out bytes.Buffer
@@ -39,7 +38,6 @@ func TestOpenStore(t *testing.T) {
 	if err != nil || tg.Adapter == nil || tg.Label != "Files" || tg.Capacity != 0 {
 		t.Errorf("files: %+v %v", tg, err)
 	}
-	// A directory that cannot be made: a file stands where it should be.
 	blocker := filepath.Join(dir, "plain")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -77,7 +75,6 @@ func TestTheLastLineWithoutANewlineIsStillRun(t *testing.T) {
 	if err := a.loop(); err != nil {
 		t.Fatal(err)
 	}
-	// "new! x" at end of input entered the editor, which ended at end of input too.
 	if !strings.Contains(out.String(), `editing "x"`) {
 		t.Errorf("the final unterminated line was dropped:\n%s", out)
 	}
@@ -124,14 +121,12 @@ func TestCommandUsageAndGuards(t *testing.T) {
 			t.Errorf("%q: err = %v, want %q", line, err, sub)
 		}
 	}
-	// Blank input is not a command.
 	if q, err := a.command("   "); q || err != nil {
 		t.Errorf("blank: %v %v", q, err)
 	}
 }
 
 func TestSaveWithANameAndOpenIsCaseInsensitive(t *testing.T) {
-	// The script feeds the editor of "new!" and then the editor of "open".
 	a, _ := newTestApp(t, ":a alpha\n:a beta\n:w\n:q\n:q\n")
 	if _, err := a.command("new! draft"); err != nil {
 		t.Fatal(err)
@@ -139,7 +134,6 @@ func TestSaveWithANameAndOpenIsCaseInsensitive(t *testing.T) {
 	if !reflect.DeepEqual(a.lines, []string{"alpha", "beta"}) || a.dirty {
 		t.Fatalf("after the editor: lines %q dirty %v", a.lines, a.dirty)
 	}
-	// save NAME renames and saves in one step.
 	a.dirty = true
 	if _, err := a.command("save Plan B"); err != nil {
 		t.Fatal(err)
@@ -210,7 +204,6 @@ func TestEditCommands(t *testing.T) {
 	wantErr(t, run("z"), "unknown editor command :z")
 	wantErr(t, run(""), "unknown editor command :")
 
-	// :q refuses while there are unsaved changes; :w saves; then :q leaves.
 	if done, err := a.editCommand("q"); done || err == nil || !strings.Contains(err.Error(), "unsaved changes") {
 		t.Errorf(":q while dirty: %v %v", done, err)
 	}
@@ -280,7 +273,6 @@ func TestRemovingTheOpenDocumentNeedsABang(t *testing.T) {
 	if a.lines != nil || a.dirty || a.s.Props().Docs.Current != "" {
 		t.Errorf("rm! left the document open: lines %v dirty %v current %q", a.lines, a.dirty, a.s.Props().Docs.Current)
 	}
-	// Another document is not guarded.
 	a.lines, a.dirty = []string{"x"}, true
 	a.s.Detach()
 	a.s.SetName("other")
