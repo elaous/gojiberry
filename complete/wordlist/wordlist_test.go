@@ -51,7 +51,6 @@ func TestForReadsTagsAndKnowsOnlyItsLanguages(t *testing.T) {
 	}
 }
 
-// The lists feed completion: a prefix finds words.
 func TestListsFeedCompletion(t *testing.T) {
 	prefix := map[string]string{"de": "Doku", "fr": "enreg", "es": "doc", "pt": "docum", "ar": "وثي", "he": "מסמ"}
 	want := map[string]string{"de": "Dokument", "fr": "enregistrer", "es": "documento", "pt": "documento", "ar": "وثيقة", "he": "מסמך"}

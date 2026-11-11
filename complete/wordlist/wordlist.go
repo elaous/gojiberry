@@ -1,4 +1,3 @@
-// Package wordlist holds small word lists by language.
 package wordlist
 
 import (

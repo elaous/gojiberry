@@ -1,7 +1,5 @@
 package wordlist
 
-// Word lists, one word per space-separated token.
-
 const de = `aber alle allein alles also alt am Anfang andere ändern anders Antwort Arbeit arbeiten auch auf aus Auto
 bald bauen beginnen bei beide beim besser bestimmt Bild bin bis bitte bleiben brauchen bringen Buch dabei dafür dann
 darf darüber das dass dein denken denn der deshalb dieser doch dort drei dürfen durch eigentlich einfach einmal Ende
