@@ -37,7 +37,7 @@ func (a *BrowserAdapter) storage() (js.Value, error) {
 	return s, nil
 }
 
-// Save implements Adapter. It fails when the browser's quota is full.
+// Save implements Adapter.
 func (a *BrowserAdapter) Save(_ context.Context, id string, data []byte) (err error) {
 	s, err := a.storage()
 	if err != nil {
@@ -53,10 +53,7 @@ func (a *BrowserAdapter) Save(_ context.Context, id string, data []byte) (err er
 	return nil
 }
 
-// SaveIf implements ConditionalAdapter: the catalog of two tabs is written without losing
-// either one's change. The check and the write are made under a Web Lock shared by every
-// tab of the origin (where the browser has them), and the write is read back: if what is
-// stored is not what was written, another tab got in between and ErrConflict is returned.
+// SaveIf implements ConditionalAdapter.
 func (a *BrowserAdapter) SaveIf(ctx context.Context, id string, data []byte, prev string) (err error) {
 	release, err := a.lock(ctx, "gojiberry-docstore:"+a.prefix+"#cas")
 	if err != nil {
@@ -155,8 +152,7 @@ func (a *BrowserAdapter) Delete(_ context.Context, id string) (err error) {
 	return nil
 }
 
-// recoverJS turns a JS exception (storage blocked, say) into an error instead
-// of letting it end the program.
+// recoverJS turns a JS exception into a Go error.
 func recoverJS(err *error) {
 	if r := recover(); r != nil {
 		*err = fmt.Errorf("docstore: browser storage: %v", r)

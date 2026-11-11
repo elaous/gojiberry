@@ -7,10 +7,7 @@ import (
 	"syscall/js"
 )
 
-// Lock implements Locker with the Web Locks API (navigator.locks): one lock per key
-// prefix, shared by every tab and worker of the origin, held until the returned function
-// is called. A browser without it (or a page that is not a secure context) gets no
-// exclusion across tabs, which is how it was; Lock then returns at once.
+// Lock implements Locker with the Web Locks API.
 func (a *BrowserAdapter) Lock(ctx context.Context) (func(), error) {
 	return a.lock(ctx, "gojiberry-docstore:"+a.prefix)
 }
@@ -31,7 +28,7 @@ func webLock(ctx context.Context, name string) (func(), error) {
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
 		close(acquired)
-		// The lock is held until the promise this returns settles: settle it when told.
+		// The lock is held until the returned promise settles.
 		var executor js.Func
 		executor = js.FuncOf(func(_ js.Value, p []js.Value) any {
 			resolve := p[0]
@@ -68,23 +65,17 @@ func webLock(ctx context.Context, name string) (func(), error) {
 	request.Call("catch", refused)
 	select {
 	case <-failed:
-		// Refused: save unlocked, as a browser without Web Locks does.
 		cb.Release()
 		return func() {}, nil
 	case <-acquired:
 	case <-ctx.Done():
-		// Still queued: give the lock back the moment it is granted.
 		go func() { <-acquired; close(release) }()
 		return nil, ctx.Err()
 	}
 	return func() { close(release) }, nil
 }
 
-// RequestPersistence asks the browser not to evict this origin's storage when the disk
-// is short (navigator.storage.persist), and says whether it will not. Without it the
-// browser may delete localStorage, IndexedDB and caches of a site that is not "important"
-// to it, and documents saved in the browser with them. Call it from a user action when
-// the page can (some browsers ask the person), or at start.
+// RequestPersistence asks the browser not to evict storage.
 func RequestPersistence() bool {
 	storage := js.Global().Get("navigator").Get("storage")
 	if !storage.Truthy() || !storage.Get("persist").Truthy() {
@@ -107,7 +98,7 @@ func RequestPersistence() bool {
 	return <-done
 }
 
-// Persisted says whether the browser has already promised to keep this origin's storage.
+// Persisted says whether the browser granted persistence.
 func Persisted() bool {
 	storage := js.Global().Get("navigator").Get("storage")
 	if !storage.Truthy() || !storage.Get("persisted").Truthy() {
