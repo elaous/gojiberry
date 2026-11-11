@@ -1,21 +1,4 @@
-// Package hub is the server half of multi-user editing: a relay that holds
-// each shared document as a crdt replica, sends every change to everyone
-// else watching it, saves it through a docstore.Adapter (Postgres, SQLite,
-// S3, files...), and checks what each person is allowed to change.
-//
-// The protocol is plain HTTP, so it needs nothing outside the standard
-// library and works from a WASM client's fetch:
-//
-//	GET  /docs/{id}/events?replica=R   server-sent events: "hello" (role),
-//	                                   "snapshot" (all ops), then "ops" and
-//	                                   "presence" from others
-//	POST /docs/{id}/ops?replica=R      a JSON array of crdt.Op; 204, or 403
-//	                                   {"error": ...} if the role forbids them
-//	POST /docs/{id}/presence           this replica's cursor (Presence)
-//	GET  /docs/{id}/snapshot           all ops, for clients that cannot stream
-//	GET  /docs/{id}/role               {"role": ...} for the caller
-//
-// See client for the Go client and collab.Session for tying it to a flow.
+// Package hub is the server half of multi-user editing.
 package hub
 
 import (
@@ -35,7 +18,7 @@ import (
 	"time"
 )
 
-// Role, Presence and the role names are shared with clients (see wire).
+// Role, Presence and the role names are shared with clients.
 type (
 	Role     = wire.Role
 	Presence = wire.Presence
@@ -47,119 +30,57 @@ const (
 	Viewer = wire.Viewer
 )
 
-// RoleFunc says what the caller of a request may do with document id.
+// RoleFunc says what the caller of a request may do.
 type RoleFunc func(r *http.Request, id string) Role
 
 // Config configures a Hub.
 type Config struct {
-	// Store keeps the documents between runs; nil keeps them in memory
-	// only.
+	// Store keeps documents between runs; nil keeps them in memory.
 	Store docstore.Adapter
-	// Roles decides each request's role; nil makes everyone an owner (for a
-	// trusted network or a test).
+	// Roles decides each request's role.
 	Roles RoleFunc
-	// User names the caller for presence ("ana@example.com"); nil gives "".
+	// User names the caller for presence.
 	User func(r *http.Request) string
-	// SaveDelay is how long after a change the document is saved (changes
-	// in the meantime share one save); 0 means two seconds.
+	// SaveDelay is how long after a change the document is saved.
 	SaveDelay time.Duration
-	// KeepAlive is how often an idle event stream is pinged; 0 means 15s.
+	// KeepAlive is how often an idle event stream is pinged.
 	KeepAlive time.Duration
-	// PresenceInterval is the least time between two updates of one
-	// replica's cursor sent to the others: updates that come faster are
-	// merged and the latest goes out when the interval ends (so a cursor
-	// dragged across the text costs a few messages a second, not hundreds).
-	// 0 means 100ms; negative sends every update at once.
+	// PresenceInterval is the least time between presence updates.
 	PresenceInterval time.Duration
-	// PresenceTTL is how long a cursor stays after its last update; 0
-	// means 10 seconds.
+	// PresenceTTL is how long a cursor stays after its last update.
 	PresenceTTL time.Duration
-	// Guard decides who may call the hub: guard.Origins(...) for pages from
-	// listed origins, guard.Token(...) for callers holding a token, both with
-	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check;
-	// the roles still apply).
+	// Guard decides who may call the hub.
 	Guard guard.Guard
-	// MaxBody limits a request body in bytes; 0 means 8 MiB.
+	// MaxBody limits a request body in bytes; 0 means the default.
 	MaxBody int64
-	// CookieOrigins lists the origins (exactly as the browser sends them,
-	// "https://app.example") whose pages may open a WebSocket that carries
-	// cookies. A socket from another origin that carries cookies is refused:
-	// with cookie-based sign-in it would be a way for any site to act as the
-	// signed-in user. Pages sending a bearer token carry no cookies for this
-	// host and are not affected.
-	CookieOrigins []string
-	// TrustForwardedHost makes the same-origin test for such a socket compare the
-	// Origin with X-Forwarded-Host as well as Host, for a hub behind a reverse proxy
-	// that rewrites Host. Set it only when the proxy sets that header itself (a
-	// client could otherwise send it).
+	// CookieOrigins lists the origins allowed to send cookies.
+	CookieOrigins      []string
 	TrustForwardedHost bool
-	// MaxRooms limits how many documents the hub keeps in memory; 0 means
-	// 1000. Further documents are refused until the hub restarts.
+	// MaxRooms limits how many documents the hub keeps in memory.
 	MaxRooms int
-	// MaxPeers limits the cursors kept per document; 0 means 256.
+	// MaxPeers limits the cursors kept per document.
 	MaxPeers int
-	// Renewer is told that a document was edited, so a store that expires documents
-	// (docstore.ExpiringAdapter, or a docstore server through docstore.HTTPAdapter) counts
-	// collaborators' edits as edits: the hub keeps its state under "collab:<id>", which
-	// never expires by itself and never touches the document. Nil does nothing.
-	//
-	// Renew is called for the document id after an edit by an owner or editor was accepted
-	// (comments by viewers, joining, watching and cursors never renew), at most once per
-	// RenewInterval per document, in the background, so a slow store never delays an
-	// acknowledgement. An error (a document that does not exist or has expired, a store that is
-	// down) is logged and the next attempt waits for the interval again. Over HTTP the call
-	// carries the Authorization header of the edit that caused it (docstore.WithAuthorization;
-	// AuthFunc replaces it), so the docstore server checks the same write permission.
-	//
-	// Expired under an open room: once a renewal of a document has succeeded, a "not found" that
-	// is repeated after GoneConfirmDelay means the document expired and was swept while a stale tab
-	// kept its room (over HTTP, "not found" means only the docstore server's marked 404:
-	// docstore.HTTPAdapter.Renew, a proxy's or an older server's 404 is ErrRenewUnsupported and
-	// closes nothing). The room is then closed: further operations get 410 Gone (and so does any request for the id for an hour), it
-	// stops saving, "collab:<id>" is deleted and the room leaves the hub. The first edit that
-	// discovers it is still acknowledged, since renewals are asynchronous. A document that was
-	// never saved to the store (it lives only in the hub) is always "not found", is never closed
-	// this way and is not kept alive by this call; the store's sweeper removes its "collab:<id>"
-	// state only with the orphan policy (docstore.ExpiringAdapter.Orphans).
-	//
-	// The hub's roles and the store's access rule must agree. A hub that lets everyone edit a
-	// document without an access list (GOJIBERRY_COLLAB_NO_ACL_ROLE=owner or editor) over a
-	// docstore that requires one (GOJIBERRY_DOCSTORE_REQUIRE_ACL=true) has every renewal refused
-	// with 403, and the document expires under active editing. The first refusal per document is
-	// logged as a warning and Health.RenewFailures (GET /healthz, behind the Guard) counts them.
+	// Renewer is told that a document was edited, so it is kept alive.
 	Renewer Renewer
-	// RenewInterval is the least time between two renewals of one document; 0 means one
-	// minute, negative renews on every accepted edit. With ExpiryTTL set it is clamped to a
-	// quarter of the TTL (an interval at or above the TTL would let a document expire under
-	// active editing), and an interval configured larger than the TTL is logged as a warning.
+	// RenewInterval is the least time between two renewals.
 	RenewInterval time.Duration
-	// ExpiryTTL is the lifetime the store gives a document, when the hub knows it (a hub in
-	// the same process as the ExpiringAdapter does; cmd/collabhub passes it). Zero means unknown.
+	// ExpiryTTL is the lifetime the store gives a document.
 	ExpiryTTL time.Duration
-	// AuthFunc returns the Authorization header value a renewal is sent with, called once per
-	// renewal with the request of the edit that caused it. Nil forwards that request's own
-	// Authorization header. A WebSocket carries the header of its upgrade request for as long as
-	// it lives, and a token in it expires: AuthFunc is where a deployment looks up the
-	// holder's current token (by session, user or cookie) so renewals outlive it. An empty result
-	// sends none.
+	// AuthFunc returns the Authorization header value for renewals.
 	AuthFunc func(r *http.Request) string
-	// GoneConfirmDelay is how long the hub waits, after a renewal says "document gone" for a room
-	// that had one success, before it asks once more: the room is closed (410 to its clients,
-	// "collab:<id>" deleted, the id refused for an hour) only if the second answer is "gone"
-	// too. A transient answer (a deploy, a failover, a document recreated) never kills a live
-	// room. 0 means 2 seconds; negative asks again at once.
+	// GoneConfirmDelay is how long the hub waits before closing a gone room.
 	GoneConfirmDelay time.Duration
-	// Now is the clock (time.Now when nil); tests inject a fake one.
+	// Now is the clock; time.Now when nil.
 	Now func() time.Time
 }
 
-// DefaultGoneConfirmDelay is Config.GoneConfirmDelay's default.
+// DefaultGoneConfirmDelay is the default GoneConfirmDelay.
 const DefaultGoneConfirmDelay = 2 * time.Second
 
-// Renewer is docstore.Renewer: what the hub calls to renew a document's expiry.
+// Renewer is docstore.Renewer: what the hub calls to renew expiry.
 type Renewer = docstore.Renewer
 
-// Hub serves documents. Create one with New and mount Handler.
+// Hub serves documents; create one with New and mount Handler.
 type Hub struct {
 	cfg   Config
 	mu    sync.Mutex
@@ -268,15 +189,12 @@ type presenceEntry struct {
 	p    Presence
 	seen time.Time
 
-	// lastSent is when this cursor was last passed to the others, and timer
-	// (when set) is a send of the latest one scheduled for the end of the
-	// throttling interval.
+	// lastSent is when this cursor was last sent.
 	lastSent time.Time
 	timer    *time.Timer
 }
 
-// dropPresence forgets a replica's cursor and any send still scheduled for it
-// (rm.mu held).
+// dropPresence forgets a replica's cursor and pending sends.
 func (rm *room) dropPresence(replica string) {
 	if e, ok := rm.pres[replica]; ok {
 		if e.timer != nil {
@@ -288,10 +206,10 @@ func (rm *room) dropPresence(replica string) {
 
 var errTooManyRooms = errors.New("hub: too many documents")
 
-// errGone is a document whose room was closed because the store's copy expired.
+// errGone signals a document whose room was closed as gone.
 var errGone = errors.New("hub: the document has expired")
 
-// goneMsg is what clients are told about a document that expired under their open room.
+// goneMsg is what clients hear about a gone document.
 const goneMsg = "this document has expired and been deleted; copy your content elsewhere"
 
 // room finds or loads a document. The store is read outside the hub's lock,

@@ -436,8 +436,6 @@ func (h *Hub) leave(rm *room, s *sub) {
 		delete(rm.subs, s)
 	}
 	if s.replica != "" {
-		// Always say so: an idle replica's cursor may have been pruned
-		// already, and its peers would otherwise keep the ghost.
 		rm.dropPresence(s.replica)
 		rm.broadcast(s.replica, jsonEvent("presence", Presence{Replica: s.replica, Gone: true}))
 	}
@@ -490,8 +488,6 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
-			// Access can be taken away or changed while a stream is open:
-			// end it, and the client reconnects with whatever it has now.
 			if h.role(r, id) != role {
 				return
 			}
@@ -505,5 +501,5 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// MaxHolding is the longest Presence.Holding the hub passes on.
+// MaxHolding is the longest Presence.Holding the hub accepts.
 const MaxHolding = 80

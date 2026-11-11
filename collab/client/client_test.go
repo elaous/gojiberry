@@ -250,7 +250,6 @@ func TestOfflineThenOnlineAndErrors(t *testing.T) {
 
 func TestBadURLAndSlowReader(t *testing.T) {
 	c := Dial(Options{BaseURL: "http://127.0.0.1:1", Doc: "d", Replica: "r", Retry: 2 * time.Millisecond, MaxRetry: 4 * time.Millisecond, Client: &http.Client{Timeout: time.Second}})
-	// Events queue without loss while nobody reads.
 	time.Sleep(60 * time.Millisecond)
 	var statuses int
 	timeout := time.After(time.Second)
@@ -270,7 +269,6 @@ loop:
 	}
 	c.Close()
 	if _, open := <-c.Events(); open {
-		// drained buffered events may remain; the channel must end
 		for range c.Events() {
 		}
 	}

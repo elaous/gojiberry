@@ -182,7 +182,7 @@ func TestEndpoints(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized body: %v %v", resp, err)
 	}
-	// A request for a no-access role is refused everywhere.
+	// A request with no-access role is refused.
 	closed := New(Config{Roles: func(*http.Request, string) Role { return "" }})
 	cs := httptest.NewServer(closed.Handler())
 	defer cs.Close()
@@ -296,7 +296,7 @@ func TestPresenceGoneWhenStreamCloses(t *testing.T) {
 	t.Fatalf("no gone event: %v", seen)
 }
 
-// failingStore fails loads (other than not-found) and saves on demand.
+// failingStore fails loads other than not-found.
 type failingStore struct {
 	docstore.Adapter
 	mu                 sync.Mutex

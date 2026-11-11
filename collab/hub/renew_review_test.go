@@ -32,7 +32,7 @@ type logBuf struct {
 func (l *logBuf) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock(); return l.b.Write(p) }
 func (l *logBuf) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
-// captureLog sends the standard logger to a buffer for the test.
+// captureLog sends the standard logger to a buffer.
 func captureLog(t *testing.T) *logBuf {
 	t.Helper()
 	lb := &logBuf{}
@@ -44,8 +44,6 @@ func captureLog(t *testing.T) *logBuf {
 var defaultLogOut = log.Writer()
 
 func countLines(s, sub string) int { return strings.Count(s, sub) }
-
-// --- M1: a document that expired under an open room
 
 func exists(t *testing.T, a docstore.Adapter, id string) bool {
 	t.Helper()
@@ -68,7 +66,7 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c1", "alive")); s != 204 {
 		t.Fatalf("edit: %d", s)
 	}
-	_ = h.Flush() // saves collab:doc and waits for the (successful) renewal
+	_ = h.Flush()
 	if !exists(t, inner, StoreKey("doc")) {
 		t.Fatal("hub state was not saved")
 	}
@@ -80,13 +78,10 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	if exists(t, inner, StoreKey("doc")) {
 		t.Fatal("the sweeper left the hub state")
 	}
-	// ... but a tab keeps its room. The next edit is acknowledged (the renewal that finds out
-	// is asynchronous) and would, before the fix, mark the room dirty and rewrite collab:doc.
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c2", "stale tab")); s != 204 {
 		t.Fatalf("first stale edit: %d", s)
 	}
 	h.waitRenewals()
-	// From now on the room is dead: 410 with a clear message, for editors and commenters alike.
 	body := func(role string) (int, string) {
 		req, _ := http.NewRequest("POST", e.srv.URL+"/docs/doc/ops?replica=r1", strings.NewReader(textOps(t, "c3", "more")))
 		req.Header.Set("X-Role", role)
@@ -123,7 +118,6 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	}
 }
 
-// A save that wins the race with the renewal that discovers the expiry is undone by it.
 func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -148,7 +142,7 @@ func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	h.mu.Lock()
 	rm := h.rooms["doc"]
 	h.mu.Unlock()
-	if err := h.save(rm); err != nil { // the save timer fires before the renewal returns
+	if err := h.save(rm); err != nil {
 		t.Fatal(err)
 	}
 	if !exists(t, inner, StoreKey("doc")) {
@@ -162,8 +156,6 @@ func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	if err := h.save(rm); err != nil || exists(t, inner, StoreKey("doc")) {
 		t.Fatalf("a dead room saved again: %v", err)
 	}
-	// A caller that still holds the room (a connection that was mid-request) is refused too,
-	// and the room does not schedule a save.
 	var ops []crdt.Op
 	_ = json.Unmarshal([]byte(textOps(t, "c7", "late")), &ops)
 	req, _ := http.NewRequest("POST", "/", nil)
@@ -182,7 +174,6 @@ type rf func(ctx context.Context, id string) error
 
 func (f rf) Renew(ctx context.Context, id string) error { return f(ctx, id) }
 
-// A document that exists only in the hub always renews to "not found" and must keep working.
 func TestHubOnlyDocumentIsNeverRefused(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -205,7 +196,6 @@ func TestHubOnlyDocumentIsNeverRefused(t *testing.T) {
 	_ = ctx
 }
 
-// A 404 only counts after a success: success, then not found, closes; not found first does not.
 func TestDeadRoomNeedsAnEarlierSuccess(t *testing.T) {
 	var calls atomic.Int32
 	h, e := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error {
@@ -230,8 +220,6 @@ func TestDeadRoomNeedsAnEarlierSuccess(t *testing.T) {
 	}
 }
 
-// A stale tab that reconnects does not start a new room that writes the content back; later the
-// id can be used again.
 func TestDeadDocumentIsRefusedOnReconnectForAWhile(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -257,13 +245,12 @@ func TestDeadDocumentIsRefusedOnReconnectForAWhile(t *testing.T) {
 	if exists(t, inner, StoreKey("doc")) {
 		t.Fatal("a reconnecting tab resurrected the state")
 	}
-	clk.Add(2 * time.Hour) // the memory ends: the id is usable again (a new document)
+	clk.Add(2 * time.Hour)
 	if st := e.get(t, "/docs/doc/snapshot", "editor"); st != http.StatusOK {
 		t.Fatalf("after the memory ended: %d", st)
 	}
 }
 
-// Over a WebSocket the client is told with a close frame carrying the reason.
 func TestDeadRoomClosesTheWebSocketWithAReason(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -301,8 +288,6 @@ func TestDeadRoomClosesTheWebSocketWithAReason(t *testing.T) {
 		break
 	}
 }
-
-// --- m3: role disagreement shows up
 
 func TestRenewalRefusedIsWarnedOnceAndCounted(t *testing.T) {
 	lb := captureLog(t)
