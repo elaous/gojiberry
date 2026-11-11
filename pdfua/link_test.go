@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// linkPDF builds a one-page file with the given annotations (object 6 on) and structure elements: the
-// structure root's children are the numbered objects named in kids.
 func linkPDF(annots string, kids string, extra ...string) []byte {
 	objs := []string{
 		goodCatalog,
@@ -38,7 +36,6 @@ func TestLinkAnnotationReferencedByAnOBJRPasses(t *testing.T) {
 }
 
 func TestLinkAnnotationOutsideTheTreeIsReported(t *testing.T) {
-	// No /StructParent at all.
 	data := linkPDF("6 0 R", "7 0 R", "<< /Type /Annot /Subtype /Link /Rect [10 20 50 40] >>",
 		"<< /Type /StructElem /S /Link >>")
 	got := findingsOf(t, data)
@@ -46,14 +43,12 @@ func TestLinkAnnotationOutsideTheTreeIsReported(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 
-	// A key, but no /OBJR in the tree uses it.
 	data = linkPDF("6 0 R", "7 0 R", linkAnnot, "<< /Type /StructElem /S /Link >>")
 	got = findingsOf(t, data)
 	if len(got) != 1 || got[0].Rule != "LinkAnnotation" || !strings.Contains(got[0].Message, "/OBJR") {
 		t.Fatalf("got %v", got)
 	}
 
-	// An /OBJR for another annotation (other key) does not cover this one.
 	data = linkPDF("6 0 R 8 0 R", "7 0 R", linkAnnot,
 		"<< /Type /StructElem /S /Link /K [ << /Type /OBJR /Obj 8 0 R >> ] >>",
 		"<< /Type /Annot /Subtype /Link /Rect [60 20 90 40] /StructParent 2 >>")
@@ -61,7 +56,6 @@ func TestLinkAnnotationOutsideTheTreeIsReported(t *testing.T) {
 		t.Fatalf("want one finding for the uncovered link, got %v", got)
 	}
 
-	// The same key on a different rectangle is not the same annotation.
 	data = linkPDF("6 0 R", "7 0 R", linkAnnot,
 		"<< /Type /StructElem /S /Link /K [ << /Type /OBJR /Obj 8 0 R >> ] >>",
 		"<< /Type /Annot /Subtype /Link /Rect [1 2 3 4] /StructParent 1 >>")

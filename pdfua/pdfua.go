@@ -1,9 +1,3 @@
-// Package pdfua is a small checker for the document-level requirements of PDF/UA (ISO 14289-1) that
-// can be read from a PDF's catalog: it marks the file as tagged, names a language, has a structure tree
-// whose elements use standard types, and asks the viewer to show the title. It is a gate for the
-// exporter in this repository, not a full validator: it also checks that every link annotation is
-// referenced by an /OBJR in the tree and that every /Lang is a well-formed language tag, but not that
-// every piece of page content is tagged or artifacted, reading order, or fonts. Use veraPDF or PAC for a full audit.
 package pdfua
 
 import (
@@ -22,8 +16,6 @@ type Finding struct {
 
 func (f Finding) String() string { return f.Rule + ": " + f.Message }
 
-// standard is the set of standard structure types (ISO 32000-1 table 333 to 338) that PDF/UA accepts
-// without a role map.
 var standard = map[string]bool{
 	"Document": true, "Part": true, "Art": true, "Sect": true, "Div": true, "BlockQuote": true, "Caption": true,
 	"TOC": true, "TOCI": true, "Index": true, "NonStruct": true, "Private": true, "P": true, "H": true,
@@ -33,11 +25,8 @@ var standard = map[string]bool{
 	"Annot": true, "Figure": true, "Formula": true, "Form": true, "Ruby": true, "Warichu": true,
 }
 
-// maxNodes bounds the walk of the structure tree, so a hostile file cannot make it run for ever.
 const maxNodes = 200000
 
-// Check reads a PDF and returns what is wrong; an empty list means the checks pass. An error means the
-// file could not be read at all.
 func Check(data []byte) ([]Finding, error) {
 	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -71,7 +60,7 @@ func Check(data []byte) ([]Finding, error) {
 	roleMap := str.Key("RoleMap")
 	count, bad := 0, map[string]bool{}
 	badLang := map[string]bool{}
-	objrKeys := map[int64][4]float64{} // /StructParent of each annotation an OBJR points at, with its /Rect
+	objrKeys := map[int64][4]float64{}
 	var walk func(v pdf.Value, depth int)
 	walk = func(v pdf.Value, depth int) {
 		if v.IsNull() || depth > 200 || count > maxNodes {
@@ -110,9 +99,6 @@ func Check(data []byte) ([]Finding, error) {
 	for l := range badLang {
 		add("Lang", fmt.Sprintf("a structure element has /Lang %q, which is not a valid language tag", l))
 	}
-	// Every link annotation must be in the tree: an /OBJR whose object has the annotation's /StructParent
-	// and /Rect (ISO 14289-1 7.18.5; the reader library does not expose object numbers, so the key is
-	// the identity).
 	for pn := 1; pn <= r.NumPage(); pn++ {
 		annots := r.Page(pn).V.Key("Annots")
 		for i := 0; i < annots.Len() && i < maxNodes; i++ {
@@ -133,7 +119,6 @@ func Check(data []byte) ([]Finding, error) {
 	return out, nil
 }
 
-// rectOf reads a dictionary's /Rect as four numbers (zeros when it has none).
 func rectOf(v pdf.Value) [4]float64 {
 	var r [4]float64
 	a := v.Key("Rect")
