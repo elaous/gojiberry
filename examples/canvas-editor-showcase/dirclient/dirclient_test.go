@@ -15,8 +15,6 @@ import (
 	"github.com/elaous/gojiberry/examples/people-keys-demo/demoserver"
 )
 
-// The client against the demo server's real routes: publishing as an account with a verified
-// e-mail, looking up (the mark comes from the server), and the refusals a page must explain.
 func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -44,23 +42,19 @@ func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// published with the proof of possession: the row says the key was held
 	k, err := bo.Publish(ctx, PublishRequest{Key: pub, Label: "Bo's key", Identity: id})
 	if err != nil || !k.Verified || !k.Held || k.Key != pub || k.Fingerprint == "" {
 		t.Fatalf("publish: %+v %v", k, err)
 	}
-	// a proof with the wrong key is not accepted
 	other, osecret, _ := encrypt.GenerateRecoveryKey()
 	wrong, _ := encrypt.ParseAgeIdentity(osecret)
 	if _, err := bo.Publish(ctx, PublishRequest{Key: other, Identity: id}); err == nil {
 		t.Fatal("a challenge opened with another key was accepted")
 	}
 	_ = wrong
-	// no proof: this server takes it, and the row says it was not held
 	if k, err := bo.Publish(ctx, PublishRequest{Key: other, Label: "no proof"}); err != nil || k.Held {
 		t.Fatalf("publish without proof: %+v %v", k, err)
 	}
-	// Ana looks Bo up and gets the verified mark from the server.
 	ana := &Client{Base: ts.URL, Token: tokenFor("ana@example.com")}
 	keys, err := ana.Lookup(ctx, "bo@example.com")
 	if err != nil || len(keys) != 2 || !keys[0].Verified || (keys[0].Key != pub && keys[1].Key != pub) {
@@ -69,7 +63,6 @@ func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	if keys, err := ana.Lookup(ctx, "nobody@example.com"); err != nil || len(keys) != 0 {
 		t.Fatalf("an unknown address: %+v %v", keys, err)
 	}
-	// No session: sign in first. A passkey account may not look up or publish.
 	if _, err := (&Client{Base: ts.URL}).Lookup(ctx, "bo@example.com"); !errors.Is(err, ErrSignInRequired) {
 		t.Fatalf("anonymous: %v", err)
 	}
@@ -81,7 +74,6 @@ func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	if _, err := pkc.Publish(ctx, PublishRequest{Key: pub}); !errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("passkey publish: %v", err)
 	}
-	// A server with no directory routes says so, for a page to show a clear message.
 	plain := httptest.NewServer(http.NewServeMux())
 	defer plain.Close()
 	nd := &Client{Base: plain.URL}
@@ -94,8 +86,6 @@ func TestDirectoryClientAgainstTheDemoServer(t *testing.T) {
 	var _ Directory = nd
 }
 
-// The owner key: who the server says I am, enrolling, an address that then wants its signature,
-// an entry signed by it, and a second enrollment refused.
 func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -133,7 +123,6 @@ func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
 	if err != nil || !e.Enrolled || len(e.Fingerprints) != 1 || e.Fingerprints[0] != OwnerFingerprint(owner) {
 		t.Fatalf("after: %+v %v", e, err)
 	}
-	// the backup text restores the same key
 	back, err := ImportOwnerKey("  " + ExportOwnerKey(owner) + "\n")
 	if err != nil || OwnerFingerprint(back) != OwnerFingerprint(owner) {
 		t.Fatalf("backup: %v", err)
@@ -141,7 +130,6 @@ func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
 	if _, err := ImportOwnerKey("not a key"); err == nil {
 		t.Fatal("garbage read as an owner key")
 	}
-	// the address wants the signature now; with it the entry goes in
 	pub, secret, _ := encrypt.GenerateRecoveryKey()
 	id, _ := encrypt.ParseAgeIdentity(secret)
 	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Identity: id}); !errors.Is(err, ErrOwnerRequired) {
@@ -151,16 +139,12 @@ func TestOwnerKeyEnrollmentAndSignedPublish(t *testing.T) {
 	if err != nil || !k.Verified || !k.Held {
 		t.Fatalf("signed publish: %+v %v", k, err)
 	}
-	// a second owner key cannot be enrolled over the first
 	other, _ := GenerateOwnerKey()
 	if err := c.Enroll(ctx, me, other); !errors.Is(err, ErrAlreadyEnrolled) {
 		t.Fatalf("second enroll: %v", err)
 	}
 }
 
-// Watching my address: the log keys pinned on first use, the position kept between runs (and
-// restored from its text), what I did myself not reported, what somebody else did reported, and a
-// log that is not checked without keys.
 func TestWatchMyAddress(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -207,7 +191,6 @@ func TestWatchMyAddress(t *testing.T) {
 	if err != nil || len(rep.Alerts) != 0 || rep.HeadSeq == 0 {
 		t.Fatalf("my own entry: %+v %v", rep, err)
 	}
-	// somebody (another session of the account) publishes a key: reported
 	pub2, secret2, _ := encrypt.GenerateRecoveryKey()
 	id2, _ := encrypt.ParseAgeIdentity(secret2)
 	if _, err := other.Publish(ctx, PublishRequest{Key: pub2, Identity: id2}); err != nil {
@@ -217,7 +200,6 @@ func TestWatchMyAddress(t *testing.T) {
 	if err != nil || len(rep.Alerts) != 1 || rep.New != 1 {
 		t.Fatalf("the other session's entry: %+v %v", rep, err)
 	}
-	// not reported twice, also after the state is stored and loaded again
 	st := me.State()
 	again := login("di@example.com")
 	if err := again.SetLogKeys(keys); err != nil {
@@ -230,14 +212,11 @@ func TestWatchMyAddress(t *testing.T) {
 	if err != nil || len(rep.Alerts) != 0 {
 		t.Fatalf("after reload: %+v %v", rep, err)
 	}
-	// damaged state is dropped, and said
 	if err := again.LoadState("{not json"); !errors.Is(err, ErrBadState) {
 		t.Fatalf("damaged state: %v", err)
 	}
 }
 
-// Other people's rows: an owner-signed row is not trusted as owner-signed until somebody confirmed
-// the owner key; confirming it (and keeping the pin) turns the mark on.
 func TestOwnerMarksOfOtherPeoplesRows(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -275,11 +254,9 @@ func TestOwnerMarksOfOtherPeoplesRows(t *testing.T) {
 	if !r.OwnerEnrolled || r.OwnerSigned || !r.Owner.NeedsConfirming() || r.OwnerPub == "" {
 		t.Fatalf("a row signed by a key nobody confirmed: %+v", r)
 	}
-	// the second look shows the same key: first seen, still not confirmed
 	if rows, _ = ana.Lookup(ctx, "bo@example.com"); rows[0].Owner != OwnerFirstSeen || rows[0].OwnerSigned {
 		t.Fatalf("second look: %+v", rows[0])
 	}
-	// confirmed (after comparing the fingerprint another way), kept, and restored in a new client
 	ana.PinOwner("bo@example.com", r.OwnerPub)
 	saved := ana.Pins()
 	fresh := login("ana@example.com")
@@ -299,7 +276,6 @@ func TestLogKeyFingerprintsAreComparable(t *testing.T) {
 	if LogKeyFingerprint("not base64!") != "" || LogKeyFingerprint("AAEC") != "" {
 		t.Error("a non-key has a fingerprint")
 	}
-	// the way people copy one: upper case, with colons or dashes
 	typed := strings.ToUpper(strings.ReplaceAll(fp, " ", ":"))
 	if NormalizeFingerprint(typed) != NormalizeFingerprint(fp) || NormalizeFingerprint(" "+fp+"\n") != NormalizeFingerprint(fp) {
 		t.Errorf("%q is not %q", NormalizeFingerprint(typed), NormalizeFingerprint(fp))
@@ -309,9 +285,6 @@ func TestLogKeyFingerprintsAreComparable(t *testing.T) {
 	}
 }
 
-// Rotating the owner key while it is held, and replacing a lost one through the provider session: the
-// request, the waiting period (a fake clock on the server), a cancel by the current key, and the
-// completion.
 func TestRotateAndResetTheOwnerKey(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -340,7 +313,6 @@ func TestRotateAndResetTheOwnerKey(t *testing.T) {
 	if err := c.Enroll(ctx, me, k1); err != nil {
 		t.Fatal(err)
 	}
-	// rotate: only the current key can, and then only the new one signs
 	stranger, _ := GenerateOwnerKey()
 	if err := c.Rotate(ctx, me, stranger, k2); err == nil {
 		t.Fatal("a key that is not the owner's rotated it")
@@ -358,7 +330,6 @@ func TestRotateAndResetTheOwnerKey(t *testing.T) {
 	if _, err := c.Publish(ctx, PublishRequest{Email: me, Key: pub, Owner: k2}); err != nil {
 		t.Fatalf("the new key: %v", err)
 	}
-	// reset: asked through the session, due after the wait
 	en, err := c.RequestReset(ctx)
 	if err != nil || !en.ResetPending || !en.ResetDue.After(now.Add(23*time.Hour)) {
 		t.Fatalf("request: %+v %v", en, err)
@@ -366,14 +337,12 @@ func TestRotateAndResetTheOwnerKey(t *testing.T) {
 	if err := c.CompleteReset(ctx, me, k3); !errors.Is(err, ErrResetWait) {
 		t.Fatalf("completing before the wait: %v", err)
 	}
-	// the current key cancels it
 	if err := c.CancelReset(ctx, me, k2); err != nil {
 		t.Fatal(err)
 	}
 	if e, _ := c.Enrollment(ctx, me); e.ResetPending {
 		t.Fatalf("still pending after the cancel: %+v", e)
 	}
-	// asked again, and the wait passes
 	if _, err := c.RequestReset(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -417,26 +386,20 @@ func TestRequireOwnerReturnsTheRowsWithErrUnenrolled(t *testing.T) {
 	if _, err := (&Client{Base: ts.URL, Token: tokenFor("bo@example.com")}).Publish(ctx, PublishRequest{Key: pub, Label: "Bo's key"}); err != nil {
 		t.Fatal(err)
 	}
-	// Bo never enrolled an owner key. By default the lookup says nothing about that.
 	plain := &Client{Base: ts.URL, Token: tokenFor("ana@example.com")}
 	if keys, err := plain.Lookup(ctx, "bo@example.com"); err != nil || len(keys) != 1 || !keys[0].Verified {
 		t.Fatalf("default lookup: %+v %v", keys, err)
 	}
-	// With RequireOwner the keys still come back, together with ErrUnenrolled, and none is marked as
-	// enrolled: the page decides how to show them.
 	strict := &Client{Base: ts.URL, Token: tokenFor("ana@example.com"), RequireOwner: true}
 	keys, err := strict.Lookup(ctx, "bo@example.com")
 	if !errors.Is(err, ErrUnenrolled) || len(keys) != 1 || keys[0].OwnerEnrolled {
 		t.Fatalf("strict lookup: %+v %v", keys, err)
 	}
-	// An address nobody published for has no keys, so there is nothing to refuse.
 	if keys, err := strict.Lookup(ctx, "nobody@example.com"); err != nil || len(keys) != 0 {
 		t.Fatalf("unknown address: %+v %v", keys, err)
 	}
 }
 
-// Watching names a reset of the owner key as its own kind of alert: the request while it waits, and
-// the reset when it is done, each with its log entry number; the person's own reset is not one.
 func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
 	ctx := context.Background()
 	var srv *demoserver.Server
@@ -476,7 +439,6 @@ func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
 		t.Fatalf("my own enrollment: %+v %v", rep, err)
 	}
 
-	// Somebody with a session of the account asks for a reset.
 	if _, err := other.RequestReset(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +451,6 @@ func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
 		t.Errorf("the request alert = %+v", req)
 	}
 
-	// The wait passes and the reset is completed with a key the owner never had.
 	now = now.Add(25 * time.Hour)
 	if err := other.CompleteReset(ctx, addr, k2); err != nil {
 		t.Fatal(err)
@@ -503,7 +464,6 @@ func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
 		t.Errorf("the reset alert = %+v (the request was entry %d)", done, req.Seq)
 	}
 
-	// A reset the person asks for and completes themselves is theirs: no alert.
 	if _, err := me.RequestReset(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +476,6 @@ func TestWatchNamesAResetOfTheOwnerKey(t *testing.T) {
 		t.Fatalf("my own reset: %+v %v", rep, err)
 	}
 
-	// Another kind of foreign entry stays a plain entry.
 	pub, secret, _ := encrypt.GenerateRecoveryKey()
 	id, _ := encrypt.ParseAgeIdentity(secret)
 	if _, err := other.Publish(ctx, PublishRequest{Email: addr, Key: pub, Identity: id, Owner: k3}); err != nil {
