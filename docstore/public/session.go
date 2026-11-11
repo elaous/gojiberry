@@ -14,101 +14,70 @@ import (
 	"github.com/elaous/gojiberry/auth"
 )
 
-// Session is one anonymous visitor: a random user ID ("anon:<random>"), no e-mail, no profile,
-// and the one document it may have. It is found by the hash of its bearer token (the token
-// itself is never stored), so a copy of the store does not hold a usable token.
+// Session is one anonymous visitor.
 type Session struct {
-	// ID is the random part of the user ID; User().ID is "anon:"+ID.
+	// ID is the random part of the user ID.
 	ID string
-	// DocID is the internal ID of the session's one document, "" until it has made one. It is
-	// kept even after the document is gone, taken down or expired, until the session ends
-	// (see Service: a taken-down session cannot start another).
+	// DocID is the internal ID of the session's one document.
 	DocID string
-	// Client is the ClientKey of the address that was given the session: what the per-address
-	// cap of live sessions counts.
+	// Client is the ClientKey of the session's address.
 	Client string
-	// Net is the NetKey of that address (an IPv6 /48, an IPv4 /24): what the second-level cap and
-	// the reserve for newcomers count.
+	// Net is the NetKey of that address.
 	Net string
-	// Wide is the WideKey of that address (an IPv6 /32, an IPv4 /16): what the third-level cap
-	// counts and the reserve for newcomers looks at (the coarsest level).
+	// Wide is the WideKey of that address.
 	Wide string
-	// Created is when the session was issued; it never extends the session beyond MaxAge.
+	// Created is when the session was issued.
 	Created time.Time
 	// Expires is the instant the session stops working.
 	Expires time.Time
 }
 
-// User is the session as the rest of the program knows people (see package auth): the ID
-// "anon:<random>" and nothing else.
+// User is the session as the rest of the program sees it.
 func (s Session) User() auth.User { return auth.AnonymousUser(s.ID) }
 
 // Errors of a SessionStore.
 var (
-	// ErrSessionsFull is returned by Create when the store holds its maximum of live sessions.
+	// ErrSessionsFull is returned by Create when the store is full.
 	ErrSessionsFull = errors.New("public: too many live anonymous sessions")
-	// ErrClientSessionsFull is returned by Create when the session's Client already holds its
-	// maximum of live sessions.
+	// ErrClientSessionsFull is returned by Create when a client is full.
 	ErrClientSessionsFull = errors.New("public: too many live anonymous sessions for this address")
-	// ErrNetSessionsFull is returned by Create when the session's Net already holds its maximum
-	// of live sessions.
+	// ErrNetSessionsFull is returned by Create when a network is full.
 	ErrNetSessionsFull = errors.New("public: too many live anonymous sessions for this network")
-	// ErrWideSessionsFull is returned by Create when the session's Wide already holds its
-	// maximum of live sessions.
+	// ErrWideSessionsFull is returned by Create when a wide network is full.
 	ErrWideSessionsFull = errors.New("public: too many live anonymous sessions for this wide network")
-	// ErrNoSession is returned by the methods that need a session that is not there (or has expired).
+	// ErrNoSession is returned by methods that need a session.
 	ErrNoSession = errors.New("public: no such session")
 )
 
-// SessionCaps are the figures a SessionStore applies in Create besides its own global cap.
+// SessionCaps are the figures a SessionStore applies in Create.
 type SessionCaps struct {
 	PerClient int // live sessions per Client (<= 0: no cap)
 	PerNet    int // live sessions per Net (<= 0: no cap)
 	PerWide   int // live sessions per Wide (<= 0: no cap)
-	// ReservePercent is the share (0..100) of the global cap kept for sessions whose Wide (the
-	// coarsest level) has no live session yet (<= 0: no reserve).
+	// ReservePercent is the share of the global cap kept in reserve.
 	ReservePercent int
 }
 
-// SessionStore keeps the live anonymous sessions. The default is NewMemorySessionStore (one
-// process); replicas that must share sessions, or a global cap, plug in a store over Redis or a
-// table. key is the hash of the bearer token (see TokenKey). Every method takes now so a store
-// needs no clock of its own, and an expired session behaves as absent.
-//
-// Create must refuse (ErrSessionsFull) when the live sessions are at the cap, counting without
-// the expired ones, (ErrClientSessionsFull) when the live sessions with the same Client already
-// number caps.PerClient, (ErrNetSessionsFull) when those with the same Net number caps.PerNet and
-// (ErrWideSessionsFull) when those with the same Wide number caps.PerWide (a figure <= 0 is no such
-// cap), so that one address, or one attacker holding a whole /48 or /32, cannot fill the global cap.
-// Once the live sessions reach the cap minus caps.ReservePercent of it, Create refuses
-// (ErrSessionsFull) every session whose Wide already has a live session (a session with no Wide:
-// whose Net does): the reserve is for visitors from networks that hold none, judged at the
-// coarsest level so that moving between the /48s of one /32 does not make an attacker a newcomer. SetDoc must be atomic (a compare-and-set), since it is what makes "one
-// document per session" hold under concurrent requests.
+// SessionStore keeps the live anonymous sessions.
 type SessionStore interface {
-	// Create stores a new session, or returns ErrSessionsFull, ErrClientSessionsFull or
-	// ErrNetSessionsFull.
+	// Create stores a new session, or returns an error when full.
 	Create(ctx context.Context, key string, s Session, now time.Time, caps SessionCaps) error
 	// Get returns the live session.
 	Get(ctx context.Context, key string, now time.Time) (Session, bool, error)
-	// SetDoc sets the session's DocID to newDoc if it is currently old (use "" for the first),
-	// and reports whether it did. ErrNoSession if the session is gone.
+	// SetDoc sets the session's DocID if it is live.
 	SetDoc(ctx context.Context, key, old, newDoc string, now time.Time) (bool, error)
-	// Extend moves the session's expiry to expires (never earlier than now; the caller
-	// has already applied MaxAge).
+	// Extend moves the session's expiry to expires.
 	Extend(ctx context.Context, key string, expires, now time.Time) error
-	// Delete ends the session; deleting a missing one is not an error.
+	// Delete ends a session.
 	Delete(ctx context.Context, key string) error
 }
 
-// SessionReaper is an optional capability of a SessionStore: Reap deletes the sessions that have
-// expired (idle ones included: a session that never wrote lives only Config.SessionIdleTTL) and
-// returns how many. Service.Sweep calls it, so expired sessions do not wait for the store to be full.
+// SessionReaper is an optional capability of a SessionStore.
 type SessionReaper interface {
 	Reap(ctx context.Context, now time.Time) (int, error)
 }
 
-// TokenKey is the store key of a bearer token: its SHA-256 in hex.
+// TokenKey is the store key of a bearer token: its SHA-256.
 func TokenKey(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
@@ -123,13 +92,9 @@ func randomString(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// MemorySessionStore is the single-process SessionStore. Expired sessions are dropped through an
-// expiry heap (each Create and Reap pops what has expired, so the cost is that of the sessions that
-// expired, never a scan of all of them): a flood of sessions that are never used again cannot fill
-// it for longer than their lifetime, and a flood of refused Creates does not make each refusal walk
-// the whole store under the lock.
+// MemorySessionStore is the single-process SessionStore.
 type MemorySessionStore struct {
-	// Max is the cap on live sessions (0: DefaultMaxSessions).
+	// Max is the cap on live sessions; 0 means the default.
 	Max int
 
 	mu       sync.Mutex
@@ -141,14 +106,14 @@ type MemorySessionStore struct {
 	popped   int            // sessions the heap has given up for expiry (for tests)
 }
 
-// memSession is a session and its place in the expiry heap.
+// memSession is a session with its place in the expiry heap.
 type memSession struct {
 	Session
 	key string
 	idx int
 }
 
-// expiryHeap is a container/heap of sessions ordered by Expires.
+// expiryHeap is a heap of sessions ordered by expiry.
 type expiryHeap []*memSession
 
 func (h expiryHeap) Len() int           { return len(h) }
@@ -175,7 +140,7 @@ func (h *expiryHeap) Pop() any {
 // DefaultMaxSessions is the live-session cap when none is set.
 const DefaultMaxSessions = 10000
 
-// NewMemorySessionStore makes a store holding at most max live sessions (0: DefaultMaxSessions).
+// NewMemorySessionStore makes a store holding at most max sessions.
 func NewMemorySessionStore(max int) *MemorySessionStore {
 	return &MemorySessionStore{Max: max}
 }
@@ -202,7 +167,7 @@ func (m *MemorySessionStore) initLocked() {
 	}
 }
 
-// reapLocked drops the expired sessions (the heap's head, until it is live) and returns how many.
+// reapLocked drops expired sessions from the heap's head.
 func (m *MemorySessionStore) reapLocked(now time.Time) int {
 	n := 0
 	for len(m.expiry) > 0 && !now.Before(m.expiry[0].Expires) {
@@ -250,7 +215,6 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 	defer m.mu.Unlock()
 	m.initLocked()
 	m.reapLocked(now) // expired sessions do not count against anyone
-	// the coarsest level the session names is the one the reserve looks at
 	known := func() bool {
 		switch {
 		case s.Wide != "":
@@ -271,7 +235,6 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 		return ErrWideSessionsFull
 	case caps.ReservePercent > 0 && known() &&
 		len(m.sessions) >= m.cap()-m.cap()*min(caps.ReservePercent, 100)/100:
-		// In the reserve: only networks with no live session are let in.
 		return ErrSessionsFull
 	}
 	ms := &memSession{Session: s, key: key}
@@ -353,7 +316,7 @@ func (m *MemorySessionStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-// Len is the number of sessions held, expired ones not yet dropped included (for tests and metrics).
+// Len is the number of sessions held.
 func (m *MemorySessionStore) Len() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

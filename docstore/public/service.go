@@ -22,69 +22,40 @@ import (
 	"time"
 )
 
-// Limiter limits requests per key ("<group>|<client>"); it is the passkey one, so the same
-// implementations (a shared Redis budget, a gateway's decision, passkey.Unlimited) plug in here.
+// Limiter limits requests per key.
 type Limiter = passkey.Limiter
 
-// Limiters are the per-group request budgets. A nil one is a passkey.RateLimiter made from the
-// Config's figures. Every "<client>" is the ClientKey of the address (an IPv4 address, an IPv6
-// /64). Keys: Session "session|<client>", Write "write|<session id>" and WriteAddr
-// "writeaddr|<client>" (a write must pass both, so rotating sessions buys no write budget),
-// View "view|<client>", Report "report|<client>", Admin "admin|<client>": the budget of FAILED
-// admin authentications only (20 a minute by default), so a client that guesses wrong is slowed
-// down and one that presents the token is never counted (see adminAllowed). AdminNet
-// ("adminnet|<NetKey>", 60 a minute) and AdminGlobal ("admin-all", 300 a minute) count the same
-// failures per network (a /48 or /24) and in all, so guesses spread over the /64s of one network,
-// or over many networks, meet a limit too; when AdminGlobal is used up the admin route answers
-// wrong tokens 429 for AdminCooldown.
+// Limiters are the per-group request budgets.
 type Limiters struct {
 	Session, Write, WriteAddr, View, Report, Admin, AdminNet, AdminGlobal Limiter
 }
 
 // Options builds a Service. Only Store is required.
 type Options struct {
-	// Store holds documents and records. It must expire documents (be an *docstore.ExpiringAdapter,
-	// or anything that implements docstore.Expirer): New refuses a store that does not, since the
-	// offer's promise is deletion 24 hours after the last edit. Public documents are stored under
-	// "pubdoc/<id>", records under docstore.PublicPrefix and reports under docstore.ReportPrefix.
+	// Store holds documents and records; it must expire them.
 	Store  docstore.Adapter
 	Config Config
 
-	// The injectable pieces, each with a single-process default (see doc.go):
+	// The injectable pieces, each for a single process.
 	Sessions SessionStore // NewMemorySessionStore(Config.MaxSessions)
 	Limiters Limiters     // passkey.RateLimiter from the Config
-	// LimiterFactory, when set, makes the budgets that Limiters leaves nil: docstore.StoreLimiters
-	// (replicas on one store share them) or any factory, instead of a per-process RateLimiter.
-	// The names are "public-session", "public-write", "public-writeaddr", "public-view",
-	// "public-report" and "public-admin"; with docstore.StoreLimiters they are records under
-	// docstore.RateLimitPrefix, which the document API refuses and expiry leaves alone.
+	// LimiterFactory, when set, makes the budgets.
 	LimiterFactory docstore.LimiterFactory
 	Quota          Quota // NewMemoryQuota(Config.IPDailyBytes, 24h)
-	// PriorityQuota, when set, counts each reporter's priority reports (Config.MaxPriorityReportsPerReporter
-	// a day) instead of the per-process count, so replicas on one store share the allowance: give it a
-	// NewStoreQuota(store, int64(Config.MaxPriorityReportsPerReporter), 24*time.Hour). It is charged one unit
-	// per priority report, under the key "prio|<reporter>", with the fixed calendar days of a StoreQuota.
+	// PriorityQuota, when set, counts each reporter's priority reports.
 	PriorityQuota Quota
-	// SharedBurstWatch keeps the burst watch of the priority reports (networks that name many different
-	// documents within an hour, which alarms the operator and shows in /admin/health) in the store, one
-	// record per network under BurstKeyPrefix named by a keyed hash, so replicas count together and the
-	// alarm is logged once an hour, not once per replica. It needs a store with conditional writes
-	// (New refuses it otherwise).
+	// SharedBurstWatch keeps the burst watch shared across replicas.
 	SharedBurstWatch bool
 	Admin            AdminGuard // TokenAdmin(Config.AdminToken)
 	Blocklist        Blocklist  // NoBlocklist
-	// Notify is told of every report that was kept, so somebody reads it: a mail, a chat message, a queue. It
-	// gets the report itself (its reason is the reporter's free text: treat it as untrusted), runs on its own
-	// goroutine, and a panic in it is caught; its failure never refuses a report.
+	// Notify is told of every kept report.
 	Notify     func(Report)
 	Challenger Challenger                 // NoChallenge
 	ClientIP   func(*http.Request) string // passkey.TrustedProxies(Config.TrustedProxies...), else the remote address
 	Now        func() time.Time           // time.Now; use the clock of the ExpiringAdapter in tests
 }
 
-// Service is the public (anonymous) offer: session, document, view link, report and takedown
-// routes over a Store. Build it with New, mount it with Mount (or Handler/AdminHandler), and
-// run Run so records of vanished documents and old reports are swept.
+// Service is the public anonymous offer: sessions, documents and reports.
 type Service struct {
 	store     docstore.Adapter
 	cfg       Config
@@ -132,20 +103,16 @@ type Service struct {
 	noDeadline   atomic.Bool
 }
 
-// ErrAdminNeedsProxyConfig is returned by New when the admin route is enabled and nothing says how
-// clients are told apart.
+// ErrAdminNeedsProxyConfig is returned by New without proxy settings.
 var ErrAdminNeedsProxyConfig = errors.New("public: the admin route is enabled but GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES is unset: behind a reverse proxy every caller would share the proxy's address, and wrong guesses of one would lock the operator out; name the proxy's CIDRs, or set it to \"none\" if the server is reached directly")
 
-// ErrExpiryRequired is returned by New for a store that does not expire documents.
+// ErrExpiryRequired is returned by New for a store without expiry.
 var ErrExpiryRequired = errors.New("public: the store must expire documents (the 24 hour promise): wrap it in docstore.ExpiringAdapter and set GOJIBERRY_DOCSTORE_EXPIRY_TTL")
 
-// docKeyPrefix is where public documents live in the store. They are plain, expiring
-// documents (docstore.IsDocumentKey accepts them), so it is not a system keyspace: HiddenPrefixes
-// keeps it away from the generic /docs routes instead.
+// docKeyPrefix is where public documents live in the store.
 const docKeyPrefix = "pubdoc/"
 
-// HiddenPrefixes are the ids the generic /docs routes must not reach besides the reserved
-// docstore.PublicPrefix and docstore.ReportPrefix: the public documents themselves. Mount hides them.
+// HiddenPrefixes are the ids the generic routes must hide.
 func HiddenPrefixes() []string { return []string{docKeyPrefix} }
 
 const (
@@ -153,13 +120,11 @@ const (
 	viewRecordPrefix = docstore.PublicPrefix + "view/" // view id -> document
 	tombPrefix       = docstore.PublicPrefix + "tomb/" // tombstones of taken-down view ids
 	saltKey          = docstore.PublicPrefix + "salt"  // the salt of the reporter hashes
-	// TombstonePrefix is where takedown tombstones are kept: inside docstore.PublicPrefix, so
-	// they never expire with documents; the sweep deletes them after Config.TombstoneTTL.
+	// TombstonePrefix is where takedown tombstones are kept.
 	TombstonePrefix = tombPrefix
 )
 
-// New builds a Service. It fails when the store does not expire documents or the terms URL is
-// not an http(s) URL.
+// New builds a Service; it fails on an invalid store.
 func New(o Options) (*Service, error) {
 	if o.Store == nil {
 		return nil, errors.New("public: Options.Store is required")
@@ -171,10 +136,6 @@ func New(o Options) (*Service, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	// The admin route counts failed authentications per client address. Behind a proxy that is
-	// the proxy's address unless the proxy is named, and then one client's wrong guesses would
-	// lock the operator out: refuse to start the route that way, unless the operator says there is
-	// no proxy ("none") or supplies its own way to name a client.
 	if (cfg.AdminToken != "" || o.Admin != nil) && o.ClientIP == nil && len(cfg.TrustedProxies) == 0 && !cfg.NoProxy {
 		return nil, ErrAdminNeedsProxyConfig
 	}
@@ -215,7 +176,7 @@ func New(o Options) (*Service, error) {
 	if s.sessions == nil {
 		s.sessions = NewMemorySessionStore(cfg.MaxSessions)
 	}
-	// rl makes a token bucket of burst `figure` refilled at figure per `per`.
+	// rl makes a token bucket of a burst size and refill rate.
 	rl := func(l Limiter, name string, figure float64, per time.Duration) Limiter {
 		if l != nil {
 			return l
@@ -261,10 +222,6 @@ func New(o Options) (*Service, error) {
 			s.clientIP = passkey.TrustedProxies(cfg.TrustedProxies...)
 		}
 	}
-	// Version snapshots written through the store (the saver's layout) are asked for before they
-	// are written (refused with docstore.ErrStorageFull when they would pass the byte budget) and
-	// counted when they are stored, and subtracted when they are deleted. This sets hooks on the
-	// caller's adapter: build the Service before serving.
 	if ea := expiringOf(o.Store); ea != nil {
 		prev := ea.Guard
 		ea.Guard = func(id string, size int) (func(bool), error) {
@@ -315,9 +272,7 @@ func New(o Options) (*Service, error) {
 	return s, nil
 }
 
-// Mount serves the public routes on srv (under its guard) and keeps the public documents away
-// from its generic /docs routes. The admin route is mounted only when an AdminGuard that can
-// allow somebody is configured (a non-empty token, or a custom guard).
+// Mount serves the public routes on srv under its guard.
 func (s *Service) Mount(srv *docstore.Server) *docstore.Server {
 	for _, p := range HiddenPrefixes() {
 		srv.Hide(p)
@@ -331,7 +286,7 @@ func (s *Service) Mount(srv *docstore.Server) *docstore.Server {
 	return srv
 }
 
-// Handler serves /public/session, /public/doc, /public/view/<id>, /public/report and /public/health.
+// Handler serves the public routes.
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/public/health", s.handleHealth)
@@ -342,16 +297,13 @@ func (s *Service) Handler() http.Handler {
 	return s.headers(mux)
 }
 
-// headers adds what every public response carries: no indexing, no caching, no sniffing, no
-// referrer (a view link must not leak through the Referer of a click on a link in the
-// document), the terms link, the headers a browser client on another origin may read, and the
-// deadlines of the request (a slow body is cut off).
+// headers adds what every public response carries.
 func (s *Service) headers(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if d := s.cfg.RequestTimeout; d > 0 {
 			rc := http.NewResponseController(w)
 			now := time.Now()
-			_ = rc.SetReadDeadline(now.Add(d)) // not supported by every writer (tests): then the server's own timeouts apply
+			_ = rc.SetReadDeadline(now.Add(d))
 			_ = rc.SetWriteDeadline(now.Add(2 * d))
 		}
 		h := w.Header()
@@ -368,27 +320,19 @@ func (s *Service) headers(next http.Handler) http.Handler {
 	})
 }
 
-// ExposedHeaders is Access-Control-Expose-Headers of the public routes (and of /docs, see
-// docstore.ExposedHeaders): the response headers a script on another origin needs to read, which a
-// browser otherwise hides.
+// ExposedHeaders is Access-Control-Expose-Headers of the public routes.
 const ExposedHeaders = docstore.ExposedHeaders
 
-// ---- identifiers and records
-
-// docKey is the store key of the document docID.
+// docKey is the store key of document docID.
 func docKey(docID string) string { return docKeyPrefix + docID }
 
-// viewIDOf derives the view-only ID of a document: the first 128 bits of SHA-256 over a domain
-// tag and the document ID. The document ID is random and never shown to a viewer, so the view
-// ID is unguessable and does not reveal the document ID (or the edit token, which is a
-// separate random value); deriving it makes the view record findable from the document alone.
+// viewIDOf derives the view-only ID of a document.
 func viewIDOf(docID string) string {
 	h := sha256.Sum256([]byte("gojiberry/public/view/v1\x00" + docID))
 	return base64.RawURLEncoding.EncodeToString(h[:16])
 }
 
-// validID reports whether id looks like an ID this service makes (22 base64url characters), so
-// nothing else is ever put into a store key.
+// validID reports whether id has the shape of a service ID.
 func validID(id string) bool {
 	if len(id) != 22 {
 		return false
@@ -403,8 +347,7 @@ func validID(id string) bool {
 	return true
 }
 
-// docMeta is the record of one public document, "public/doc/<docID>". It holds no content and
-// no token: the owner is the user ID of the session ("anon:<random>"), not a bearer.
+// docMeta is the record of one public document.
 type docMeta struct {
 	Owner    string    `json:"owner"`
 	ViewID   string    `json:"view"`
@@ -412,8 +355,7 @@ type docMeta struct {
 	Versions int       `json:"versions"`
 	Bytes    int       `json:"bytes"`
 	Reports  int       `json:"reports,omitempty"`
-	// ReportRefs are the reports stored for this document (at most maxReportsOfDoc), what the
-	// dedupe, the reserved slots and the priority eviction of handleReport work from.
+	// ReportRefs are the reports stored for this document.
 	ReportRefs []reportRef `json:"reportRefs,omitempty"`
 }
 
@@ -434,7 +376,7 @@ func (s *Service) putJSON(ctx context.Context, key string, v any) error {
 	return s.store.Save(ctx, key, b)
 }
 
-// getJSON loads key into v; found is false for a missing record.
+// getJSON loads key into v; found is false when missing.
 func (s *Service) getJSON(ctx context.Context, key string, v any) (found bool, err error) {
 	d, err := s.store.Load(ctx, key)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -461,17 +403,13 @@ func (s *Service) lock(docID string) func() {
 	return m.Unlock
 }
 
-// removed reports whether the document's view ID has a tombstone: it was taken down.
+// removed reports whether the document's view ID has a tombstone.
 func (s *Service) removed(ctx context.Context, docID string) (bool, error) {
 	var t tombstone
 	return s.getJSON(ctx, tombPrefix+viewIDOf(docID), &t)
 }
 
-// live reports whether the document is stored and not expired (an expired one is invisible to
-// the ExpiringAdapter at once, before its sweep).
-//
-// It asks for the one document's deadline (a single small read), never for a listing; a store
-// that has no deadline for it falls back to loading it.
+// live reports whether the document is stored and not expired.
 func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	key := docKey(docID)
 	if x, ok := s.store.(docstore.Expirer); ok {
@@ -490,7 +428,7 @@ func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	return err == nil, err
 }
 
-// dropRecords deletes the document's own records (not the document, not the tombstone).
+// dropRecords deletes the document's own records.
 func (s *Service) dropRecords(ctx context.Context, docID string) error {
 	if err := s.deleteKey(ctx, viewRecordPrefix+viewIDOf(docID)); err != nil {
 		return err
@@ -498,16 +436,13 @@ func (s *Service) dropRecords(ctx context.Context, docID string) error {
 	return s.deleteKey(ctx, docRecordPrefix+docID)
 }
 
-// ---- responses
-
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v) // a write failure means the client went away
 }
 
-// fail answers 500 without the error's text, and logs it with the store keys (which hold document
-// IDs) taken out.
+// fail answers 500 without the error's text, and logs it.
 func (s *Service) fail(w http.ResponseWriter, err error) {
 	log.Printf("public docstore: %s", redact(err))
 	http.Error(w, "storage error", http.StatusInternalServerError)
@@ -524,11 +459,10 @@ func methodNotAllowed(w http.ResponseWriter, allow string) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
-// clientKey is the ClientKey of the address the request comes from (the remote address, or what
-// Options.ClientIP names).
+// clientKey is the ClientKey of the request's address.
 func (s *Service) clientKey(r *http.Request) string { return ClientKey(s.clientIP(r)) }
 
-// allow asks the limiter for group's budget of the client of r (or of key, if not "").
+// allow asks the limiter for group's budget of the client.
 func (s *Service) allow(w http.ResponseWriter, r *http.Request, l Limiter, group, who string) bool {
 	if who == "" {
 		who = s.clientKey(r)
@@ -540,7 +474,7 @@ func (s *Service) allow(w http.ResponseWriter, r *http.Request, l Limiter, group
 	return ok
 }
 
-// setExpires adds X-Gojiberry-Expires for the document, as docstore's /docs routes do.
+// setExpires adds X-Gojiberry-Expires for the document.
 func (s *Service) setExpires(ctx context.Context, w http.ResponseWriter, docID string) {
 	if x, ok := s.store.(docstore.Expirer); ok {
 		if t, has, err := x.Expiry(ctx, docKey(docID)); err == nil && has {
@@ -549,8 +483,7 @@ func (s *Service) setExpires(ctx context.Context, w http.ResponseWriter, docID s
 	}
 }
 
-// expiresOf is the document's deadline; has is false when it has none (err nil) and err says the
-// store could not be asked.
+// expiresOf is the document's deadline.
 func (s *Service) expiresOf(ctx context.Context, docID string) (t time.Time, has bool, err error) {
 	x, ok := s.store.(docstore.Expirer)
 	if !ok {
@@ -560,17 +493,14 @@ func (s *Service) expiresOf(ctx context.Context, docID string) (t time.Time, has
 	return t.UTC(), has, err
 }
 
-// writeAllowed charges a write to the session's budget and to its address's.
+// writeAllowed charges a write to the session's budget.
 func (s *Service) writeAllowed(w http.ResponseWriter, r *http.Request, sess Session) bool {
 	return s.allow(w, r, s.lim.Write, "write", sess.ID) && s.allow(w, r, s.lim.WriteAddr, "writeaddr", "")
 }
 
-// ---- sessions
-
 // sessionResponse is the body of POST /public/session.
 type sessionResponse struct {
-	// Token is the bearer token of the session: the edit capability. Keep it secret; the edit
-	// link carries it in its fragment.
+	// Token is the session's bearer token.
 	Token   string    `json:"token"`
 	UserID  string    `json:"userId"`
 	Expires time.Time `json:"expires"`
@@ -582,9 +512,7 @@ type limits struct {
 	MaxVersions int   `json:"maxVersions"`
 }
 
-// handleSession serves POST /public/session: a new anonymous session. One document per session
-// is the rule; clearing the browser's storage makes a new session, which is why the per-address
-// budgets (sessions issued, bytes a day) are the real limit.
+// handleSession serves POST /public/session: a new anonymous session.
 func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, "POST")
@@ -608,7 +536,6 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now()
-	// A session that has not stored a document yet is short-lived: the first write extends it.
 	addr := s.clientIP(r)
 	sess := Session{ID: id, Client: ClientKey(addr), Net: NetKey(addr), Wide: WideKey(addr), Created: now, Expires: now.Add(s.cfg.SessionIdleTTL)}
 	caps := SessionCaps{PerClient: s.cfg.MaxSessionsPerAddress, PerNet: s.cfg.MaxSessionsPerNet, PerWide: s.cfg.MaxSessionsPerWide, ReservePercent: max(0, s.cfg.SessionReservePercent)}
@@ -639,8 +566,7 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CurrentUser resolves the request's bearer token to its anonymous user (ID "anon:<random>"),
-// the way auth.Manager.CurrentUser does for a signed-in one.
+// CurrentUser resolves the request's bearer token to its user.
 func (s *Service) CurrentUser(r *http.Request) (auth.User, bool) {
 	_, sess, ok := s.lookup(r)
 	if !ok {
@@ -662,7 +588,7 @@ func (s *Service) lookup(r *http.Request) (key string, sess Session, ok bool) {
 	return key, sess, true
 }
 
-// session answers 401 unless the request carries a live session's token.
+// session answers 401 unless the request carries a live session.
 func (s *Service) session(w http.ResponseWriter, r *http.Request) (string, Session, bool) {
 	key, sess, ok := s.lookup(r)
 	if !ok {
@@ -672,12 +598,12 @@ func (s *Service) session(w http.ResponseWriter, r *http.Request) (string, Sessi
 	return key, sess, ok
 }
 
-// renewSession extends the session after a write, within SessionMaxAge.
+// renewSession extends the session after a write.
 func (s *Service) renewSession(ctx context.Context, key string, sess Session) {
 	now := s.now()
 	exp := now.Add(s.cfg.SessionTTL)
 	if limit := sess.Created.Add(s.cfg.SessionMaxAge); exp.After(limit) {
 		exp = limit
 	}
-	_ = s.sessions.Extend(ctx, key, exp, now) // best effort: a failure shortens the session, not the document
+	_ = s.sessions.Extend(ctx, key, exp, now)
 }
