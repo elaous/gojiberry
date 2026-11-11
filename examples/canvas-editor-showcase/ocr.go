@@ -12,14 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Text from a picture (the ocr add-on, window.addons.ocr), for scans and photographed pages:
-//
-//	recognize({image: Uint8Array /* PNG, longer side at most 2048 */, mime: "image/png", language, model}) -> Promise<{text}>
-//
-// It runs on this device. The text is shown for the author to read and correct, and goes into the document only when
-// they press a button: after the picture, or as its long description.
-
-// ocrState is the text read from each picture (by its index in the document), and which are being read.
 var ocrState struct {
 	text    map[int]string
 	working map[int]bool
@@ -28,7 +20,6 @@ var ocrState struct {
 
 func ocrAddon() bool { return hasAddon("ocr", "recognize") }
 
-// readPicture asks the add-on for the text in the picture at index i.
 func readPicture(i int, im *canvas.Image, renderUI func()) {
 	if ocrState.text == nil {
 		ocrState.text, ocrState.working, ocrState.msg = map[int]string{}, map[int]bool{}, map[int]string{}
@@ -61,8 +52,6 @@ func readPicture(i int, im *canvas.Image, renderUI func()) {
 	}()
 }
 
-// ocrControls is the offer under a picture, when the page has the ocr add-on: a button that reads the text in it, the
-// text (to correct), and what to do with it.
 func ocrControls(i int, r imageRef, canEdit bool, fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	if !ocrAddon() {
 		return xango.Frag()

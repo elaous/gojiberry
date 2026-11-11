@@ -11,67 +11,19 @@ import (
 	"strings"
 )
 
-// Page metadata annotations are doc-comment lines directly above a
-// page component's func declaration -- one key per line, each its own
-// marker, deliberately shaped differently from the other two comment
-// conventions already in this codebase so the three don't get
-// confused for one another:
-//
-//   - a tool directive (//go:generate, //encore:api) triggers an
-//     external command or build-time codegen;
-//   - //language=SQL (see editors/vscode-xango) is a pure editor hint
-//     with zero effect on the compiled program;
-//   - @title/@stylesheets/@wasm, below, are neither: they're
-//     informational metadata about the function that a real tool
-//     (xgc) does turn into code (a xango.Document{}.Render() wrapper),
-//     which is why they get a third shape instead of overloading
-//     either existing one. The @-prefixed, space-separated form
-//     mirrors swaggo/swag's `// @Summary`/`// @Router` handler
-//     annotations -- genuine, widely-used Go prior art for exactly
-//     this kind of per-function informational comment, unlike an
-//     invented bare `@` marker.
+// Page metadata: @-prefixed doc-comment lines above a page func.
 const (
 	titleMarker       = "@title "
 	stylesheetsMarker = "@stylesheets "
-	// stylesMarker picks which registered stylesheets (CSS imports) a
-	// page includes: `@styles components/base.css button.css` (full IDs or
-	// their ends), or `@styles none`. Without it a page gets them all.
+	// stylesMarker limits a page to named stylesheets, or none.
 	stylesMarker = "@styles "
-	// wasmMarker names the URL a compiled WASM client is served from
-	// (e.g. "/static/main.wasm"), not a filesystem path: unlike
-	// @stylesheets, which reads a file's content at transpile time,
-	// the .wasm binary doesn't exist yet when its SSR page is
-	// transpiled -- it's built separately, from a different package,
-	// typically after this page's own build. xgc only needs to know
-	// where it'll be served from to generate the bootstrap <script>
-	// tags.
+	// wasmMarker names the URL the WASM client is served from.
 	wasmMarker = "@wasm "
 )
 
-// defaultTitleIdent is the package-level identifier @title falls back
-// to when a page component doesn't specify one: the caller declares
-// `var DefaultTitle = "..."` once anywhere in the package (in main.go
-// or alongside the pages themselves) and every annotated page without
-// its own @title picks it up. xango does not declare it itself -- same
-// "trust the Go compiler" stance as the JSON typed-import annotation:
-// if it's never declared, the generated code fails to compile with an
-// ordinary undefined-identifier error.
+// defaultTitleIdent: the package var @title falls back to.
 const defaultTitleIdent = "DefaultTitle"
 
-// processPageMetadata scans src (already past tag expansion, so it's
-// syntactically valid Go) for func declarations annotated with
-// @title/@stylesheets/@wasm doc comments and rewrites their return
-// statements to wrap the returned xango.Node in a xango.Document{}.Render()
-// call: each stylesheet's file content is injected into Head via
-// xango.Style, and @wasm appends the wasm_exec.js loader plus an
-// WebAssembly.instantiateStreaming bootstrap script after the
-// function's own returned content -- the same two <script> tags every
-// WASM-consuming page in this repo otherwise had to hand-write. baseDir
-// resolves @stylesheets paths the same way resource imports do:
-// relative to the .xg file's own directory.
-//
-// A cheap substring pre-check means files that never use any of the
-// three markers are returned unchanged without paying for a parse.
 func processPageMetadata(filename, baseDir, src string) (string, error) {
 	if !strings.Contains(src, titleMarker) && !strings.Contains(src, stylesheetsMarker) && !strings.Contains(src, stylesMarker) && !strings.Contains(src, wasmMarker) {
 		return src, nil
@@ -151,9 +103,7 @@ WebAssembly.instantiateStreaming(fetch(%s), go.importObject).then((result) => {
 	return out.String(), nil
 }
 
-// parsePageDoc scans a func's doc comment for @title/@stylesheets/
-// @wasm lines, leaving ordinary prose lines alone. found is false if
-// none of the markers appear, meaning the function is left untouched.
+// parsePageDoc finds the @-markers in a func doc; false if none.
 func parsePageDoc(doc *ast.CommentGroup) (title string, stylesheets, styles []string, wasmURL string, found bool) {
 	for _, c := range doc.List {
 		text := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
@@ -185,15 +135,6 @@ type returnEdit struct {
 	replacement string
 }
 
-// wrapPageReturns locates every return statement in body's own
-// top-level control flow -- ifs, fors, switches, blocks -- and
-// reports a text edit wrapping each one's expression in
-// xango.Document{Title: ..., Head: ..., Body: wrapBody(<original
-// expression text, untouched>)}.Render(). It never descends into a
-// nested func literal: those returns belong to that closure, not to
-// the page component itself, and must be left alone (e.g. the
-// immediately-invoked closures this codebase already uses for
-// rendering a []xango.Node from a loop).
 func wrapPageReturns(fset *token.FileSet, src string, body *ast.BlockStmt, titleSrc, headSrc string, wrapBody func(string) string) []returnEdit {
 	var edits []returnEdit
 	var walkStmt func(ast.Stmt)

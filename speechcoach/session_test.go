@@ -68,7 +68,6 @@ func TestSessionRecordRetakeSkipAndFinish(t *testing.T) {
 	if err != nil || len(take.Hints) != 0 || take.Attempts != 1 || s.Index() != 0 {
 		t.Fatalf("a good take keeps the position and has no hints: %+v %v", take, err)
 	}
-	// a retake replaces the take and counts; a faint one gets a hint but is kept
 	take, _ = s.Record(tone(2, 0.01, 0.0001), t0.Add(time.Minute))
 	if take.Attempts != 2 || !slices.Contains(take.Hints, HintTooQuiet) || s.Status(0) != Recorded {
 		t.Fatalf("retake: %+v", take)
@@ -93,7 +92,6 @@ func TestSessionRecordRetakeSkipAndFinish(t *testing.T) {
 	if !s.Finished() {
 		t.Error("finished with one skipped: skipping is allowed")
 	}
-	// next from the end offers the skipped phrase again; the person may also go back and discard
 	if !s.Next() || s.Phrase() != "two" {
 		t.Errorf("a skipped phrase is offered again: %q", s.Phrase())
 	}
@@ -153,7 +151,6 @@ func TestResumeFromProgressAndDataset(t *testing.T) {
 	if got, ok := r.Take(0); !ok || len(got.PCM) != len(take.PCM) || got.Attempts != 1 {
 		t.Error("the take comes back from the dataset")
 	}
-	// the take is gone from the dataset: the phrase is pending again; a record of another set is ignored
 	if r := Resume(set, saved, &Dataset{}); r.Status(0) != Pending {
 		t.Error("no audio, no recorded status")
 	}

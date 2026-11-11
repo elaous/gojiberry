@@ -6,45 +6,29 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// GrammarIssue is one thing the grammar check found, as LanguagePanel shows it.
 type GrammarIssue struct {
-	// Text is the words concerned, Message what is wrong, Suggestion what to
-	// write instead ("" when the model offered none).
 	Text, Message, Suggestion string
 }
 
 // LanguageTarget is a language the text can be translated into.
 type LanguageTarget struct{ Code, Name string }
 
-// LanguagePanelProps configures LanguagePanel. It is controlled: the caller
-// runs the backends (packages lang, translate and grammar) and feeds back what
-// they say.
+// LanguagePanelProps configures LanguagePanel.
 type LanguagePanelProps struct {
-	// Detected is the name of the language the text seems to be in ("" if
-	// unknown).
-	Detected string
-	// OnUseDetected, when set, adds a button that makes the detected language the language of the document
-	// (UseDetectedDone says it already is, and the button is then off).
+	Detected        string
 	OnUseDetected   func()
 	UseDetectedDone bool
 
-	// Targets are the languages offered for translation; empty means no
-	// translation backend is set up, which is said instead of offering it.
 	Targets []LanguageTarget
-	// Target is the chosen one. Translation is the result for the selection (""
-	// until asked), and HasSelection whether anything is selected to translate.
+	// Target is the chosen one.
 	Target       string
 	Translation  string
 	HasSelection bool
 
-	// GrammarEnabled says a grammar backend is set up; Issues are what it found.
 	GrammarEnabled bool
 	Issues         []GrammarIssue
-	// Checked is true once a grammar check has run (so "no issues" can be told
-	// from "not run").
-	Checked bool
+	Checked        bool
 
-	// Busy is shown while a backend is working; Error is the last failure.
 	Busy  bool
 	Error string
 	// ReadOnly hides the buttons that change the text.
@@ -58,8 +42,6 @@ type LanguagePanelProps struct {
 	OnGotoIssue    func(index int)
 }
 
-// LanguagePanel shows the detected language, a translator for the selection and
-// the grammar issues with the fix for each.
 func LanguagePanel(p LanguagePanelProps) xango.Node {
 	call := func(f func()) func(xango.Event) {
 		return func(xango.Event) {
@@ -90,7 +72,6 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-error"), xango.A("role", "alert")}, xango.Text(p.Error)))
 	}
 
-	// Translation.
 	kids = append(kids, xango.El("h4", nil, xango.Text(tr("lang.translateHead", "Translate the selection"))))
 	if len(p.Targets) == 0 {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text(tr("lang.noTranslator", "No translation server is set up."))))
@@ -122,7 +103,6 @@ func LanguagePanel(p LanguagePanelProps) xango.Node {
 		}
 	}
 
-	// Grammar.
 	kids = append(kids, xango.El("h4", nil, xango.Text(tr("lang.grammar", "Grammar"))))
 	if !p.GrammarEnabled {
 		kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-lang-off")}, xango.Text(tr("lang.noGrammar", "No grammar model is set up."))))

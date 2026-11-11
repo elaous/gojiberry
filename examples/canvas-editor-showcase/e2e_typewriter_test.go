@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// With typewriter scrolling on, the line being typed stays in the middle of the view and the page moves under it:
-// moving down a few lines scrolls the page although the caret was still well inside the view. Off, the page stays
-// until the caret reaches the edge.
 func TestTypewriterScrolling(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -41,8 +38,6 @@ func TestTypewriterScrolling(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the carriage on, the page slides left as the line grows and back right (and a line up) on Enter, and runs past
-// its left edge at the start of a line, as the paper of a typewriter does.
 func TestTypewriterCarriageSlidesThePageSideways(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

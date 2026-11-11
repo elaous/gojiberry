@@ -44,13 +44,11 @@ func TestFloatingImageAnchoredToAPage(t *testing.T) {
 		t.Fatalf("anchored images move with their page: y=%g", y)
 	}
 	ps.Y = 0
-	// Drag right 33: the anchor follows (and Y stays).
 	im.MouseDown(100, 200)
 	im.MouseMove(133, 200)
 	if im.Anchor.X != 65 || im.Anchor.Page != 1 || im.Anchor.Y != 10 { // 30+33 snapped to 5, relative to the page
 		t.Fatalf("anchor = %+v", *im.Anchor)
 	}
-	// Exclusion uses the resolved position.
 	im.Wrap = true
 	if x0, _, ok := im.Exclusion(160, 170); !ok || x0 != 24+65-8 {
 		t.Fatalf("exclusion x0 = %g ok=%v", x0, ok)
@@ -65,7 +63,6 @@ func TestAnchoredImageUsesTheFlowsPages(t *testing.T) {
 	if x, y, _, _ := im.Visible(); x != 29 || y != 30 {
 		t.Fatalf("visible at %g,%g", x, y)
 	}
-	// Without any PageSet an Anchor is ignored.
 	im2 := NewImage(fakeImage{50, 50}, 7, 8)
 	im2.Anchor = &Anchor{Page: 3, X: 1, Y: 1}
 	if x, y, _, _ := im2.Visible(); x != 7 || y != 8 {
@@ -84,10 +81,9 @@ func TestFloatingTextAnchoredAndReanchoredAcrossPages(t *testing.T) {
 	if x, y, _, _ := ft.Box(); x != 44 || y != 54 {
 		t.Fatalf("box at %g,%g", x, y)
 	}
-	// Move button: the toolbar sits 28px above the box.
 	ft.MouseDown(50, 54-17)
-	ft.MouseMove(50, 54-17+105)                                        // drag down 105: the box's top lands at y=159, on page 1
-	if ft.Anchor.Page != 1 || ft.Anchor.Y != 10 || ft.Anchor.X != 20 { // y 159 on page 1 is 11 -> snaps to 10
+	ft.MouseMove(50, 54-17+105)
+	if ft.Anchor.Page != 1 || ft.Anchor.Y != 10 || ft.Anchor.X != 20 {
 		t.Fatalf("anchor = %+v", *ft.Anchor)
 	}
 	if x, y, _, _ := ft.Box(); x != 44 || y != 158 {
@@ -101,8 +97,6 @@ func TestFloatingTextAnchoredAndReanchoredAcrossPages(t *testing.T) {
 		t.Fatal("not wrapping")
 	}
 }
-
-// --- inline images ---
 
 func inlineImage(t *testing.T) (*Image, *TextFlow, *fakePainter) {
 	t.Helper()
@@ -124,13 +118,11 @@ func TestInlineImageFitsTheColumnKeepingAspectRatio(t *testing.T) {
 	if o.W != 100 || o.H != 50 || im.scale != 0.5 {
 		t.Fatalf("object %gx%g scale %g, want 100x50 at 0.5", o.W, o.H, im.scale)
 	}
-	// The page's text height limits it too.
 	f.Height = 30
 	f.Layout()
 	if im.scale != 0.3 {
 		t.Fatalf("scale = %g, want 0.3 (30/100)", im.scale)
 	}
-	// Small images are never scaled up.
 	small := NewImage(fakeImage{20, 10}, 0, 0)
 	if w, h := small.Measure(nil, 500, 500); w != 20 || h != 10 {
 		t.Fatalf("small image = %gx%g", w, h)
@@ -145,11 +137,10 @@ func TestInlineImageDrawAt(t *testing.T) {
 	im.Alpha = 0.5
 	im.Clip = Insets{Left: 20, Top: 10}
 	f.Draw()
-	// Visible nominal 180x90 -> scale 100/180 -> 100 x 50; source rect is in natural pixels.
 	if !p.has("alpha 0.5") || !p.has("drawImage 20 10 180 90 -> 10 ") {
 		t.Fatalf("calls: %v", p.calls)
 	}
-	im.Draw() // as a stage component, an inline image draws no bitmap itself
+	im.Draw()
 	count := 0
 	for _, c := range p.calls {
 		if len(c) > 9 && c[:9] == "drawImage" {
@@ -195,7 +186,6 @@ func TestInlineImageClipDragWorksInDisplayedPixels(t *testing.T) {
 	if vw != 100 || vh != 50 {
 		t.Fatalf("visible %gx%g", vw, vh)
 	}
-	// Left handle: drag 20 displayed px right = 40 nominal px at scale 0.5.
 	im.MouseDown(vx, vy+vh/2)
 	im.MouseMove(vx+20, vy+vh/2)
 	if im.Clip.Left != 40 {
@@ -204,12 +194,11 @@ func TestInlineImageClipDragWorksInDisplayedPixels(t *testing.T) {
 	im.MouseUp(0, 0)
 	f.Layout()
 	f.Draw()
-	if _, _, w, _ := im.Visible(); w != 80 { // (200-40) x 0.5... re-fitted to a 100px column at scale 0.625
+	if _, _, w, _ := im.Visible(); w != 80 { // Re-fitted to the 100px column at scale 0.625.
 		if w != 100 {
 			t.Fatalf("visible width after the clip = %g", w)
 		}
 	}
-	// Chrome draws over the flow's bitmap in edit mode.
 	p := im.Painter.(*fakePainter)
 	p.calls = nil
 	im.Draw()

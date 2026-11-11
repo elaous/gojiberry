@@ -2,10 +2,6 @@
 
 //go:build js && wasm
 
-// worker_section.xg spawns a dedicated Worker running a separate
-// Go/WASM binary (worker/worker.go) and exchanges messages with it via
-// browser.Worker, proving the round trip actually works end to end --
-// not just that both binaries compile.
 package main
 
 import (
@@ -21,9 +17,6 @@ func wireWorkerSection(document *html.Document) {
 
 	w.OnMessage(func(data js.Value) {
 		if data.Get("ready").Truthy() {
-			// The worker's own goroutine scheduling isn't running until
-			// this fires, so wait for it instead of posting on a timer
-			// and hoping the worker is listening by then.
 			w.PostMessage(map[string]any{"n": 100})
 			return
 		}

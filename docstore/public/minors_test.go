@@ -16,15 +16,10 @@ import (
 	"time"
 )
 
-// behindProxy makes the test server believe X-Forwarded-For from the loopback (where httptest
-// connects from), so a test can act as many clients.
 func behindProxy(o *Options) { o.Config.TrustedProxies = []string{"127.0.0.1"} }
 
 func xff(ip string) []string { return []string{"X-Forwarded-For", ip} }
 
-// ---- 1. a chunked body gives back what the pre-charge held beyond what was read
-
-// chunked sends body with no Content-Length (Transfer-Encoding: chunked).
 func (e *env) chunked(method, path, token, body string) resp {
 	e.t.Helper()
 	req, err := http.NewRequest(method, e.srv.URL+path, io.NopCloser(strings.NewReader(body)))
@@ -58,9 +53,7 @@ func TestChunkedBodyIsRefundedToWhatWasRead(t *testing.T) {
 		o.Config.MaxDocBytes = 500
 	})
 	tok, _ := e.session()
-	// A chunked body of unknown length is pre-charged the document cap (500: half the day) ...
 	e.want(e.chunked("POST", "/public/doc", tok, strings.Repeat("a", 10)), 201)
-	// ... and what it did not use is given back: 10 bytes are charged, not 500.
 	if used := quotaUsed(e, "ip:127.0.0.1"); used != 10 {
 		t.Fatalf("a 10 byte chunked body left %d bytes charged, want 10", used)
 	}
@@ -68,13 +61,10 @@ func TestChunkedBodyIsRefundedToWhatWasRead(t *testing.T) {
 	if used := quotaUsed(e, "ip:127.0.0.1"); used != 30 {
 		t.Fatalf("charged %d, want 30", used)
 	}
-	// the rest of the day (970 bytes) is still there for bodies of known length
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("c"), 485)), 204)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("c"), 485)), 204)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("d")), 429)
 }
-
-// ---- 2. a second-level cap per /48 and /24, and a reserve for newcomers
 
 func TestNetKey(t *testing.T) {
 	for in, want := range map[string]string{
@@ -94,7 +84,6 @@ func TestNetKey(t *testing.T) {
 	}
 }
 
-// sessionStatus asks for a session as ip and returns the status.
 func sessionStatus(e *env, ip string) int {
 	e.t.Helper()
 	return e.do("POST", "/public/session", "", nil, xff(ip)...).StatusCode
@@ -109,8 +98,6 @@ func TestSlash48FloodCannotFillTheGlobalCap(t *testing.T) {
 		o.Config.MaxSessionsPerAddress = 2
 		o.Config.MaxSessionsPerNet = 6
 	})
-	// One attacker holds 2001:db8:aaaa::/48 (65,536 /64s) and starts a session from each of 200:
-	// the per-/64 cap of 2 never triggers, the per-/48 cap of 6 does.
 	got := map[int]int{}
 	for i := 0; i < 200; i++ {
 		got[sessionStatus(e, fmt.Sprintf("2001:db8:aaaa:%x::1", i))]++
@@ -121,7 +108,6 @@ func TestSlash48FloodCannotFillTheGlobalCap(t *testing.T) {
 	if sessions.Len() != 6 {
 		t.Fatalf("the attacker holds %d of 50", sessions.Len())
 	}
-	// a /24 is the IPv4 equivalent: 8 hosts of one /24, at most 6 sessions
 	got = map[int]int{}
 	for i := 1; i <= 8; i++ {
 		got[sessionStatus(e, fmt.Sprintf("198.51.100.%d", i))]++
@@ -129,7 +115,6 @@ func TestSlash48FloodCannotFillTheGlobalCap(t *testing.T) {
 	if got[201] != 6 || got[429] != 2 {
 		t.Fatalf("the /24 got %v", got)
 	}
-	// other networks are not affected by either
 	for _, ip := range []string{"2001:db8:bbbb::1", "192.0.2.1", "203.0.113.9"} {
 		if st := sessionStatus(e, ip); st != 201 {
 			t.Fatalf("%s: %d", ip, st)
@@ -145,9 +130,7 @@ func TestReserveKeepsRoomForNewNetworksUnderABotnet(t *testing.T) {
 		o.Config.MaxSessions = 50
 		o.Config.MaxSessionsPerAddress = 2
 		o.Config.MaxSessionsPerNet = 6
-		// the default reserve: 20% of 50 = 10, so 40 sessions are open to everybody
 	})
-	// A botnet of seven /48s, each as busy as the per-/48 cap lets it be, fills the open 40.
 	for p := 0; p < 7; p++ {
 		for i := 0; i < 6; i++ {
 			sessionStatus(e, fmt.Sprintf("2001:db8:%x:%x::1", 0xa00+p, i))
@@ -156,8 +139,6 @@ func TestReserveKeepsRoomForNewNetworksUnderABotnet(t *testing.T) {
 	if sessions.Len() != 40 {
 		t.Fatalf("the botnet holds %d sessions, want the 40 outside the reserve", sessions.Len())
 	}
-	// its prefixes cannot take the reserve: 429 for the ones at their cap, 503 (the offer is full
-	// for them) for the one that is not
 	for p := 0; p < 7; p++ {
 		want := 429
 		if p == 6 {
@@ -167,14 +148,12 @@ func TestReserveKeepsRoomForNewNetworksUnderABotnet(t *testing.T) {
 			t.Fatalf("botnet prefix %d got %d inside the reserve, want %d", p, st, want)
 		}
 	}
-	// a second visitor from a network that already holds a session is turned away too ...
 	if st := sessionStatus(e, "198.51.100.1"); st != 201 { // new /24: in the reserve
 		t.Fatalf("a new network got %d, want 201", st)
 	}
 	if st := sessionStatus(e, "198.51.100.2"); st != 503 { // same /24, now live
 		t.Fatalf("a second visitor of a live network got %d in the reserve, want 503", st)
 	}
-	// ... while legitimate newcomers from networks with no session fill the 10 places
 	for i := 0; i < 9; i++ {
 		if st := sessionStatus(e, fmt.Sprintf("100.%d.0.1", i+10) /* a different /16 each: the reserve looks at the coarsest level */); st != 201 {
 			t.Fatalf("newcomer %d: %d", i, st)
@@ -183,7 +162,6 @@ func TestReserveKeepsRoomForNewNetworksUnderABotnet(t *testing.T) {
 	if st := sessionStatus(e, "192.0.99.1"); st != 503 || sessions.Len() != 50 {
 		t.Fatalf("at the global cap: %d, %d sessions", st, sessions.Len())
 	}
-	// sessions that end free their places: the reserve is only for newcomers while it applies
 	e.clk.Add(2 * hour)
 	if st := sessionStatus(e, "2001:db8:a00:1::1"); st != 201 {
 		t.Fatalf("after the sessions expired: %d", st)
@@ -206,24 +184,20 @@ func TestMemorySessionStoreNetCapAndReserve(t *testing.T) {
 	if err := st.Create(ctx, "a3", mk("c9", "N1", time.Hour), now, caps); err != ErrNetSessionsFull {
 		t.Fatalf("err = %v, want ErrNetSessionsFull", err)
 	}
-	// the client cap is told apart from the net cap
 	_ = st.Create(ctx, "b0", mk("cb", "N2", time.Hour), now, caps)
 	_ = st.Create(ctx, "b1", mk("cb", "N2", time.Hour), now, caps)
 	if err := st.Create(ctx, "b2", mk("cb", "N2", time.Hour), now, caps); err != ErrClientSessionsFull {
 		t.Fatalf("err = %v, want ErrClientSessionsFull", err)
 	}
-	// expired sessions do not count against the net
 	if err := st.Create(ctx, "a3", mk("c9", "N1", time.Hour), now.Add(2*time.Hour), caps); err != nil {
 		t.Fatalf("expired sessions still count: %v", err)
 	}
-	// a session with no Net (a custom caller) is under no net cap
 	for i := 0; i < 5; i++ {
 		if err := st.Create(ctx, fmt.Sprint("n", i), mk(fmt.Sprint("x", i), "", time.Hour), now.Add(2*time.Hour), caps); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// the reserve (2 of 10): from 8 live sessions on, only networks with no live session get in
 	caps.ReservePercent = 20
 	st = NewMemorySessionStore(10)
 	for i := 0; i < 8; i++ {
@@ -242,7 +216,6 @@ func TestMemorySessionStoreNetCapAndReserve(t *testing.T) {
 	if err := st.Create(ctx, "full", mk("k", "NEW9", time.Hour), now, caps); err != ErrSessionsFull {
 		t.Fatalf("at the global cap: %v", err)
 	}
-	// no reserve configured: the same network may use every place
 	st = NewMemorySessionStore(10)
 	for i := 0; i < 10; i++ {
 		if err := st.Create(ctx, fmt.Sprint("g", i), mk("g", "G", time.Hour), now, SessionCaps{}); err != nil {
@@ -251,15 +224,13 @@ func TestMemorySessionStoreNetCapAndReserve(t *testing.T) {
 	}
 }
 
-// ---- 3. the byte counter: reconcile vs reserve, refunds, takedowns, windows, fail closed
-
 func TestSweepBetweenReserveAndSaveKeepsTheReservation(t *testing.T) {
 	e, hs := envWith(t, nil)
 	tok, _ := e.session()
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	letGo := func() { once.Do(func() { close(release) }) }
-	t.Cleanup(letGo) // a failing test must not leave the create waiting (the server's Close would hang)
+	t.Cleanup(letGo)
 	hs.beforePub = func(context.Context, string, []byte) error {
 		close(entered)
 		<-release
@@ -267,7 +238,7 @@ func TestSweepBetweenReserveAndSaveKeepsTheReservation(t *testing.T) {
 	}
 	done := make(chan resp, 1)
 	go func() { done <- e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 40)) }()
-	<-entered // the bytes are reserved and the document is not stored yet
+	<-entered
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -293,9 +264,6 @@ func TestTakedownAndDiscardSubtractOnlyWhatTheCurrentGenerationCounts(t *testing
 	b, _ := e.session()
 	da := e.create(a, strings.Repeat("a", 100))
 	e.create(b, strings.Repeat("b", 200))
-	// document A vanishes behind the service's back (expiry, another replica); its record is still
-	// there (a fresh orphan is kept for a minute) when the sweep recounts: A is not counted
-	// any more.
 	if err := e.store.Delete(context.Background(), docKey(da.ID)); err != nil {
 		t.Fatal(err)
 	}
@@ -309,13 +277,10 @@ func TestTakedownAndDiscardSubtractOnlyWhatTheCurrentGenerationCounts(t *testing
 	if got := e.svc.Health().StorageBytes; got != 200 {
 		t.Fatalf("counter %d, want 200", got)
 	}
-	// the takedown finds A's record (100 bytes) but A is not counted in this generation: B's
-	// bytes must stay
 	e.want(e.do("DELETE", "/admin/takedown/"+da.ViewID, "", nil, AdminHeader, adminToken), 204)
 	if got := e.svc.Health().StorageBytes; got != 200 {
 		t.Fatalf("a takedown of an uncounted document left %d, want 200", got)
 	}
-	// the same for a discard
 	c, _ := e.session()
 	dc := e.create(c, strings.Repeat("c", 50))
 	if err := e.store.Delete(context.Background(), docKey(dc.ID)); err != nil {
@@ -346,7 +311,6 @@ func TestBudgetNeverGoesNegativeAndLogsTheClamp(t *testing.T) {
 	if got := b.release("never-counted"); got != 0 {
 		t.Fatalf("released %d for a document that was never counted", got)
 	}
-	// a refund below zero (here a stray pending release) clamps and logs
 	b.mu.Lock()
 	b.unholdLocked(5)
 	b.mu.Unlock()
@@ -367,7 +331,7 @@ func TestOverlappingReconcilesDoNotLoseAWrite(t *testing.T) {
 	var b budget
 	w1, w2 := b.begin(), b.begin() // two reconciles listing at the same time
 	r, _ := b.reserve("doc", 30, 30, 1000)
-	r.commit() // a write lands while both are listing: neither listing saw it
+	r.commit()
 	b.set(w1, map[string]budgetEntry{"old": {doc: 5}})
 	if used, _ := b.get(); used != 35 {
 		t.Fatalf("after the first: %d, want 35", used)
@@ -376,14 +340,12 @@ func TestOverlappingReconcilesDoNotLoseAWrite(t *testing.T) {
 	if used, _ := b.get(); used != 35 {
 		t.Fatalf("after the second: %d, want 35 (the write's 30 + 5)", used)
 	}
-	// a removal during a listing wins over a listing that still saw the document
 	w3 := b.begin()
 	b.release("doc")
 	b.set(w3, map[string]budgetEntry{"old": {doc: 5}, "doc": {doc: 30}})
 	if used, _ := b.get(); used != 5 {
 		t.Fatalf("after a removal during a listing: %d, want 5", used)
 	}
-	// version snapshots known from the listing stay with their document when it is edited
 	w4 := b.begin()
 	b.set(w4, map[string]budgetEntry{"old": {doc: 5, extra: 7}})
 	r2, _ := b.reserve("old", 9, 4, 1000)
@@ -452,7 +414,6 @@ func TestFirstReconcileFailureFailsClosedForABackoff(t *testing.T) {
 	if k := e.keys("pubdoc/"); len(k) != 0 {
 		t.Fatalf("a document was stored while the counters were unknown: %v", k)
 	}
-	// the store is back, but the backoff has not passed: still closed (and no listing is tried)
 	hs.failLists.Store(false)
 	lists := hs.lists.Load()
 	e.want(e.do("POST", "/public/doc", tok, []byte("hello")), 503)
@@ -464,7 +425,6 @@ func TestFirstReconcileFailureFailsClosedForABackoff(t *testing.T) {
 	if got := e.svc.Health().StorageBytes; got != 5 {
 		t.Fatalf("counter %d, want 5", got)
 	}
-	// a failed refusal charged nothing to the daily bytes
 	if used := quotaUsed(e, "ip:127.0.0.1"); used != 5 {
 		t.Fatalf("quota used %d, want 5", used)
 	}
@@ -486,8 +446,6 @@ func TestEditWithoutADeadlineSubtractsAtOnce(t *testing.T) {
 	}
 }
 
-// ---- 4. /public/health says 200 or 503; the detail is behind the admin guard
-
 func TestPublicHealthIsMinimalAndAdminHealthIsGuarded(t *testing.T) {
 	e := newEnv(t, nil)
 	tok, _ := e.session()
@@ -506,7 +464,6 @@ func TestPublicHealthIsMinimalAndAdminHealthIsGuarded(t *testing.T) {
 			t.Fatalf("the public health leaks %q: %s", leak, r.body)
 		}
 	}
-	// the detail needs the admin token
 	e.want(e.do("GET", "/admin/health", "", nil), 403)
 	e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, "wrong"), 403)
 	r = e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
@@ -529,8 +486,6 @@ func TestNoAdminTokenNoAdminHealth(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.AdminToken = "" })
 	e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 404)
 }
-
-// ---- 6. the admin route behind a proxy
 
 func TestAdminRouteNeedsTrustedProxiesToBeSet(t *testing.T) {
 	mk := func(mod func(*Options)) error {
@@ -557,7 +512,6 @@ func TestAdminRouteNeedsTrustedProxiesToBeSet(t *testing.T) {
 	if err := mk(func(o *Options) { o.Config.AdminToken = ""; o.Admin = allowAll{} }); err != ErrAdminNeedsProxyConfig {
 		t.Fatalf("a custom guard counts too: %v", err)
 	}
-	// the message names the variable
 	if !strings.Contains(ErrAdminNeedsProxyConfig.Error(), "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES") || !strings.Contains(ErrAdminNeedsProxyConfig.Error(), "none") {
 		t.Fatal(ErrAdminNeedsProxyConfig)
 	}
@@ -566,7 +520,6 @@ func TestAdminRouteNeedsTrustedProxiesToBeSet(t *testing.T) {
 func TestOneClientsWrongGuessesDoNotLockOutTheOperator(t *testing.T) {
 	e := newEnv(t, behindProxy)
 	id := strings.Repeat("B", 22)
-	// an attacker behind the same proxy guesses far more than the 20 a minute
 	var limited int
 	for i := 0; i < 60; i++ {
 		switch e.do("DELETE", "/admin/takedown/"+id, "", nil, append(xff("203.0.113.66"), AdminHeader, fmt.Sprint("guess", i))...).StatusCode {
@@ -580,12 +533,9 @@ func TestOneClientsWrongGuessesDoNotLockOutTheOperator(t *testing.T) {
 	if limited != 40 {
 		t.Fatalf("%d of 60 wrong guesses were rate limited, want 40", limited)
 	}
-	// the operator, from the same address and from another one, gets in
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, append(xff("203.0.113.66"), AdminHeader, adminToken)...), 202)
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, append(xff("198.51.100.7"), AdminHeader, adminToken)...), 204)
-	// and another address's wrong guesses have their own budget
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, append(xff("198.51.100.8"), AdminHeader, "nope")...), 403)
-	// the detailed health is under the same guard
 	e.want(e.do("GET", "/admin/health", "", nil, append(xff("203.0.113.66"), AdminHeader, "nope")...), 429)
 	e.want(e.do("GET", "/admin/health", "", nil, append(xff("203.0.113.66"), AdminHeader, adminToken)...), 200)
 }
@@ -599,10 +549,6 @@ func TestShortAdminTokenIsWarnedAbout(t *testing.T) {
 	}
 }
 
-// ---- 7. a global cap on the bytes of request bodies in flight
-
-// holdUpload opens a connection, sends a request head declaring n bytes and a few of them, and
-// keeps the connection open: the server is left waiting for the rest of the body.
 func holdUpload(t *testing.T, e *env, token string, n int) net.Conn {
 	t.Helper()
 	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
@@ -631,14 +577,13 @@ func TestInflightBytesAreCappedGlobally(t *testing.T) {
 	e := newEnv(t, func(o *Options) {
 		o.Config.MaxDocBytes = 600
 		o.Config.MaxInflightBytes = 1000
-		o.Config.MaxInflightPerClient = 1000 // every request here is one client: only the global cap is under test
+		o.Config.MaxInflightPerClient = 1000
 	})
 	a, _ := e.session()
 	b, _ := e.session()
 	c, _ := e.session()
 	conn := holdUpload(t, e, a, 600)
 	waitFor(t, "the first upload to be admitted", func() bool { return e.svc.flight.held() == 600 })
-	// a second 600 would make 1200 in flight: refused up front, nothing read, nothing charged
 	r := e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 600)), 503)
 	if r.Header.Get("Retry-After") == "" {
 		t.Fatal("no Retry-After")
@@ -646,12 +591,9 @@ func TestInflightBytesAreCappedGlobally(t *testing.T) {
 	if used := quotaUsed(e, "ip:127.0.0.1"); used != 600 {
 		t.Fatalf("charged %d, want only the first upload's 600", used)
 	}
-	// a smaller one fits beside it (600 + 400), and a chunked one holds the cap of 600 and is
-	// refused while the first is in flight
 	e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 400)), 201)
 	e.want(e.chunked("POST", "/public/doc", c, "chunked"), 503)
 	waitFor(t, "the finished uploads to give theirs back", func() bool { return e.svc.flight.held() == 600 })
-	// when the slow client goes, its bytes are released and others go through
 	_ = conn.Close() // the point of the test: the client goes away
 	waitFor(t, "the held upload to end", func() bool { return e.svc.flight.held() == 0 })
 	e.want(e.chunked("POST", "/public/doc", c, "chunked"), 201)
@@ -679,8 +621,6 @@ func TestInflightNeverBelowTheDocumentCap(t *testing.T) {
 		t.Fatal(f.held())
 	}
 }
-
-// ---- 8. nits
 
 func TestRefundAfterTheWindowRolledOverDoesNotCreditTheNewWindow(t *testing.T) {
 	ctx := context.Background()
@@ -722,7 +662,7 @@ func TestTicketRefundsIntoTheWindowItWasChargedIn(t *testing.T) {
 	e.clk.Add(25 * time.Hour)
 	fresh := admit(50)
 	fresh.keep()
-	slow.release() // it fails after the window rolled over: its 80 were charged to the old window
+	slow.release()
 	req := httptest.NewRequest("POST", "/public/doc", nil)
 	req.ContentLength = 51
 	req.RemoteAddr = "192.0.2.1:1234"
@@ -744,7 +684,6 @@ func TestQuotaEvictsTheLeastRecentlyUsedKeyAndLogs(t *testing.T) {
 			t.Fatal(k)
 		}
 	}
-	// a is used again, so b is the least recently used
 	if ok, _, _ := q.Take(ctx, "a", 5); !ok {
 		t.Fatal("a")
 	}
@@ -754,7 +693,6 @@ func TestQuotaEvictsTheLeastRecentlyUsedKeyAndLogs(t *testing.T) {
 	if !strings.Contains(logs.String(), "least recently used") {
 		t.Fatalf("the drop was not logged: %q", logs.String())
 	}
-	// a and c keep their spent budgets (an arbitrary choice could have reset them)
 	for _, k := range []string{"a", "c"} {
 		if ok, _, _ := q.Take(ctx, k, 50); ok {
 			t.Fatalf("the window of %q was reset by the eviction", k)

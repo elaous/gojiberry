@@ -16,11 +16,7 @@ type flowDrag struct {
 	startL, startR float64
 }
 
-// --- caret queries (used by editable components) --------------------
-
-// CaretRect returns where a caret at text-stream offset goes: its x, the
-// top y and the height of its line. ok is false if there is no layout
-// to place it in.
+// CaretRect returns the caret's position at a text-stream offset.
 func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 	lay := f.Layout()
 	if len(lay.Lines) == 0 {
@@ -38,15 +34,13 @@ func (f *TextFlow) CaretRect(offset int) (x, y, h float64, ok bool) {
 	return f.lineX(ln, offset), ln.Y, ln.H, true
 }
 
-// CaretPlace is where the caret would be drawn at an offset (see CaretRects).
+// CaretPlace is where the caret is drawn for an offset.
 type CaretPlace struct {
 	X, Y, H float64
 	OK      bool
 }
 
-// CaretRects is CaretRect for many offsets from one layout. CaretRect works the whole layout out each time it is
-// called, so a caller that wants the place of every paragraph of a long text asks here: the cost is one layout,
-// not one per offset.
+// CaretRects is CaretRect for many offsets from one layout.
 func (f *TextFlow) CaretRects(offsets []int) []CaretPlace {
 	out := make([]CaretPlace, len(offsets))
 	lay := f.Layout()
@@ -68,17 +62,13 @@ func (f *TextFlow) CaretRects(offsets []int) []CaretPlace {
 	return out
 }
 
-// OffsetAt returns the text-stream offset nearest (x, y), for placing a
-// caret from a click. With columns it picks the line whose column the
-// point is in, so a click in the second column doesn't land in the first.
+// OffsetAt returns the text-stream offset nearest (x, y).
 func (f *TextFlow) OffsetAt(x, y float64) int {
 	x, y = f.vpt(x, y)
 	o, _ := f.offsetAt(x, y)
 	return o
 }
 
-// offsetAt is OffsetAt that also says whether the point is on a line that
-// starts at the offset right after a break (see Cursor.After).
 func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 	lay := f.Layout()
 	if len(lay.Lines) == 0 {
@@ -126,17 +116,12 @@ func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 	return ln.End, false
 }
 
-// --- column grips ----------------------------------------------------
-
-// gripRect returns the draggable grip above gap g of band b: x, y, w, h.
 func (f *TextFlow) gripRect(b Band, g int) [4]float64 {
 	cx := b.Xs[g] + b.Widths[g] + b.Gap/2
 	s := f.ChromeStyle
 	return [4]float64{cx - s.GripW/2, b.Top - 2 - s.GripH, s.GripW, s.GripH}
 }
 
-// GripAt returns the band and gap index of the grip at (x, y), or
-// (-1, -1).
 func (f *TextFlow) GripAt(x, y float64) (band, gap int) {
 	g := f.gripAt(f.Layout().Bands, x, y)
 	return g.band, g.gap
@@ -156,19 +141,16 @@ func (f *TextFlow) gripAt(bands []Band, x, y float64) grip {
 // Dragging reports whether a gap is being dragged.
 func (f *TextFlow) Dragging() bool { return f.drag != nil }
 
-// MouseDown starts dragging a gap if (x, y) is on its grip (edit mode).
 func (f *TextFlow) MouseDown(x, y float64) bool {
 	x, y = f.vpt(x, y)
 	return f.mouseDown(x, y)
 }
 
-// mouseDown is MouseDown for a point in the plane the text is laid out in.
 func (f *TextFlow) mouseDown(x, y float64) bool {
 	if id, ok := f.footnoteAt(x, y); ok && f.OnFootnote != nil && f.mode == ModeEdit {
 		f.OnFootnote(id)
 		return true
 	}
-	// A click on a row of a table of contents goes to the heading it lists.
 	if off, ok := f.tocTargetAt(x, y); ok && !f.suggestionsOpen() {
 		f.GotoOffset(off)
 		return true
@@ -180,7 +162,7 @@ func (f *TextFlow) mouseDown(x, y float64) bool {
 		f.closeSuggestions()
 	}
 	if f.mode == ModeEdit && f.objectDragStart(x, y) {
-		return true // a grip of a table: its column or row is being resized
+		return true // A table grip press resizes its column or row.
 	}
 	if f.objectClickAt(x, y) {
 		return true // a form field's icon or box
@@ -208,8 +190,7 @@ func (f *TextFlow) mouseDown(x, y float64) bool {
 	return true
 }
 
-// MouseMove drags the gap (keeping the two neighbours' combined width)
-// or updates which grip is hovered.
+// MouseMove drags the gap, keeping neighbours' combined width.
 func (f *TextFlow) MouseMove(x, y float64) bool {
 	x, y = f.vpt(x, y)
 	hover := false
@@ -292,8 +273,7 @@ func (f *TextFlow) MouseLeave() bool {
 	return changed
 }
 
-// CSSCursor implements CursorProvider: col-resize over a grip or while
-// dragging.
+// CSSCursor returns col-resize over a grip.
 func (f *TextFlow) CSSCursor() string {
 	if f.mode == ModeEdit && (f.drag != nil || f.hover != noGrip) {
 		return "col-resize"
@@ -304,10 +284,6 @@ func (f *TextFlow) CSSCursor() string {
 	return ""
 }
 
-// --- drawing ---------------------------------------------------------
-
-// Draw paints the text (and, for a single page, the page) and, in edit
-// mode, the column guides and grips.
 func (f *TextFlow) Draw() {
 	p, cs := f.Painter, f.ChromeStyle
 	if f.Pages == nil && !f.Transparent {
@@ -327,7 +303,6 @@ func (f *TextFlow) Draw() {
 	f.drawBody(lay)
 }
 
-// drawBody draws the text of a layout, its marks, and in edit mode the column grips.
 func (f *TextFlow) drawBody(lay Layout) {
 	p, cs := f.Painter, f.ChromeStyle
 	f.drawSearch(lay)

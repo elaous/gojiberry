@@ -18,16 +18,13 @@ func TestCorrectionsLearnPairs(t *testing.T) {
 	if n := c.Learn("please call my sisters", "please call my sisters"); n != 0 {
 		t.Errorf("identical: %d", n)
 	}
-	// a stretch of different length is kept whole, a word for a word on its own
 	if n := c.Learn("tell dr shell low about the metal", "tell Dr Schellow about the medal"); n != 2 {
 		t.Errorf("noted %d, pairs %+v", n, c.pairs)
 	}
 	c.Learn("i want to by pass", "I want to bypass")
-	// only added or removed words are an edit, not a correction
 	if n := c.Learn("open the window", "open the window please"); n != 0 {
 		t.Errorf("an added word is not a correction: %d", n)
 	}
-	// a change of capitals alone is not a correction
 	if n := c.Learn("hello samir", "Hello Samir"); n != 0 {
 		t.Errorf("capitals: %d", n)
 	}
@@ -82,7 +79,6 @@ func TestCorrectionsPersistAndAreBounded(t *testing.T) {
 	if err != nil || back.Len() != 1 || back.Suggest("wether")[0].Meant != "weather" {
 		t.Fatalf("round trip %v", err)
 	}
-	// damaged entries are dropped, not trusted
 	junk, _ := UnmarshalCorrections([]byte(`{"version":1,"pairs":[{"heard":"Up","meant":"x","count":1},{"heard":"a","meant":"","count":1},{"heard":"a","meant":"b","count":0},{"heard":"ok","meant":"fine","count":2,"seq":9}]}`))
 	if junk.Len() != 1 || junk.seq != 9 {
 		t.Errorf("kept %d", junk.Len())
@@ -113,7 +109,6 @@ func TestVocabularyPrompt(t *testing.T) {
 	if p != "Medal-X, Gojiberry, Samir Aouad, Dr Schellow" {
 		t.Errorf("prompt %q", p)
 	}
-	// room for only some: the newest terms win, whole terms only, written oldest to newest
 	short := v.Prompt(nil, len("Samir Aouad, Dr Schellow"))
 	if short != "Samir Aouad, Dr Schellow" {
 		t.Errorf("short %q", short)
@@ -185,7 +180,6 @@ func TestRecogniserSendsTheContract(t *testing.T) {
 	}
 }
 
-// research is a stand-in for an operator's endpoint: it records every request.
 type research struct {
 	mu       sync.Mutex
 	posts    int
@@ -250,7 +244,6 @@ func TestContributionNeedsTheConfirmedPackage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// what is shown is what is sent: names no one, new random IDs, fixed dates
 	if len(plan.Items) != 3 || plan.Bytes != len(plan.Body()) || len(plan.Digest) != 64 || len(plan.Token) != 32 {
 		t.Fatalf("plan %+v", plan)
 	}
@@ -292,7 +285,6 @@ func TestContributionNeedsTheConfirmedPackage(t *testing.T) {
 		t.Error("the body sent is the body shown")
 	}
 
-	// revoking: the deletion goes out with the token, and nothing more can be sent
 	deleted, err := c.Revoke(context.Background(), srv.Client())
 	if err != nil || deleted != 1 || len(rs.deletes) != 1 || !strings.HasSuffix(rs.deletes[0], "/"+plan.Token) || c.Sent() != 0 {
 		t.Fatalf("revoke: %d %v %v", deleted, err, rs.deletes)
@@ -300,7 +292,6 @@ func TestContributionNeedsTheConfirmedPackage(t *testing.T) {
 	if err := c.Send(context.Background(), srv.Client(), plan); err != ErrRevoked || rs.posts != 1 {
 		t.Errorf("after revoking: %v", err)
 	}
-	// a new confirmation of a package starts a new consent
 	c.Confirm(plan)
 	if !c.Confirmed(plan) {
 		t.Error("confirm again")
@@ -324,7 +315,6 @@ func TestContributionFailuresKeepConsentWithdrawn(t *testing.T) {
 	if err == nil || deleted != 0 || c.Confirmed(plan) {
 		t.Errorf("the deletion failed but consent is withdrawn all the same: %d %v", deleted, err)
 	}
-	// a package that was changed after it was shown is not sent
 	rs.status = 0
 	plan2, _ := Prepare(srv.URL, sampleDataset().List())
 	var c2 Contribution

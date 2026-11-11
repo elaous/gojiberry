@@ -10,12 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-// The protobuf text format of a Document (what a .pbtxt file holds), written and read
-// against the model's types. It writes the form protobuf's own libraries print, and reads
-// that and what they accept: either spelling of a field name (snake_case or the Go
-// name), `:` or not before a message, `{}` or `<>`, `,` and `;` between fields,
-// `#` comments, adjacent strings joined, a list as repeated fields or in `[...]`.
-
 func marshalText(m *message, v reflect.Value) []byte {
 	var b strings.Builder
 	writeText(&b, m, v, 0)
@@ -88,8 +82,6 @@ func formatFloat(x float64) string {
 	return strconv.FormatFloat(x, 'g', -1, 64)
 }
 
-// quoteText writes s as a double-quoted string with the escapes protobuf text uses; text
-// that is valid UTF-8 stays as it is.
 func quoteText(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -131,7 +123,6 @@ func (p *textParser) fail(format string, args ...any) error {
 	return fmt.Errorf("%w: line %d: %s", errText, p.line+1, fmt.Sprintf(format, args...))
 }
 
-// skip passes white space and comments.
 func (p *textParser) skip() {
 	for p.pos < len(p.s) {
 		switch p.s[p.pos] {
@@ -184,7 +175,6 @@ func unmarshalText(m *message, data []byte, v reflect.Value) error {
 
 const maxTextDepth = 64
 
-// body reads fields until the closing delimiter (0 at the end of the text).
 func (p *textParser) body(m *message, v reflect.Value, depth int) error {
 	if depth > maxTextDepth {
 		return p.fail("too deeply nested")
@@ -311,7 +301,6 @@ func (p *textParser) value(f *field, fv reflect.Value, colon bool, depth int) er
 	return nil
 }
 
-// number reads the characters of a number (sign, digits, hex, a decimal point, an exponent).
 func (p *textParser) number() string {
 	p.skip()
 	start := p.pos
@@ -344,7 +333,6 @@ func (p *textParser) float() (float64, error) {
 	return x, nil
 }
 
-// str reads one or more adjacent quoted strings.
 func (p *textParser) str() (string, error) {
 	var out strings.Builder
 	n := 0
@@ -433,7 +421,6 @@ func (p *textParser) str() (string, error) {
 	return out.String(), nil
 }
 
-// hexRun reads up to max hex digits, returning the value and how many there were.
 func hexRun(s string, max int) (uint32, int) {
 	var v uint32
 	n := 0

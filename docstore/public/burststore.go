@@ -11,16 +11,9 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// BurstKeyPrefix is where the shared burst watch keeps one record per network: "public/burst/<keyed
-// hash of the network>". Reserved with the rest of PublicPrefix.
+// BurstKeyPrefix is where the shared burst watch keeps records.
 const BurstKeyPrefix = docstore.PublicPrefix + "burst/"
 
-// burstStore is the burst watch of the priority abuse reports (see prioTracker) kept in the store, so
-// replicas count a network's different documents together and the operator is told once an hour, not
-// once per replica. A record holds, for one network (named by a keyed hash, never its address), the
-// documents (by a short hash) that priority-category reports from it named in the last hour and when
-// the burst was last flagged. It is changed by compare-and-set; a record never grows past the limit
-// plus one document, because once it holds more than the limit the exact count no longer matters.
 type burstStore struct {
 	store docstore.ConditionalAdapter
 }
@@ -35,9 +28,6 @@ func burstDoc(doc string) string {
 	return hex.EncodeToString(h[:6])
 }
 
-// note records a priority-category report from the network netHash for document doc, and says, like
-// prioTracker.note, whether the network is over limit documents in the hour and whether this call is
-// the one to flag it.
 func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Time, limit int) (over, first bool, err error) {
 	if limit <= 0 {
 		return false, false, nil
@@ -54,7 +44,7 @@ func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Tim
 		default:
 			prev = docstore.Digest(d.Data)
 			if json.Unmarshal(d.Data, &rec) != nil {
-				rec = burstRecord{} // a record that cannot be read is started afresh
+				rec = burstRecord{}
 			}
 		}
 		if rec.Docs == nil {
@@ -94,7 +84,6 @@ func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Tim
 	return false, false, docstore.ErrConflict
 }
 
-// bursts is how many networks are over limit documents within the hour right now.
 func (b *burstStore) bursts(ctx context.Context, now time.Time, limit int) (int, error) {
 	if limit <= 0 {
 		return 0, nil
@@ -126,8 +115,6 @@ func (b *burstStore) bursts(ctx context.Context, now time.Time, limit int) (int,
 	return n, nil
 }
 
-// sweep deletes the records that have nothing left to say: no document within the hour and no flag
-// within the hour.
 func (b *burstStore) sweep(ctx context.Context, now time.Time) (int, error) {
 	metas, err := docstore.ListPrefix(ctx, b.store, BurstKeyPrefix)
 	if err != nil {

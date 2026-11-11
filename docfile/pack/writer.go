@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// builder lays a pack out at an offset, to any sink.
 type builder struct {
 	write   func(p []byte, off int64) error
 	off     int64
@@ -32,8 +31,6 @@ func (b *builder) emit(p []byte) error {
 	return nil
 }
 
-// addRaw writes data as a document record and lists it under e (whose Offset, Length and
-// SHA256 are filled in here). The record is flagged encrypted when e.Encrypted is set.
 func (b *builder) addRaw(e Entry, data []byte) error {
 	if b.closed {
 		return errors.New("pack: closed")
@@ -67,11 +64,8 @@ func (b *builder) addRaw(e Entry, data []byte) error {
 	return nil
 }
 
-// ErrNoAttachments is returned when adding an attachment to a pack that is not version 2.
 var ErrNoAttachments = errors.New("pack: only a version 2 pack holds attachments")
 
-// addAttachment writes data as an attachment record, once: the same bytes twice are one record. It returns the hash the
-// documents refer to it by.
 func (b *builder) addAttachment(mime string, data []byte) ([32]byte, error) {
 	sum := sha256.Sum256(data)
 	if b.closed {
@@ -131,7 +125,6 @@ func (b *builder) addFolder(f Folder) error {
 	return nil
 }
 
-// finish writes the index, the signature if there is a key, and the footer, in that order.
 func (b *builder) finish(key ed25519.PrivateKey) error {
 	idx := Index{Entries: b.entries, Folders: b.folders, Attachments: b.atts}
 	if err := idx.validate(int64(len(b.header)), b.off); err != nil {
@@ -166,8 +159,6 @@ type Writer struct{ b builder }
 // NewWriter starts a pack: the header is written at once.
 func NewWriter(w io.Writer, meta Meta) (*Writer, error) { return newWriter(w, meta, false) }
 
-// NewWriterV2 starts a version 2 pack, which may hold attachments (AddAttachment). Use it only for a pack that has some:
-// a version 1 reader refuses a version 2 pack, so one without attachments should stay version 1.
 func NewWriterV2(w io.Writer, meta Meta) (*Writer, error) { return newWriter(w, meta, true) }
 
 func newWriter(w io.Writer, meta Meta, v2 bool) (*Writer, error) {
@@ -182,38 +173,24 @@ func newWriter(w io.Writer, meta Meta, v2 bool) (*Writer, error) {
 	return wr, nil
 }
 
-// Add writes a document; its ID, name, folder, tags, update time and trash flag go to the
-// index from the document's own metadata.
 func (w *Writer) Add(doc docfile.Document) error { return w.b.add(doc) }
 
-// AddRaw writes the bytes of a document (a .open message, or an envelope when e.Encrypted
-// is set) listed under e.
 func (w *Writer) AddRaw(e Entry, data []byte) error { return w.b.addRaw(e, data) }
 
-// AddEncrypted writes env, an envelope the pack cannot read, as a document record flagged
-// encrypted and lists it under e (e.Encrypted is set here). e carries what the index shows
-// about it: the ID, and the name, tags, folder and times the writer chooses to leave
-// readable, typically a placeholder name and no tags. The pack never sees the plaintext, so
-// its checks and signature work without a key.
 func (w *Writer) AddEncrypted(e Entry, env []byte) error {
 	e.Encrypted = true
 	return w.b.addRaw(e, env)
 }
 
-// AddAttachment writes bytes the documents refer to by their SHA-256 (returned) and lists them with their MIME type; the
-// same bytes added twice are written once. Only a version 2 pack (NewWriterV2) takes them.
 func (w *Writer) AddAttachment(mime string, data []byte) ([32]byte, error) {
 	return w.b.addAttachment(mime, data)
 }
 
-// Version2 says the pack being written is version 2 (NewWriterV2): it takes attachments.
 func (w *Writer) Version2() bool { return w.b.v2 }
 
 // AddFolder lists a folder.
 func (w *Writer) AddFolder(f Folder) error { return w.b.addFolder(f) }
 
-// CloseSigned writes the index and the footer, signed by each of the keys (the first is the pack's signer, the others
-// co-sign it). With no key the pack is unsigned.
 func (w *Writer) CloseSigned(keys ...ed25519.PrivateKey) error {
 	if len(keys) > MaxSigners {
 		return fmt.Errorf("pack: %d signers (at most %d)", len(keys), MaxSigners)
@@ -225,10 +202,8 @@ func (w *Writer) CloseSigned(keys ...ed25519.PrivateKey) error {
 	return w.b.finish(keys[0])
 }
 
-// Close writes the index and the footer, signing with key if it is not nil.
 func (w *Writer) Close(key ed25519.PrivateKey) error { return w.b.finish(key) }
 
-// File is what a pack is appended to: an *os.File is one.
 type File interface {
 	io.ReaderAt
 	io.WriterAt
@@ -236,24 +211,16 @@ type File interface {
 	Sync() error
 }
 
-// Appender adds to a pack in place: new records go over the old index, signature and
-// footer, and a new index, signature and footer follow them. Nothing already written is
-// moved.
 type Appender struct {
 	b   builder
 	f   File
 	key ed25519.PrivateKey
 }
 
-// OpenAppend opens the pack in f (of the given size) for appending. A signed pack is
-// signed again when closed, so it needs the key now (ErrNeedKey): the new records go over
-// the old index, and a pack that cannot be finished is left to Recover. A key given for an
-// unsigned pack signs it.
 func OpenAppend(f File, size int64, key ed25519.PrivateKey) (*Appender, error) {
 	return openAppend(f, size, key, false)
 }
 
-// OpenAppendUnsigned opens a pack for appending and drops its signature, if it has one.
 func OpenAppendUnsigned(f File, size int64) (*Appender, error) {
 	return openAppend(f, size, nil, true)
 }
@@ -285,14 +252,11 @@ func (a *Appender) Add(doc docfile.Document) error { return a.b.add(doc) }
 // AddRaw appends the bytes of a document listed under e.
 func (a *Appender) AddRaw(e Entry, data []byte) error { return a.b.addRaw(e, data) }
 
-// AddEncrypted appends an envelope as an encrypted record listed under e (see
-// Writer.AddEncrypted).
 func (a *Appender) AddEncrypted(e Entry, env []byte) error {
 	e.Encrypted = true
 	return a.b.addRaw(e, env)
 }
 
-// AddAttachment appends an attachment (see Writer.AddAttachment); a version 1 pack is ErrNoAttachments.
 func (a *Appender) AddAttachment(mime string, data []byte) ([32]byte, error) {
 	return a.b.addAttachment(mime, data)
 }
@@ -300,8 +264,6 @@ func (a *Appender) AddAttachment(mime string, data []byte) ([32]byte, error) {
 // AddFolder lists a folder.
 func (a *Appender) AddFolder(f Folder) error { return a.b.addFolder(f) }
 
-// Edit changes what the index says about a document (its folder, tags, name, trash flag):
-// no record is written. The record's own bytes are what they were.
 func (a *Appender) Edit(id string, fn func(*Entry)) error {
 	for i := range a.b.entries {
 		if a.b.entries[i].ID == id {
@@ -315,7 +277,6 @@ func (a *Appender) Edit(id string, fn func(*Entry)) error {
 	return ErrNotFound
 }
 
-// Remove takes a document out of the index; its bytes stay until the pack is compacted.
 func (a *Appender) Remove(id string) error {
 	for i := range a.b.entries {
 		if a.b.entries[i].ID == id {
@@ -326,7 +287,6 @@ func (a *Appender) Remove(id string) error {
 	return ErrNotFound
 }
 
-// Close writes the index, signature and footer, cuts the file at the end and syncs it.
 func (a *Appender) Close() error {
 	if err := a.b.finish(a.key); err != nil {
 		return err
@@ -337,9 +297,6 @@ func (a *Appender) Close() error {
 	return a.f.Sync()
 }
 
-// Compact copies the documents the index lists, and only those, from a pack to a new one
-// in dst (a record that is damaged is an error), keeping folders and metadata. Sign it
-// again with key, if it is not nil.
 func Compact(src io.ReaderAt, size int64, dst io.Writer, key ed25519.PrivateKey) error {
 	r, err := Open(src, size)
 	if err != nil {
@@ -375,19 +332,12 @@ func Compact(src io.ReaderAt, size int64, dst io.Writer, key ed25519.PrivateKey)
 	return w.Close(key)
 }
 
-// ErrBadSignature is returned by Cosign for a pack whose signature is not valid: nobody adds a name to it.
 var ErrBadSignature = errors.New("pack: the pack's signature is not valid, so it is not co-signed")
 
-// ErrNotSigned is returned by Cosign for a pack with no signature: the first signer signs it by Close or OpenAppend.
 var ErrNotSigned = errors.New("pack: the pack is not signed, so there is nothing to co-sign")
 
-// ErrAlreadySigned is returned by Cosign for a key that already signed the pack.
 var ErrAlreadySigned = errors.New("pack: that key already signed this pack")
 
-// Cosign adds the signature of key to a signed pack, in place: the signature record is rewritten with one more signer and
-// the footer after it. Nothing else is touched, so the other signatures stay valid (they cover the same digest). It
-// refuses a pack that is not signed, whose signatures are not all valid, or that the key signed already. Appending to
-// a pack changes it, and the signatures of the others are dropped by that: they sign again.
 func Cosign(f File, size int64, key ed25519.PrivateKey) error {
 	r, err := Open(f, size)
 	if err != nil {

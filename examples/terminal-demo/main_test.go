@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// session runs the demo on a script of lines and returns everything it printed.
 func session(t *testing.T, store, script string) string {
 	t.Helper()
 	var out bytes.Buffer
@@ -44,7 +43,6 @@ func TestWriteSaveListAndReopen(t *testing.T) {
 			t.Errorf("the output lacks %q:\n%s", want, out)
 		}
 	}
-	// Reopened after the move, the text is what was saved.
 	if i := strings.LastIndex(out, "editing"); !strings.Contains(out[i:], "coffee") || !strings.Contains(out[i:], "bread") {
 		t.Errorf("the reopened document has its text:\n%s", out[i:])
 	}

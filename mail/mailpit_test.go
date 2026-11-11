@@ -16,15 +16,6 @@ import (
 	"time"
 )
 
-// These tests send through a real SMTP server, Mailpit (https://mailpit.axllent.org, the image
-// axllent/mailpit), and read what it received back through its HTTP API. They skip unless
-// GOJIBERRY_TEST_MAILPIT_SMTP and GOJIBERRY_TEST_MAILPIT_API are set (docs/testing-workflow.md says
-// how to start one, and CI runs them with the image and fails on a skip):
-//
-//	GOJIBERRY_TEST_MAILPIT_SMTP  host:port of its SMTP listener, e.g. 127.0.0.1:1025
-//	GOJIBERRY_TEST_MAILPIT_API   its web address, e.g. http://127.0.0.1:8025
-//	GOJIBERRY_TEST_MAILPIT_CA    the PEM certificate its STARTTLS uses (self-signed), if it has one
-//	GOJIBERRY_TEST_MAILPIT_USER / _PASS   the sign-in it requires, if it requires one
 type mailpit struct {
 	t         *testing.T
 	host      string
@@ -103,7 +94,6 @@ type mpMessage struct {
 	HTML    string
 }
 
-// received waits for n messages and returns them, newest data included.
 func (m *mailpit) received(n int) []mpMessage {
 	m.t.Helper()
 	var list struct {
@@ -130,7 +120,7 @@ func (m *mailpit) received(n int) []mpMessage {
 
 func TestMailpitReceivesAMultipartMessageIntact(t *testing.T) {
 	m := newMailpit(t)
-	long := strings.Repeat("a long line of words ", 120) // far over 76 columns: quoted-printable must wrap it and Mailpit must join it
+	long := strings.Repeat("a long line of words ", 120)
 	msg := Message{
 		To:      []string{"ana@example.com", "bo@example.com"},
 		Subject: "Verify your address: café ✓",
@@ -182,7 +172,6 @@ func TestMailpitRefusesWhatIsNotAllowedAndNothingIsDelivered(t *testing.T) {
 			t.Errorf("wrong password: %v", err)
 		}
 	}
-	// a subject or recipient that would inject a header never reaches the wire
 	for _, msg := range []Message{
 		{To: []string{"ana@example.com"}, Subject: "hi\r\nBcc: x@example.com", Text: "t"},
 		{To: []string{"ana@example.com\r\nBcc: x@example.com"}, Subject: "hi", Text: "t"},

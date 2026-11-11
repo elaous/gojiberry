@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/screenreader"
 )
 
-// openTyping opens the editor with the typing-speech preferences set, in Edit mode with the caret at the
-// start of the first paragraph, and a screen reader watching the live regions.
 func openTyping(t *testing.T, prefs string) (*e2etest.Tab, *screenreader.Reader) {
 	t.Helper()
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
@@ -31,8 +29,6 @@ func openTyping(t *testing.T, prefs string) (*e2etest.Tab, *screenreader.Reader)
 	return d, sr
 }
 
-// said collects what the live regions announce until every wanted phrase has been said (or 8 seconds
-// have gone by), and returns it all, as a screen reader would speak it.
 func said(t *testing.T, d *e2etest.Tab, sr *screenreader.Reader, want ...string) string {
 	t.Helper()
 	var out []string
@@ -53,8 +49,6 @@ func said(t *testing.T, d *e2etest.Tab, sr *screenreader.Reader, want ...string)
 	return strings.Join(out, " | ")
 }
 
-// A person who chose "say each word" hears the words as they are finished, spaced by the throttle, in a
-// polite live region; the Edit mode announcement stays in its own region.
 func TestTypingSpeaksFinishedWords(t *testing.T) {
 	d, sr := openTyping(t, `{typing:'words'}`)
 	d.OK(d.Attr("#typing-live", "aria-live") == "polite" && d.Attr("#typing-live", "role") == "status", "typed words go to a polite status region")
@@ -67,7 +61,6 @@ func TestTypingSpeaksFinishedWords(t *testing.T) {
 	d.NoErrors()
 }
 
-// Per character: letters, and the space by its name.
 func TestTypingSpeaksCharactersWhenAsked(t *testing.T) {
 	d, sr := openTyping(t, `{typing:'characters'}`)
 	d.Type("q ")
@@ -76,7 +69,6 @@ func TestTypingSpeaksCharactersWhenAsked(t *testing.T) {
 	d.NoErrors()
 }
 
-// Nothing is said unless the person asked: a screen reader may echo the input itself.
 func TestTypingSaysNothingUnlessAsked(t *testing.T) {
 	d, sr := openTyping(t, "")
 	d.Type("alpha beta ")
@@ -90,8 +82,6 @@ func TestTypingSaysNothingUnlessAsked(t *testing.T) {
 	d.NoErrors()
 }
 
-// With "read the line" the line the caret goes to is read when the arrow keys change line; with
-// "say formatting changes" Ctrl+B is heard as "Bold on" (and off).
 func TestTypingReadsTheLineAndFormattingChanges(t *testing.T) {
 	d, sr := openTyping(t, `{typeread:'on', typefmt:'on'}`)
 	text := d.State().Str("text")
@@ -110,7 +100,6 @@ func TestTypingReadsTheLineAndFormattingChanges(t *testing.T) {
 	d.NoErrors()
 }
 
-// The preferences are in the preferences menu, and choosing one is announced and kept.
 func TestTypingPreferencesAreInTheMenu(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")

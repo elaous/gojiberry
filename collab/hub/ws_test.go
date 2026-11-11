@@ -18,7 +18,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// readFrame reads frames until one has the event.
 func readFrame(t *testing.T, ctx context.Context, c *websocket.Conn, event string) wire.Frame {
 	t.Helper()
 	for {
@@ -124,7 +123,6 @@ func TestWebSocketSpeaksOnlyForItsOwnReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = mover.CloseNow() }()
-	// The mover claims to be someone else in the body: the socket's own replica wins.
 	b, _ := json.Marshal(wire.Frame{Event: "presence", Data: json.RawMessage(`{"replica":"watcher","name":"Imposter"}`)})
 	if err := mover.Write(ctx, websocket.MessageText, b); err != nil {
 		t.Fatal(err)
@@ -156,7 +154,7 @@ func TestWebSocketRoleIsCheckedOnEveryFrame(t *testing.T) {
 	}
 	defer func() { _ = c.CloseNow() }()
 	readFrame(t, ctx, c, "snapshot")
-	role.Store("viewer") // downgraded; the next keep-alive tick is an hour away
+	role.Store("viewer")
 	ops, _ := json.Marshal([]crdt.Op{charDoc("c").Put(crdt.Block{ID: "doc", Content: "x"})})
 	b, _ := json.Marshal(wire.Frame{Event: "ops", ID: 1, Data: ops})
 	if err := c.Write(ctx, websocket.MessageText, b); err != nil {

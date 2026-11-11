@@ -68,7 +68,6 @@ func TestExpirySaveRenewsLoadAndListDoNot(t *testing.T) {
 		t.Fatalf("expiry = %v %v", at, ok)
 	}
 	clk.Add(20 * time.Hour)
-	// Viewing (Load, List) does not renew.
 	if _, err := ea.Load(ctx, "d"); err != nil {
 		t.Fatal(err)
 	}
@@ -78,14 +77,13 @@ func TestExpirySaveRenewsLoadAndListDoNot(t *testing.T) {
 	if at, _, _ := ea.Expiry(ctx, "d"); !at.Equal(t0.Add(day)) {
 		t.Errorf("viewing renewed: %v", at)
 	}
-	// Saving does.
 	if err := ea.Save(ctx, "d", []byte("v2")); err != nil {
 		t.Fatal(err)
 	}
 	if at, _, _ := ea.Expiry(ctx, "d"); !at.Equal(t0.Add(20*time.Hour + day)) {
 		t.Errorf("save did not renew: %v", at)
 	}
-	clk.Add(10 * time.Hour) // 30 h after the first save, 10 h after the second
+	clk.Add(10 * time.Hour)
 	if _, err := ea.Load(ctx, "d"); err != nil {
 		t.Errorf("renewed document gone: %v", err)
 	}
@@ -110,11 +108,9 @@ func TestExpiryInvisibleBeforeSweep(t *testing.T) {
 	if err := ea.Delete(ctx, "d"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Delete expired: %v", err)
 	}
-	// Still physically there until the sweep (the delete above purged only d).
 	if _, err := inner.Load(ctx, "keep.open"); err != nil {
 		t.Errorf("inner: %v", err)
 	}
-	// Reserved records are not reachable.
 	if _, err := ea.Load(ctx, ExpiryPrefix+"keep.open"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("record visible: %v", err)
 	}
@@ -159,7 +155,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 	t.Run("record written, document missing", func(t *testing.T) {
 		inner := NewMemoryAdapter()
 		ea, clk := newExpiring(inner)
-		// A crash inside Save: the deadline is there, the document is not.
 		_ = inner.Save(ctx, "expiry:ghost", []byte(clk.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)))
 		if _, err := ea.Load(ctx, "ghost"); !errors.Is(err, ErrNotFound) {
 			t.Errorf("load: %v", err)
@@ -167,7 +162,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 		if n, err := ea.Sweep(ctx); err != nil || n != 0 {
 			t.Fatalf("sweep: %d %v", n, err)
 		}
-		// Not expired yet: kept, since another process may be in the middle of its Save.
 		if _, err := inner.Load(ctx, "expiry:ghost"); err != nil {
 			t.Errorf("record dropped early: %v", err)
 		}
@@ -188,7 +182,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 		ea.AdoptUpdatedAt = true
 		clk := &fakeClock{t: time.Now()}
 		ea.Now = clk.Now
-		// With no record it has no expiry yet.
 		if _, ok, _ := ea.Expiry(ctx, "old"); ok {
 			t.Fatal("expiry before adoption")
 		}
@@ -197,7 +190,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 			t.Fatalf("unrecorded document hidden: %v", err)
 		}
 		up, _ := inner.Load(ctx, "old")
-		// First sweep: deadline = UpdatedAt + TTL (real time.Now here, so far in the past of the fake clock).
 		n, err := ea.Sweep(ctx)
 		if err != nil || n != 1 {
 			t.Fatalf("sweep = %d %v (updated %v, now %v)", n, err, up.UpdatedAt, clk.Now())
@@ -224,7 +216,6 @@ func TestExpiryCrashOrder(t *testing.T) {
 	})
 }
 
-// failingSave fails the document write (not the record's) to test the rollback.
 type failingSave struct {
 	Adapter
 	fail bool
@@ -288,7 +279,7 @@ func TestExpirySavingAnExpiredDocumentStartsFresh(t *testing.T) {
 	_ = ea.Save(ctx, "a.open", []byte("old"))
 	_ = ea.Save(ctx, "versions/a/1.open", []byte("snap"))
 	clk.Add(2 * day)
-	if err := ea.SaveIf(ctx, "a.open", []byte("new"), ""); err != nil { // absent, as far as anybody can tell
+	if err := ea.SaveIf(ctx, "a.open", []byte("new"), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ea.Load(ctx, "versions/a/1.open"); !errors.Is(err, ErrNotFound) {
@@ -366,7 +357,6 @@ func TestExpiryPassthroughOfOptionalCapabilities(t *testing.T) {
 	})
 }
 
-// lockingAdapter is an adapter with a Locker, as the browser one has.
 type lockingAdapter struct {
 	Adapter
 	mu sync.Mutex
@@ -440,7 +430,6 @@ func TestExpiryConcurrentSaveAndSweep(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				// Just renewed: a sweep at any moment must not delete it.
 				if _, err := ea.Load(ctx, id); err != nil {
 					t.Errorf("renewed document gone: %v", err)
 					return
@@ -453,7 +442,7 @@ func TestExpiryConcurrentSaveAndSweep(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
-			clk.Add(time.Minute) // a save renews by a day, so only a lost renewal could expire one
+			clk.Add(time.Minute)
 			if _, err := ea.Sweep(ctx); err != nil {
 				t.Error(err)
 				return
@@ -506,7 +495,6 @@ func TestServerExpiryHeaderAndListingField(t *testing.T) {
 			t.Errorf("%s expiry: key = %d", m, rec.Code)
 		}
 	}
-	// Delete works as before on a live document, and no header appears without expiry.
 	_ = doRequest(h, "PUT", "/docs/d2", "x")
 	if rec := doRequest(h, "DELETE", "/docs/d2", ""); rec.Code != 204 {
 		t.Errorf("DELETE = %d", rec.Code)
@@ -564,8 +552,6 @@ func TestParseExpiryEnv(t *testing.T) {
 	}
 }
 
-// The public offer's keyspaces ("public/", "report/", any case) are not reachable or listed
-// through the generic document API, and the sweeper never adopts them.
 func TestPublicKeyspacesReservedFromDocs(t *testing.T) {
 	ea, _ := newExpiring(NewMemoryAdapter())
 	for _, k := range []string{"public/doc/x", "public/tomb/x", "report/x", "Public/doc/x", "REPORT/x"} {

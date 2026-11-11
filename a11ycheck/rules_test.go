@@ -78,7 +78,6 @@ func TestTypedMarkersAreNotAList(t *testing.T) {
 	if !strings.Contains(fs[1].Message, "2 paragraphs") || !strings.Contains(fs[1].Message, "numbers") || fs[1].Text != "1. wash" {
 		t.Errorf("numbers: %+v", fs[1])
 	}
-	// the one-click fix: which paragraphs, what kind of list, and exactly which runes are the typed markers
 	f := fs[0]
 	if f.Action != ActionToList || f.Arg != 0 || f.Length != 22 { // from "• milk" to the end of "• bread"
 		t.Errorf("bullets fix: %+v", f)
@@ -89,7 +88,6 @@ func TestTypedMarkersAreNotAList(t *testing.T) {
 	if f := fs[1]; f.Arg != 1 || len(f.Spans) != 2 || f.Spans[0][1] != 3 || f.Spans[1][1] != 3 {
 		t.Errorf("numbers fix: %+v", f)
 	}
-	// two typed lines with a table between them are not one run
 	items = nil
 	add("- one", docfile.Para{})
 	items = append(items, docfile.Item{Table: table([]string{"a"}, []string{"b"})})
@@ -133,14 +131,11 @@ func TestOperatorMinimumOfTheGate(t *testing.T) {
 			t.Errorf("person %q operator %q: %q override %v, want %q %v", c.person, c.operator, got, OverrideAllowed(c.operator), c.want, c.override)
 		}
 	}
-	// with a block minimum an export with errors is refused even when the person set the gate to none,
-	// and the person's "export anyway" does not count
 	errs := []Finding{{Severity: Error}}
 	override := true // the person pressed "export anyway"
 	if allow, _ := GateAllow.AtLeast(GateBlock).Decide(errs, override && OverrideAllowed(GateBlock)); allow {
 		t.Error("an operator block was lowered")
 	}
-	// under a warn minimum the person's own block stops the export, and their override still works
 	if allow, _ := GateBlock.AtLeast(GateWarn).Decide(errs, false); allow {
 		t.Error("the person's block did not stop the export")
 	}

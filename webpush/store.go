@@ -12,15 +12,8 @@ type Entry struct {
 	Added        time.Time
 }
 
-// Store keeps subscriptions by handle (the @name a person is mentioned by). A person may have several (a phone and a
-// laptop). An implementation must be safe for concurrent use. The store holds the push service address and the two
-// keys of each subscription, which are secrets of the subscription: it must be protected like credentials, and the
-// endpoint is the only thing that identifies a browser.
 type Store interface {
-	// Add keeps the subscription for the handle (replacing one with the same endpoint). It returns ErrTooMany when
-	// the handle has MaxPerHandle already.
 	Add(ctx context.Context, handle string, sub Subscription) error
-	// Remove forgets the subscription with this endpoint, whoever it belonged to.
 	Remove(ctx context.Context, endpoint string) error
 	// For lists the handle's subscriptions.
 	For(ctx context.Context, handle string) ([]Entry, error)
@@ -29,7 +22,6 @@ type Store interface {
 // MaxPerHandle is the number of subscriptions one handle may have.
 const MaxPerHandle = 5
 
-// MemStore is a Store in memory, for tests and for a single process that loses its subscriptions on restart.
 type MemStore struct {
 	mu  sync.Mutex
 	by  map[string][]Entry

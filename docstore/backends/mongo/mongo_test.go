@@ -12,10 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-// mongoURI is the server the live tests run against. Without TEST_MONGO_URI they skip, and a plain go test
-// still prints ok, so the message says loudly that nothing was tested (a skip once hid a stale test elsewhere
-// in this repo). docs/testing-workflow.md has a no-Docker recipe; CI runs these against a service container
-// and fails on a skip.
 func mongoURI(t *testing.T) string {
 	t.Helper()
 	uri := os.Getenv("TEST_MONGO_URI")
@@ -25,13 +21,6 @@ func mongoURI(t *testing.T) string {
 	return uri
 }
 
-// TestMongoAdapterConformance only runs against a real MongoDB
-// instance, since the driver has no small operation-level interface
-// to fake the way s3API does for S3 -- FindOne/Find/ReplaceOne return
-// concrete *mongo.SingleResult/*mongo.Cursor types that construct
-// their own internal state from a live connection. Set
-// TEST_MONGO_URI (and optionally TEST_MONGO_DB) to run this in an
-// environment with MongoDB reachable. It has run green against MongoDB 7.0.14 under -race.
 func TestMongoAdapterConformance(t *testing.T) {
 	uri := mongoURI(t)
 	db := os.Getenv("TEST_MONGO_DB")
@@ -44,8 +33,6 @@ func TestMongoAdapterConformance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		// Every subtest starts from an empty store: CheckAdapter calls the factory once per subtest and a
-		// collection left over from the one before would break "empty store lists as empty".
 		if err := a.coll.Drop(ctx); err != nil {
 			t.Fatalf("Drop: %v", err)
 		}
@@ -53,7 +40,6 @@ func TestMongoAdapterConformance(t *testing.T) {
 	})
 }
 
-// The conditional save needs a real MongoDB as well (see above).
 func TestMongoAdapterSaveIf(t *testing.T) {
 	uri := mongoURI(t)
 	ctx := context.Background()
@@ -67,8 +53,6 @@ func TestMongoAdapterSaveIf(t *testing.T) {
 	})
 }
 
-// The filter is what the adapter adds over List: an anchored regular expression with the
-// prefix quoted, so a prefix with regular-expression characters matches only itself.
 func TestMongoPrefixFilterQuotesThePrefix(t *testing.T) {
 	var _ docstore.PrefixLister = (*Adapter)(nil)
 	f := prefixFilter(`dir.ectory/a+b(1)/`)
@@ -86,7 +70,6 @@ func TestMongoPrefixFilterQuotesThePrefix(t *testing.T) {
 	}
 }
 
-// ListPrefix against a real MongoDB (see above).
 func TestMongoAdapterListPrefix(t *testing.T) {
 	uri := mongoURI(t)
 	ctx := context.Background()
@@ -100,7 +83,6 @@ func TestMongoAdapterListPrefix(t *testing.T) {
 	})
 }
 
-// The conditional delete needs a real MongoDB too (see above).
 func TestMongoAdapterDeleteIf(t *testing.T) {
 	uri := mongoURI(t)
 	ctx := context.Background()
@@ -124,8 +106,6 @@ func TestMongoAdapterDeleteIf(t *testing.T) {
 	}
 }
 
-// MongoDB has no cheap way to read a prefix of a binary field, so it does not claim to be a
-// HeadReader: callers fall back to Load rather than getting a slow "head read".
 func TestMongoAdapterIsNotAHeadReader(t *testing.T) {
 	var a docstore.Adapter = &Adapter{}
 	if _, ok := a.(docstore.HeadReader); ok {

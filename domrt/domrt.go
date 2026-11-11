@@ -1,12 +1,5 @@
 //go:build js && wasm
 
-// Package domrt is the client-side runtime: it mounts a xango.Node tree
-// into a real DOM element and, on each Update, diffs the new tree
-// against what's currently mounted, patching only what changed (text
-// content, attributes, event listeners, children) instead of tearing
-// down and rebuilding the DOM. Only builds under GOOS=js GOARCH=wasm;
-// xango itself has no browser dependency so the same components render
-// both here and via xango.Render on the server.
 package domrt
 
 import (
@@ -18,15 +11,13 @@ import (
 
 func document() js.Value { return js.Global().Get("document") }
 
-// Root is a live mount point: the result of Mount, and the handle
-// Update is called on for every subsequent render.
+// Root is a live mount point, the handle Update patches.
 type Root struct {
 	container js.Value
 	tree      *renderedNode
 }
 
-// Mount installs the registered stylesheets (see InstallStyles), creates
-// DOM nodes for initial and appends them to container, returning a Root whose Update re-renders in place on future calls.
+// Mount installs the registered stylesheets and mounts a tree.
 func Mount(container js.Value, initial xango.Node) *Root {
 	InstallStyles()
 	rn := create(initial)
@@ -36,21 +27,11 @@ func Mount(container js.Value, initial xango.Node) *Root {
 	return &Root{container: container, tree: rn}
 }
 
-// Update diffs next against the currently mounted tree and patches the
-// real DOM to match, preserving node identity (and therefore focus,
-// scroll position, input state, etc.) wherever the shape is unchanged.
 func (r *Root) Update(next xango.Node) {
 	r.tree = patch(r.container, r.tree, next)
 }
 
-// FirstNode returns the first real DOM node this Root's mounted tree
-// owns -- the element itself for a simple single-element component
-// (e.g. Button). Useful for a caller that mounts a small, static
-// component once, reparents the resulting node into its own DOM
-// structure, and never calls Update again -- driving all further
-// state changes (a pressed/disabled toggle, a label swap) directly on
-// the returned node the same way it already would for any other
-// element it built by hand.
+// FirstNode returns the first DOM node of this Root's tree.
 func (r *Root) FirstNode() js.Value {
 	if r.tree == nil {
 		return js.Undefined()
@@ -58,13 +39,7 @@ func (r *Root) FirstNode() js.Value {
 	return r.tree.firstNode()
 }
 
-// Listener returns the js.Func trampoline domrt created for the given
-// event name on this Root's own top-level node, or the zero js.Func
-// if none is bound. For a caller that -- like FirstNode's own use
-// case -- never calls Update, Update's own patch/replace machinery
-// never runs to release this js.Func on the caller's behalf; Listener
-// lets that caller track and release it through whatever mechanism it
-// already uses for js.Funcs it creates directly.
+// Listener returns the js.Func trampoline for an event.
 func (r *Root) Listener(event string) js.Func {
 	if r.tree == nil {
 		return js.Func{}
@@ -75,8 +50,6 @@ func (r *Root) Listener(event string) js.Func {
 	return js.Func{}
 }
 
-// renderedNode pairs a previously-rendered xango.Node with the live DOM
-// node(s) it produced, so the next patch can diff against it.
 type renderedNode struct {
 	kind      xango.Kind
 	tag       string
@@ -87,9 +60,7 @@ type renderedNode struct {
 	attrs     []xango.Attr
 	text      string
 	listeners map[string]*eventBinding
-	// opener is, for a modal (an element with data-gj-modal), what had the focus when it was created:
-	// the focus goes back to it when the modal is taken away.
-	opener js.Value
+	opener    js.Value
 }
 
 type eventBinding struct {
@@ -97,10 +68,6 @@ type eventBinding struct {
 	handler xango.EventHandler
 }
 
-// ownedNodes returns every top-level DOM node this renderedNode is
-// responsible for -- exactly one for Element/Text, the parsed set for
-// Raw, and the flattened union of children's owned nodes for Fragment
-// (a fragment has no wrapper node of its own).
 func (rn *renderedNode) ownedNodes() []js.Value {
 	switch rn.kind {
 	case xango.KindFragment:
@@ -138,7 +105,7 @@ func createInner(n xango.Node) *renderedNode {
 	case xango.KindRaw:
 		return &renderedNode{kind: xango.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
 	case xango.KindHost:
-		// Host nodes belong to another renderer; leave a hole.
+		// host nodes belong to another renderer: leave a hole
 		return &renderedNode{kind: xango.KindFragment}
 	case xango.KindFragment:
 		rn := &renderedNode{kind: xango.KindFragment}
@@ -168,9 +135,6 @@ func createInner(n xango.Node) *renderedNode {
 	}
 }
 
-// parseHTMLFragment parses an HTML string into real DOM nodes via a
-// <template> element, the standard trick for turning an HTML string
-// into a live NodeList without an extra wrapper element.
 func parseHTMLFragment(html string) []js.Value {
 	tmpl := document().Call("createElement", "template")
 	tmpl.Set("innerHTML", html)
@@ -184,10 +148,6 @@ func parseHTMLFragment(html string) []js.Value {
 	return nodes
 }
 
-// propAttrs are set as live DOM properties rather than HTML attributes,
-// since for form controls the attribute only sets the initial value --
-// after user interaction the live property is what actually reflects
-// state, and what a controlled component needs to keep in sync.
 var propAttrs = map[string]bool{"value": true, "checked": true, "disabled": true, "selected": true}
 
 func truthyAttr(s string) bool {
@@ -209,8 +169,6 @@ func applyAttr(rn *renderedNode, a xango.Attr) {
 	}
 	rn.dom.Call("setAttribute", a.Name, a.Value)
 	if a.Name == "autofocus" {
-		// The attribute only works on page load: focus the element once it
-		// is in the document.
 		el := rn.dom
 		var focus js.Func
 		focus = js.FuncOf(func(js.Value, []js.Value) any {
@@ -231,10 +189,7 @@ func hasAttr(attrs []xango.Attr, name string) bool {
 	return false
 }
 
-// takeFocus is for a modal that has just been created: it notes what has the focus now, and moves the
-// focus into the modal once it is in the document (unless something inside it, an autofocus
-// field, has taken it already). Only creation does this, never a later render of the same modal, so
-// typing in a field inside it is not interrupted.
+// on creation only, never on re-render
 func takeFocus(rn *renderedNode) {
 	if active := document().Get("activeElement"); !active.IsNull() && !active.IsUndefined() && !active.Equal(document().Get("body")) {
 		rn.opener = active
@@ -251,11 +206,6 @@ func takeFocus(rn *renderedNode) {
 	js.Global().Call("requestAnimationFrame", focus)
 }
 
-// giveBackFocus is for a node that has just been taken out of the document: a modal inside it
-// returns the focus to what had it before the modal opened, if that is still in the page and the focus
-// was lost with the modal (it is on nothing, or on the page's body). It waits for the end of the
-// render (one frame): the same render may still move the opener within its parent, and moving a
-// node drops its focus.
 func giveBackFocus(rn *renderedNode) {
 	var openers []js.Value
 	var collect func(*renderedNode)
@@ -308,10 +258,6 @@ func removeAttr(rn *renderedNode, a xango.Attr) {
 	rn.dom.Call("removeAttribute", a.Name)
 }
 
-// setListener registers a real addEventListener at most once per
-// (element, event name); re-renders that keep binding the same event
-// just swap the Go closure a stable JS trampoline calls through,
-// avoiding duplicate listeners and js.Func churn.
 func setListener(rn *renderedNode, name string, handler xango.EventHandler) {
 	if b, ok := rn.listeners[name]; ok {
 		b.handler = handler
@@ -369,7 +315,6 @@ func domEventToXangoEvent(ev js.Value) xango.Event {
 	})
 }
 
-// moveFocus implements xango.Event.MoveFocus over the DOM event ev.
 func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	target := ev.Get("target")
 	if target.IsUndefined() || target.IsNull() || target.Get("closest").IsUndefined() {
@@ -379,7 +324,7 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	if rootEl.IsNull() || rootEl.IsUndefined() {
 		return false
 	}
-	// ":scope" alone names the widget element itself (querySelectorAll only finds descendants).
+	// ":scope" alone names the widget element (querySelectorAll finds descendants)
 	var all []js.Value
 	if strings.TrimSpace(items) == ":scope" {
 		all = append(all, rootEl)
@@ -438,9 +383,6 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	return true
 }
 
-// nearestInDirection is the index of the candidate nearest below (or above) cands[cur] on the screen: among those
-// whose top is below its bottom (above its top), the one with the least vertical gap and then the least
-// horizontal distance between the centres; cur itself when there is none.
 func nearestInDirection(cands []js.Value, cur int, down bool) int {
 	rect := func(el js.Value) (top, bottom, cx float64) {
 		r := el.Call("getBoundingClientRect")
@@ -473,11 +415,6 @@ func nearestInDirection(cands []js.Value, cur int, down bool) int {
 	return best
 }
 
-// patch diffs newNode against the tree rooted at old (whose last
-// rendered value was oldNode), mutating the live DOM to match and
-// returning the renderedNode to track for the next patch. parent is
-// used only when old must be replaced wholesale (to know where in the
-// DOM to splice the replacement in).
 func patch(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	if old == nil {
 		rn := create(next)
@@ -514,8 +451,6 @@ func patch(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	return old
 }
 
-// replace tears down old's DOM nodes and mounts next fresh in their
-// place, preserving position via insertBefore against old's first node.
 func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	oldNodes := old.ownedNodes()
 	rn := create(next)
@@ -536,9 +471,6 @@ func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode 
 	return rn
 }
 
-// anchorAfter returns the DOM node immediately following rn's owned
-// nodes in parent, used as the insertBefore reference when patching a
-// fragment's children (a fragment has no wrapper node to anchor off of).
 func anchorAfter(parent js.Value, rn *renderedNode) js.Value {
 	nodes := rn.ownedNodes()
 	if len(nodes) == 0 {
@@ -562,10 +494,6 @@ func patchAttrs(old *renderedNode, next []xango.Attr) {
 	}
 }
 
-// patchChildren reconciles an old list of rendered children against a
-// new list of xango.Node children. Children carrying a Key are matched by
-// key (so reorders move existing DOM nodes instead of recreating them);
-// unkeyed children are matched positionally.
 func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, next []xango.Node) []*renderedNode {
 	oldByKey := make(map[string]*renderedNode)
 	oldKeys := make([]string, len(old))
@@ -598,7 +526,6 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 		}
 	}
 
-	// Remove anything from old that wasn't reused.
 	for _, o := range old {
 		if !used[o] {
 			for _, dn := range o.ownedNodes() {
@@ -608,9 +535,6 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 		}
 	}
 
-	// Ensure DOM order matches result order (moves reused-but-shifted
-	// nodes into place); appends before endAnchor when set (fragment
-	// case) or at the natural end otherwise.
 	for i := len(result) - 1; i >= 0; i-- {
 		var ref js.Value
 		if i+1 < len(result) {
@@ -619,8 +543,7 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 			ref = endAnchor
 		}
 		for _, dn := range reverse(result[i].ownedNodes()) {
-			// A node already in place is left alone: re-inserting it would
-			// drop the focus (and the selection) from anything inside it.
+			// a node in place is left alone: re-inserting drops its focus
 			if inPlace(parent, dn, ref) {
 				ref = dn
 				continue
@@ -644,12 +567,8 @@ func reverse(vs []js.Value) []js.Value {
 	return out
 }
 
-// key exists only because renderedNode doesn't otherwise retain the
-// xango.Node.Key it was created from; store it alongside text/attrs.
 func (rn *renderedNode) key() string { return rn.k }
 
-// inPlace reports whether dn is already a child of parent directly before
-// ref (the last child when ref is undefined).
 func inPlace(parent, dn, ref js.Value) bool {
 	if !dn.Get("parentNode").Equal(parent) {
 		return false

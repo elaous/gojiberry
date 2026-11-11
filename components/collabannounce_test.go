@@ -15,7 +15,6 @@ func TestCollabAnnouncerGroupsSpacesAndFilters(t *testing.T) {
 	if got := a.Update(at(10), true, []string{"Ana", "Bo"}, ""); got != "Bo joined." {
 		t.Errorf("one joins: %q", got)
 	}
-	// changes inside the spacing are held, then said together
 	if got := a.Update(at(10), true, []string{"Ana", "Bo", "Cy"}, ""); got != "" {
 		t.Errorf("held: %q", got)
 	}
@@ -25,16 +24,13 @@ func TestCollabAnnouncerGroupsSpacesAndFilters(t *testing.T) {
 	if got := a.Update(at(13), true, []string{"Ana", "Bo", "Cy", "Di"}, ""); got != "2 people joined: Cy, Di." {
 		t.Errorf("grouped: %q", got)
 	}
-	// someone who comes and goes before anything was said is not announced
 	a.Update(at(14), true, []string{"Ana", "Bo", "Cy", "Di", "Ed"}, "")
 	if got := a.Update(at(20), true, []string{"Ana", "Bo", "Cy", "Di"}, ""); got != "" {
 		t.Errorf("joined and left: %q", got)
 	}
-	// leaving, and many names are counted
 	if got := a.Update(at(30), true, []string{"Ana"}, ""); got != "3 people left: Bo, Cy, Di." {
 		t.Errorf("leaving: %q", got)
 	}
-	// the connection
 	if got := a.Update(at(40), false, []string{"Ana"}, ""); got != "The connection to the shared document was lost." {
 		t.Errorf("offline: %q", got)
 	}
@@ -48,7 +44,6 @@ func TestCollabAnnouncerGroupsSpacesAndFilters(t *testing.T) {
 		t.Errorf("nothing changed: %q", got)
 	}
 
-	// important: the connection and problems, not the people
 	b := CollabAnnouncer{Level: CollabImportant}
 	b.Update(at(0), true, []string{"Ana"}, "")
 	if got := b.Update(at(10), true, []string{"Ana", "Bo"}, ""); got != "" {
@@ -57,7 +52,6 @@ func TestCollabAnnouncerGroupsSpacesAndFilters(t *testing.T) {
 	if got := b.Update(at(20), false, []string{"Ana", "Bo"}, ""); got == "" {
 		t.Error("important says the connection is lost")
 	}
-	// off: nothing at all
 	c := CollabAnnouncer{Level: CollabOff}
 	c.Update(at(0), true, nil, "")
 	if got := c.Update(at(10), false, []string{"Ana"}, "broken"); got != "" {

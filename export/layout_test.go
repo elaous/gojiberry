@@ -17,8 +17,6 @@ import (
 	"github.com/elaous/gojiberry/pdfua"
 )
 
-// longSnapshot is a document of numbered headings, each followed by enough text to fill most of a page,
-// on a small sheet so that it runs to several pages.
 func longSnapshot(headings int) Snapshot {
 	var blocks []Block
 	for i := 1; i <= headings; i++ {
@@ -110,11 +108,9 @@ func TestPDFHeadersFootersAndPageNumbersOnEveryPage(t *testing.T) {
 			t.Errorf("page %d lacks the header: %q", i+1, txt)
 		}
 	}
-	// The header and footer are artifacts: the file is still valid tagged PDF.
 	if got, err := pdfua.Check(data); err != nil || len(got) != 0 {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
-	// With neither set nothing is added.
 	snap.Header, snap.Footer = "", ""
 	plain, err := PDF{}.Export(snap)
 	if err != nil {
@@ -140,7 +136,6 @@ func TestPDFTableOfContentsHasTheRealPageNumbers(t *testing.T) {
 	if !strings.Contains(pages[0], "Table of contents") {
 		t.Fatalf("the contents come first: %q", pages[0])
 	}
-	// Where each heading really is: the first page after the contents with the heading's text.
 	where := map[string]int{}
 	for _, e := range snap.Outline() {
 		for i := 1; i < len(pages); i++ {
@@ -157,7 +152,6 @@ func TestPDFTableOfContentsHasTheRealPageNumbers(t *testing.T) {
 		t.Fatalf("the headings should be on increasing pages after the contents: %v", where)
 	}
 	for _, e := range snap.Outline() {
-		// The contents line is the heading text, dots, then its page number.
 		re := regexp.MustCompile(regexp.QuoteMeta(e.Text) + `[\s.]*?(\d+)`)
 		m := re.FindStringSubmatch(pages[0])
 		if m == nil {
@@ -174,7 +168,6 @@ func TestPDFTableOfContentsHasTheRealPageNumbers(t *testing.T) {
 }
 
 func TestPDFTableOfContentsThatRunsToSeveralPages(t *testing.T) {
-	// So many headings that the contents themselves fill more than a page: the numbers must count them.
 	var blocks []Block
 	for i := 1; i <= 70; i++ {
 		blocks = append(blocks, Block{Kind: Heading1, Segments: []Segment{{Text: fmt.Sprintf("Topic %d", i)}}})
@@ -189,8 +182,6 @@ func TestPDFTableOfContentsThatRunsToSeveralPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The text of a page is its pieces joined without separators: a heading is "Topic Ntext" in the body
-	// and "Topic N. . . P" in the contents.
 	first := 0
 	for p, txt := range pages {
 		if first == 0 && strings.Contains(txt, "Topic 1text") {
@@ -242,7 +233,6 @@ func TestHTMLPrintStylesheetAndContents(t *testing.T) {
 	if !strings.Contains(s, `\"quoted\"`) {
 		t.Error("quotes in the header are escaped in the CSS string")
 	}
-	// Every contents link points at a heading with that id.
 	links := regexp.MustCompile(`<a href="#(toc-\d+)">([^<]*)</a>`).FindAllStringSubmatch(s, -1)
 	if len(links) != 4 {
 		t.Fatalf("contents links = %v", links)
@@ -252,7 +242,6 @@ func TestHTMLPrintStylesheetAndContents(t *testing.T) {
 			t.Errorf("link %v has no heading", l)
 		}
 	}
-	// Without a contents the headings carry no ids and there is no nav; EPUB's XHTML takes neither.
 	snap.TOC = false
 	plain, _ := HTML{}.Export(snap)
 	if strings.Contains(string(plain), "<nav") || strings.Contains(string(plain), ` id="toc-`) {
@@ -329,7 +318,6 @@ func TestDOCXHeaderFooterAndContents(t *testing.T) {
 	if strings.Index(doc, "headerReference") > strings.Index(doc, "<w:pgSz") {
 		t.Error("the references come before the page size in sectPr")
 	}
-	// The contents: a TOC field, an entry per heading linking to a bookmark that exists, with a PAGEREF.
 	if !strings.Contains(doc, `TOC \o "1-3" \h \z \u`) || !strings.Contains(doc, `w:dirty="true"`) {
 		t.Error("the contents are a TOC field that Word refreshes")
 	}
@@ -345,7 +333,6 @@ func TestDOCXHeaderFooterAndContents(t *testing.T) {
 	if strings.Count(doc, "<w:bookmarkStart") != strings.Count(doc, "<w:bookmarkEnd") || strings.Count(doc, "<w:bookmarkStart") != 4 {
 		t.Error("each heading has a matching bookmark")
 	}
-	// Word's own reader (ours) still reads the body, headings included, through the field and bookmarks.
 	back, err := docximport.Import(data)
 	if err != nil {
 		t.Fatal(err)
@@ -359,7 +346,6 @@ func TestDOCXHeaderFooterAndContents(t *testing.T) {
 	if s := all.String(); !strings.Contains(s, "Chapter 2") || !strings.Contains(s, "words of the paragraph") {
 		t.Errorf("the imported text lost the body: %.200q", s)
 	}
-	// Without them the package has neither part.
 	snap.Header, snap.Footer, snap.TOC = "", "", false
 	data, _ = DOCX{}.Export(snap)
 	p = docxParts(t, data)
@@ -414,7 +400,6 @@ func TestRTFContentsListHeadingsWithPageReferences(t *testing.T) {
 			t.Errorf("RTF contents lack %q:\n%s", want, s[:min(len(s), 1200)])
 		}
 	}
-	// Each entry's bookmark is on a heading.
 	if strings.Count(s, `\bkmkstart`) != strings.Count(s, `PAGEREF`) {
 		t.Errorf("%d bookmarks for %d page references", strings.Count(s, `\bkmkstart`), strings.Count(s, `PAGEREF`))
 	}

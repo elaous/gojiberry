@@ -1,24 +1,3 @@
-// Package observe is OPERATOR observability for a Gojiberry server: metrics and traces about the
-// server's own behaviour (requests per route template, store operation timings, sweep timings,
-// sign-in and limiter outcomes, errors by a fixed code), for the person who runs the server. It is
-// about the machine, not about people, and it is a different producer from package telemetry (usage
-// counts that a browser sends with the person's opt-in); they share the Sink abstraction (sink.go)
-// so either can be routed to the built-in admin pages, OpenTelemetry, PostHog, or several.
-//
-// Nothing here has a place for personal data, by construction:
-//
-//   - Names are closed. A metric, a label, a span and a span attribute exist only if they are in
-//     the tables of this file; anything else is dropped and counted (Dropped), never forwarded.
-//   - Values are closed. A label value must be one of the enumerated values of its label, a span
-//     attribute is an enumerated value or a number in a fixed range. There is no string parameter
-//     that a request could fill: a route is a template ("/docs/{id}"), never a path.
-//   - The HTTP middleware reads the method and the path to choose a template and the status the
-//     handler wrote. It never reads the remote address, a header, a cookie, the query or the body.
-//   - It is off unless the operator turns it on (GOJIBERRY_OBS=on, see config.go); a nil *Observer
-//     is valid and does nothing.
-//
-// Adding a name, a label or a value is a reviewed change to this file and to docs/observability.md,
-// which a test keeps in step with it.
 package observe
 
 import (
@@ -36,11 +15,9 @@ type Kind uint8
 
 // The kinds of metric.
 const (
-	// Counter only goes up; a point carries the amount to add.
 	Counter Kind = iota + 1
 	// Histogram is a distribution of observations (durations, in seconds).
 	Histogram
-	// Gauge is a value that goes up and down; a point carries its current value.
 	Gauge
 )
 
@@ -79,14 +56,11 @@ const (
 	WorkRuns       Metric = "work_runs_total"
 	WorkDuration   Metric = "work_duration_seconds"
 	WorkOpen       Metric = "work_open"
-	// UsageEvents is the user-usage producer (package telemetry) routed through the same sinks:
-	// counts of allowlisted facts, only ever fed after a person opted in at the browser.
-	UsageEvents Metric = "usage_events_total"
+	UsageEvents    Metric = "usage_events_total"
 	// Dropped counts what the allowlist refused, by reason.
 	DroppedPoints Metric = "obs_dropped_total"
 )
 
-// Def describes one metric: what it is and which labels it has (all of them are required).
 type Def struct {
 	Name   Metric
 	Kind   Kind
@@ -95,7 +69,6 @@ type Def struct {
 	Why    string
 }
 
-// defs is the whole metric schema, in a stable order.
 var defs = []Def{
 	{HTTPRequests, Counter, "requests", []string{"route", "method", "status_class"}, "how much each route template is used and how it ends"},
 	{HTTPDuration, Histogram, "seconds", []string{"route", "method"}, "which routes are slow"},
@@ -119,13 +92,10 @@ var defs = []Def{
 	{DroppedPoints, Counter, "points", []string{"reason"}, "what the allowlist refused, so a wrong call is visible"},
 }
 
-// labelValues are the allowed values of each label. A label whose values are filled in at run time
-// (fact and choice of the usage producer) is listed in usageLabels instead.
 var labelValues = map[string][]string{
 	"route": {"/health", "/ready", "/quota", "/docs", "/docs/{id}", "/docs/{id}/acl", "/docs/{id}/renew",
 		"/auth/{provider}/login", "/auth/{provider}/callback", "/auth/me", "/auth/logout", "/auth/passkey/*", "/auth/other",
 		"/directory/*", "/admin/*", "/telemetry", "/me/config", "/public/*",
-		// the other servers (collaboration hub, sync relay, font, translation, speech and braille services)
 		"/docs/{id}/events", "/docs/{id}/snapshot", "/docs/{id}/ws", "/docs/{id}/ops", "/docs/{id}/presence", "/docs/{id}/role",
 		"/ops", "/presence", "/local/*", "/google/*", "/translate", "/speak", "/transcribe", "other"},
 	"method":       {"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "other"},
@@ -142,8 +112,6 @@ var labelValues = map[string][]string{
 	"reason":       {"unknown_metric", "wrong_kind", "unknown_label", "bad_label_value", "bad_value", "unknown_span", "unknown_attribute", "bad_attribute_value"},
 }
 
-// usageLabels are the labels whose values the usage producer fills in (from the telemetry
-// allowlist, set with SetUsageAllowlist).
 var usageLabels = map[string]bool{"fact": true, "choice": true}
 
 // SpanName is the name of a span of the allowlist.
@@ -177,7 +145,6 @@ var spanDefs = []SpanDef{
 	{SpanSweep, []string{"sweep", "result", "count"}, "one run of a background sweep"},
 }
 
-// attrDefs are the span attributes: an enumeration (the label of the same name) or a number in a range.
 var attrDefs = map[string]struct {
 	numeric  bool
 	lo, hi   float64
@@ -193,7 +160,6 @@ var attrDefs = map[string]struct {
 	"count":        {numeric: true, lo: 0, hi: 1e9},
 }
 
-// attrNames is the stable order of the attributes.
 var attrNames = []string{"route", "method", "status_class", "op", "result", "sweep", "status_code", "count"}
 
 var (
@@ -228,7 +194,6 @@ type Source uint8
 const (
 	// Operator points are the server's own behaviour (this package).
 	Operator Source = iota + 1
-	// Usage points are the browsers' usage counts (package telemetry), opt-in by the person.
 	Usage
 )
 
@@ -239,17 +204,14 @@ func (s Source) String() string {
 	return "operator"
 }
 
-// Point is one validated sample: a counter amount, a histogram observation or a gauge value.
 type Point struct {
 	Metric Metric
 	Kind   Kind
 	Value  float64
-	// Labels are in the order of the metric's definition, every one present.
 	Labels []Label
 	Source Source
 }
 
-// Attr is a span attribute: an enumerated value (Str) or a number (Num).
 type Attr struct {
 	Key   string
 	Str   string
@@ -257,14 +219,11 @@ type Attr struct {
 	IsNum bool
 }
 
-// S is an enumerated attribute (the value must be on the attribute's list).
 func S(key, value string) Attr { return Attr{Key: key, Str: value} }
 
-// N is a numeric attribute (the value must be in the attribute's range).
 func N(key string, v float64) Attr { return Attr{Key: key, Num: v, IsNum: true} }
 
-// SpanData is a finished span, as the sinks get it. The ids are random per span (not derived from
-// anything of the request) and exist to join a child to its parent.
+// SpanData is a finished span, as the sinks get it.
 type SpanData struct {
 	Name    SpanName
 	TraceID [16]byte
@@ -277,19 +236,13 @@ type SpanData struct {
 
 // Options of New.
 type Options struct {
-	// Operator receives the server's own metrics and spans; nil drops them.
-	Operator Sink
-	// Usage receives the usage counts of package telemetry; nil drops them.
-	Usage Sink
-	// TraceSample is the share of root spans that are kept (0 to 1; the zero value keeps none, so a
-	// caller says 1 for all). A child follows its parent.
+	Operator    Sink
+	Usage       Sink
 	TraceSample float64
 	// Now replaces time.Now (tests).
 	Now func() time.Time
 }
 
-// Observer validates what the server reports and hands it to the sinks. A nil *Observer is valid
-// and does nothing, so call sites never check.
 type Observer struct {
 	operator Sink
 	usage    Sink
@@ -301,7 +254,6 @@ type Observer struct {
 	mu         sync.Mutex
 	usageAllow map[string]map[string]bool
 
-	// cfg and named are set by FromEnv (what the admin route describes).
 	cfg   *Config
 	named map[string]Sink
 }
@@ -320,8 +272,6 @@ func (o *Observer) Enabled() bool { return o != nil && (o.operator != nil || o.u
 
 var def atomic.Pointer[Observer]
 
-// Default is the process-wide Observer that code without a handle on a Server (a sweep loop) reports
-// to; nil until SetDefault. A nil result is valid.
 func Default() *Observer { return def.Load() }
 
 // SetDefault sets the process-wide Observer.
@@ -336,8 +286,6 @@ func reasonIndex(reason string) int {
 	return -1
 }
 
-// drop counts a refusal. It goes to the operator sink as a point of its own, built without the
-// validation that could drop it again.
 func (o *Observer) drop(reason string) {
 	if i := reasonIndex(reason); i >= 0 {
 		o.dropped[i].Add(1)
@@ -347,7 +295,6 @@ func (o *Observer) drop(reason string) {
 	}
 }
 
-// Dropped is how many points and attributes the allowlist refused, by reason (reasons never seen are absent).
 func (o *Observer) Dropped() map[string]int64 {
 	out := map[string]int64{}
 	if o == nil {
@@ -361,7 +308,6 @@ func (o *Observer) Dropped() map[string]int64 {
 	return out
 }
 
-// validate checks a point against the allowlist and returns it with its labels in definition order.
 func (o *Observer) validate(m Metric, kind Kind, v float64, kv []string) (Point, bool) {
 	d, ok := defByName[m]
 	if !ok {
@@ -419,7 +365,7 @@ func (o *Observer) send(m Metric, kind Kind, v float64, kv []string) {
 	}
 }
 
-// Add adds n to a counter. kv are label name and value pairs, e.g. ("route", "/docs", "method", "GET", ...).
+// Add adds n to a counter.
 func (o *Observer) Add(m Metric, n float64, kv ...string) { o.send(m, Counter, n, kv) }
 
 // Observe records one value of a histogram (seconds for durations).
@@ -431,7 +377,7 @@ func (o *Observer) Set(m Metric, v float64, kv ...string) { o.send(m, Gauge, v, 
 // Error counts a failure by its fixed code.
 func (o *Observer) Error(code string) { o.Add(Errors, 1, "code", code) }
 
-// Span is a span being recorded. A nil *Span is valid (unsampled, or the observer is off).
+// Span is a span being recorded.
 type Span struct {
 	o     *Observer
 	data  SpanData
@@ -447,8 +393,6 @@ type spanCtx struct {
 	sampled bool
 }
 
-// Start begins a span named from the allowlist, a child of the span in ctx if there is one. The
-// returned context carries it. Attributes outside the allowlist are dropped (and counted).
 func (o *Observer) Start(ctx context.Context, name SpanName, attrs ...Attr) (context.Context, *Span) {
 	if o == nil || o.operator == nil {
 		return ctx, nil
@@ -501,8 +445,7 @@ func fillRandom(b []byte) {
 	}
 }
 
-// Set adds attributes. One that is not on the span's list, or whose value is not an allowed value
-// (a string outside its enumeration, a number outside its range), is dropped and counted.
+// Set adds attributes.
 func (s *Span) Set(attrs ...Attr) {
 	if s == nil {
 		return
@@ -552,7 +495,7 @@ func (o *Observer) attrOK(d *SpanDef, a Attr) bool {
 	return true
 }
 
-// End finishes the span and hands it to the sinks. A second call does nothing.
+// End finishes the span and hands it to the sinks.
 func (s *Span) End() {
 	if s == nil || !s.ended.CompareAndSwap(false, true) {
 		return
@@ -565,8 +508,6 @@ func (s *Span) End() {
 	s.o.operator.Span(d)
 }
 
-// SetUsageAllowlist tells the observer which usage facts exist: the producer (package telemetry)
-// passes its own allowlist, so the two cannot disagree. Facts outside it are dropped by Usage.
 func (o *Observer) SetUsageAllowlist(allowed map[string][]string) {
 	if o == nil {
 		return
@@ -598,8 +539,6 @@ func (o *Observer) usageLabelOK(name, value string) bool {
 	return false
 }
 
-// Usage routes n occurrences of an allowlisted usage fact (the counts a browser sent with the
-// person's opt-in) to the usage sinks. A pair outside the allowlist is dropped and counted.
 func (o *Observer) Usage(fact, choice string, n int) {
 	if o == nil || o.usage == nil {
 		return
@@ -614,8 +553,7 @@ func (o *Observer) Usage(fact, choice string, n int) {
 	o.usage.Metric(Point{Metric: UsageEvents, Kind: Counter, Value: float64(n), Labels: []Label{{"fact", fact}, {"choice", choice}}, Source: Usage})
 }
 
-// Sweep times one run of a background sweep. Call it when the run starts and the returned function
-// when it ends with how many items it removed and its error.
+// Sweep times one run of a background sweep.
 func (o *Observer) Sweep(name string) func(removed int, err error) {
 	if o == nil || o.operator == nil {
 		return func(int, error) {}
@@ -638,9 +576,6 @@ func (o *Observer) Sweep(name string) func(removed int, err error) {
 	}
 }
 
-// Work times one piece of a server's own work (a name of the "work" list) and counts how it ended. Call it
-// when the work starts and the returned function when it ends with its result: ok, rejected (refused
-// by a rule), canceled or error.
 func (o *Observer) Work(name string) func(result string) {
 	if o == nil || o.operator == nil {
 		return func(string) {}
@@ -652,12 +587,9 @@ func (o *Observer) Work(name string) func(result string) {
 	}
 }
 
-// SetOpen sets how much of a kind of work is open now (the gauge of the "work" list, for example hub_rooms).
 func (o *Observer) SetOpen(name string, n int) { o.Set(WorkOpen, float64(n), "work", name) }
 
-// StoreOp times one store operation under the span in ctx. Call the returned function when it ends
-// with its result (one of the "result" values: ok, not_found, conflict, canceled, error) and, for a
-// listing, the number of items (-1 for none).
+// StoreOp times one store operation under the span in ctx.
 func (o *Observer) StoreOp(ctx context.Context, op string) func(result string, count int) {
 	if o == nil || o.operator == nil {
 		return func(string, int) {}
@@ -698,7 +630,6 @@ func (o *Observer) Close(ctx context.Context) error {
 	return joinErr(closeAll(ctx, o.sinks()))
 }
 
-// sinks are the distinct sinks behind both producers.
 func (o *Observer) sinks() []Sink {
 	var out []Sink
 	for _, s := range []Sink{o.operator, o.usage} {
@@ -712,9 +643,7 @@ func (o *Observer) sinks() []Sink {
 	return out
 }
 
-// MetricInfo, SpanInfo and AttributeInfo are the allowlist as data, for the admin route and the docs.
 type (
-	// MetricInfo is one metric with the allowed values of each label.
 	MetricInfo struct {
 		Name   Metric              `json:"name"`
 		Kind   string              `json:"kind"`
@@ -728,7 +657,6 @@ type (
 		Attributes []string `json:"attributes"`
 		Why        string   `json:"why"`
 	}
-	// AttributeInfo is one span attribute: its allowed values, or its range.
 	AttributeInfo struct {
 		Name   string   `json:"name"`
 		Values []string `json:"values,omitempty"`
@@ -737,7 +665,7 @@ type (
 	}
 )
 
-// Metrics lists the metric allowlist. The usage labels list what the producer registered (usage).
+// Metrics lists the metric allowlist.
 func Metrics(usage map[string][]string) []MetricInfo {
 	var out []MetricInfo
 	for _, d := range defs {

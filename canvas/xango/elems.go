@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// --- TextFlow ----------------------------------------------------------------
-
-// flowElem is a TextFlow element: a PageSet drawn under a TextFlow.
 type flowElem struct {
 	ps    *canvas.PageSet
 	flow  *canvas.TextFlow
@@ -106,7 +103,6 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 		changed = true
 	}
 	if first || p.Source != old.Source || p.Text != old.Text || !reflect.DeepEqual(p.Items, old.Items) {
-		// New content: forget what was typed into the flow.
 		fl.ResetContent()
 		fl.Source, fl.Text, fl.Items = p.Source, p.Text, append([]canvas.Item(nil), p.Items...)
 		changed = true
@@ -118,8 +114,6 @@ func (f *flowElem) Update(_ *Context, props any, _ []xango.Node) (bool, error) {
 	return changed, nil
 }
 
-// clonePages copies pages so editing a header on the canvas does not
-// write through to the comparison copy.
 func clonePages(in []canvas.Page) []canvas.Page {
 	out := make([]canvas.Page, len(in))
 	for i, p := range in {
@@ -139,8 +133,6 @@ func clonePages(in []canvas.Page) []canvas.Page {
 	}
 	return out
 }
-
-// --- Image ---------------------------------------------------------------------
 
 type imageElem struct {
 	im   *canvas.Image
@@ -232,8 +224,6 @@ func (e *imageElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 	return changed, nil
 }
 
-// --- FloatingText ----------------------------------------------------------------
-
 type floatElem struct {
 	ft   *canvas.FloatingText
 	last FloatingTextProps
@@ -316,8 +306,6 @@ func (e *floatElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 	return changed, nil
 }
 
-// --- Table -----------------------------------------------------------------------
-
 type tableElem struct {
 	v    *canvas.TableView
 	last TableProps
@@ -376,15 +364,13 @@ func (e *tableElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 		changed = true
 	}
 	if first {
-		// A table made before its painter is set measures against none.
+		// a table made before its painter is set measures against none
 		if c.Stage.Painter != nil {
 			v.SetPainter(c.Stage.Painter)
 		}
 	}
 	return changed, nil
 }
-
-// --- ScrollView ---------------------------------------------------------------
 
 type scrollElem struct {
 	sv   *canvas.ScrollView
@@ -454,8 +440,7 @@ func (e *floatElem) Close() { e.ft.SetFlow(nil) }
 // Close implements Closer.
 func (e *tableElem) Close() { e.v.SetFlow(nil) }
 
-// sameValue reports whether two interface values are equal, false for ones
-// that cannot be compared (so a changed value is never missed).
+// uncomparable values report false: a change is never missed
 func sameValue(a, b any) (same bool) {
 	defer func() {
 		if recover() != nil {
@@ -465,8 +450,6 @@ func sameValue(a, b any) (same bool) {
 	return a == b
 }
 
-// newTable builds the table a TableProps describes; a merge that does not fit
-// the grid is left out.
 func newTable(p TableProps) *canvas.Table {
 	t := canvas.NewTableFrom(p.Cells)
 	for _, m := range p.Merges {
@@ -480,7 +463,6 @@ func newTable(p TableProps) *canvas.Table {
 	return t
 }
 
-// themeChanged says whether two themes differ (nil is the canvas's own colours).
 func themeChanged(a, b *canvas.FlowTheme) bool {
 	switch {
 	case a == nil && b == nil:

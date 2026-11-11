@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// withError is a document with one error (a picture nobody described); fine has none.
 func docBytes(t *testing.T, codec docfile.Codec, items ...docfile.Item) []byte {
 	t.Helper()
 	b, err := codec.Marshal(docfile.Document{Content: items})
@@ -67,7 +66,6 @@ func TestWhatCannotBeReadAsADocumentIsRefusedUnderBlockAndFlaggedUnderWarn(t *te
 	}
 }
 
-// fixture is a real docstore server behind the gate, with two stored documents.
 func fixture(t *testing.T, mode a11ycheck.GateMode) http.Handler {
 	t.Helper()
 	store := docstore.NewMemoryAdapter()
@@ -107,20 +105,16 @@ func TestBlockRefusesTheExportRouteButNotTheEditorsLoad(t *testing.T) {
 	if rec := get(h, http.MethodHead, "/docs/bad?for=export", nil); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("HEAD is the server's own answer: %d", rec.Code)
 	}
-	// The editor opens a document with errors to fix them.
 	if rec := get(h, http.MethodGet, "/docs/bad", nil); rec.Code != http.StatusOK || rec.Header().Get(GateHeader) != "" {
 		t.Errorf("plain load: %d %v", rec.Code, rec.Header())
 	}
-	// A document without errors goes out, with the gate's verdict on it.
 	rec := get(h, http.MethodGet, "/docs/good?for=export", nil)
 	if rec.Code != http.StatusOK || rec.Header().Get(GateHeader) != "ok" || rec.Body.Len() == 0 {
 		t.Errorf("good: %d %v", rec.Code, rec.Header())
 	}
-	// What cannot be checked is not handed over under block.
 	if rec := get(h, http.MethodGet, "/docs/cipher?for=export", nil); rec.Code != http.StatusUnprocessableEntity || rec.Header().Get(GateHeader) != "unchecked" {
 		t.Errorf("cipher: %d %v", rec.Code, rec.Header())
 	}
-	// A missing document is the server's own 404, not the gate's.
 	if rec := get(h, http.MethodGet, "/docs/nope?for=export", nil); rec.Code != http.StatusNotFound {
 		t.Errorf("missing: %d", rec.Code)
 	}
@@ -144,8 +138,6 @@ func TestNoGateLeavesTheHandlerAlone(t *testing.T) {
 	}
 }
 
-// The gate runs after the server's own access decision: someone refused there sees that refusal, never the
-// gate's count of errors.
 func TestAnAnswerThatIsNotTheDocumentPassesThroughUntouched(t *testing.T) {
 	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusServiceUnavailable} {
 		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "refused", code) })
@@ -173,7 +165,6 @@ func TestOnlyGetOfOneDocumentIsExportBound(t *testing.T) {
 	}
 }
 
-// A host with the keys judges the document it decrypts; with the wrong key, or none, it is refused under block.
 func TestDecideSealedJudgesWhatTheHostDecrypts(t *testing.T) {
 	bad := docfile.Document{Content: []docfile.Item{{Image: &docfile.ImageItem{URL: "a.png"}}}}
 	plain, err := docfile.JSON.Marshal(bad)

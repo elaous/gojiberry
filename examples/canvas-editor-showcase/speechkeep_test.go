@@ -33,8 +33,6 @@ func takeOf(prompt string, n int) speechcoach.Entry {
 	return speechcoach.NewEntry("en", prompt, prompt, speechcoach.Prompted, pcm, nil, time.Unix(1700000000, 0))
 }
 
-// Kept recordings come back whole under the same key; nothing readable is in the vault; a retake replaces the
-// old take in the vault; a changed one, or one sealed under another key, is dropped.
 func TestKeptRecordingsAreSealedAndComeBack(t *testing.T) {
 	key, _ := speechSealKey([]byte("device secret"))
 	other, _ := speechSealKey([]byte("another secret"))
@@ -51,7 +49,6 @@ func TestKeptRecordingsAreSealedAndComeBack(t *testing.T) {
 			t.Errorf("%s holds readable data", name)
 		}
 	}
-	// a retake of one phrase replaces its take: the old sealed entry leaves the vault
 	d.Add(takeOf("good morning", 3))
 	if err := keepSpeech(v, key, &d, kept); err != nil {
 		t.Fatal(err)
@@ -68,7 +65,6 @@ func TestKeptRecordingsAreSealedAndComeBack(t *testing.T) {
 		t.Errorf("the retake did not come back: %+v", e)
 	}
 
-	// one changed recording is dropped, the other stays
 	for _, name := range v.Names("speech/e/") {
 		b := v[name]
 		b[len(b)-1] ^= 1
@@ -82,7 +78,6 @@ func TestKeptRecordingsAreSealedAndComeBack(t *testing.T) {
 		t.Errorf("the changed one should have been removed: %v", v.Names("speech/"))
 	}
 
-	// another key opens nothing, and the vault is wiped
 	var wrong speechcoach.Dataset
 	if n, err := loadSpeech(v, other, &wrong, map[string]bool{}); err == nil || n != 0 || wrong.Len() != 0 {
 		t.Errorf("another key: %d %v", n, err)
@@ -92,7 +87,6 @@ func TestKeptRecordingsAreSealedAndComeBack(t *testing.T) {
 	}
 }
 
-// Deleting everything empties the vault; corrections are kept sealed and come back.
 func TestKeptCorrectionsAndDeletion(t *testing.T) {
 	key, _ := speechSealKey([]byte("device secret"))
 	v := speechVault{}

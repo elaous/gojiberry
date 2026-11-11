@@ -20,13 +20,6 @@ type ToastProps struct {
 	OnClose func()       // nil hides the close button
 }
 
-// Toast renders a single transient notification -- unlike Modal/Dialog,
-// it has no backdrop and doesn't block interaction with the rest of
-// the page. It has no opinion on where it sits on screen (no fixed
-// positioning of its own); wrap one or more in your own
-// position:fixed container to stack them. Auto-dismissal, if wanted,
-// is the caller's job too (e.g. Window.SetTimeout), the same way
-// FileUploader leaves progress tracking to the caller.
 func Toast(props ToastProps) xango.Node {
 	if !props.Open {
 		return xango.Frag()

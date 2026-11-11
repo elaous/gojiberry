@@ -49,7 +49,6 @@ func TestMediaFindingsRequireCaptionsAndTranscripts(t *testing.T) {
 	}
 }
 
-// Check finds the clips of a document, where they are, and counts a clip as one object in the text stream.
 func TestCheckFindsMediaInTheDocument(t *testing.T) {
 	d := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Intro\n"}},
@@ -67,7 +66,6 @@ func TestCheckFindsMediaInTheDocument(t *testing.T) {
 			t.Errorf("the clip is at offset 6, item 1: %+v", f)
 		}
 	}
-	// A clip after the first is at an offset that counts the first as one object (6, the clip, "Text after\n").
 	d.Content = append(d.Content, docfile.Item{Chars: &docfile.Chars{Text: "More\n"}}, docfile.Item{Media: &docfile.MediaItem{URL: "late.mp4", Title: "Late"}})
 	late := 0
 	for _, f := range Check(d, Options{}) {
@@ -81,7 +79,6 @@ func TestCheckFindsMediaInTheDocument(t *testing.T) {
 	if late != 2 {
 		t.Errorf("findings for the second clip: %d, want 2", late)
 	}
-	// A document whose clips all have their text is clean, and the gate lets it out.
 	ok := docfile.Document{Content: []docfile.Item{{Media: &docfile.MediaItem{URL: "talk.mp4", Title: "Talk", Captions: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi\n"}}}}
 	if fs := Check(ok, Options{}); len(fs) != 0 {
 		t.Errorf("a captioned video: %v", rulesOf(fs))
@@ -107,8 +104,6 @@ func exportText(t *testing.T, d docfile.Document) string {
 	return string(data)
 }
 
-// The checker and the exports agree: a clip the checker passes has words in every export, and one it
-// stops (no captions, no transcript) is what the block gate refuses.
 func TestACheckedClipHasItsWordsInTheExportAndAnUncheckedOneIsRefused(t *testing.T) {
 	good := docOfItems(docfile.Item{Media: &docfile.MediaItem{URL: "a.mp4", Title: "Clip", Captions: "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello world.\n"}})
 	bad := docOfItems(docfile.Item{Media: &docfile.MediaItem{URL: "a.mp4", Title: "Clip"}})

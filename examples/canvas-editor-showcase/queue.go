@@ -9,11 +9,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// localQueue keeps the changes of a shared document that have not reached the others in this browser's
-// localStorage, so closing the tab or reloading the page with changes waiting (offline, a hub that is
-// down) does not lose them: the next visit sends them first. The key is per document and name, the
-// stored text is what the person typed, and a browser that refuses to store it (private window, full)
-// just does without.
 type localQueue struct{ key string }
 
 func newLocalQueue(doc, name string) localQueue {

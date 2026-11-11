@@ -42,7 +42,6 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 }
 
-// every way an archive can be wrong leaves the target untouched
 func TestRestoreRefusesADamagedBackupAndWritesNothing(t *testing.T) {
 	ctx := context.Background()
 	var good bytes.Buffer
@@ -53,7 +52,6 @@ func TestRestoreRefusesADamagedBackupAndWritesNothing(t *testing.T) {
 	at := bytes.Index(flipped, []byte("first"))
 	flipped[at] ^= 1
 
-	// a valid tar whose manifest is missing, or whose entry is not in the manifest
 	build := func(entries map[string]string, order []string) []byte {
 		var b bytes.Buffer
 		tw := tar.NewWriter(&b)

@@ -6,46 +6,31 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// MigrateItem is a folder or a document at the platform being migrated from.
 type MigrateItem struct {
 	ID, Name string
 	Folder   bool
 	Selected bool
-	// Meta is the line under the name (when it changed, how big).
-	Meta string
+	Meta     string
 }
 
 // MigrateFailure is a document that did not come over.
 type MigrateFailure struct{ Name, Err string }
 
-// MigrateProps configures Migrate. Every operation is a plain callback: a nil one
-// leaves its control out, and the host decides how it runs (migrate.Session runs
-// them in the background and sets Busy).
+// MigrateProps configures Migrate.
 type MigrateProps struct {
-	// Sources are the platforms to migrate from; Source is the one chosen ("" for
-	// none yet).
 	Sources  []DocChoice
 	Source   string
 	OnSource func(name string)
 
-	// Formats are the formats documents can be converted to while migrating;
-	// Format is the chosen one, reported to OnFormat. None leaves the choice out.
 	Formats  []DocChoice
 	Format   string
 	OnFormat func(name string)
 
-	// Token is the access token for the platform, typed into a box that reports to
-	// OnToken; OnConnect signs in with it and lists the top of the platform.
-	// Connected says that has been done.
 	Token     string
 	OnToken   func(token string)
 	OnConnect func()
 	Connected bool
 
-	// Path are the folders from the top down to the one listed; Items what is in
-	// it. OnOpenFolder goes into one ("" is the top, the breadcrumb's first item);
-	// OnToggle selects or unselects an item; OnSelectAll selects them all;
-	// OnStart migrates the selection (or everything listed when none is selected).
 	Path         []MigrateItem
 	Items        []MigrateItem
 	OnOpenFolder func(id string)
@@ -53,42 +38,28 @@ type MigrateProps struct {
 	OnSelectAll  func()
 	OnStart      func()
 
-	// OnAgain turns on bringing again what an earlier run already brought (Again says it is on); a
-	// file that is there and has not changed at the platform is left alone otherwise. nil leaves the
-	// choice out. OnHistory and History are the same for the version history of each document (the
-	// platform has one; HistoryMax is how many versions).
 	OnAgain    func(on bool)
 	Again      bool
 	OnHistory  func(on bool)
 	History    bool
 	HistoryMax int
 
-	// OnPickFiles opens the chooser for Word files on this computer, which are
-	// migrated at once.
 	OnPickFiles func()
 
-	// Busy is set while something runs. Done and Total, Current describe the file
-	// being migrated; Imported and Failed the outcome of the last run (Reported
-	// says there was one).
-	Busy        bool
-	Done, Total int
-	Current     string
-	Reported    bool
-	Imported    int
-	// Skipped were brought by an earlier run and had not changed; Versions came with their documents.
+	// Busy is set while something runs.
+	Busy              bool
+	Done, Total       int
+	Current           string
+	Reported          bool
+	Imported          int
 	Skipped, Versions int
 	Failed            []MigrateFailure
 	Truncated         bool
-	// Partial says the run was a pack that failed or was cancelled, so no pack was handed over.
-	Partial        bool
-	Error          string
-	ConfirmedLabel string // optional heading override
+	Partial           bool
+	Error             string
+	ConfirmedLabel    string // optional heading override
 }
 
-// Migrate is the panel for moving documents in from another platform (Google
-// Docs, Microsoft Word on OneDrive) or from Word files on this computer: choose
-// the platform, sign in with a token, browse its folders, tick what to bring and
-// start; progress and a report of what could not be migrated are shown.
 func Migrate(p MigrateProps) xango.Node {
 	title := p.ConfirmedLabel
 	if title == "" {
@@ -96,7 +67,6 @@ func Migrate(p MigrateProps) xango.Node {
 	}
 	kids := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(title))}
 
-	// The platform.
 	if len(p.Sources) > 0 && p.OnSource != nil {
 		opts := []xango.Node{migrateOption("-", tr("migrate.choose", "Choose a platform…"), p.Source == "")}
 		for _, s := range p.Sources {
@@ -122,7 +92,6 @@ func Migrate(p MigrateProps) xango.Node {
 			docButton("gj-migrate-connect", tr("migrate.connect", "Connect"), p.Busy || strings.TrimSpace(p.Token) == "", p.OnConnect)))
 	}
 
-	// The format the documents are stored in.
 	if len(p.Formats) > 0 && p.OnFormat != nil {
 		var opts []xango.Node
 		for _, f := range p.Formats {
@@ -137,7 +106,6 @@ func Migrate(p MigrateProps) xango.Node {
 			xango.El("select", attrs, opts...)))
 	}
 
-	// Browsing.
 	if p.Connected {
 		crumbs := []BreadcrumbItem{{Label: tr("migrate.top", "All files")}}
 		for _, f := range p.Path {
@@ -212,13 +180,11 @@ func Migrate(p MigrateProps) xango.Node {
 		}
 	}
 
-	// Word files on this computer.
 	if p.OnPickFiles != nil {
 		kids = append(kids, xango.El("div", []xango.Attr{xango.A("class", "gj-migrate-files")},
 			docButton("gj-migrate-pick", tr("migrate.pickFiles", "Import Word files…"), p.Busy, p.OnPickFiles)))
 	}
 
-	// Progress and the report.
 	if p.Busy && p.Total > 0 {
 		kids = append(kids, xango.El("progress", []xango.Attr{xango.A("class", "gj-migrate-progress"), xango.A("max", itoa(p.Total)), xango.A("value", itoa(p.Done)),
 			xango.A("aria-label", tr("migrate.progress", "Migration progress"))}),

@@ -15,10 +15,7 @@ type DropdownOption struct {
 	Icon  *xango.Node // optional, rendered before Label
 }
 
-// DropdownProps configures Dropdown. There's no native <select>
-// equivalent that supports per-option icons, so both single- and
-// multi-select modes use the same custom widget here (a native
-// <select> is a better fit when icons aren't needed).
+// DropdownProps configures Dropdown.
 type DropdownProps struct {
 	Options     []DropdownOption
 	Selected    []string // selected Values; single-select just uses at most one
@@ -28,19 +25,10 @@ type DropdownProps struct {
 
 	OnToggleOpen func(open bool) // called when the control is clicked
 
-	// OnSelect is called when an option is clicked. For single-select,
-	// it should replace Selected and close the dropdown; for
-	// multi-select, it should add/remove value from Selected and
-	// typically leave it open.
+	// OnSelect is called when an option is clicked.
 	OnSelect func(value string)
 }
 
-// Dropdown renders a closed control button and, when Open, a listbox
-// of options below it (the ARIA listbox pattern). Keyboard: Down or Up on
-// the button opens the list and goes to its first or last option; Up, Down,
-// Home and End move among the options, Enter or Space chooses one, Escape
-// closes the list with the focus back on the button, Tab closes it and
-// leaves (see listboxkeys.go).
 func Dropdown(props DropdownProps) xango.Node {
 	lb := listbox{root: ".gj-dropdown", control: ":scope > .gj-dropdown-control", options: ":scope > .gj-dropdown-list > .gj-dropdown-option"}
 	selected := make(map[string]bool, len(props.Selected))

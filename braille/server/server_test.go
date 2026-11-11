@@ -58,7 +58,7 @@ func TestTranslateReturnsBrailleFromLouTranslate(t *testing.T) {
 	var gotBinary, gotTable, gotText string
 	s := newTestServer(func(binary, table, text string) (string, error) {
 		gotBinary, gotTable, gotText = binary, table, text
-		return ",hello world", nil // liblouis's own ASCII braille for "hello world"-shaped output (illustrative, not asserted verbatim)
+		return ",hello world", nil
 	})
 
 	body, _ := json.Marshal(translateRequest{Text: "hello world"})
@@ -149,7 +149,6 @@ func TestExecLouTranslateRunsTheBinary(t *testing.T) {
 		t.Skip("needs a POSIX shell")
 	}
 	dir := t.TempDir()
-	// a stand-in for lou_translate: the table (if any) is the first argument, the text comes on stdin
 	bin := filepath.Join(dir, "lou_translate")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '[%s]%s' \"$1\" \"$(cat)\"\n"), 0o755); err != nil {
 		t.Fatal(err)

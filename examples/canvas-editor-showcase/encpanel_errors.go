@@ -10,13 +10,8 @@ import (
 	"strings"
 )
 
-// --- messages: the errors of encstore and the passkey client, in the interface's language ---
-
-// errHandled says a step stopped for a reason the page already put on screen (a notice): the caller
-// returns it and Run drops it.
 var errHandled = errors.New("handled")
 
-// shownError is an error with the words to show; the original stays reachable (errors.Is).
 type shownError struct {
 	msg string
 	err error
@@ -26,12 +21,8 @@ func (s *shownError) Error() string { return s.msg }
 
 func (s *shownError) Unwrap() error { return s.err }
 
-// UserMessage says the text is already in words for a person: components.ExplainError shows it and keeps the
-// original error's text behind "Details".
 func (s *shownError) UserMessage() string { return s.msg }
 
-// tErr puts the errors this page knows into the interface's language; others pass as they are, and
-// components.ExplainError gives them a generic message with the text behind "Details".
 func tErr(err error) error {
 	if err == nil || errors.Is(err, errHandled) {
 		return err

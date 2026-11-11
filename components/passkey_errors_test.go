@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/i18n"
 )
 
-// The errors auth/passkey/client names are told apart and said in words, not filed under "something went wrong".
 func TestExplainErrorKnowsThePasskeyCeremonyErrors(t *testing.T) {
 	cases := []struct {
 		name string
@@ -35,7 +34,6 @@ func TestExplainErrorKnowsThePasskeyCeremonyErrors(t *testing.T) {
 			}
 		})
 	}
-	// An unrelated error is still the generic one.
 	if info := ExplainError(errors.New("boom")); info.Kind != ErrKindUnknown {
 		t.Errorf("kind %q", info.Kind)
 	}

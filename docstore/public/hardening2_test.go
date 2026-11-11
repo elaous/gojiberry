@@ -16,8 +16,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// ---- finding 4: the proxy warning, and finding 9: the tombstone must outlive the session
-
 func TestTrustedProxiesWarning(t *testing.T) {
 	if w := (Config{ReportKey: testReportKey}).Warnings(); len(w) != 1 || !strings.Contains(w[0], "TRUSTED_PROXIES") {
 		t.Fatalf("warnings = %v", w)
@@ -49,7 +47,6 @@ func TestTombstoneTTLMustOutliveTheSession(t *testing.T) {
 	store := func() docstore.Adapter {
 		return docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.FixedTTL(hour))
 	}
-	// defaults: 72h max age + 24h
 	if _, err := New(Options{Store: store(), Config: Config{TombstoneTTL: 95 * hour}}); err == nil || !strings.Contains(err.Error(), "TombstoneTTL") {
 		t.Fatalf("err = %v", err)
 	}
@@ -68,8 +65,6 @@ func TestTombstoneTTLMustOutliveTheSession(t *testing.T) {
 	}
 }
 
-// A takedown bans the session even when the document had already expired and its records had
-// been swept, by either of the IDs an operator may hold.
 func TestTakedownBansTheSessionAfterTheRecordsAreSwept(t *testing.T) {
 	for _, byView := range []bool{true, false} {
 		e := newEnv(t, nil)
@@ -95,8 +90,6 @@ func TestTakedownBansTheSessionAfterTheRecordsAreSwept(t *testing.T) {
 	}
 }
 
-// A takedown that lands while a create is in flight wins: the create sees the tombstone once its
-// document is stored, removes everything and keeps the session banned.
 func TestTakedownDuringCreate(t *testing.T) {
 	e, hs := envWith(t, nil)
 	hs.beforePub = func(ctx context.Context, id string, _ []byte) error {
@@ -131,8 +124,6 @@ func TestTombstoneSweepTTL(t *testing.T) {
 	}
 }
 
-// ---- finding 5: slow bodies
-
 func TestSlowBodyIsCutOff(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.RequestTimeout = 300 * time.Millisecond })
 	tok, _ := e.session()
@@ -157,8 +148,6 @@ func TestSlowBodyIsCutOff(t *testing.T) {
 		t.Fatalf("a cut-off edit changed the document: %q", got)
 	}
 }
-
-// ---- finding 6: charge before the body, refund what was not written
 
 type blocklistContains string
 
@@ -186,7 +175,6 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 		o.Blocklist = blocklistContains("bad")
 	})
 	tok, _ := e.session()
-	// a store failure (rollback)
 	fail := true
 	hs.beforePub = func(context.Context, string, []byte) error {
 		if fail {
@@ -196,21 +184,15 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 		return nil
 	}
 	e.want(e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 80)), 500)
-	// the budget (100) is whole: 80 fits
 	d := e.create(tok, strings.Repeat("a", 80))
 	_ = d
-	// a failed edit gives its charge back too: 20 bytes left in the day
 	fail = true
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 500)
-	// content refused for what it is (422) is NOT given back: it was sent, and a client that could
-	// send refused content for free could do it all day
 	e.want(e.do("PUT", "/public/doc", tok, append([]byte("bad"), bytes.Repeat([]byte("a"), 7)...)), 422)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 11)), 429)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 10)), 204)
 	e.want(e.do("PUT", "/public/doc", tok, bytes.Repeat([]byte("a"), 1)), 429)
 }
-
-// ---- finding 7: no listing per request, a bounded sweep
 
 func TestLiveDoesNotListTheStore(t *testing.T) {
 	e, hs := envWith(t, nil)
@@ -229,7 +211,6 @@ func TestLiveDoesNotListTheStore(t *testing.T) {
 	}
 }
 
-// noPrefix is a store that cannot list by prefix.
 type noPrefix struct {
 	docstore.Adapter
 	docstore.Expirer
@@ -249,7 +230,6 @@ func TestSweepIsBoundedWithoutPrefixListing(t *testing.T) {
 	clk := newClock()
 	ea := docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.FixedTTL(24*hour))
 	ea.Now = clk.Now
-	// a plain List-only view of the expiring adapter
 	st := &noPrefix{Adapter: ea, Expirer: ea}
 	svc, err := New(Options{Store: st, Now: clk.Now})
 	if err != nil {
@@ -279,13 +259,10 @@ func TestSweepIsBoundedWithoutPrefixListing(t *testing.T) {
 	if st.lists.Load() == first {
 		t.Fatal("the listing sweep never ran again")
 	}
-	// with prefix listing the throttle does not apply
 	if !canListPrefix(ea) || canListPrefix(st) {
 		t.Fatalf("canListPrefix: expiring memory %v, plain %v", canListPrefix(ea), canListPrefix(st))
 	}
 }
-
-// ---- finding 8: edits, deadlines, health
 
 func TestEditCountsTheVersionBeforeSavingAndRollsBack(t *testing.T) {
 	e, hs := envWith(t, func(o *Options) { o.Config.MaxVersions = 2 })
@@ -311,12 +288,10 @@ func TestEditCountsTheVersionBeforeSavingAndRollsBack(t *testing.T) {
 	if seenInRecord != 2 {
 		t.Fatalf("the save ran with the count at %d, want 2 (counted before)", seenInRecord)
 	}
-	// the failed save was rolled back: one more edit fits under the cap of 2, then the cap holds
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v2")), 204)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v3")), 403)
 }
 
-// an expiry policy that stops covering documents after the switch is flipped
 func flippablePolicy(off *atomic.Bool) docstore.ExpiryPolicy {
 	return docstore.ExpiryPolicyFunc(func(string, time.Time) (time.Duration, bool) {
 		if off.Load() {
@@ -413,7 +388,6 @@ func TestHealthSweeperStaleAndFailing(t *testing.T) {
 	if h := e.svc.Health(); !h.OK {
 		t.Fatalf("health %+v after a sweep", h)
 	}
-	// Run records its interval: stale means twice that
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.svc.Run(ctx, time.Hour); close(done) }()
@@ -431,7 +405,6 @@ func TestHealthSweeperStaleAndFailing(t *testing.T) {
 	if h := e.svc.Health(); !contains(h.Problems, ProblemSweeperStale) {
 		t.Fatalf("not stale after 2 intervals: %+v", h)
 	}
-	// a failing sweep is reported (and its error carries no document id into the log)
 	logs := captureLog(t)
 	hs.failLists.Store(true)
 	if _, err := e.svc.Sweep(context.Background()); err == nil {
@@ -442,8 +415,6 @@ func TestHealthSweeperStaleAndFailing(t *testing.T) {
 	}
 	_ = logs
 }
-
-// ---- finding 10: reports are bounded as a whole
 
 func TestReportsAreBoundedGloballyOldestFirst(t *testing.T) {
 	e := newEnv(t, func(o *Options) {
@@ -492,7 +463,6 @@ func TestReportBytesAreBounded(t *testing.T) {
 	}
 }
 
-// The sweep trims reports that came in some other way (another replica, an older version).
 func TestSweepEvictsExcessReports(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.MaxReports = 5 })
 	for i := 0; i < 12; i++ {
@@ -510,8 +480,6 @@ func TestSweepEvictsExcessReports(t *testing.T) {
 		t.Fatalf("reports after the sweep: %v", keys)
 	}
 }
-
-// ---- finding 11: CORS exposes what a browser client reads
 
 func TestExposedHeaders(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.WritesPerMinute = 1 })
@@ -532,13 +500,10 @@ func TestExposedHeaders(t *testing.T) {
 	check("429", e.want(e.do("PUT", "/public/doc", tok, []byte("y"), origin...), 429))
 	check("docs list", e.want(e.do("GET", "/docs", "", nil, origin...), 200))
 	check("docs 400", e.want(e.do("GET", "/docs/pubdoc/x", "", nil, origin...), 400))
-	// the public handler states it itself, mounted or not
 	rec := httptest.NewRecorder()
 	e.svc.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/public/view/"+d.ViewID, nil))
 	check("standalone handler", resp{Response: rec.Result()})
 }
-
-// ---- finding 12: hidden prefixes ignore case
 
 func TestHiddenPrefixesIgnoreCase(t *testing.T) {
 	e := newEnv(t, nil)
@@ -552,10 +517,6 @@ func TestHiddenPrefixesIgnoreCase(t *testing.T) {
 	e.want(e.do("GET", "/public/doc", tok, nil), 200)
 }
 
-// ---- finding 13: exactly one document from concurrent creates
-
-// barrierSessions holds the first n Gets until all n have looked, so that n create requests have
-// all seen a session with no document before any of them claims one.
 type barrierSessions struct {
 	SessionStore
 	n       int32
@@ -617,7 +578,6 @@ func TestConcurrentCreatesMakeOneDocument(t *testing.T) {
 	if len(e.keys("public/doc/")) != 1 || len(e.keys("public/view/")) != 1 {
 		t.Fatal("stray records")
 	}
-	// the losers' charges were given back: only the one document is charged
 	q := e.svc.quota.(*MemoryQuota)
 	q.mu.Lock()
 	var used int64
@@ -632,8 +592,6 @@ func TestConcurrentCreatesMakeOneDocument(t *testing.T) {
 		t.Fatalf("storage counter %d, want 10", h.StorageBytes)
 	}
 }
-
-// ---- finding 14: no keys in the log
 
 func TestFailDoesNotLogDocumentIDs(t *testing.T) {
 	logs := captureLog(t)
@@ -671,8 +629,6 @@ func TestRedact(t *testing.T) {
 	}
 }
 
-// ---- finding 3: the docs API must be closed before the offer starts
-
 func TestRequireDocsClosed(t *testing.T) {
 	a := docstore.NewMemoryAdapter()
 	open := docstore.NewServer(a, "memory")
@@ -685,7 +641,6 @@ func TestRequireDocsClosed(t *testing.T) {
 	if err := RequireDocsClosed(docstore.NewServer(a, "memory").CloseDocs(), false); err != nil {
 		t.Fatal(err)
 	}
-	// required ACLs count as closed only with sign-in
 	if err := RequireDocsClosed(docstore.NewServer(a, "memory").WithRequireACL(true), false); err == nil {
 		t.Fatal("RequireACL without sign-in counts as closed")
 	}

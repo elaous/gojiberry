@@ -12,17 +12,10 @@ import (
 	"time"
 )
 
-// envState is the file the built-in totals are kept in across restarts. Unset, they start from zero at
-// every start, as they always did.
 const envState = "GOJIBERRY_OBS_STATE"
 
-// stateEvery is how often the totals are written while the server runs; they are also written when it
-// stops, so a crash loses at most this much.
 const stateEvery = 5 * time.Minute
 
-// persisted is the file: the operator's series and the span statistics, nothing else. It is the same
-// numbers GET /admin/observe shows, so it holds no more than that page does (no ids, names or text:
-// every label is a member of a closed set, which Restore checks again).
 type persisted struct {
 	Version  int        `json:"v"`
 	Series   []Series   `json:"series"`
@@ -46,11 +39,7 @@ func finite(vs ...float64) bool {
 	return true
 }
 
-// RestoreState reads totals written by MarshalState into an empty sink and adds them to what it holds. A
-// file that is not exactly what MarshalState writes (an unknown field, a metric or label value that is not
-// on the allowlist, a negative count, a number that is not finite, more series than the sink keeps) is
-// refused whole and nothing is restored: a damaged or tampered file starts the totals again, it never
-// puts a value in them that the allowlist would have refused.
+// strict: anything but MarshalState's exact output is refused
 func (b *Builtin) RestoreState(data []byte) error {
 	var p persisted
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -123,9 +112,6 @@ func (b *Builtin) RestoreState(data []byte) error {
 	return nil
 }
 
-// KeepIn makes the sink keep its totals in the file at path: it reads them now (a missing file is the first
-// start; a damaged one is reported and the totals start again), writes them every few minutes, and writes
-// them when it is closed. The file is written beside its name and renamed, with mode 0600.
 func (b *Builtin) KeepIn(path string) error {
 	b.mu.Lock()
 	b.path = path
@@ -170,7 +156,6 @@ func (b *Builtin) save() error {
 	return os.Rename(tmp, path)
 }
 
-// closeState stops the writer and writes the totals one last time.
 func (b *Builtin) closeState(ctx context.Context) error {
 	if b.stop == nil {
 		return nil

@@ -13,11 +13,9 @@ import (
 	_ "modernc.org/sqlite" // pure-Go driver, registered as "sqlite"
 )
 
-// SQLiteConfig is the sqlite backend's own config, decoded from
-// Config.BackendConfig when Config.Backend == "sqlite".
+// SQLiteConfig is the sqlite backend's configuration.
 type SQLiteConfig struct {
-	// Path is the database file ("documents.db"); ":memory:" keeps it in
-	// memory (gone when the adapter closes).
+	// Path is the database file.
 	Path string `json:"path"`
 }
 
@@ -36,23 +34,11 @@ func init() {
 	})
 }
 
-// SQLiteAdapter stores documents in one table of a SQLite file:
-//
-//	CREATE TABLE IF NOT EXISTS documents (
-//	    id         TEXT PRIMARY KEY,
-//	    data       BLOB NOT NULL,
-//	    updated_at INTEGER NOT NULL  -- unix nanoseconds
-//	)
-//
-// It creates the table itself, so a path is all it needs.
+// SQLiteAdapter stores documents in one table.
 type SQLiteAdapter struct{ db *sql.DB }
 
-// NewSQLiteAdapter opens (creating if needed) the database at path.
+// NewSQLiteAdapter opens the database, creating it if needed.
 func NewSQLiteAdapter(ctx context.Context, path string) (*SQLiteAdapter, error) {
-	// Another process may have the file open: wait for its write lock instead of
-	// failing at once with SQLITE_BUSY, and take the write lock when a transaction
-	// begins (a deferred one that reads first and writes later is refused outright
-	// when it cannot upgrade).
 	dsn := path
 	if !strings.Contains(dsn, "?") {
 		dsn += "?_pragma=busy_timeout(10000)&_txlock=immediate"
@@ -61,8 +47,7 @@ func NewSQLiteAdapter(ctx context.Context, path string) (*SQLiteAdapter, error) 
 	if err != nil {
 		return nil, err
 	}
-	// One connection: ":memory:" databases are per connection, and a
-	// document store has no need for parallel writers.
+	// one connection: :memory: databases are per connection
 	db.SetMaxOpenConns(1)
 	_, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
 		id TEXT PRIMARY KEY,
@@ -105,7 +90,7 @@ func (a *SQLiteAdapter) Load(ctx context.Context, id string) (Document, error) {
 	return doc, nil
 }
 
-// LoadHead implements HeadReader: substr(data, 1, n) is cut in the database.
+// LoadHead implements HeadReader using substr.
 func (a *SQLiteAdapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
 	var head []byte
 	err := a.db.QueryRowContext(ctx, `SELECT substr(data, 1, ?) FROM documents WHERE id = ?`, max(n, 0), id).Scan(&head)
@@ -138,13 +123,11 @@ func (a *SQLiteAdapter) List(ctx context.Context) ([]Meta, error) {
 	return metas, rows.Err()
 }
 
-// ListPrefix implements PrefixLister with a range over the primary key, so the index is used.
+// ListPrefix implements PrefixLister.
 func (a *SQLiteAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, error) {
 	if prefix == "" {
 		return a.List(ctx)
 	}
-	// ids in [prefix, prefix with its last byte raised by one) all start with prefix
-	// (a prefix ending in 0xff, which no valid ID has, falls back to the filter).
 	upper := []byte(prefix)
 	if upper[len(upper)-1] == 0xff {
 		all, err := a.List(ctx)

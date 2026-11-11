@@ -11,9 +11,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The Files tab says, before anything is exported, what the chosen format leaves out of this document, and the
-// list changes with the format. It is a status a screen reader announces, the list has a name, and it holds no
-// accessibility violation.
 func TestFidelityPanelListsWhatAFormatLeavesOut(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	importMarkdown(d, "Water is H~2~O and x^2^ is a square.\n\nEnd words.", "End words")
@@ -40,7 +37,6 @@ func TestFidelityPanelListsWhatAFormatLeavesOut(t *testing.T) {
 		t.Errorf("the fidelity panel: %s", v)
 	}
 
-	// Exporting as the PDF says what was left out, next to the file's name.
 	d.Select("#gj-fidelity-format", "pdf")
 	name, _ := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="pdf"]`) })
 	d.OK(strings.HasSuffix(name, ".pdf"), name)
@@ -48,7 +44,6 @@ func TestFidelityPanelListsWhatAFormatLeavesOut(t *testing.T) {
 	d.NoErrors()
 }
 
-// A Word file with a comment and a header says, after it is imported, that the header was not brought over (the comment was).
 func TestFidelityPanelSaysWhatAnImportLeftOut(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -81,8 +76,6 @@ func TestFidelityPanelSaysWhatAnImportLeftOut(t *testing.T) {
 	d.NoErrors()
 }
 
-// A Markdown file with a picture on a server and a table cell in bold says, after it is imported, what was left
-// out; its footnote is brought in as a footnote.
 func TestMarkdownImportSaysWhatItLeftOutAndKeepsItsFootnotes(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	importMarkdown(d, "# Report\n\nA claim[^1] and ![far](https://example.org/a.png).\n\n| A | **B** |\n|---|---|\n| x | y |\n\n[^1]: The note text.\n\nEnd words.", "End words")

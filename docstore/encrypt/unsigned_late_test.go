@@ -7,15 +7,11 @@ import (
 	"testing"
 )
 
-// A document whose re-key ended in ErrUnsignedAfterFlip is not pending (the record says Signed)
-// but is not done either: UnsignedDocs lists it with the file ids, so "what is left to do" shows
-// it, and the listing survives a new Sharing (the marker is in the signed record).
 func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
 	id, f := lockedDocument(t, w, "v2")
 
-	// Another client (a fresh Sharing over the same store) sees it too.
 	other := &Sharing{Store: w.inner, Adapter: w.ad, Signer: w.signer}
 	for name, sh := range map[string]*Sharing{"same": w.sharing, "other": other} {
 		docs, err := sh.UnsignedDocs(ctx)
@@ -29,12 +25,10 @@ func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 			t.Errorf("%s: reason %q, since %v", name, docs[0].Reason, docs[0].Since)
 		}
 	}
-	// PendingDocs stays about re-keys in flight.
 	if p, err := w.sharing.PendingDocs(ctx); err != nil || len(p) != 0 {
 		t.Errorf("PendingDocs = %v, %v", p, err)
 	}
 
-	// Repair with AcceptUnsigned settles it, and the list empties.
 	if _, err := w.sharing.Repair(ctx, id, AcceptUnsigned()); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +40,6 @@ func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 	}
 }
 
-// Repair without the option refuses and leaves the marker.
 func TestUnsignedMarkerSurvivesARefusedRepair(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -59,7 +52,6 @@ func TestUnsignedMarkerSurvivesARefusedRepair(t *testing.T) {
 	}
 }
 
-// Recover with AcceptUnsigned also settles it.
 func TestUnsignedMarkerClearedByRecoverAcceptUnsigned(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -72,7 +64,6 @@ func TestUnsignedMarkerClearedByRecoverAcceptUnsigned(t *testing.T) {
 	}
 }
 
-// A document that was never in the window is not listed, before or after a normal re-key.
 func TestDocumentOutsideTheWindowIsNotListed(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -88,7 +79,6 @@ func TestDocumentOutsideTheWindowIsNotListed(t *testing.T) {
 	}
 }
 
-// RepairAll's report and the list agree: the document it skips as forged, with the same file.
 func TestRepairAllAndUnsignedDocsAgree(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

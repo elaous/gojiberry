@@ -9,22 +9,14 @@ import (
 type OutlineProps struct {
 	// Entries are the headings (TextFlow.Outline).
 	Entries []canvas.OutlineEntry
-	// Current is the index of the heading the caret is under, or -1.
 	Current int
 	// OnSelect is called with the index of the clicked heading.
-	OnSelect func(index int, entry canvas.OutlineEntry)
-	// Collapsed lists the indexes of headings whose subsections are hidden; OnToggle is called with the index of a
-	// heading whose toggle was pressed (the caller adds it to or removes it from Collapsed). A heading with nothing
-	// under it has no toggle. With OnToggle nil there are no toggles and everything shows.
+	OnSelect  func(index int, entry canvas.OutlineEntry)
 	Collapsed []int
 	OnToggle  func(index int)
-	// OnMove, when set, lets a section be moved: each heading gets "Move section up" and "Move section down"
-	// buttons, and can be dragged onto another heading. It is called with the heading and the heading to put it in
-	// front of (len(Entries) for the end); pass them to TextFlow.MoveSection.
-	OnMove func(from, before int)
+	OnMove    func(from, before int)
 }
 
-// outlineHidden says which entries sit under a collapsed heading.
 func outlineHidden(es []canvas.OutlineEntry, collapsed []int) []bool {
 	hidden := make([]bool, len(es))
 	for _, c := range collapsed {
@@ -38,8 +30,6 @@ func outlineHidden(es []canvas.OutlineEntry, collapsed []int) []bool {
 	return hidden
 }
 
-// OutlineUp is the heading to put section i in front of to move it up one place among its siblings, or -1 when it
-// is the first of them.
 func OutlineUp(es []canvas.OutlineEntry, i int) int {
 	for j := i - 1; j >= 0; j-- {
 		if es[j].Level < es[i].Level {
@@ -52,8 +42,6 @@ func OutlineUp(es []canvas.OutlineEntry, i int) int {
 	return -1
 }
 
-// OutlineDown is the heading to put section i in front of to move it down one place among its siblings
-// (len(es) for the end), or -1 when it is the last of them.
 func OutlineDown(es []canvas.OutlineEntry, i int) int {
 	j := i + 1
 	for j < len(es) && es[j].Level > es[i].Level {
@@ -69,9 +57,6 @@ func OutlineDown(es []canvas.OutlineEntry, i int) int {
 	return k
 }
 
-// Outline renders the document's headings as an indented list, the
-// current one marked; clicking one reports it (go there with
-// TextFlow.GotoOffset and ScrollView.RevealPending). It is controlled.
 func Outline(props OutlineProps) xango.Node {
 	var items []xango.Node
 	hidden := outlineHidden(props.Entries, props.Collapsed)
@@ -151,9 +136,6 @@ type BookmarksProps struct {
 	OnRemove func(name string)
 }
 
-// BookmarkList renders the bookmarks with the text each is on; clicking
-// one goes there and, for an editor, Remove takes it off. The link form
-// "#name" is shown, to type into a link.
 func BookmarkList(props BookmarksProps) xango.Node {
 	var items []xango.Node
 	for _, b := range props.Bookmarks {
@@ -187,17 +169,13 @@ func BookmarkList(props BookmarksProps) xango.Node {
 
 // FootnoteListProps configures FootnoteList.
 type FootnoteListProps struct {
-	// Entries are the notes whose marks are in the text (TextFlow.FootnoteList).
-	Entries []canvas.FootnoteEntry
-	CanEdit bool
-	// OnGoto is called when a note's number is clicked (go to its mark).
+	Entries  []canvas.FootnoteEntry
+	CanEdit  bool
 	OnGoto   func(e canvas.FootnoteEntry)
 	OnEdit   func(e canvas.FootnoteEntry)
 	OnDelete func(e canvas.FootnoteEntry)
 }
 
-// FootnoteList renders the numbered footnotes, their text as Markdown;
-// clicking a number goes to its mark and an editor gets Edit and Delete.
 func FootnoteList(props FootnoteListProps) xango.Node {
 	var items []xango.Node
 	for _, e := range props.Entries {

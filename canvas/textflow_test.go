@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// Fake runes are 8px wide; DefaultTextStyle has a 22px line.
-
 func newFlow(text string, w, h float64) (*TextFlow, *fakePainter) {
 	p := &fakePainter{}
 	f := NewTextFlow(text, 10, 30, w, h)
@@ -125,7 +123,6 @@ func TestSetColumnCountMinimumOne(t *testing.T) {
 	}
 }
 
-// block is a fixed Obstacle: x0..x1 for bands overlapping y0..y1.
 type block struct{ x0, x1, y0, y1 float64 }
 
 func (b block) Exclusion(y0, y1 float64) (float64, float64, bool) {
@@ -137,8 +134,6 @@ func (b block) Exclusion(y0, y1 float64) (float64, float64, bool) {
 
 func TestFlowStartsRightOfLeftObstacle(t *testing.T) {
 	f, _ := newFlow("aaaa bbbb cccc dddd eeee", 200, 200)
-	// Obstacle covers x 10..60 for the first two lines (y 30..74):
-	// the free space is 60..210 (150px = 18 runes).
 	f.AddObstacle(block{10, 60, 30, 74})
 	l := f.Layout()
 	if l.Lines[0].X != 60 {
@@ -182,8 +177,6 @@ type imgObstacle struct{}
 
 func (*imgObstacle) Exclusion(float64, float64) (float64, float64, bool) { return 0, 0, false }
 
-// --- dragging column gaps ---
-
 func dragFlow() (*TextFlow, *int) {
 	f, _ := newFlow("aaaa bbbb", 180, 100)
 	f.Gap = 20
@@ -193,9 +186,6 @@ func dragFlow() (*TextFlow, *int) {
 	f.OnChange = func(*TextFlow) { n++ }
 	return f, &n
 }
-
-// Gap 0's grip is centered at x = 10+80+10 = 100, above the page top
-// (y = 30-2-16 .. 30-2).
 
 func TestGripHitTest(t *testing.T) {
 	f, _ := dragFlow()
@@ -332,11 +322,6 @@ func TestFlowDrawViewVersusEdit(t *testing.T) {
 	}
 }
 
-// --- pages, breaks, column configs, formats ---
-
-// Two 200x100 pages with 10px margins: text areas are 180x80, which
-// holds three 22px lines (66px). Page 0's area starts at y=34, page 1's
-// at y=158. 180px is 22 fake runes.
 func pagedFlow(items ...Item) *TextFlow {
 	p := &fakePainter{}
 	f := NewTextFlow("", 0, 0, 0, 0)
@@ -459,7 +444,6 @@ func TestColumnBreakInLastColumnActsAsPageBreak(t *testing.T) {
 }
 
 func TestColumnConfigPersistsAcrossPages(t *testing.T) {
-	// 2 columns of 80 (10 runes): text flows col 0, col 1, then page 1 col 0 ...
 	text := "a\nb\nc\nd\ne\nf\ng"
 	f := pagedFlow(ColumnConfig{Widths: []float64{80, 80}, Gap: 20}, Chars{Text: text})
 	l := f.Layout()
@@ -523,7 +507,6 @@ func TestNewBandStartsBelowTheTallestColumn(t *testing.T) {
 func TestColumnConfigTooWideIsScaledToFit(t *testing.T) {
 	f := pagedFlow(ColumnConfig{Widths: []float64{300, 100}, Gap: 20}, Chars{Text: "x"})
 	b := f.Layout().Bands[0]
-	// Room is 180-20 = 160, split 3:1.
 	if b.Widths[0] != 120 || b.Widths[1] != 40 || b.Xs[1] != 34+120+20 {
 		t.Fatalf("band = %+v", b)
 	}
@@ -602,7 +585,6 @@ func TestDragEditsTheColumnConfigItsBandUses(t *testing.T) {
 		Chars{Text: "x"},
 	)
 	f.SetMode(ModeEdit)
-	// Band 1 starts at y=56 (below "intro"); its gap-0 grip is centred at x=34+80+10.
 	lay := f.Layout()
 	g := f.gripRect(lay.Bands[1], 0)
 	if !f.MouseDown(g[0]+g[2]/2, g[1]+2) {

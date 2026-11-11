@@ -8,27 +8,15 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// MaxLines bounds the log a Session keeps: the oldest lines go first.
 const MaxLines = 500
 
-// Session is the console inside the editor: the state behind components.ConsolePanel. It runs one command at a time on
-// a Shell in the background (Pending), keeps what was typed and what came back as a log, remembers the commands for
-// the Up and Down keys, and turns a command's question (purge, rebuild) into a Yes and No in the panel.
-//
-// The Shell's Out, Err, Confirm and Files are taken over by the Session. Files is a PageFiles: the person adds
-// files with the panel (PickFiles), import and unpack read them, and export and pack deliver what they make
-// through Deliver (a download).
 type Session struct {
-	Shell *Shell
-	Files *PageFiles
-	// PickFiles opens the chooser; the host calls add for each file picked (transfer.PickFiles in a browser).
+	Shell     *Shell
+	Files     *PageFiles
 	PickFiles func(add func(name string, data []byte))
-	// Before is called when a command is about to run, in its goroutine: a host whose target can change
-	// (the Save tab's) points the Shell at the right one there.
-	Before func()
-	// OnDone is called after each command, with its error (nil if it succeeded): refresh the document list there.
-	OnDone func(err error)
-	// OnChange is called after any state change, possibly from another goroutine.
+	Before    func()
+	OnDone    func(err error)
+	// possibly from another goroutine
 	OnChange func()
 	Pending  *components.Pending
 
@@ -37,14 +25,14 @@ type Session struct {
 	partial  map[string]string // kind -> text of a line not finished yet
 	input    string
 	history  []string
-	hpos     int // where the Up and Down keys are in history; len(history) is "a new line"
+	hpos     int
 	question string
 	answer   chan bool
 	runCtx   context.Context
-	prompt   string // the folder being worked in, as a path; read after each command, not on each render
+	prompt   string // the folder being worked in, as a path
 }
 
-// NewSession makes a Session over sh. deliver hands a finished file to the person (transfer.Download in a browser).
+// NewSession makes a Session over sh.
 func NewSession(sh *Shell, deliver func(name string, data []byte)) *Session {
 	s := &Session{Shell: sh, Files: &PageFiles{Deliver: deliver}, partial: map[string]string{}}
 	s.Pending = components.NewPending(s.changed)
@@ -62,7 +50,6 @@ func (s *Session) changed() {
 	}
 }
 
-// lineWriter splits what the Shell writes into the log's lines.
 type lineWriter struct {
 	s    *Session
 	kind string
@@ -92,7 +79,6 @@ func (s *Session) addLocked(kind, text string) {
 	}
 }
 
-// flushLocked turns what a command left unfinished (a question's "[y/N] ") into lines.
 func (s *Session) flushLocked() {
 	for _, kind := range []string{"out", "err"} {
 		if t := s.partial[kind]; t != "" {
@@ -102,11 +88,8 @@ func (s *Session) flushLocked() {
 	}
 }
 
-// confirm is the Shell's way of asking: the question shows in the panel with Yes and No, and the command waits for
-// the answer (or for its context to end).
 func (s *Session) confirm(question string) bool {
 	s.mu.Lock()
-	// The Shell printed nothing of the question itself with Confirm set; the panel shows it.
 	ch := make(chan bool, 1)
 	s.question, s.answer = question, ch
 	ctx := s.runCtx
@@ -125,7 +108,7 @@ func (s *Session) confirm(question string) bool {
 	return yes
 }
 
-// Answer gives the answer to the question a command is waiting on.
+// Answer gives the answer to a command's question.
 func (s *Session) Answer(yes bool) {
 	s.mu.Lock()
 	ch := s.answer
@@ -141,7 +124,7 @@ func (s *Session) Answer(yes bool) {
 // SetInput keeps the text being typed.
 func (s *Session) SetInput(text string) { s.mu.Lock(); s.input = text; s.mu.Unlock() }
 
-// History moves through the commands already run: -1 an older one, +1 a newer one (past the newest, an empty line).
+// History moves through commands already run.
 func (s *Session) History(dir int) {
 	s.mu.Lock()
 	s.hpos = max(0, min(len(s.history), s.hpos+dir))
@@ -162,7 +145,7 @@ func (s *Session) Clear() {
 	s.changed()
 }
 
-// Submit runs the line typed, in the background. "clear" empties the log.
+// Submit runs the typed line in the background.
 func (s *Session) Submit() {
 	s.mu.Lock()
 	line := strings.TrimSpace(s.input)
@@ -181,7 +164,7 @@ func (s *Session) Submit() {
 
 func (s *Session) running() bool { return s.Pending.Busy() }
 
-// Run runs one command line, in the background, and logs it and what comes back.
+// Run runs one command line in the background.
 func (s *Session) Run(line string) {
 	if strings.TrimSpace(line) == "clear" {
 		s.Clear()
@@ -212,7 +195,7 @@ func (s *Session) Run(line string) {
 	})
 }
 
-// AddFiles opens the chooser; the files picked wait in the inbox for import and unpack.
+// AddFiles opens the chooser; picked files wait in the inbox.
 func (s *Session) AddFiles() {
 	if s.PickFiles == nil {
 		return
@@ -226,7 +209,7 @@ func (s *Session) AddFiles() {
 	})
 }
 
-// Props returns the props for components.ConsolePanel with the operations plugged in.
+// Props returns the props for components.ConsolePanel.
 func (s *Session) Props() components.ConsoleProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()

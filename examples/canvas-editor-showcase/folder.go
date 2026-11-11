@@ -14,17 +14,14 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// folderKey is where the chosen folder's handle is remembered in IndexedDB.
 const folderKey = "showcase"
 
-// folderState is the "Folder on this computer" target: the browser lets the page write a folder
-// the person chose, and may ask for a click to allow it again after a restart.
 type folderState struct {
 	mu      sync.Mutex
 	state   string // components.FolderNone, FolderReady or FolderReconnect
 	name    string
 	adapter *docstore.FileSystemAdapter
-	gen     int // bumped by every choice the person makes, so a slower restore knows it is stale
+	gen     int
 }
 
 func (f *folderState) get() (state, name string) {
@@ -36,8 +33,6 @@ func (f *folderState) get() (state, name string) {
 	return f.state, f.name
 }
 
-// bump records that the person has decided something about the folder, and returns the new
-// generation.
 func (f *folderState) bump() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -45,8 +40,6 @@ func (f *folderState) bump() int {
 	return f.gen
 }
 
-// lapseAdapter is the folder as the saver sees it: when the browser refuses access (the
-// permission lapsed mid-session) the folder is taken out of use and the picker offers Reconnect.
 type lapseAdapter struct {
 	*docstore.FileSystemAdapter
 	lapsed func(error)
@@ -85,8 +78,6 @@ func (u *ui) folderTarget(a *docstore.FileSystemAdapter) saver.Target {
 	return saver.Target{Name: "folder", Label: "Folder: " + a.Name(), Adapter: lapseAdapter{a, func(error) { u.folderLapsed(a) }}}
 }
 
-// folderLapsed is called when the folder refuses a read or write: it stops being a target
-// (the document stays where it is) and the picker shows Reconnect folder.
 func (u *ui) folderLapsed(a *docstore.FileSystemAdapter) {
 	u.folder.mu.Lock()
 	if u.folder.adapter != a || u.folder.state != components.FolderReady {
@@ -96,10 +87,7 @@ func (u *ui) folderLapsed(a *docstore.FileSystemAdapter) {
 	u.folder.state = components.FolderReconnect
 	u.folder.gen++
 	u.folder.mu.Unlock()
-	// Not on the goroutine of the operation that failed, which holds the session's lock.
 	u.saver.Pending.Run(func(ctx context.Context) error {
-		// The folder stops being a target even if switching to the browser fails; the error
-		// is still surfaced.
 		var err error
 		if t, _ := u.saver.Where(); t == "folder" {
 			err = u.saver.SetTarget(ctx, "browser")
@@ -109,8 +97,6 @@ func (u *ui) folderLapsed(a *docstore.FileSystemAdapter) {
 	})
 }
 
-// useFolder makes the folder a target of the saver and selects it. The folder is Ready only
-// once the saver has accepted it.
 func (u *ui) useFolder(ctx context.Context, a *docstore.FileSystemAdapter) error {
 	u.saver.Saver.AddTarget(u.folderTarget(a))
 	if err := u.saver.SetTarget(ctx, "folder"); err != nil {
@@ -125,7 +111,6 @@ func (u *ui) useFolder(ctx context.Context, a *docstore.FileSystemAdapter) error
 
 const lastTargetKey = "showcase:last-target"
 
-// rememberTarget keeps the target in use, so a later visit can go back to the folder.
 func rememberTarget(name string) {
 	defer func() { _ = recover() }()
 	js.Global().Get("localStorage").Call("setItem", lastTargetKey, name)
@@ -144,10 +129,6 @@ func lastTarget() (name string) {
 	return v.String()
 }
 
-// restoreFolder looks for the folder chosen in an earlier visit: if the browser still allows
-// it, it is a target again (and the one in use if it was when the page was last closed); if it
-// wants a click, the picker offers "Reconnect folder". If the person chooses, reconnects or
-// stops using a folder before this finishes, what it found is dropped.
 func (u *ui) restoreFolder() {
 	if !docstore.FileSystemSupported() {
 		return
@@ -202,7 +183,6 @@ func (u *ui) chooseFolder() {
 			return err
 		}
 		u.folder.bump()
-		// A folder that cannot be remembered still works for this visit.
 		if err := a.Remember(ctx, folderKey); err != nil {
 			js.Global().Get("console").Call("warn", "the folder will not be remembered: "+err.Error())
 		}
@@ -239,8 +219,6 @@ func (u *ui) reconnectFolder() {
 func (u *ui) forgetFolder() {
 	u.folder.bump()
 	u.saver.Pending.Run(func(ctx context.Context) error {
-		// Forgetting goes ahead even if switching to the browser fails; the error is still
-		// surfaced.
 		var setErr error
 		if t, _ := u.saver.Where(); t == "folder" {
 			setErr = u.saver.SetTarget(ctx, "browser")
@@ -257,7 +235,6 @@ func (u *ui) forgetFolder() {
 	})
 }
 
-// folderPanel is the folder control above the save form.
 func (u *ui) folderPanel() xango.Node {
 	state, name := u.folder.get()
 	return components.FolderPicker(components.FolderPickerProps{

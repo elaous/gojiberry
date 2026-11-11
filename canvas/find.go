@@ -14,15 +14,12 @@ type FindOptions struct {
 	MatchCase bool
 	// WholeWord only matches whole words.
 	WholeWord bool
-	// Regex reads Query as a regular expression (Go syntax). In a
-	// replacement, $1 and ${name} stand for what a group matched.
+	// Regex reads Query as a regular expression (Go syntax).
 	Regex bool
 }
 
-// Match is a range [From, To) of the text stream, in runes.
 type Match struct{ From, To int }
 
-// ErrEmptyQuery is returned by Find and Replace for an empty query.
 var ErrEmptyQuery = errors.New("canvas: nothing to look for")
 
 func (o FindOptions) compile() (*regexp.Regexp, error) {
@@ -39,9 +36,6 @@ func (o FindOptions) compile() (*regexp.Regexp, error) {
 	return regexp.Compile(expr)
 }
 
-// FindAll returns the matches of o in text, in order, as rune offsets. Empty
-// matches (a regex like "x*") are skipped. With WholeWord a match must not be
-// glued to a word character on a side where it starts or ends with one.
 func FindAll(text string, o FindOptions) ([]Match, error) {
 	re, err := o.compile()
 	if err != nil {
@@ -73,8 +67,6 @@ func findAll(re *regexp.Regexp, text string, whole bool) []Match {
 	return out
 }
 
-// runeIndex returns a function mapping byte offsets in s (at the start of a
-// rune) to rune offsets.
 func runeIndex(s string) func(int) int {
 	if len(s) == utf8.RuneCountInString(s) {
 		return func(b int) int { return b }
@@ -89,8 +81,7 @@ func runeIndex(s string) func(int) int {
 	return func(b int) int { return idx[b] }
 }
 
-// Find returns the matches of o in the flow's text. A match that crosses an
-// inline object (an image, a table of contents) is left out.
+// Find returns the matches of o in the flow's text.
 func (f *TextFlow) Find(o FindOptions) ([]Match, error) {
 	text := f.EditText()
 	ms, err := FindAll(text, o)
@@ -107,10 +98,6 @@ func (f *TextFlow) Find(o FindOptions) ([]Match, error) {
 	return out, nil
 }
 
-// ReplaceMatches changes the matches (as Find returned them, still valid for the
-// current text) to repl, giving each the formatting of its first character,
-// and returns how many were changed. With o.Regex, repl may use $1 and
-// ${name}. It is one undoable change.
 func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (int, error) {
 	re, err := o.compile()
 	if err != nil {
@@ -119,8 +106,7 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 	text := f.EditText()
 	rs := []rune(text)
 	d := f.flatten()
-	// The matches' groups are found in the whole text, not in the matched text
-	// alone, so a pattern that looks around (\b, \B, ^) means what it did in Find.
+	// groups found in the whole text so lookarounds keep their meaning
 	var all map[[2]int][]int // the groups of the match at bytes [from, to)
 	var byteAt []int         // rune offset -> byte offset
 	if o.Regex {
@@ -160,9 +146,6 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 	return len(edits), nil
 }
 
-// expandReplacement applies a regex replacement template to the match of the
-// bytes [from, to) of text, whose groups are in all. A match that is not there
-// (the text changed since Find) is expanded from its own text.
 func expandReplacement(re *regexp.Regexp, text string, all map[[2]int][]int, from, to int, repl string) string {
 	if loc, ok := all[[2]int{from, to}]; ok {
 		return string(re.ExpandString(nil, repl, text, loc))
@@ -174,8 +157,6 @@ func expandReplacement(re *regexp.Regexp, text string, all map[[2]int][]int, fro
 	return repl
 }
 
-// ReplaceRange puts text in place of the range [from, to) of the text stream,
-// in the formatting of its first character (an empty range inserts).
 func (f *TextFlow) ReplaceRange(from, to int, text string) {
 	d := f.flatten()
 	var fm Format
@@ -189,8 +170,6 @@ func (f *TextFlow) ReplaceRange(from, to int, text string) {
 	f.Replace([]Edit{{From: from, To: to, Items: items}})
 }
 
-// ReplaceAll finds every match of o and replaces it with repl; it returns how
-// many it changed.
 func (f *TextFlow) ReplaceAll(o FindOptions, repl string) (int, error) {
 	ms, err := f.Find(o)
 	if err != nil {
@@ -199,15 +178,11 @@ func (f *TextFlow) ReplaceAll(o FindOptions, repl string) (int, error) {
 	return f.ReplaceMatches(ms, o, repl)
 }
 
-// --- highlighting ---------------------------------------------------------
-
 type searchState struct {
 	matches []Match
 	cur     int
 }
 
-// SetSearch highlights matches on the canvas, the one at index current in the
-// stronger colour (pass -1 for none). It draws on the next Draw.
 func (f *TextFlow) SetSearch(matches []Match, current int) {
 	f.search = searchState{matches: append([]Match(nil), matches...), cur: current}
 }

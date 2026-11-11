@@ -141,7 +141,6 @@ func TestMovesByKindLikeBrowseMode(t *testing.T) {
 	if r.MoveTo("button", "No such") {
 		t.Fatal("MoveTo found a button that is not there")
 	}
-	// at the ends nothing is said
 	r.Reset()
 	if _, ok := r.Previous(); !ok {
 		t.Fatal("Previous from the top starts at the end")
@@ -208,7 +207,6 @@ func TestLiveRegionsAnnounce(t *testing.T) {
 	if again := r.Announcements(); len(again) != 0 {
 		t.Fatalf("announcements are taken once: %v", again)
 	}
-	// the live regions are items too, with their text
 	if !r.MoveTo("status", "") {
 		t.Fatal("the status region is a stop once it has text")
 	}

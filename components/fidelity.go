@@ -6,9 +6,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// FidelityLoss is one line of a fidelity report: a feature of the document, what the format does with it
-// ("dropped" or "simplified"), a note on how, and in how many places the document uses it (0 when it is
-// not a count).
 type FidelityLoss struct {
 	Feature, Treatment, Note string
 	Count                    int
@@ -16,28 +13,22 @@ type FidelityLoss struct {
 
 // FidelityReport is what a format loses of a document.
 type FidelityReport struct {
-	Losses []FidelityLoss
-	// Known says the host knows what the format writes (or reads); false makes the panel say so instead
-	// of "nothing is lost".
-	Known bool
-	// Pending says the report is still being worked out (the host does it elsewhere); the panel says so.
+	Losses  []FidelityLoss
+	Known   bool
 	Pending bool
 }
 
 // FidelityPanelProps configures FidelityPanel.
 type FidelityPanelProps struct {
-	// Formats are the formats to export as, Format the one chosen; OnFormat chooses another.
 	Formats  []SaverChoice
 	Format   string
 	OnFormat func(name string)
 	// Export is what exporting the document as Format loses.
-	Export FidelityReport
-	// Import, if ImportName is set, is what the last file imported left out.
+	Export     FidelityReport
 	Import     FidelityReport
 	ImportName string
 }
 
-// fidelityFeature is the name of a feature in a report.
 func fidelityFeature(id string) string {
 	names := map[string]string{
 		"bold":             tr("fidelity.f.bold", "Bold"),
@@ -105,7 +96,6 @@ func fidelityFeature(id string) string {
 	return id
 }
 
-// fidelityNote says how a feature is written when it is not as it is ("" for no note).
 func fidelityNote(id string) string {
 	switch id {
 	case "text":
@@ -164,10 +154,6 @@ func fidelityItems(rep FidelityReport) []xango.Node {
 	return items
 }
 
-// FidelityPanel shows what a file format changes in the document before it is exported, and what the last
-// file imported left out: each feature the document uses that the format drops or simplifies, with how it
-// is written. The summary is a live status, so a reader hears it when the format is chosen. Nothing here
-// blocks an export; it tells the person what the file will not hold.
 func FidelityPanel(p FidelityPanelProps) xango.Node {
 	var opts []xango.Node
 	label := p.Format

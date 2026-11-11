@@ -17,8 +17,6 @@ const (
 	googleFolderMIM = "application/vnd.google-apps.folder"
 )
 
-// GoogleDocs is a Source over the Google Drive API: Google Docs and the folders
-// holding them, each exported as a Word file.
 type GoogleDocs struct {
 	// Token is an OAuth access token with the drive.readonly scope.
 	Token string
@@ -70,15 +68,11 @@ func (g *GoogleDocs) List(ctx context.Context, folder string) ([]Item, error) {
 	}
 }
 
-// Fetch implements Source: the Google Doc exported as a Word file.
 func (g *GoogleDocs) Fetch(ctx context.Context, item Item) ([]byte, error) {
 	u := g.base() + "/drive/v3/files/" + url.PathEscape(item.ID) + "/export?" + url.Values{"mimeType": {docxMIME}}.Encode()
 	return getBytes(ctx, g.Client, g.Token, u)
 }
 
-// Versions implements Versioned: the revisions Google Docs keeps, each exported as a Word file through the
-// export link the revision lists. Up to max are taken, the newest ones, oldest first; the last revision is
-// the current document, so it is left out.
 func (g *GoogleDocs) Versions(ctx context.Context, item Item, max int) ([]Version, error) {
 	type rev struct {
 		ID           string            `json:"id"`
@@ -129,8 +123,6 @@ func (g *GoogleDocs) Versions(ctx context.Context, item Item, max int) ([]Versio
 	return out, nil
 }
 
-// trusts says the token may be sent to link: the API's own host, or (with the default API address) Google's
-// export host and its googleapis.com hosts, over https.
 func (g *GoogleDocs) trusts(link string) bool {
 	u, err := url.Parse(link)
 	if err != nil {
@@ -149,7 +141,6 @@ func (g *GoogleDocs) trusts(link string) bool {
 	return u.Scheme == "https" && (u.Host == "docs.google.com" || strings.HasSuffix(u.Host, ".googleapis.com") || u.Host == "www.googleapis.com")
 }
 
-// escapeQuery escapes a value for a Drive query string literal.
 func escapeQuery(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s)
 }

@@ -12,8 +12,6 @@ import (
 	"github.com/coder/websocket"
 )
 
-// Only a page served by this server may open the socket: another site in the same
-// browser must not be able to read or overwrite the document through localhost.
 func TestOnlyThisServersPagesMayOpenTheSocket(t *testing.T) {
 	h := newHub()
 	srv := httptest.NewServer(http.HandlerFunc(h.handleWS))

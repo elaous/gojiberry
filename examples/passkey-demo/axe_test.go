@@ -12,8 +12,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The passkey page is under the accessibility gate, signed out and signed in. Heading order is
-// exempt: the panel component brings its own h4, to sit under the host page's headings.
 func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()

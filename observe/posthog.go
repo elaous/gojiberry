@@ -16,18 +16,7 @@ import (
 	"time"
 )
 
-// The PostHog sink. It needs nothing but the standard library: PostHog's capture API is one JSON POST.
-//
-// What it sends is aggregate events about the server, never about a person:
-//
-//   - "gojiberry_metric": one per series per flush, holding the label values, the count, the sum, the
-//     smallest, the largest and the last value of the interval.
-//   - "gojiberry_span": one per kept (sampled) span, with its name, duration, attributes and the random
-//     trace and span ids.
-//
-// Every event carries "$process_person_profile": false (no person is created) and "$geoip_disable": true
-// (no location is looked up), and one fixed distinct id that names the service, not a person. No address,
-// header, query or body ever reaches a Sink, so none can be sent.
+// The PostHog sink.
 const (
 	envPostHogKey      = "GOJIBERRY_OBS_POSTHOG_KEY"
 	envPostHogKeyFile  = "GOJIBERRY_OBS_POSTHOG_KEY_FILE"
@@ -46,20 +35,14 @@ func init() { RegisterSink("posthog", newPostHogFromEnv) }
 
 // PostHogConfig configures the PostHog sink.
 type PostHogConfig struct {
-	// APIKey is the project API key (the "phc_..." one; it is write-only but still not logged).
-	APIKey string
-	// Host is the ingestion base URL: PostHogUSHost, PostHogEUHost or a self-hosted instance.
-	Host string
-	// Service is the distinct id of every event (the name of the server, not of a person).
+	APIKey  string
+	Host    string
 	Service string
-	// Interval is how often the aggregates are sent. Zero is 30 seconds; negative disables the timer
-	// (the caller flushes).
+	// Interval is how often the aggregates are sent.
 	Interval time.Duration
-	// Client is used for the requests; nil is a client with a 10 second timeout.
-	Client *http.Client
+	Client   *http.Client
 }
 
-// PostHog is a Sink that sends aggregates and sampled spans to PostHog.
 type PostHog struct {
 	cfg    PostHogConfig
 	endpt  string
@@ -102,9 +85,6 @@ func NewPostHog(cfg PostHogConfig) (*PostHog, error) {
 	return p, nil
 }
 
-// posthogHost resolves "us", "eu" (or empty: us) and a URL. A plain http URL is only accepted for a loopback
-// host (a local PostHog for trying it out); anything else must be https so the project key is not sent in
-// the clear.
 func posthogHost(h string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(h)) {
 	case "", "us":
@@ -166,7 +146,6 @@ func (p *PostHog) Metric(pt Point) {
 	a.add(pt.Value)
 }
 
-// Span implements Sink: it keeps a bounded buffer, dropping the oldest.
 func (p *PostHog) Span(s SpanData) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -208,8 +187,6 @@ func (p *PostHog) props(extra map[string]any) map[string]any {
 	return m
 }
 
-// held is what one flush takes: the aggregates and spans, and the events made from them (the series first, in
-// key order, then the spans), so that what a failed request did not carry can be put back.
 type held struct {
 	keys   []string
 	series map[string]*agg
@@ -217,7 +194,6 @@ type held struct {
 	events []phEvent
 }
 
-// events takes what is held and turns it into capture events.
 func (p *PostHog) events(now time.Time) held {
 	p.mu.Lock()
 	series, spans := p.series, p.spans
@@ -255,9 +231,6 @@ func (p *PostHog) events(now time.Time) held {
 	return held{keys: keys, series: series, spans: spans, events: out}
 }
 
-// putBack returns what a request did not carry to the sink, to be sent with the next interval: the aggregates are
-// added to the ones that have grown since (counts and sums add, the newer "last" stays), the spans go before the
-// newer ones, and both stay inside the bounds (maxSeries, posthogMaxSpans; what does not fit is counted as lost).
 func (p *PostHog) putBack(h held, from int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -288,8 +261,6 @@ func (p *PostHog) putBack(h held, from int) {
 	}
 }
 
-// phStatusError is an answer that was not a success; a 429 or a 5xx is worth trying again at the next interval, any
-// other client error (a wrong key, a refused payload) is not.
 type phStatusError struct{ code int }
 
 func (e phStatusError) Error() string { return fmt.Sprintf("observe: posthog: answered %d", e.code) }
@@ -297,15 +268,10 @@ func (e phStatusError) transient() bool {
 	return e.code == http.StatusTooManyRequests || e.code >= 500
 }
 
-// phNetError is a request that did not get an answer; trying again later may work.
 type phNetError struct{ msg string }
 
 func (e phNetError) Error() string { return e.msg }
 
-// Flush implements Sink: it sends what is held now, in batches. A request that fails for a reason that may pass (no
-// answer, 429, 5xx) stops the flush and what was not sent is kept for the next interval, inside the bounds; one the
-// server refused for good (any other 4xx: a wrong key, a payload it will not take) drops that batch and the rest,
-// counted, so a wrong key cannot fill the memory.
 func (p *PostHog) Flush(ctx context.Context) error {
 	h := p.events(time.Now())
 	var errs []error
@@ -351,7 +317,7 @@ func (p *PostHog) post(ctx context.Context, evs []phEvent) error {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := p.cfg.Client.Do(req)
 	if err != nil {
-		// The error of net/http repeats the URL, which holds no secret (the key is in the body), but name only the cause.
+		// net/http's error repeats the URL: name only the cause
 		return phNetError{"observe: posthog: the request failed"}
 	}
 	defer resp.Body.Close()
@@ -362,7 +328,6 @@ func (p *PostHog) post(ctx context.Context, evs []phEvent) error {
 	return nil
 }
 
-// Close implements Sink: it stops the timer and sends the rest.
 func (p *PostHog) Close(ctx context.Context) error {
 	select {
 	case <-p.stop:
@@ -373,7 +338,7 @@ func (p *PostHog) Close(ctx context.Context) error {
 	return p.Flush(ctx)
 }
 
-// Describe implements Describer: the destination and the counts, never the key.
+// never the key
 func (p *PostHog) Describe() any {
 	p.mu.Lock()
 	defer p.mu.Unlock()

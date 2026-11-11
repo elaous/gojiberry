@@ -47,8 +47,6 @@ func denied(w http.ResponseWriter, msg string) {
 	writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 }
 
-// access finds the document and the caller's role, writing the error
-// response itself when there is no access.
 func (h *Hub) access(w http.ResponseWriter, r *http.Request) (*room, Role, bool) {
 	id := r.PathValue("id")
 	if id == "" || strings.ContainsAny(id, "/\\") {
@@ -96,9 +94,7 @@ func (h *Hub) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ops)
 }
 
-// broadcast sends an event to every subscriber but from (rm.mu held). A
-// subscriber that cannot keep up is dropped; its client reconnects and
-// gets a fresh snapshot.
+// rm.mu held
 func (rm *room) broadcast(from string, e event) {
 	for s := range rm.subs {
 		if s.replica == from && from != "" {
@@ -118,11 +114,7 @@ func jsonEvent(name string, v any) event {
 	return event{name: name, data: b}
 }
 
-// bindReplica ties a replica id to the signed-in user who first used it in
-// this document (rm.mu held), so another user cannot speak under it: their
-// ops would otherwise be hidden from the real owner of the id, and their
-// presence would overwrite its cursor. Anonymous callers (no User function, or
-// no one signed in) cannot be bound.
+// rm.mu held; one signed-in user per replica id
 func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	if replica == "" || h.cfg.User == nil {
 		return true
@@ -143,7 +135,7 @@ func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	return true
 }
 
-// maxBoundReplicas bounds the replica-to-user table of one document.
+// bounds the replica-to-user table of one document
 const maxBoundReplicas = 4096
 
 func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
@@ -171,12 +163,6 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// acceptOps checks and applies operations from replica, whatever the
-// transport carried them, and tells the others. It returns 204, or the status
-// and message the transport should report (403: refused).
-//
-// An accepted batch from an owner or editor renews the document's expiry (see
-// Config.Renewer); nothing else does.
 func (h *Hub) acceptOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (int, string) {
 	done := observe.Default().Work("hub_ops")
 	status, msg, renew := h.applyOps(rm, role, r, replica, ops)
@@ -207,7 +193,7 @@ func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops
 		return http.StatusForbidden, err.Error(), false
 	}
 	if !role.CanEdit() && h.cfg.User != nil {
-		// A commenter may only write comments and replies under their own name.
+		// a commenter may only write comments and replies under their own name
 		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
 			return http.StatusForbidden, err.Error(), false
 		}
@@ -218,9 +204,6 @@ func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops
 	return http.StatusNoContent, "", role.CanEdit() && len(ops) > 0 && h.renewDue(rm)
 }
 
-// commentAuthors checks that every new comment or reply record in ops names
-// user as its author (case-insensitively). With nobody signed in (user "")
-// there is nothing to check against.
 func commentAuthors(ops []crdt.Op, user string) error {
 	if user == "" {
 		return nil
@@ -241,18 +224,10 @@ func commentAuthors(ops []crdt.Op, user string) error {
 }
 
 const (
-	// maxClockJump is how far past the document's clock a commenter's
-	// timestamps may be.
-	maxClockJump = 1 << 16
-	// maxCommentSize is the largest comment or reply record a commenter may
-	// add, in bytes.
+	maxClockJump   = 1 << 16
 	maxCommentSize = 16 << 10
 )
 
-// authorize decides whether role may make these changes to doc. Owners and
-// editors may change anything. Anyone else who can read may comment: mark a
-// range of the text as commented (and nothing else about the text), and add
-// new comment and reply records -- but not change or delete existing ones.
 func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	if role.CanEdit() {
 		return nil
@@ -261,8 +236,7 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 		return errors.New("you do not have access to this document")
 	}
 	const viewOnly = "you can only view and comment on this document"
-	// A Lamport counter far ahead of anything the document has seen would
-	// win every later conflict on what it touches.
+	// a far-ahead Lamport counter would win every later conflict
 	limit := doc.Clock() + maxClockJump
 	if limit < doc.Clock() { // wrapped: the clock is already at the top
 		limit = ^uint64(0)
@@ -281,17 +255,16 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			}
 			continue
 		}
-		// A change to the text: only comment marks, leaving the block as it is.
+		// text change: only comment marks, the block is left as it is
 		if !exists || len(op.CharOps) == 0 || blk.Kind != existing.Kind || blk.Order != existing.Order || blk.Deleted != existing.Deleted {
 			return errors.New(viewOnly)
 		}
 		for _, c := range op.CharOps {
-			// Every character operation advances the document's clock to its id.
+			// every character operation advances the document clock to its id
 			if c.ID.Counter > limit {
 				return errors.New(viewOnly)
 			}
-			// A comment mark that sets a comment: an empty value would erase
-			// the comments already on the text.
+			// an empty comment value would erase the comments on the text
 			if c.Kind != crdt.CharMark || c.Mark == nil || c.Mark.Key != "comment" || c.Mark.Value == "" || c.Mark.ID.Counter > limit || len(c.Mark.Value) > 256 {
 				return errors.New(viewOnly)
 			}
@@ -300,8 +273,7 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	return nil
 }
 
-// prunePresence drops cursors that have not been refreshed within the TTL and
-// tells the others they are gone (rm.mu held).
+// rm.mu held
 func (h *Hub) prunePresence(rm *room) {
 	cutoff := h.now().Add(-h.cfg.PresenceTTL)
 	for id, e := range rm.pres {
@@ -312,10 +284,7 @@ func (h *Hub) prunePresence(rm *room) {
 	}
 }
 
-// setPresence records p as its replica's cursor (what newcomers are told at
-// once) and tells the others, at most once per PresenceInterval: an update
-// inside the interval is held, and one send of the latest value goes out when
-// it ends (rm.mu held).
+// rm.mu held; at most one send per PresenceInterval
 func (h *Hub) setPresence(rm *room, p Presence) {
 	if len(p.Holding) > MaxHolding { // a name of an object, not a message
 		p.Holding = ""
@@ -372,7 +341,6 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// acceptPresence validates and records a cursor update from any transport.
 func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (status int, msg string) {
 	done := observe.Default().Work("hub_presence")
 	defer func() {
@@ -406,9 +374,6 @@ func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (
 	return http.StatusNoContent, ""
 }
 
-// join subscribes replica to the document: it returns the subscription, the
-// snapshot and the others' cursors to tell it first. The caller must call
-// leave. ok is false if the replica id belongs to someone else.
 func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub, snapshot []crdt.Op, peers []Presence, ok bool) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -428,7 +393,6 @@ func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub
 	return s, snapshot, peers, true
 }
 
-// leave ends a subscription and tells the others the cursor is gone.
 func (h *Hub) leave(rm *room, s *sub) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -436,8 +400,7 @@ func (h *Hub) leave(rm *room, s *sub) {
 		delete(rm.subs, s)
 	}
 	if s.replica != "" {
-		// Always say so: an idle replica's cursor may have been pruned
-		// already, and its peers would otherwise keep the ghost.
+		// always say so: a pruned idle cursor must not linger
 		rm.dropPresence(s.replica)
 		rm.broadcast(s.replica, jsonEvent("presence", Presence{Replica: s.replica, Gone: true}))
 	}
@@ -490,8 +453,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
-			// Access can be taken away or changed while a stream is open:
-			// end it, and the client reconnects with whatever it has now.
+			// access can change mid-stream: end it, the client reconnects
 			if h.role(r, id) != role {
 				return
 			}
@@ -505,5 +467,5 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// MaxHolding is the longest Presence.Holding the hub passes on.
+// MaxHolding is the longest Presence.Holding the hub accepts.
 const MaxHolding = 80

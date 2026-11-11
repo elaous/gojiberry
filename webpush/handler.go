@@ -8,17 +8,12 @@ import (
 	"regexp"
 )
 
-// ErrTooMany is returned by a Store that has all it keeps.
 var ErrTooMany = errors.New("webpush: too many subscriptions")
 
 // Config is what Handler needs.
 type Config struct {
-	VAPID *VAPID
-	Store Store
-	// Authorize says whether the request may subscribe, or unsubscribe, for the handle. It is required, because a
-	// subscription receives the notifications addressed to its handle: if anybody could subscribe as @ana, anybody
-	// would learn who mentions Ana and where. Typically it checks the session of the signed-in person and that the
-	// handle is theirs.
+	VAPID     *VAPID
+	Store     Store
 	Authorize func(r *http.Request, handle string) bool
 }
 
@@ -26,11 +21,6 @@ var handleRE = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 const maxBody = 8 << 10
 
-// Handler serves the three routes a page needs, relative to where it is mounted (mount it at /push/):
-//
-//	GET  key          -> {"key": "<applicationServerKey>"}
-//	POST subscribe    {"handle": "ana", "subscription": {...}}   -> 204
-//	POST unsubscribe  {"handle": "ana", "endpoint": "https://..."} -> 204
 func Handler(cfg Config) (http.Handler, error) {
 	if cfg.VAPID == nil || cfg.Store == nil || cfg.Authorize == nil {
 		return nil, errors.New("webpush: the handler needs a VAPID key, a store and an Authorize function")

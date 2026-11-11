@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// newConsole makes the Console tab: the command line of docsh (ls, mv, tag, import, export, pack, check ...) over
-// the documents the Save tab shows. Files for import are added with the tab's button, and what export and pack make
-// is downloaded. The writers of the other file formats are the file worker's (u.transfer).
 func newConsole(u *ui, renderUI func()) *console.Session {
 	target, _ := u.saver.Where()
 	sh := console.New(u.saver.Saver, target, nil, nil, nil)
@@ -35,7 +32,6 @@ func newConsole(u *ui, renderUI func()) *console.Session {
 	return s
 }
 
-// fileType is the media type of a file the console made, from its extension.
 func fileType(name string) string {
 	if t := mime.TypeByExtension(path.Ext(name)); t != "" {
 		return t

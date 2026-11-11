@@ -13,21 +13,15 @@ import (
 	"sync"
 )
 
-// Files is where import reads files from and export, pack and unpack read and write them. The
-// command line uses the disk (OSFiles); a page has no disk, so it gives the files the person
-// picked and takes the ones the commands make (PageFiles).
 type Files interface {
-	// Glob lists the files a pattern names (the pattern itself when it has none to match, so a
-	// plain name reaches ReadFile and fails there if it is not found).
+	// Glob lists the files a pattern names.
 	Glob(pattern string) ([]string, error)
 	// ReadFile returns a file's bytes.
 	ReadFile(name string) ([]byte, error)
 	// Exists says a file is there.
 	Exists(name string) bool
-	// MkdirAll makes a folder to write into (a no-op where there are none).
+	// MkdirAll makes a folder to write into.
 	MkdirAll(dir string) error
-	// Write makes the file name from what write puts out, all or nothing: a failure leaves no
-	// partial file and no damaged older one. A file that exists is replaced only with force.
 	Write(name string, force bool, write func(io.Writer) error) error
 }
 
@@ -59,7 +53,7 @@ func (OSFiles) Exists(name string) bool { _, err := os.Stat(name); return err ==
 // MkdirAll implements Files.
 func (OSFiles) MkdirAll(dir string) error { return os.MkdirAll(dir, 0o755) }
 
-// Write implements Files: through a temporary file next to name, then a rename.
+// Write implements Files, via a temporary file.
 func (OSFiles) Write(name string, force bool, write func(io.Writer) error) (err error) {
 	if !force {
 		if _, serr := os.Stat(name); serr == nil {
@@ -88,11 +82,8 @@ func (OSFiles) Write(name string, force bool, write func(io.Writer) error) (err 
 	return os.Rename(f.Name(), name)
 }
 
-// PageFiles is Files for a page: Inbox holds the files the person picked (Add), which import and
-// unpack read by name, and what export and pack make goes to Deliver (a download), once, whole. It
-// has no folders: -o and a path in a name are kept in the delivered name, nothing is created.
 type PageFiles struct {
-	// Deliver hands over a finished file (transfer.Download in a browser). Required for Write.
+	// Deliver hands over a finished file.
 	Deliver func(name string, data []byte)
 
 	mu        sync.Mutex
@@ -100,7 +91,7 @@ type PageFiles struct {
 	delivered map[string]bool
 }
 
-// Add puts a picked file in the inbox (a file of the same name is replaced).
+// Add puts a picked file in the inbox.
 func (p *PageFiles) Add(name string, data []byte) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -129,7 +120,7 @@ func (p *PageFiles) Clear() {
 	p.mu.Unlock()
 }
 
-// Glob implements Files: * and ? against the names in the inbox, in any case.
+// Glob implements Files for the inbox names.
 func (p *PageFiles) Glob(pattern string) ([]string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -156,18 +147,15 @@ func (p *PageFiles) ReadFile(name string) ([]byte, error) {
 	return nil, fmt.Errorf("%s: no such file here (add files with the Add files button first)", name)
 }
 
-// Exists implements Files: a file already delivered in this session counts, so a second export of
-// the same name needs --force like on a disk.
 func (p *PageFiles) Exists(name string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.delivered[name]
 }
 
-// MkdirAll implements Files: there are no folders to make.
+// MkdirAll implements Files; the inbox has no folders.
 func (*PageFiles) MkdirAll(string) error { return nil }
 
-// Write implements Files: the file is built in memory and delivered when it is whole.
 func (p *PageFiles) Write(name string, force bool, write func(io.Writer) error) error {
 	if p.Deliver == nil {
 		return errors.New("console: nowhere to deliver the file")

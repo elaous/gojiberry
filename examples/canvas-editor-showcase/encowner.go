@@ -16,19 +16,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The owner key of the person's address in the key directory. Once an address has one, the
-// directory only takes entries signed by it, so a stolen session token alone cannot publish or
-// revoke keys for the address. The key is made here, enrolled with the server, and kept in this
-// browser for the directory it was enrolled with.
-//
-// Where the browser can sign with Ed25519 through WebCrypto (encowner_webkey.go) the key is kept as
-// a non-extractable CryptoKey in IndexedDB: a script in the page can ask it to sign while the page
-// is open but cannot copy it away. Its backup (the seed) is therefore shown once, when the key is
-// made, and is not kept: "Back up" shows it only until it is hidden or the page is left. Where the
-// browser cannot (older ones), the key is kept as text in localStorage, readable by any script on
-// the origin, and the panel says so; a backup can then be shown at any time. Either way the key is
-// treated like a password: it has a backup and a way to forget it.
-
 const (
 	ownerKeyPrefix = "showcase-enc:owner:"   // + the directory address
 	watchStateKey  = "showcase-enc:watch:"   // the log position and what lookups saw
@@ -37,21 +24,17 @@ const (
 	pinsKey        = "showcase-enc:pins:"    // owner keys the person confirmed for other addresses
 )
 
-// ownerRecord is what is kept for one directory: the address the key is enrolled for and the key.
 type ownerRecord struct {
 	Email string `json:"email"`
 	Key   string `json:"key"`
 }
 
-// ownerAlert is one thing watching found, kept until dismissed: its kind (a dirclient.AlertKind, empty
-// for the page's own alerts) and the text shown. Alerts kept by an older version are bare strings.
 type ownerAlert struct {
 	Kind string `json:"kind,omitempty"`
 	Seq  int64  `json:"seq,omitempty"`
 	Text string `json:"text"`
 }
 
-// UnmarshalJSON reads an alert, or the bare string an older version kept.
 func (a *ownerAlert) UnmarshalJSON(b []byte) error {
 	if len(b) > 0 && b[0] == '"' {
 		*a = ownerAlert{}
@@ -61,8 +44,6 @@ func (a *ownerAlert) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, (*plain)(a))
 }
 
-// alertFor words what watching found. A reset of the owner key, or a request for one, gets a text of
-// its own that says what it means and what to do; the rest is the directory client's English text.
 func alertFor(a dirclient.Alert) ownerAlert {
 	text := a.Text
 	switch a.Kind {
@@ -74,15 +55,11 @@ func alertFor(a dirclient.Alert) ownerAlert {
 	return ownerAlert{Kind: string(a.Kind), Seq: a.Seq, Text: text}
 }
 
-// ownerUI is the state of the owner key panel.
 type ownerUI struct {
-	key   dirclient.OwnerSigner // held in this browser, nil if none: a webKey, or an OwnerKey kept as text
-	plain bool                  // the key is kept as text in localStorage (no Ed25519 in this browser's WebCrypto)
-	email string                // the address the held key was enrolled for
-	// secret is the backup text of a key that is kept non-extractable: known only from the moment it
-	// was made until it is hidden or the page is left.
-	secret string
-	// state is what the server last said about the address, shown as text.
+	key        dirclient.OwnerSigner
+	plain      bool
+	email      string // the address the held key was enrolled for
+	secret     string
 	state      string
 	unenrolled bool // the server said the address has no owner key
 	msg        string
@@ -91,23 +68,19 @@ type ownerUI struct {
 	restore    string // the draft of a backup being restored
 	restoreO   bool   // the restore field is open
 
-	// pending is the key made when a reset was requested, held until the reset is completed; resetSince
-	// and resetDue are what the server said about the reset (zero if none).
 	pending     dirclient.OwnerSigner
 	pendingText bool // pending is kept as text
 	pendingSec  string
 	resetSince  time.Time
 	resetDue    time.Time
 
-	logKeys   map[string]string // the pinned log keys (key ID to base64), none until pinned
-	candidate map[string]string // the keys the server states, shown to be compared before they are pinned
-	expected  string            // a fingerprint the person got from the operator, to hold the candidate to
-	alerts    []ownerAlert      // what watching found, until dismissed
+	logKeys   map[string]string
+	candidate map[string]string
+	expected  string
+	alerts    []ownerAlert // what watching found, until dismissed
 	watchMsg  string
 }
 
-// loadWatch restores what is kept for the current directory: the log position, the pinned log keys
-// and the alerts not yet dismissed. A position that cannot be read is dropped, and said.
 func (d *dirUI) loadWatch() {
 	d.owner.logKeys, d.owner.alerts, d.owner.watchMsg = nil, nil, ""
 	if d.dir == nil {
@@ -143,8 +116,6 @@ func (d *dirUI) keepAlerts() {
 	lsSet(alertsKey+d.url, string(b))
 }
 
-// lookAtLogKeys fetches the keys the server states for its log and shows them, with their
-// fingerprints, to be compared before anything is pinned.
 func (d *dirUI) lookAtLogKeys(ctx context.Context) error {
 	keys, err := d.dir.ServerLogKeys(ctx)
 	if err != nil {
@@ -160,10 +131,6 @@ func (d *dirUI) lookAtLogKeys(ctx context.Context) error {
 	return nil
 }
 
-// pinLogKeys keeps the candidate keys as the ones the log is checked against. This is trust on
-// first use unless the person holds a fingerprint from another source (a call, the operator's
-// page): then at least one of the keys must match it, or nothing is pinned. Pinned or not, it proves
-// the server stays consistent with itself from now on, not that it is the server meant.
 func (d *dirUI) pinLogKeys() {
 	keys := d.owner.candidate
 	if want := dirclient.NormalizeFingerprint(d.owner.expected); want != "" {
@@ -192,7 +159,6 @@ func (d *dirUI) forgetLogKeys() {
 	d.owner.logKeys = nil
 }
 
-// watchMine reads the log since the last look and says what somebody else did to my address.
 func (d *dirUI) watchMine(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -233,11 +199,7 @@ func (d *dirUI) watchMine(ctx context.Context) error {
 	return nil
 }
 
-// loadOwner reads the owner key kept for the current directory: the non-extractable one from
-// IndexedDB (in the background: the panel is drawn again when it is there), or one kept as text in
-// localStorage, which is moved to a non-extractable key when the browser can.
 func (d *dirUI) loadOwner() {
-	// only the owner key's own fields: the page calls this again once it is wired, after loadWatch
 	d.owner.key, d.owner.plain, d.owner.email, d.owner.secret = nil, false, "", ""
 	d.owner.state, d.owner.msg, d.owner.isErr, d.owner.backup = "", "", false, false
 	d.owner.restore, d.owner.restoreO = "", false
@@ -257,8 +219,6 @@ func (d *dirUI) loadOwner() {
 			}
 		}
 	}
-	// The background part holds the address of d, so it starts only once the page has put d where
-	// it will stay (newDirUI returns it by value): the page calls loadOwner again then.
 	if d.render == nil {
 		return
 	}
@@ -266,12 +226,11 @@ func (d *dirUI) loadOwner() {
 		current := func() bool { return d.url == url }
 		if email, w, ok, err := webOwnerLoad(url); err == nil && ok && current() {
 			d.owner.key, d.owner.email, d.owner.plain = w, email, false
-			lsSet(ownerKeyPrefix+url, "") // a copy as text left from before is not needed any more
+			lsSet(ownerKeyPrefix+url, "")
 			if d.dir != nil {
 				d.dir.Pin(email, w)
 			}
 		} else if d.owner.plain && current() {
-			// kept as text by an earlier version of this page: move it where it cannot be copied out
 			if k, ok := d.owner.key.(dirclient.OwnerKey); ok {
 				if w, err := webOwnerImport(k); err == nil && webOwnerSave(url, d.owner.email, w) == nil {
 					d.owner.key, d.owner.plain = w, false
@@ -287,8 +246,6 @@ func (d *dirUI) loadOwner() {
 	}()
 }
 
-// signerFor makes the signer of a new or restored owner key k: a non-extractable browser key where
-// the browser can, else k itself (kept as text). It does not keep it yet.
 func signerFor(k dirclient.OwnerKey) (signer dirclient.OwnerSigner, plain bool) {
 	if w, err := webOwnerImport(k); err == nil {
 		return w, false
@@ -296,13 +253,10 @@ func signerFor(k dirclient.OwnerKey) (signer dirclient.OwnerSigner, plain bool) 
 	return k, true
 }
 
-// keepOwner keeps signer for the current directory and address. made says the key was just made
-// (its backup text is then shown once); k is the key's bytes, which a non-extractable key does not
-// keep: they are cleared here.
 func (d *dirUI) keepOwner(email string, signer dirclient.OwnerSigner, plain bool, k dirclient.OwnerKey, made bool) {
 	if !plain {
 		if w, ok := signer.(*webKey); ok && webOwnerSave(d.url, email, w) != nil {
-			signer, plain = k, true // IndexedDB refused (a private window, no room): keep it as text
+			signer, plain = k, true
 		}
 	}
 	if plain {
@@ -321,7 +275,6 @@ func (d *dirUI) keepOwner(email string, signer dirclient.OwnerSigner, plain bool
 	}
 }
 
-// backupText is the owner key's backup, or "" when it cannot be shown any more.
 func (d *dirUI) backupText() string {
 	if k, ok := d.owner.key.(dirclient.OwnerKey); ok && d.owner.plain {
 		return dirclient.ExportOwnerKey(k)
@@ -329,7 +282,6 @@ func (d *dirUI) backupText() string {
 	return d.owner.secret
 }
 
-// forgetOwner drops the key held in this browser. The address keeps its owner key on the server.
 func (d *dirUI) forgetOwner() {
 	_ = webOwnerDelete(d.url)
 	lsSet(ownerKeyPrefix+d.url, "")
@@ -338,7 +290,6 @@ func (d *dirUI) forgetOwner() {
 
 func (d *dirUI) say(msg string, isErr bool) { d.owner.msg, d.owner.isErr = msg, isErr }
 
-// checkOwner asks the server who the account is and whether its address has an owner key.
 func (d *dirUI) checkOwner(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -360,7 +311,6 @@ func (d *dirUI) checkOwner(ctx context.Context) error {
 	return nil
 }
 
-// ownerState says in words what the address has and whether this browser holds it.
 func (d *dirUI) ownerState(me string, en dirclient.Enrollment) string {
 	held := d.owner.key != nil && d.owner.email == me && en.Current == dirclient.OwnerFingerprint(d.owner.key)
 	switch {
@@ -382,7 +332,6 @@ func firstOr(s []string) string {
 	return s[0]
 }
 
-// enrollOwner makes an owner key and enrolls it for the signed-in address.
 func (d *dirUI) enrollOwner(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -404,12 +353,11 @@ func (d *dirUI) enrollOwner(ctx context.Context) error {
 		return nil
 	}
 	d.keepOwner(me, signer, plain, k, true)
-	d.owner.backup = true // the first thing to do with a new key is back it up
+	d.owner.backup = true
 	d.say(T("dir.owner.enrolled", "Owner key enrolled for %s. Back it up now: if this browser's storage is cleared, only the backup can publish for this address again.", me), false)
 	return d.checkOwner(ctx)
 }
 
-// restoreOwner takes a backup, checks it is an owner key of the signed-in address, and keeps it.
 func (d *dirUI) restoreOwner(ctx context.Context) error {
 	k, err := dirclient.ImportOwnerKey(d.owner.restore)
 	if err != nil {
@@ -438,7 +386,6 @@ func (d *dirUI) restoreOwner(ctx context.Context) error {
 	return d.checkOwner(ctx)
 }
 
-// ownerPanel is the owner key section of the directory settings.
 func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 	if d.dir == nil {
 		return nil
@@ -515,10 +462,6 @@ func (d *dirUI) ownerPanel(e *encUI) []xango.Node {
 	return append(nodes, d.watchPanel(e)...)
 }
 
-// confirmPanel lists the owner keys behind the last lookup that nothing held confirms. A row signed by
-// an owner key the server alone vouches for is not shown as owner-signed; the person can compare the
-// key's fingerprint with its owner another way (a call, a message) and confirm it here, which keeps
-// the pin for this directory and shows the strongest mark from then on.
 func (d *dirUI) confirmPanel(e *encUI) []xango.Node {
 	type pending struct {
 		pub   string
@@ -561,8 +504,6 @@ func (d *dirUI) confirmPanel(e *encUI) []xango.Node {
 	return nodes
 }
 
-// confirmOwnerKey pins pub for email, keeps the pins and looks the address up again so the rows are
-// marked by what is now confirmed.
 func (d *dirUI) confirmOwnerKey(ctx context.Context, email, pub string) error {
 	d.dir.PinOwner(email, pub)
 	b, _ := json.Marshal(d.dir.Pins())
@@ -583,7 +524,6 @@ func (d *dirUI) confirmOwnerKey(ctx context.Context, email, pub string) error {
 	return nil
 }
 
-// watchPanel pins the server's log keys and watches the address.
 func (d *dirUI) watchPanel(e *encUI) []xango.Node {
 	busy := e.pending.Busy()
 	nodes := []xango.Node{

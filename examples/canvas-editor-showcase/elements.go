@@ -16,11 +16,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The equation and code parts of the Pictures tab (roadmap 78): insert an equation, which needs a text
-// alternative before it goes in; edit the formula and the alternative of each equation in the document; set
-// the language of the code block at the caret. A picture's long description is in the picture list itself.
-
-// elementsForm is the equation being typed in the tab, and the last message of its equation and code parts.
 type elementsForm struct {
 	formula, alt string
 	inline       bool // the new equation goes in the line of text
@@ -29,13 +24,11 @@ type elementsForm struct {
 	focusAlt     bool
 }
 
-// equationRef is an equation in the text: where it is (a caret position) and the object to edit.
 type equationRef struct {
 	offset int
 	eq     *canvas.EquationObject
 }
 
-// documentEquations lists the equations of the flow in order.
 func documentEquations(fl *canvas.TextFlow) []equationRef {
 	if fl == nil {
 		return nil
@@ -56,8 +49,6 @@ func documentEquations(fl *canvas.TextFlow) []equationRef {
 	return out
 }
 
-// insertEquation puts the typed equation at the caret. It is refused until it has a text alternative: the
-// check that the Check tab makes (a11ycheck.EquationFindings) is made here on the equation about to go in.
 func (u *ui) insertEquation(fl *canvas.TextFlow, redraw, renderUI func()) {
 	f := &u.elements
 	item := docfile.EquationItem{Formula: strings.TrimSpace(f.formula), Alt: strings.TrimSpace(f.alt)}
@@ -87,14 +78,12 @@ func (u *ui) insertEquation(fl *canvas.TextFlow, redraw, renderUI func()) {
 	renderUI()
 }
 
-// lineInput is a one-line text field.
 func lineInput(id, label, value, placeholder string, on func(string)) xango.Node {
 	return xango.El("input", []xango.Attr{xango.A("id", id), xango.A("type", "text"), xango.A("value", value), xango.A("spellcheck", "false"),
 		xango.A("aria-label", label), xango.A("placeholder", placeholder), xango.A("style", "width:100%;box-sizing:border-box;font-size:13px"),
 		xango.On("input", func(ev xango.Event) { on(xango.EventValue[string](ev)) })})
 }
 
-// elementsSections are the equation and code parts of the Pictures tab.
 func elementsSections(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	fl := flow()
 	canEdit := state.Role.CanEdit() && state.Mode == canvas.ModeEdit
@@ -156,7 +145,6 @@ func elementsSections(u *ui, state *State, flow func() *canvas.TextFlow, redraw,
 		}), 50)
 	}
 
-	// the language of the code block at the caret
 	nodes = append(nodes, xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("code.title", "Code blocks"))))
 	if fl != nil {
 		pf := fl.ParagraphAt(fl.Cursors()[0].Caret)

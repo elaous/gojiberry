@@ -1,12 +1,3 @@
-// Package mentionpush tells people who have the document closed that somebody mentioned them, by Web Push (package
-// webpush): the same job as package mentionmail, for a person who allowed notifications in their browser instead of
-// giving an address. A host calls Notify when a document changes.
-//
-// What goes in a notification: who mentioned you and in which document, and the link, never the text of the comment.
-// A message is encrypted for the browser (the push service cannot read it), but the notification is shown on a lock
-// screen. A mention is marked as sent only when a push service accepted the message, so a failure is tried again at the
-// next change and a success is not repeated; a person only gets the mentions made after they subscribed, so a new
-// subscription does not bring a flood of old ones.
 package mentionpush
 
 import (
@@ -26,19 +17,13 @@ type Sender interface {
 	Send(ctx context.Context, sub webpush.Subscription, payload []byte) error
 }
 
-// Message is what the service worker receives (docs: static push handler in wasmserve's service worker).
 type Message struct {
 	Title string `json:"title"`
 	Body  string `json:"body"`
-	// Tag makes a newer notification replace an older one of the same tag.
-	Tag string `json:"tag"`
-	// URL is where a click goes; the worker only follows an address of the app's own origin.
-	URL string `json:"url,omitempty"`
+	Tag   string `json:"tag"`
+	URL   string `json:"url,omitempty"`
 }
 
-// Notify pushes each handle's new mentions, as one notification each, to every subscription the handle has, and records
-// them in done. It drops a subscription the push service says is gone. It returns the handles reached, and the errors of
-// the others joined: one person's failure does not stop the rest.
 func Notify(ctx context.Context, sender Sender, store webpush.Store, set *canvas.CommentSet, title, link string, handles []string, done mentionmail.Done) ([]string, error) {
 	if sender == nil || store == nil {
 		return nil, errors.New("mentionpush: no sender or store")

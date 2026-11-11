@@ -147,7 +147,6 @@ func TestDeltaCarriesOneRefreshAndIsBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a refresh that updated a, added c and dropped b
 	after := Index{docs: map[string]*doc{}}
 	for id, d := range ix.docs {
 		nd := *d
@@ -172,7 +171,6 @@ func TestDeltaCarriesOneRefreshAndIsBound(t *testing.T) {
 	if opened.Len() != 2 || len(opened.Search("changed", 5)) != 1 || len(opened.Search("bravo", 5)) != 0 || len(opened.Search("charlie", 5)) != 1 {
 		t.Errorf("the delta was not applied: %d docs", opened.Len())
 	}
-	// not another place in the sequence, another base, another key, or changed bytes
 	other, _ := ix.Seal(key)
 	wrong, _ := DeriveKey([]byte("other"), "t")
 	bad := append([]byte(nil), sealed...)

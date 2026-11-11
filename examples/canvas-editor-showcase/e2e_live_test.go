@@ -14,13 +14,7 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestLiveEndToEnd opens the showcase in several browsers on one shared
-// document served by a collab hub: shared typing, cursors, per-user undo, and
-// a viewer who can comment but not edit. The page takes its role from the
-// bearer token it sends, which this test's hub reads as the role name. It
-// runs over both transports (?transport=http|ws).
 func TestLiveEndToEnd(t *testing.T) {
-	// The WebSocket run shares everything (?flow=*), the HTTP one the text only.
 	for _, c := range []struct{ transport, flow string }{{"http", ""}, {"ws", "*"}} {
 		transport, flow := c.transport, c.flow
 		t.Run(transport, func(t *testing.T) {
@@ -64,10 +58,8 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	b.Wait("s.text.length > 100")
 	b.OK(b.State().Str("text") == aText, "the second browser receives the first one's document")
 
-	// Ana hears, through the live region, that Bo joined.
 	a.WaitFor("Bo's arrival is announced", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('Bo joined.')`)
 
-	// Both go into edit mode; Ana types at the end of a line, Bo on another line.
 	a.ToggleMode()
 	b.ToggleMode()
 	edit(a, 240, 164, "End")
@@ -79,13 +71,11 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	b.Wait("s.text.includes(' ANA')")
 	a.OK(a.State().Str("text") == b.State().Str("text"), "concurrent typing converges: both documents are the same")
 
-	// Presence: each sees the other and a cursor drawn for them.
 	a.Wait("s.live.peers.includes('Bo') && s.live.remote >= 1")
 	b.Wait("s.live.peers.includes('Ana') && s.live.remote >= 1")
 	a.OK(a.Count("#presence .gj-presence-avatar") == 2, "the presence list shows two people")
 	a.OK(strings.HasPrefix(a.Text("#presence .gj-presence-status"), "Online"), "and that it is online")
 
-	// Per-user undo: Ana undoes her typing; Bo's stays.
 	a.Focus("#input")
 	a.Press("Control+z")
 	b.Wait("!s.text.includes(' ANA')")
@@ -95,13 +85,10 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	b.Wait("s.text.includes(' ANA')")
 	a.OK(true, "redo brings it back for everyone")
 
-	// A viewer: held in view mode, cannot type, can comment on selected text.
 	c := site.Open(t, q("Vee", "viewer", "#059669"))
 	c.Wait("s.live.status === 'online' && s.live.role === 'viewer'")
 	c.Wait("s.text.length > 100")
 	c.OK(c.Text("#presence .gj-presence-badge") == "View only", "a viewer sees the View only badge")
-	// The viewer joins while the others' last edits are still arriving: take the text for the
-	// comparison once it has stopped changing.
 	before := c.State().Str("text")
 	for i := 0; i < 20; i++ {
 		time.Sleep(150 * time.Millisecond)
@@ -128,7 +115,6 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	a.OK(a.Text(".gj-comment .gj-markdown") == "A viewer's comment", "Ana sees it in her comments list")
 	c.OK(c.Count(".gj-comment-reply-row") == 1 && c.Count(".gj-comment-actions") == 0, "the viewer can reply but not resolve or delete")
 
-	// A reply and a resolved thread are announced to the others, and not to the person who made them.
 	c.Fill(".gj-comment-reply-row input", "Thanks, Ana")
 	c.Click(".gj-comment-send")
 	a.WaitFor("the reply announced", `document.querySelector('.gj-announcer').textContent.includes('replied')`)
@@ -137,22 +123,19 @@ func liveEndToEnd(t *testing.T, hubURL, transport, flow string) {
 	c.WaitFor("the resolved thread announced", `document.querySelector('.gj-announcer').textContent.includes('resolved')`)
 	a.OK(!strings.Contains(a.Text(".gj-announcer"), "resolved"), "the person who resolved it is not told")
 
-	// Closing a tab removes its cursor for the others.
 	c.Close()
 	a.WaitForTimeout("Vee to leave", `(s => !s.live.peers.includes('Vee'))(JSON.parse(document.getElementById('state').textContent))`, 40*time.Second)
 	a.OK(true, "a closed browser leaves the presence list")
 
-	// Where the others are is said only on request, and only for a person who asked for the buttons.
 	a.OK(a.Count("#presence .gj-presence-where") == 0, "no 'Where is' button until the person turns it on")
 	a.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({where: 'on'}))`, nil)
 	a.Reload()
 	a.Wait("s.live.status === 'online'")
 	b.Focus("#input")
 	b.Press("Home")
-	b.Press("End") // Bo's cursor moves, so the newcomer is told where it is
+	b.Press("End")
 	a.Wait("s.live.peers.includes('Bo') && s.live.remote >= 1")
 	a.WaitSelector(`#presence .gj-presence-where[data-name="Bo"]`)
-	// (by name: the page before the reload may still be listed for a moment as another Ana)
 	a.OK(a.Text(`#presence .gj-presence-where[data-name="Bo"]`) == "Where is Bo?", "the button names the person: "+a.Text(`#presence .gj-presence-where[data-name="Bo"]`))
 	a.OK(!strings.Contains(a.Text(".gj-announcer"), "paragraph"), "the cursor moves are not announced: "+a.Text(".gj-announcer"))
 	a.Click(`#presence .gj-presence-where[data-name="Bo"]`)

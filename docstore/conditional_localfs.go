@@ -6,8 +6,7 @@ import (
 	"os"
 )
 
-// SaveIf implements ConditionalAdapter. The directory lock (see lockDir) makes the
-// check and the write one step across processes as well as goroutines.
+// SaveIf implements ConditionalAdapter.
 func (a *LocalFSAdapter) SaveIf(_ context.Context, id string, data []byte, prev string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()

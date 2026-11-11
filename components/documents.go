@@ -9,55 +9,23 @@ import (
 	"time"
 )
 
-// The document components -- DocList, Trash, Versions, TagFilter -- are plug-in
-// pieces: each shows one part of a document's life and takes the operations it
-// offers as functions, so it works with any backend (a saver.Session, a REST API,
-// a test double). An operation that is nil is not offered: its control is not
-// drawn. They are controlled components: the host owns the data they show.
-//
-//	<Trash docs={gone} restore={restore} delete={purge} pending={p}>
-//	    <DocList docs={live} trash={trash} open={open} />
-//	</Trash>
-//
-// is, in Go,
-//
-//	Trash(TrashProps{Docs: gone, Restore: restore, Delete: purge, Pending: p,
-//	    Children: []xango.Node{DocList(DocListProps{Docs: live, Trash: trash, Open: open})}})
-
-// Doc is a document as the components list it. ID is a UUID that never changes;
-// Name is a label, and two documents may have the same one.
+// Doc is a document as the components list it.
 type Doc struct {
-	ID, Name string
-	Format   string // the file format's label ("JSON")
-	Size     int
-	Updated  time.Time
-	// Trashed is when the document was moved to the trash; zero if it is not there.
-	Trashed time.Time
-	Tags    []string
-	// Confidential marks a document protected end to end: its real name and tags are inside the
-	// envelope, so a UI draws a lock. NameHidden says the name shown is the placeholder (the
-	// document has not been opened or revealed here, so its real name is not known): the list
-	// offers Reveal for it.
+	ID, Name                 string
+	Format                   string // the file format's label ("JSON")
+	Size                     int
+	Updated                  time.Time
+	Trashed                  time.Time
+	Tags                     []string
 	Confidential, NameHidden bool
 }
 
-// DocFolder is a folder as the components list it: like a document, an ID and a
-// name that need not be unique; Parent is the folder it is in, "" at the top.
-//
-// Confidential marks a folder whose real name is kept inside the envelope: Name is then the
-// placeholder ("Confidential folder") until the host has revealed it, so a UI can draw a lock.
-//
-// NameHidden says the name is still the placeholder (not revealed here): the list offers Reveal.
 type DocFolder struct {
 	ID, Name, Parent string
 	Confidential     bool
 	NameHidden       bool
 }
 
-// shown is the name to draw: the real one, or, for a name that is still the placeholder
-// (NameHidden), the placeholder in the interface's language. The catalog stores the English
-// constant (saver.ConfidentialName) because it is data that packs and other clients read; what
-// is drawn is translated here and never stored.
 func (d Doc) shown() string {
 	if d.NameHidden {
 		return tr("docs.confidentialName", "Confidential document")
@@ -65,7 +33,6 @@ func (d Doc) shown() string {
 	return d.Name
 }
 
-// shown is Doc.shown for a folder (saver.ConfidentialFolderName).
 func (f DocFolder) shown() string {
 	if f.NameHidden {
 		return tr("docs.confidentialFolderName", "Confidential folder")
@@ -75,28 +42,18 @@ func (f DocFolder) shown() string {
 
 // DocVersion is a snapshot of a document.
 type DocVersion struct {
-	Key  string // what the version operations take
-	Time time.Time
-	Size int
-	// Name is the name the person gave the version, Pinned says it is kept when older ones are dropped, and
-	// Author is who saved it.
+	Key    string // what the version operations take
+	Time   time.Time
+	Size   int
 	Name   string
 	Pinned bool
 	Author string
 }
 
-// DocsAction is an operation on documents by ID, like Delete, Restore or Trash.
-// It may take a while (a server call): components run it in the background, with
-// Pending showing that it is running, and show its error if it fails.
 type DocsAction func(ctx context.Context, ids []string) error
 
-// DocAction is an operation on one document (or version) by ID (or key).
 type DocAction func(ctx context.Context, id string) error
 
-// Pending is the Go side of a Promise: it runs an operation in the background
-// and remembers whether it is still running and how it ended, which the
-// components show. Make one with NewPending, whose onChange the host uses to
-// render again; one Pending may be shared by every component on a page.
 type Pending struct {
 	mu     sync.Mutex
 	busy   int
@@ -106,12 +63,8 @@ type Pending struct {
 	Inline bool
 }
 
-// NewPending makes a Pending that calls onChange whenever its state changes (from
-// whichever goroutine the operation ends on).
 func NewPending(onChange func()) *Pending { return &Pending{change: onChange} }
 
-// Run starts f and returns at once; a nil Pending just runs it. While f runs
-// Busy is true; when it fails Err is its error until the next Run.
 func (p *Pending) Run(f func(ctx context.Context) error) {
 	if p == nil {
 		go func() { _ = f(context.Background()) }()
@@ -119,7 +72,7 @@ func (p *Pending) Run(f func(ctx context.Context) error) {
 	}
 	p.mu.Lock()
 	if p.busy == 0 {
-		p.err = nil // a new burst of work: the last one's error has been seen
+		p.err = nil
 	}
 	p.busy++
 	p.mu.Unlock()
@@ -167,8 +120,6 @@ func (p *Pending) Err() error {
 	return p.err
 }
 
-// act is the click handler for an operation on ids; nil when the operation is not
-// offered.
 func act(p *Pending, a DocsAction, ids ...string) func() {
 	if a == nil {
 		return nil
@@ -187,8 +138,6 @@ func docButton(class, label string, disabled bool, on func()) xango.Node {
 	return docButtonAs(class, label, "", disabled, on)
 }
 
-// docButtonAs is docButton with an accessible name (aria-label) that says which row it is for,
-// when the visible words alone ("Make confidential") would be the same on every row.
 func docButtonAs(class, label, accessible string, disabled bool, on func()) xango.Node {
 	attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", class)}
 	if accessible != "" {
@@ -205,7 +154,6 @@ func docButtonAs(class, label, accessible string, disabled bool, on func()) xang
 	return xango.El("button", attrs, xango.Text(label))
 }
 
-// docIcons are the icons of the document components' buttons, by class.
 var docIcons = map[string]string{
 	"gj-doclist-open": "description", "gj-doclist-duplicate": "content_copy", "gj-doclist-trash": "delete",
 	"gj-doclist-delete": "delete_forever", "gj-doclist-refresh": "refresh", "gj-doclist-check": "fact_check", "gj-doclist-download": "download",
@@ -215,7 +163,6 @@ var docIcons = map[string]string{
 	"gj-migrate-pick": "upload_file", "gj-migrate-start": "download",
 }
 
-// pendingError is the line under a component saying what went wrong.
 func pendingError(p *Pending) []xango.Node {
 	if err := p.Err(); err != nil {
 		return []xango.Node{ErrorView("", err)}
@@ -239,84 +186,46 @@ func docMeta(d Doc) string {
 	return strings.Join(parts, " · ")
 }
 
-// --- DocList -------------------------------------------------------------
-
 // DocCheck is the operation behind DocListProps.Check.
 type DocCheck func(ctx context.Context) error
 
 // DocListProps configures DocList.
 type DocListProps struct {
-	// Docs are the documents to list (the ones not in the trash). Current is the
-	// ID of the one being edited, marked in the list.
-	Docs    []Doc
-	Current string
-	// The operations a document row offers; a nil one is left out.
+	Docs      []Doc
+	Current   string
 	Open      DocAction
 	Duplicate DocAction
 	Trash     DocsAction // moves to the trash: see Trash for getting them back
-	// Delete removes a document for good, with no trash in between.
-	Delete DocAction
+	Delete    DocAction
 	// Tag edits a document's tags.
-	Tag func(ctx context.Context, id string, tags []string) error
-	// TagFilter is the tag the list is narrowed to ("" for all), set by
-	// OnTagFilter.
+	Tag         func(ctx context.Context, id string, tags []string) error
 	TagFilter   string
 	OnTagFilter func(tag string)
-	// Title heads the list; Refresh, if set, adds a Refresh button.
-	Title   string
-	Refresh func()
-	// Check reads every document and compares it with its checksum, restoring damaged
-	// ones from their previous copy (saver.Session.Check); nil leaves the button out.
-	Check   DocCheck
-	Pending *Pending
-	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
-	Confirm func(message string, do func())
-	// ConfirmAs, if set, asks the same question with the words of the confirm button (an Asker's
-	// AskWith): the protection switches use it so the dialog says "Make confidential", not
-	// "Delete". Without it they use Confirm, or act at once.
-	ConfirmAs func(label, message string, do func())
+	Title       string
+	Refresh     func()
+	Check       DocCheck
+	Pending     *Pending
+	Confirm     func(message string, do func())
+	ConfirmAs   func(label, message string, do func())
 
-	// Folders are the folders inside the one being shown, and Path the folders from
-	// the top down to it (empty at the top level), drawn as a breadcrumb.
-	// AllFolders, with their Parents, are where a document can be moved to.
 	Folders, Path, AllFolders []DocFolder
-	// OpenFolder goes into a folder ("" is the top level, the breadcrumb's first
-	// item); NewFolder makes one in the folder shown, named by FolderDraft (typed
-	// into a box that reports to OnFolderDraft); RenameFolder and DeleteFolder
-	// (which asks first) and Move (documents to a folder, "" the top level)
-	// complete it. A nil operation leaves its control out.
-	OpenFolder    DocAction
-	NewFolder     func(ctx context.Context, name string) error
-	FolderDraft   string
-	OnFolderDraft func(name string)
-	RenameFolder  func(ctx context.Context, id, name string) error
-	DeleteFolder  DocAction
-	Move          func(ctx context.Context, ids []string, folder string) error
+	OpenFolder                DocAction
+	NewFolder                 func(ctx context.Context, name string) error
+	FolderDraft               string
+	OnFolderDraft             func(name string)
+	RenameFolder              func(ctx context.Context, id, name string) error
+	DeleteFolder              DocAction
+	Move                      func(ctx context.Context, ids []string, folder string) error
 
-	// Link gives the address of a document and FolderLink of a folder; with
-	// CopyLink (which receives that address) they add a Link button to each row.
 	Link, FolderLink func(id string) string
 	CopyLink         func(url string)
-	// Download hands a document over in a format picked from DownloadFormats
-	// (none: one Download button, "" for the format); DownloadFolder hands over
-	// a folder's documents together.
-	// OpenDownload, if set, shows the dialog that asks whether to keep the version
-	// history in an opendocs download.
-	OpenDownload *OpenDownload
-	// DownloadPack hands over a folder ("" for everything) as one .opendoc pack, and
-	// ImportPack asks for a .opendoc file to bring in. Each shows its button when set.
-	DownloadPack    func(ctx context.Context, id string) error
-	ImportPack      func()
-	Download        func(ctx context.Context, id, format string) error
-	DownloadFolder  DocAction
-	DownloadFormats []DocChoice
+	OpenDownload     *OpenDownload
+	DownloadPack     func(ctx context.Context, id string) error
+	ImportPack       func()
+	Download         func(ctx context.Context, id, format string) error
+	DownloadFolder   DocAction
+	DownloadFormats  []DocChoice
 
-	// SetProtection makes a document confidential (true: its name and tags move inside the
-	// encrypted document) or not (false), and SetFolderProtection does the same for a folder's
-	// name. Each is offered as "Make confidential" / "Make not confidential" with a question
-	// first (Confirm) that says what changes; a nil operation leaves the control out. Reveal and
-	// RevealFolder read the real name of a confidential document or folder whose name is still
-	// hidden (Doc.NameHidden), which works once the host holds the key.
 	SetProtection       func(ctx context.Context, id string, confidential bool) error
 	SetFolderProtection func(ctx context.Context, id string, confidential bool) error
 	Reveal              DocAction
@@ -326,8 +235,6 @@ type DocListProps struct {
 // DocChoice is a name and the label shown for it.
 type DocChoice struct{ Name, Label, Group string }
 
-// DocList lists documents, each with the operations the host plugs in: Open,
-// Duplicate, Trash, Delete and a tag editor, and above them a filter by tag.
 func DocList(p DocListProps) xango.Node {
 	busy := p.Pending.Busy()
 	title := p.Title
@@ -417,19 +324,13 @@ func DocList(p DocListProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-doclist")}, children...)
 }
 
-// --- TagFilter -----------------------------------------------------------
-
 // TagFilterProps configures TagFilter.
 type TagFilterProps struct {
-	// Tags are the tags in use (repeats and case differences are folded).
-	Tags []string
-	// Selected is the tag the list is narrowed to, "" for All.
+	Tags     []string
 	Selected string
 	OnSelect func(tag string)
 }
 
-// TagFilter is a row of chips, All and one for each tag, that picks which tag a
-// list is narrowed to.
 func TagFilter(p TagFilterProps) xango.Node {
 	seen := map[string]bool{}
 	var uniq []string
@@ -459,7 +360,6 @@ func TagFilter(p TagFilterProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-tagbar"), xango.A("role", "group"), xango.A("aria-label", tr("docs.filterByTag", "Filter by tag"))}, chips...)
 }
 
-// toggled is ids with id added, or removed if it is there.
 func toggled(ids []string, id string) []string {
 	out := make([]string, 0, len(ids)+1)
 	found := false
@@ -493,7 +393,6 @@ func hasTag(tags []string, want string) bool {
 	return false
 }
 
-// splitTags reads a comma-separated list of tags.
 func splitTags(s string) []string {
 	var out []string
 	for _, t := range strings.Split(s, ",") {
@@ -521,8 +420,6 @@ func byteSize(n int) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// docBreadcrumbs is the trail from the top level to the folder being shown; not
-// there when folders are not in use.
 func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
 	if p.OpenFolder == nil && len(p.Path) == 0 {
 		return xango.Node{}, false
@@ -545,15 +442,13 @@ func docBreadcrumbs(p DocListProps) (xango.Node, bool) {
 	return Breadcrumbs(BreadcrumbsProps{Items: items}), true
 }
 
-// folderRows are the folders in the one shown, each to open, rename or delete,
-// and the form for a new one.
 func folderRows(p DocListProps, busy bool) []xango.Node {
 	var rows []xango.Node
 	for _, f := range p.Folders {
 		id := f.ID
 		nameNodes := []xango.Node{xango.Text("📁 " + f.shown())}
 		if f.Confidential {
-			// The name is the placeholder until revealed: a lock says why.
+			// the name is the placeholder until revealed: a lock says why
 			nameNodes = append(nameNodes, xango.Text(" "), Icon(IconProps{Glyph: "🔒", Size: 14, Label: tr("docs.folderConfidential", "Confidential folder")}))
 		}
 		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name"+confidentialClass(f.Confidential))}, nameNodes...)}
@@ -567,7 +462,7 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 				xango.On("change", func(ev xango.Event) {
 					name := strings.TrimSpace(xango.EventValue[string](ev))
 					if name == "" || name == f.Name {
-						return // a blank or unchanged name is not a rename; folders are found by ID, so renaming while something else runs is safe
+						return
 					}
 					p.Pending.Run(func(ctx context.Context) error { return p.RenameFolder(ctx, id, name) })
 				})}))
@@ -605,7 +500,6 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 	return out
 }
 
-// moveSelect is the "Move to…" menu of one document.
 func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
 	byID := map[string]DocFolder{}
 	for _, f := range p.AllFolders {
@@ -625,7 +519,7 @@ func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
 	}
 	here := ""
 	if len(p.Path) > 0 {
-		here = p.Path[len(p.Path)-1].ID // where the document is: not a place to move it to
+		here = p.Path[len(p.Path)-1].ID
 	}
 	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.moveTo", "Move to…")))}
 	if here != "" {
@@ -653,7 +547,6 @@ func moveSelect(p DocListProps, d Doc, busy bool) xango.Node {
 	return xango.El("select", attrs, opts...)
 }
 
-// linkButton is the Link button of a row: it copies the address of the item.
 func linkButton(p DocListProps, link func(id string) string, id string) []xango.Node {
 	if link == nil || p.CopyLink == nil {
 		return nil
@@ -667,8 +560,6 @@ func linkButton(p DocListProps, link func(id string) string, id string) []xango.
 		Material("link"), xango.Text(tr("docs.link", "Link")))}
 }
 
-// downloadControl is a document's Download: one button, or a "Download as…" menu
-// of the formats offered.
 func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
 	if p.Download == nil {
 		return nil
@@ -679,7 +570,6 @@ func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
 			func() { p.Pending.Run(func(ctx context.Context) error { return p.Download(ctx, id, "") }) })}
 	}
 	opts := []xango.Node{xango.El("option", []xango.Attr{xango.A("value", "-"), xango.A("selected", "selected")}, xango.Text(tr("docs.downloadAs", "Download as…")))}
-	// Choices with a Group are shown under a heading for it, in the order the groups first appear.
 	var groups []string
 	byGroup := map[string][]xango.Node{}
 	for _, f := range p.DownloadFormats {
@@ -708,7 +598,6 @@ func downloadControl(p DocListProps, d Doc, busy bool) []xango.Node {
 	return []xango.Node{xango.El("select", attrs, opts...)}
 }
 
-// confidentialClass marks the name of a confidential folder for styling.
 func confidentialClass(c bool) string {
 	if c {
 		return " gj-doc-confidential"
@@ -716,7 +605,6 @@ func confidentialClass(c bool) string {
 	return ""
 }
 
-// docNameNodes is a document's name, and a lock with its label when it is confidential.
 func docNameNodes(d Doc) []xango.Node {
 	nodes := []xango.Node{xango.Text(d.shown())}
 	if d.Confidential {
@@ -725,9 +613,6 @@ func docNameNodes(d Doc) []xango.Node {
 	return nodes
 }
 
-// docRowLabel names a document for an accessible name that must be unique per row: its shown
-// name, and a short ID when another document in the list is shown under the same name (two
-// confidential documents are both the placeholder).
 func docRowLabel(p DocListProps, d Doc) string {
 	n := 0
 	for _, o := range p.Docs {
@@ -741,7 +626,6 @@ func docRowLabel(p DocListProps, d Doc) string {
 	return d.shown()
 }
 
-// folderRowLabel is docRowLabel for a folder.
 func folderRowLabel(p DocListProps, f DocFolder) string {
 	n := 0
 	for _, o := range p.Folders {
@@ -762,9 +646,6 @@ func shortID(id string) string {
 	return id
 }
 
-// protectionButtons are a document's "Make confidential" / "Make not confidential" and, for one
-// whose name is hidden, "Reveal". The switch asks first (when the list has a Confirm) and says
-// what changes.
 func protectionButtons(p DocListProps, d Doc, busy bool) []xango.Node {
 	var out []xango.Node
 	if p.Reveal != nil && d.Confidential && d.NameHidden {
@@ -785,7 +666,6 @@ func protectionButtons(p DocListProps, d Doc, busy bool) []xango.Node {
 	return out
 }
 
-// folderProtectionButtons are protectionButtons for a folder, whose name is what moves.
 func folderProtectionButtons(p DocListProps, f DocFolder, busy bool) []xango.Node {
 	var out []xango.Node
 	if p.RevealFolder != nil && f.Confidential && f.NameHidden {

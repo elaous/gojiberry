@@ -8,18 +8,6 @@ import (
 	"time"
 )
 
-// Pointer and switch access (roadmap 65). Two ways to use the page without a precise click:
-//
-//   - Dwell click: with the setting on, a button, tab, link, menu entry or field that the pointer rests on is
-//     clicked after a pause (0.7, 1.2 or 2 seconds, the person's choice), with a ring that closes around it so the
-//     person sees it coming and can move away. It clicks once; the pointer has to leave and come back for another.
-//   - Switch scanning: with the setting on, the page's controls are lit one after another, every step; pressing the
-//     switch (Space or Enter) activates the lit one. The last stop is the document: choosing it hands the keyboard to
-//     the editor (scanning waits), and Escape gives it back to the scan.
-//
-// Both look at the page's own controls and never at the canvas, which is the document, and neither sends anything
-// anywhere.
-
 const accessCSS = `
 [data-gj-dwelling]{outline:3px solid #2563eb;outline-offset:2px;animation:gj-dwell var(--gj-dwell-ms,1200ms) linear forwards}
 @keyframes gj-dwell{from{outline-color:rgba(37,99,235,.15)}to{outline-color:#2563eb}}
@@ -27,11 +15,9 @@ const accessCSS = `
 .gj-scan-on{outline:4px solid #f59e0b !important;outline-offset:2px;background-image:linear-gradient(rgba(245,158,11,.18),rgba(245,158,11,.18))}
 `
 
-// dwellMillis and scanMillis are the pauses of the settings.
 func dwellMillis(v string) int { return map[string]int{"fast": 700, "medium": 1200, "slow": 2000}[v] }
 func scanMillis(v string) int  { return map[string]int{"fast": 1000, "medium": 1500, "slow": 2500}[v] }
 
-// clickable is what a dwell can click and a scan can light.
 const clickable = `button, a[href], [role="tab"], [role="menuitem"], [role="option"], summary, select, input[type="checkbox"], input[type="radio"], input[type="button"], input[type="submit"]`
 
 type accessUI struct {
@@ -52,7 +38,6 @@ var access accessUI
 
 func (a *accessUI) doc() js.Value { return js.Global().Get("document") }
 
-// usable says an element can be clicked now: it is shown, enabled, and not the hidden editing input.
 func usable(el js.Value) bool {
 	if el.IsUndefined() || el.IsNull() || el.Get("disabled").Truthy() || el.Call("hasAttribute", "aria-disabled").Truthy() && el.Call("getAttribute", "aria-disabled").String() == "true" {
 		return false
@@ -64,7 +49,6 @@ func usable(el js.Value) bool {
 	return r.Get("width").Float() > 0 && r.Get("height").Float() > 0
 }
 
-// setAccess starts or stops the two helpers for the preferences in force.
 func setAccess(p prefs) {
 	a := &access
 	a.dwell, a.scan = p.Dwell, p.Scan
@@ -82,7 +66,6 @@ func setAccess(p prefs) {
 	}
 }
 
-// start adds the style and the listeners, once.
 func (a *accessUI) start() {
 	a.started = true
 	d := a.doc()
@@ -148,7 +131,6 @@ func (a *accessUI) start() {
 	d.Call("addEventListener", "keydown", key, true)
 }
 
-// beginDwell lights the ring on t and clicks it when the pause is over.
 func (a *accessUI) beginDwell(t js.Value) {
 	a.dwellOn = t
 	a.dwellGen++
@@ -172,7 +154,6 @@ func (a *accessUI) cancelDwell() {
 	a.dwellOn = js.Undefined()
 }
 
-// startScan lights the first control and goes on every step.
 func (a *accessUI) startScan() {
 	a.scanGen++
 	a.scanPaused = false
@@ -207,7 +188,6 @@ func (a *accessUI) unlight() {
 	}
 }
 
-// step lights the next usable control (the document last, as the stop that hands over the keyboard).
 func (a *accessUI) step() {
 	a.unlight()
 	els := a.doc().Call("querySelectorAll", clickable)
@@ -235,7 +215,6 @@ func (a *accessUI) step() {
 	a.publish()
 }
 
-// scanName is what the lit control is called in the page's state: its tab name, id or text.
 func scanName(el js.Value) string {
 	if v := el.Call("getAttribute", "data-tab"); !v.IsNull() {
 		return "tab:" + v.String()
@@ -249,7 +228,6 @@ func scanName(el js.Value) string {
 	return el.Get("tagName").String()
 }
 
-// choose is the switch: it activates the lit control, or hands the keyboard to the document.
 func (a *accessUI) choose() {
 	if a.scanAt < 0 {
 		return
@@ -266,13 +244,10 @@ func (a *accessUI) choose() {
 	}
 	el := a.scanList[a.scanAt]
 	el.Call("click")
-	a.scanAt = -1 // start again from the first control, which the click may have changed
+	a.scanAt = -1
 	a.step()
 }
 
-// publish puts what is lit on the root element (data-gj-scan, and data-gj-scan-paused while the document has the
-// keyboard), where a style or a test can read it. (The page's state element is written when the canvas is drawn,
-// which a scan step does not do.)
 func (a *accessUI) publish() {
 	root := a.doc().Get("documentElement")
 	if a.label == "" {

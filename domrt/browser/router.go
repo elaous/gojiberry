@@ -7,22 +7,13 @@ import (
 	"syscall/js"
 )
 
-// Router wraps the History API (pushState/replaceState) and the
-// browser's back/forward buttons (popstate) behind a single callback.
-// pushState/replaceState fire no event of their own -- only popstate
-// does -- so without this, code driving a page from Go has to
-// duplicate its "update the page for this URL" logic in two places:
-// right after calling pushState, and separately in a popstate
-// listener, taking care to route both through the same function.
-// OnNavigate fires for either case.
+// Router wraps the History API and reports URL changes.
 type Router struct {
 	onNavigate func(u *url.URL)
 	popstate   js.Func
 }
 
-// NewRouter creates a Router and starts listening for the browser's
-// back/forward buttons. Call OnNavigate to register what runs on any
-// URL change.
+// NewRouter creates a Router and starts listening for navigation.
 func NewRouter() *Router {
 	r := &Router{}
 	r.popstate = js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -35,16 +26,12 @@ func NewRouter() *Router {
 	return r
 }
 
-// OnNavigate registers fn to run on any URL change: Navigate, Replace,
-// or the user's own back/forward navigation. Calling it again replaces
-// the previous handler.
+// OnNavigate registers fn to run on any URL change.
 func (r *Router) OnNavigate(fn func(u *url.URL)) {
 	r.onNavigate = fn
 }
 
-// Navigate pushes path onto the history stack (a new Back stop) and
-// calls the OnNavigate handler immediately, since pushState itself
-// fires no event.
+// Navigate pushes path onto the history stack.
 func (r *Router) Navigate(path string) {
 	js.Global().Get("history").Call("pushState", js.Null(), "", path)
 	if r.onNavigate != nil {
@@ -52,9 +39,7 @@ func (r *Router) Navigate(path string) {
 	}
 }
 
-// Replace swaps the current history entry for path -- e.g. for a
-// redirect that shouldn't itself become a Back stop -- and calls the
-// OnNavigate handler immediately.
+// Replace swaps the current history entry for path.
 func (r *Router) Replace(path string) {
 	js.Global().Get("history").Call("replaceState", js.Null(), "", path)
 	if r.onNavigate != nil {

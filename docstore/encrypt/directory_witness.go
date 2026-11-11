@@ -13,39 +13,23 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Witnesses. A transparency log whose one operator holds the key can show different people
-// different logs (a split view). A witness is an independent party that reads the whole log,
-// checks it is consistent with every head it cosigned before (the chain still contains the entry it
-// saw: VerifyLogHead and VerifyLog), and signs "entry Seq of this log has this Hash" with its own
-// key. The directory takes the cosignatures (AddCosignature) and shows them (Cosigned); a client
-// that pins the witnesses' public keys and asks for a quorum of them (directoryclient.Client.
-// Witnesses, WitnessQuorum) refuses a log whose entry at the cosigned number is another one, or
-// that ends before it. To show two clients two logs, the server would need a quorum of witnesses to
-// sign both, and an honest witness signs only one chain.
-//
-// What it does not do: a witness vouches for what it saw, so a client is protected from a split
-// only from the cosigned entry back (entries after the newest cosigned one are not yet vouched
-// for), and witnesses that all collude with the operator, or that are all down, protect no one.
-
 const witnessDomain = "gojiberry-directory-log-witness-v1|"
 
-// WitnessMessage is what a witness signs: the log key, the entry's number and its hash.
+// WitnessMessage is what a witness signs.
 func WitnessMessage(kid string, seq int64, hash string) []byte {
 	return []byte(fmt.Sprintf("%s%s|%d|%s", witnessDomain, kid, seq, hash))
 }
 
-// CosignEntry makes a witness's cosignature of an entry. sign signs with the witness's key (an
-// ed25519.PrivateKey's Sign method wrapped, or a KMS); witness is the name the directory and the
-// clients know that key by.
+// CosignEntry makes a witness's cosignature of an entry.
 func CosignEntry(sign func(msg []byte) []byte, witness, kid string, seq int64, hash string) docstore.DirectoryCosignature {
 	return docstore.DirectoryCosignature{Witness: witness, Kid: kid, Seq: seq, Hash: hash,
 		Sig: base64.StdEncoding.EncodeToString(sign(WitnessMessage(kid, seq, hash)))}
 }
 
-// ErrNotWitnessed is returned when too few known witnesses cosigned the entry.
+// ErrNotWitnessed is returned when too few known witnesses signed.
 var ErrNotWitnessed = errors.New("encrypt: not enough witnesses cosigned the log entry")
 
-// VerifyCosignature checks one witness's signature against its pinned key.
+// VerifyCosignature checks one witness's signature.
 func VerifyCosignature(c docstore.DirectoryCosignature, keys map[string]ed25519.PublicKey) error {
 	pub, ok := keys[c.Witness]
 	sig, err := base64.StdEncoding.DecodeString(c.Sig)
@@ -55,9 +39,7 @@ func VerifyCosignature(c docstore.DirectoryCosignature, keys map[string]ed25519.
 	return nil
 }
 
-// VerifyCosigned counts the distinct pinned witnesses whose signatures on the entry verify and
-// returns ErrNotWitnessed unless there are at least quorum. A signature by a witness that is not
-// pinned, or that does not verify, counts for nothing.
+// VerifyCosigned counts the distinct pinned witnesses that signed.
 func VerifyCosigned(c docstore.DirectoryCosigned, keys map[string]ed25519.PublicKey, quorum int) error {
 	seen := map[string]bool{}
 	for _, w := range c.Witnesses {
@@ -78,9 +60,7 @@ func witnessID(witness string) string {
 	return docstore.DirectoryLogPrefix + "witness/" + hex.EncodeToString([]byte(witness))
 }
 
-// AddCosignature implements docstore.DirectoryWitnessing: it takes a cosignature of a witness in
-// Witnesses, whose signature verifies, for an entry that is the log's own (same hash, signed by
-// the key it names). A witness's older cosignature is replaced by a newer one, never the other way.
+// AddCosignature implements docstore.DirectoryWitnessing.
 func (d *AdapterDirectory) AddCosignature(ctx context.Context, c docstore.DirectoryCosignature) error {
 	if d.Signer == nil {
 		return ErrDirectoryOff
@@ -112,7 +92,7 @@ func (d *AdapterDirectory) AddCosignature(ctx context.Context, c docstore.Direct
 		default:
 			var old docstore.DirectoryCosignature
 			if json.Unmarshal(doc.Data, &old) == nil && old.Seq > c.Seq {
-				return nil // already holds a later one: keep it
+				return nil
 			}
 			prev = docstore.Digest(doc.Data)
 		}
@@ -150,7 +130,7 @@ func (d *AdapterDirectory) Cosigned(ctx context.Context) ([]docstore.DirectoryCo
 		}
 		var c docstore.DirectoryCosignature
 		if json.Unmarshal(doc.Data, &c) != nil || c.Witness != name || VerifyCosignature(c, d.Witnesses) != nil {
-			continue // a record that does not verify counts for nothing
+			continue
 		}
 		k := key{c.Kid, c.Hash, c.Seq}
 		g := groups[k]

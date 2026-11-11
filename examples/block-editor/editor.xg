@@ -5,10 +5,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// EditorProps is the raw, editable view: one thumb-sized input per
-// block, stacked vertically. This is the ingestion side of the
-// decoupling pitch — it never knows what the final document looks
-// like, only how to let a finger edit one block at a time.
 type EditorProps struct {
 	Blocks []crdt.Block
 }

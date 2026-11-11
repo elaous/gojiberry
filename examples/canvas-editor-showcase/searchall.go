@@ -15,19 +15,16 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// searchAll is the state of "Search all documents": a local index of the documents of the place the
-// page saves to (read through that place's own adapter, so an encrypted store is searched after it is
-// unlocked, on this device), and the replace across documents with its preview and undo.
 type searchAll struct {
-	cache    indexCache // the index, loaded from its sealed copy at the first search of a visit
-	read     int        // documents the last sync read (the others were as the index had them)
-	loaded   bool       // the last sync started from the sealed copy kept on this device
+	cache    indexCache
+	read     int
+	loaded   bool
 	synced   bool
 	query    string
 	repl     string
 	opts     canvas.FindOptions
 	hits     []docsearch.Hit
-	keyToID  map[string]string // the store key of a document to its ID, for Open
+	keyToID  map[string]string
 	searched bool
 	plan     *docsearch.Plan
 	applied  []replacedDoc   // what the last replacement wrote, for Undo
@@ -38,7 +35,6 @@ type searchAll struct {
 	target   string
 }
 
-// adapterFor is the adapter of the saver target by name.
 func (u *ui) adapterFor(target string) docstore.Adapter {
 	for _, t := range u.saver.Saver.TargetList() {
 		if t.Name == target {
@@ -48,11 +44,6 @@ func (u *ui) adapterFor(target string) docstore.Adapter {
 	return nil
 }
 
-// searchKeyFor is the key the sealed index of target is kept under, with where it is kept; nil when the
-// index may not be kept (it then lives in memory only). The encrypted store's index is sealed only under a
-// key derived from the unlocked owner key, so it is neither read nor written while the store is locked
-// (or its key list could not be trusted), and never kept under a key the storage can read; any other place
-// uses the per-device key the browser keeps non-extractable (searchvault_js.go).
 func (u *ui) searchKeyFor(target string) ([]byte, sealedVault) {
 	var secret []byte
 	if e := u.enc; e != nil && target == encTarget && (e.broken != nil || e.store.Enabled()) {
@@ -78,8 +69,6 @@ func (u *ui) searchKeyFor(target string) ([]byte, sealedVault) {
 	return key, idbVault{}
 }
 
-// sync reads the list of documents of the current place and brings the index up to date with it. The
-// documents it sees are only the live ones' own files (not old versions, the catalog or the trash).
 func (u *ui) syncSearchAll(ctx context.Context) error {
 	sa := &u.sa
 	target, _ := u.saver.Where()
@@ -110,7 +99,6 @@ func (u *ui) syncSearchAll(ctx context.Context) error {
 	return nil
 }
 
-// runSearch searches the index for the query.
 func (u *ui) runSearchAll(renderUI func()) {
 	sa := &u.sa
 	sa.errText, sa.message, sa.plan = "", "", nil // a finished replacement stays undoable while the person searches on
@@ -132,8 +120,6 @@ func (u *ui) runSearchAll(renderUI func()) {
 	})
 }
 
-// previewReplace works out the replacement across the other documents and shows it; nothing is written.
-// The document open in the editor is left out: the editor's own Replace all is for that one.
 func (u *ui) previewReplaceAll() {
 	sa := &u.sa
 	sa.errText, sa.message, sa.applied = "", "", nil
@@ -167,7 +153,6 @@ func (u *ui) previewReplaceAll() {
 	})
 }
 
-// applyReplaceAll writes the previewed replacement to the ticked documents.
 func (u *ui) applyReplaceAll() {
 	sa := &u.sa
 	if sa.plan == nil {
@@ -205,7 +190,6 @@ func (u *ui) applyReplaceAll() {
 	})
 }
 
-// undoReplaceAll puts the old text back.
 func (u *ui) undoReplaceAll() {
 	sa := &u.sa
 	if len(sa.applied) == 0 {
@@ -229,7 +213,6 @@ func (u *ui) undoReplaceAll() {
 	})
 }
 
-// searchAllPanel is the "Search all documents" section of the Find tab.
 func (u *ui) searchAllPanel(renderUI func()) xango.Node {
 	sa := &u.sa
 	busy := u.saver.Pending.Busy()
@@ -272,7 +255,6 @@ func (u *ui) searchAllPanel(renderUI func()) xango.Node {
 			nodes = append(nodes, xango.El("ul", []xango.Attr{xango.A("id", "sa-hits"), xango.A("style", "padding-left:18px")}, items...))
 		}
 	}
-	// Replace across the other documents.
 	nodes = append(nodes,
 		xango.El("h3", []xango.Attr{xango.A("style", "font-size:14px;margin:12px 0 4px")}, xango.Text(T("search.replaceTitle", "Replace in the other documents"))),
 		xango.El("p", []xango.Attr{xango.A("style", "font-size:12px;margin:2px 0")}, xango.Text(T("search.replaceNote", "Uses the search above (and the options of the bar above). You see what would change first; the open document is left out: use Replace all above for it."))),

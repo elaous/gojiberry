@@ -6,52 +6,22 @@ import (
 	"sort"
 )
 
-// runeRange is one contiguous, inclusive range of Unicode codepoints a
-// font has a real (non-.notdef) glyph for -- sfntCmapRanges' own
-// return type, and what the /symbols HTTP endpoint (server.go)
-// serializes to JSON. Deliberately a range list rather than a flat
-// rune slice: the 'cmap' table itself is already range-encoded
-// (format 4/12's own segments), so this is both the natural parse
-// output and a compact cache/wire representation -- even a huge CJK
-// font's cmap comes out to at most a few thousand ranges, not tens of
-// thousands of individual runes.
 type runeRange struct {
 	Lo rune `json:"lo"`
 	Hi rune `json:"hi"`
 }
 
-// encodingWindowsSymbol/encodingWindowsUCS4/encodingUnicodeFull are
-// 'cmap' subtable encoding IDs cmapPreferredSubtable's own priority
-// order cares about, alongside platformWindows/platformMac/
-// platformUnicode and encodingWindowsBMP already declared in sfnt.go.
 const (
 	encodingWindowsSymbol = 0
 	encodingWindowsUCS4   = 10
-	encodingUnicodeFull   = 4 // 6 also means "full repertoire" on platform 0; both score the same
+	encodingUnicodeFull   = 4
 )
 
-// cmapSubtableRecord is one entry in the 'cmap' table's own subtable
-// directory: which (platform, encoding) it claims to serve, and its
-// own byte offset within the 'cmap' table.
 type cmapSubtableRecord struct {
 	platformID, encodingID uint16
 	offset                 uint32
 }
 
-// sfntCmapRanges extracts the set of Unicode codepoints data's 'cmap'
-// table maps to a real glyph, as a sorted, non-overlapping list of
-// inclusive ranges -- the font's own actual character repertoire,
-// distinct from sfntNames' family/subfamily strings. Picks the "best"
-// subtable via cmapPreferredSubtable, and understands subtable formats
-// 4 (segment mapping, BMP-only, what most Windows/Unicode subtables
-// use), 12 (segmented coverage, full Unicode range), and 0 (byte
-// encoding table, a legacy 256-glyph Mac table) -- together the
-// formats every font actually likely to be installed locally uses. A
-// subtable in a format we don't understand is skipped in favor of the
-// next-best one (cmapPreferredSubtable's own doc comment); if none at
-// all are usable, that's a reported error rather than a silently
-// empty result, so a caller can tell "this font genuinely has no
-// symbols" apart from "we couldn't read this font's cmap at all."
 func sfntCmapRanges(data []byte) ([]runeRange, error) {
 	off, length, err := findSfntTable(data, "cmap")
 	if err != nil {
@@ -87,17 +57,6 @@ func sfntCmapRanges(data []byte) ([]runeRange, error) {
 	return mergeRuneRanges(ranges), nil
 }
 
-// cmapPreferredSubtable scores each subtable record by platform/
-// encoding -- a full-Unicode Windows or Unicode-platform subtable
-// first, then a BMP-only Windows/Unicode one, then any other Unicode-
-// platform subtable, then a Windows Symbol-encoded one (used by
-// dingbat fonts like Wingdings/Webdings, whose own codepoints already
-// sit in the cmap at their real 0xF0xx Private Use Area positions --
-// no extra offsetting needed here), then finally the legacy Macintosh
-// table -- and returns the highest-scoring record whose own format
-// (the uint16 at its offset) is one parseCmapSubtable actually
-// understands, skipping a record we can't decode even if it would
-// otherwise have won on platform/encoding alone.
 func cmapPreferredSubtable(recs []cmapSubtableRecord, table []byte) (cmapSubtableRecord, bool) {
 	score := func(r cmapSubtableRecord) int {
 		switch {
@@ -135,8 +94,6 @@ func cmapPreferredSubtable(recs []cmapSubtableRecord, table []byte) (cmapSubtabl
 	return best, found
 }
 
-// parseCmapSubtable dispatches on sub's own format field to the
-// matching parser.
 func parseCmapSubtable(sub []byte) ([]runeRange, error) {
 	if len(sub) < 2 {
 		return nil, fmt.Errorf("fontserver: 'cmap' subtable too short")
@@ -153,10 +110,6 @@ func parseCmapSubtable(sub []byte) ([]runeRange, error) {
 	}
 }
 
-// parseCmapFormat0 reads a byte encoding table: format(2) length(2)
-// language(2) glyphIdArray[256]byte -- codepoint i (0-255) has a real
-// glyph iff glyphIdArray[i] != 0. A legacy, Mac-only table; rare in
-// modern fonts, but trivial to support alongside 4/12.
 func parseCmapFormat0(sub []byte) ([]runeRange, error) {
 	if len(sub) < 6+256 {
 		return nil, fmt.Errorf("fontserver: truncated format-0 'cmap' subtable")
@@ -171,18 +124,6 @@ func parseCmapFormat0(sub []byte) ([]runeRange, error) {
 	return ranges, nil
 }
 
-// parseCmapFormat4 reads a segment mapping table (BMP-only, what most
-// Windows/Unicode subtables actually use): a list of [startCode,
-// endCode] segments, each either directly covered (idRangeOffset == 0
-// -- every codepoint in the segment has a glyph, glyph ID computed as
-// (code + idDelta) mod 65536) or indirectly covered through
-// glyphIdArray (idRangeOffset != 0 -- an individual codepoint within
-// the segment can still be a "hole", glyphIdArray entry == 0, which
-// this walks and splits into sub-ranges around rather than assuming
-// the whole declared segment is populated). The required terminal
-// sentinel segment (startCode == endCode == 0xFFFF, present in every
-// format-4 subtable) is skipped outright -- it exists only to
-// terminate binary search in a real rasterizer, never a real glyph.
 func parseCmapFormat4(sub []byte) ([]runeRange, error) {
 	if len(sub) < 14 {
 		return nil, fmt.Errorf("fontserver: truncated format-4 'cmap' subtable")
@@ -207,18 +148,9 @@ func parseCmapFormat4(sub []byte) ([]runeRange, error) {
 		}
 		rangeOffset := u16(idRangeOff + i*2)
 		if rangeOffset == 0 {
-			// idDelta doesn't affect whether a glyph exists here (only
-			// its ID), so it's irrelevant to a pure coverage check.
 			ranges = append(ranges, runeRange{Lo: rune(start), Hi: rune(end)})
 			continue
 		}
-		// Indirect lookup through glyphIdArray: each covered
-		// codepoint's own entry sits at idRangeOffset[i]'s own byte
-		// position, plus rangeOffset (already a byte count), plus
-		// twice the codepoint's distance from start -- OpenType's own
-		// "pointer arithmetic from the idRangeOffset slot itself"
-		// formula. A run of consecutive non-zero entries becomes one
-		// range; a zero entry (a genuine hole) breaks the run.
 		runStart := rune(start)
 		haveRun := false
 		for c := uint32(start); c <= uint32(end); c++ {
@@ -243,13 +175,6 @@ func parseCmapFormat4(sub []byte) ([]runeRange, error) {
 	return ranges, nil
 }
 
-// parseCmapFormat12 reads a segmented coverage table (the full-
-// Unicode-range counterpart to format 4): format(2) reserved(2)
-// length(4) language(4) numGroups(4), then numGroups groups of
-// startCharCode(4) endCharCode(4) startGlyphID(4). Unlike format 4,
-// every codepoint within a declared group is covered by definition --
-// there's no indirect-lookup "hole" concept here, so each group maps
-// directly to one runeRange.
 func parseCmapFormat12(sub []byte) ([]runeRange, error) {
 	if len(sub) < 16 {
 		return nil, fmt.Errorf("fontserver: truncated format-12 'cmap' subtable")
@@ -276,11 +201,6 @@ func parseCmapFormat12(sub []byte) ([]runeRange, error) {
 	return ranges, nil
 }
 
-// mergeRuneRanges sorts ranges by Lo and coalesces overlapping or
-// adjacent ones (Hi+1 == next Lo) into the minimal equivalent set --
-// format 4/12 subtables routinely declare runs of adjacent segments/
-// groups that are really one contiguous span, and collapsing them
-// keeps both the in-memory cache and the JSON response compact.
 func mergeRuneRanges(ranges []runeRange) []runeRange {
 	if len(ranges) == 0 {
 		return nil

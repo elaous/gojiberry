@@ -14,8 +14,6 @@ import (
 
 const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
-// What the exporter writes, the importer reads back: links, super and
-// subscript, lists (ordered restarting, nested), a table and a picture.
 func TestDocxRoundTrip(t *testing.T) {
 	c := func(text string, f docfile.Format) docfile.Item {
 		return docfile.Item{Chars: &docfile.Chars{Text: text, Format: f}}
@@ -74,8 +72,6 @@ func TestDocxRoundTrip(t *testing.T) {
 	}
 }
 
-// Merged cells survive the trip through a Word file: the writer emits gridSpan
-// and vMerge, the reader turns them back into merges.
 func TestDocxRoundTripKeepsMergedCells(t *testing.T) {
 	in := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
 		Rows: []docfile.TableRow{
@@ -115,7 +111,6 @@ func TestDocxRoundTripKeepsMergedCells(t *testing.T) {
 	}
 }
 
-// Cell background, alignment and bold survive the trip too.
 func TestDocxRoundTripKeepsCellStyles(t *testing.T) {
 	in := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
 		Rows: []docfile.TableRow{{Cells: []string{"a", "b"}}, {Cells: []string{"c", "d"}}},
@@ -151,8 +146,6 @@ func TestDocxRoundTripKeepsCellStyles(t *testing.T) {
 	}
 }
 
-// Suggestions leave as Word tracked changes and come back as suggestions: the replacement is still one,
-// the struck text is still there to accept or reject, and who and when are kept.
 func TestTrackedChangesRoundTrip(t *testing.T) {
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	mark := func(kind canvas.ProposalKind, id, author string) string {
@@ -194,7 +187,6 @@ func TestTrackedChangesRoundTrip(t *testing.T) {
 	}
 }
 
-// A vertical section comes back as vertical text.
 func TestDocxVerticalTextRoundTrip(t *testing.T) {
 	snap := export.Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, MarginLeft: 96, MarginTop: 96, MarginRight: 96, MarginBottom: 96,
 		Blocks: []export.Block{{Kind: export.Paragraph, Segments: []export.Segment{{Text: "日本語"}}}}}

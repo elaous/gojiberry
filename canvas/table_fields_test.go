@@ -166,7 +166,6 @@ func TestTheSwitchOfATableInTheText(t *testing.T) {
 	if used, _ := plain.ClickAt(plain.switchRect()[0]+2, 5); used {
 		t.Fatal("a table with no formula or field has no switch")
 	}
-	// in the formula view a field cell is changed, not filled in
 	pad2 := o.pad
 	f := NewFormField(FormText, "Name")
 	tb.SetField(1, 0, f)

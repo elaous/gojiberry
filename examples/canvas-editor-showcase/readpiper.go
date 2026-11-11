@@ -18,39 +18,24 @@ import (
 	"github.com/elaous/gojiberry/voice/read/piper"
 )
 
-// The page's side of the Piper adapter (voice/read/piper): the pieces of the browser the adapter's ports stand for.
-// Fetcher is fetch(), Store is the Cache Storage, Output is Web Audio, and Runtime is window.addons.piper (the page keeps its optional add-ons in one object, window.addons), a script the
-// operator adds (reader-voices.json names it, or the page carries it): it has to offer
-//
-//	addons.piper.synthesize(model: Uint8Array, config: string, text: string, lengthScale: number)
-//	    -> Promise<{samples: Float32Array, sampleRate: number}>
-//
-// and may offer addons.piper.cancel(). It runs the voice's ONNX model and turns the text into phonemes; this page does
-// neither. docs/reader-voices.md says more.
-
 var (
 	errNoPiperRuntime    = piper.ErrNoRuntime
 	errPiperNotInstalled = piper.ErrNotInstalled
 )
 
-// piperUI is what the page knows of the downloaded voices.
 var piperUI struct {
-	engine  *piper.Engine
-	cfg     piper.Config
-	checked bool // the configuration was read and the store looked at
-	started bool // ensurePiper began
-	// the catalogue
-	catLoading bool
-	catErr     string
-	// the voice being installed
+	engine      *piper.Engine
+	cfg         piper.Config
+	checked     bool // the configuration was read and the store looked at
+	started     bool // ensurePiper began
+	catLoading  bool
+	catErr      string
 	busy        string
 	done, total int64
 	cancel      context.CancelFunc
 	msg         string
 }
 
-// ensurePiper reads reader-voices.json (optional), loads the runtime script when one is named and looks in the store
-// for the voices already downloaded. It fetches nothing from the voice catalogue: that waits for the person to ask.
 func ensurePiper(renderUI func()) {
 	if piperUI.started {
 		return
@@ -86,7 +71,6 @@ func ensurePiper(renderUI func()) {
 	}()
 }
 
-// loadScript adds a script element and waits for it.
 func loadScript(src string) error {
 	done := make(chan error, 1)
 	ok := js.FuncOf(func(js.Value, []js.Value) any { done <- nil; return nil })
@@ -101,7 +85,6 @@ func loadScript(src string) error {
 	return <-done
 }
 
-// jsFetcher is piper.Fetcher over fetch(), reading the body as it comes so that the progress can be shown.
 type jsFetcher struct{}
 
 func (jsFetcher) Fetch(ctx context.Context, u string, progress func(received, total int64), done func([]byte, error)) {
@@ -172,21 +155,18 @@ func parseInt(s string) (int64, error) {
 	return n, nil
 }
 
-// bytesOf copies a Uint8Array into Go.
 func bytesOf(v js.Value) []byte {
 	b := make([]byte, v.Get("length").Int())
 	js.CopyBytesToGo(b, v)
 	return b
 }
 
-// u8 copies bytes into a new Uint8Array.
 func u8(b []byte) js.Value {
 	a := js.Global().Get("Uint8Array").New(len(b))
 	js.CopyBytesToJS(a, b)
 	return a
 }
 
-// cacheStore is piper.Store over the Cache Storage: the voices stay in the browser, in a cache of their own.
 type cacheStore struct{}
 
 const voiceCache = "gj-reader-voices"
@@ -270,7 +250,6 @@ func (cacheStore) Keys(done func([]string)) {
 	}()
 }
 
-// jsRuntime is piper.Runtime over window.addons.piper.
 type jsRuntime struct{}
 
 func (jsRuntime) gj() js.Value { return addon("piper") }
@@ -304,7 +283,6 @@ func (r jsRuntime) Synthesize(model, config []byte, text string, rate float64, d
 	}
 }
 
-// webAudio is piper.Output over Web Audio.
 type webAudio struct{ ctx js.Value }
 
 func (w *webAudio) context() js.Value {

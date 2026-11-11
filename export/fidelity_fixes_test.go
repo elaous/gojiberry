@@ -17,8 +17,6 @@ func numbered(level int) docfile.Item {
 	return paraItem(docfile.Para{List: docfile.List{Kind: 2, Level: level}})
 }
 
-// A list item's nesting level reaches the exporters (it was dropped on the way to the Snapshot, so every nested
-// list was written flat), and the numbers count within each level.
 func TestNestedListsKeepTheirLevelAndNumbering(t *testing.T) {
 	d := docOf(numbered(0), plain("one\n"), numbered(1), plain("one-a\n"), numbered(1), plain("one-b\n"),
 		bullet(1), plain("dot\n"), numbered(0), plain("two\n"), numbered(1), plain("two-a\n"), plain("end\n"))
@@ -46,8 +44,6 @@ func TestNestedListsKeepTheirLevelAndNumbering(t *testing.T) {
 	}
 }
 
-// Text proposed to be removed must not reach the Markdown or plain text of the editor's own exporters, which
-// cannot strike it: they write the document as it would be with every suggestion accepted.
 func TestMarkdownAndTextWriteSuggestionsAsAccepted(t *testing.T) {
 	del := canvas.ProposalMark{Kind: canvas.ProposalDelete, ID: "s1", Author: "Ann", Time: time.Unix(1700000000, 0)}.String()
 	ins := canvas.ProposalMark{Kind: canvas.ProposalInsert, ID: "s1", Author: "Ann", Time: time.Unix(1700000000, 0)}.String()
@@ -59,13 +55,11 @@ func TestMarkdownAndTextWriteSuggestionsAsAccepted(t *testing.T) {
 			t.Errorf("%s: %q: the removed text is in the file, or the added text is not", format, out)
 		}
 	}
-	// The formats that can show a suggestion still do.
 	if out := string(exportOne(t, r, "html", d)); !strings.Contains(out, "<del") || !strings.Contains(out, "old") {
 		t.Errorf("html lost the tracked deletion: %s", out)
 	}
 }
 
-// The editor's heading command sets a paragraph style, not a size on every run; Markdown writes it as a heading.
 func TestMarkdownWritesStyleHeadings(t *testing.T) {
 	d := docOf(paraItem(docfile.Para{Style: "Heading 2"}), plain("Section\n"), paraItem(docfile.Para{Style: "Title"}), plain("Name\n"), plain("body\n"))
 	out := string(rawOne(t, registry(), "markdown", d))

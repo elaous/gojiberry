@@ -2,10 +2,6 @@
 
 package main
 
-// sample is the starting document and svg the demo picture; only the browser entry
-// point (main.go) uses them, so they live in a js/wasm-only file and the native build
-// (which has no use for them) does not carry dead declarations.
-
 const sample = "# Gojiberry editor\n\n" +
 	"Everything on this canvas is a **xango** tree: pages, a text flow, a picture, a floating note and a table. " +
 	"Switch to *edit* mode and click into the text to type; select text and use Ctrl+B, Ctrl+I, Ctrl+U or the style editor above.\n\n" +

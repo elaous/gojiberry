@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A table cell becomes a form field from the Forms tab (table, row and column); a press on the cell in the text opens it
-// for filling in; the exports carry its words, and "Make the cell plain text again" undoes it.
 func TestAFormFieldInATableCell(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -36,14 +34,12 @@ func TestAFormFieldInATableCell(t *testing.T) {
 	d.WaitSelector("#forms-item-0")
 	d.OK(d.Has("#forms-uncell-0"), "the field is in a table cell")
 
-	// a press on the cell in the text opens it for filling in
-	d.CanvasClick(360, 93) // the cell of the table (the canvas is scrolled sideways in the test window)
+	d.CanvasClick(360, 93)
 	d.WaitSelector("#forms-input")
 	d.Fill("#forms-input", "7")
 	d.Click("#forms-fill-done")
 
-	// the pen at the top right of the table: formulas and fields as they are defined, and a press changes the field
-	d.CanvasClick(429, 35) // the grip of the eye/pen beside the top right corner of the table (wider once filled in)
+	d.CanvasClick(429, 35)
 	d.CanvasClick(360, 93)
 	d.WaitSelector("#forms-editor")
 	d.Click("#forms-edit-done")

@@ -43,7 +43,6 @@ func TestCosignAddsASignerAndKeepsTheOthersValid(t *testing.T) {
 	if rep := r.Verify(); !rep.OK() || len(rep.Signers) != 3 || !bytes.Equal(rep.Signer, pubOf(a)) {
 		t.Errorf("report %+v", rep)
 	}
-	// what a reader that knows one signer sees: the first signature, valid
 	if sig, valid := r.Signature(); sig == nil || !valid || !bytes.Equal(sig.PublicKey, pubOf(a)) {
 		t.Error("the first signature is the pack's signature as ever")
 	}
@@ -59,7 +58,6 @@ func TestCosignRefusals(t *testing.T) {
 	if err := Cosign(f, int64(len(f.b)), a); !errors.Is(err, ErrAlreadySigned) {
 		t.Errorf("the same key twice: %v", err)
 	}
-	// a pack changed after it was signed is not co-signed: flip a byte of the index's hash in the footer
 	g := &memFile{b: build(t, a)}
 	g.b[len(g.b)-footerSize+30] ^= 1
 	if _, err := Open(g, int64(len(g.b))); err == nil {
@@ -79,7 +77,7 @@ func TestOneBadCosignatureFailsThePackAndNamesTheSigner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.sig.More[0].Sig[0] ^= 0xff // as if the second signature had been altered and its frame made good again
+	r.sig.More[0].Sig[0] ^= 0xff
 	s := r.Signers()
 	if len(s) != 2 || !s[0].Valid || s[1].Valid {
 		t.Errorf("signers %+v", s)

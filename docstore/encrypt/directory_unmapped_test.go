@@ -23,8 +23,6 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// An enrollment entry with neither a record nor a key is listed (pseudonym, entry numbers, age),
-// the e-mail never; mending it by an owner operation, or the operator reset, removes it.
 func TestUnmappedAddressesListAndMend(t *testing.T) {
 	ctx := context.Background()
 	e := newOwnerEnv(t)
@@ -41,7 +39,6 @@ func TestUnmappedAddressesListAndMend(t *testing.T) {
 	if b, _ := json.Marshal(u); strings.Contains(string(b), "ana") {
 		t.Errorf("no e-mail in the list: %s", b)
 	}
-	// The owner operates on it: the record is completed and the address is named again.
 	if _, err := e.d.RequestReset(ctx, ana); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +46,6 @@ func TestUnmappedAddressesListAndMend(t *testing.T) {
 		t.Errorf("mended by the owner: %+v", u)
 	}
 
-	// The operator reset settles an address nobody operates on.
 	e2 := newOwnerEnv(t)
 	crashAfterEnroll(t, e2, false)
 	e2.clk.Add(reconcileGrace + time.Second)
@@ -64,7 +60,6 @@ func TestUnmappedAddressesListAndMend(t *testing.T) {
 	}
 }
 
-// The list is capped, the count is whole, and the oldest come first.
 func TestUnmappedAddressesAreCapped(t *testing.T) {
 	d, _, clk := newTestDirectory(t)
 	d.UnmappedCap = 3
@@ -82,7 +77,6 @@ func TestUnmappedAddressesAreCapped(t *testing.T) {
 	}
 }
 
-// The warning is logged when the count changes, not on every sweep.
 func TestUnmappedWarningOncePerChange(t *testing.T) {
 	ctx := context.Background()
 	e := newOwnerEnv(t)
@@ -115,7 +109,6 @@ func TestUnmappedWarningOncePerChange(t *testing.T) {
 	}
 }
 
-// The route is for the operator: others get 403 and spend the failure budget; the operator reads it.
 func TestUnmappedRouteIsOperatorOnly(t *testing.T) {
 	var d *AdapterDirectory
 	e := newDirEnvWith(t, func(x *AdapterDirectory) { d = x }, func(s *docstore.Server) {

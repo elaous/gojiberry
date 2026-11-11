@@ -16,28 +16,14 @@ import (
 	"time"
 )
 
-// The floors below keep the highest record seq seen per document somewhere the store's writers
-// cannot reach, so that a record older than one this client has seen, or a deleted one, is
-// refused (ErrStaleRecord) even where the file frames cannot tell (a document whose files are
-// still v1, or whose files were all replaced). They are the optional belt and braces of
-// docs/encryption-and-passkeys.md C.5: the frames inside the encryption need no state kept on the client; this floor is that state, and the only one.
-
-// KV is the little string store a StorageSeqFloor keeps its values in (the browser's
-// localStorage, see LocalStorageSeqFloor in a js/wasm build).
+// KV is a small string store for floor values.
 type KV interface {
-	// Get returns the value of key, and false when there is none.
 	Get(key string) (string, bool, error)
 	// Set stores value under key.
 	Set(key, value string) error
 }
 
-// ErrFloorDegraded is wrapped by the error a StorageSeqFloor returns from Get and Raise when its
-// KV failed (a private window, blocked or full storage, a damaged value): the floor kept
-// working from memory, and the value returned with it is the memory's (or what the KV did
-// give), so a caller may go on but the floor no longer outlives this process, and the
-// protection it adds ends at the next reload. The readers in this package (the keyring, Sharing)
-// go on as well, and report it through SetFloorDegradedHandler (logged by default); a caller
-// that uses the floor directly sees the error. StorageSeqFloor.Err says the same later.
+// ErrFloorDegraded is wrapped by errors from a degraded floor.
 var ErrFloorDegraded = errors.New("encrypt: the sequence floor's storage failed: it works from memory only and will not survive a reload")
 
 var (
@@ -45,11 +31,7 @@ var (
 	floorLogged  atomic.Pointer[string]
 )
 
-// SetFloorDegradedHandler sets the function called, with an error that wraps ErrFloorDegraded,
-// each time a read or write of a floor made by this package's keyring or Sharing finds its
-// storage failing, so that an application can show it (a banner: "this browser is not
-// remembering what it saw"). Nil restores the default, which logs a message when it changes. It
-// may be called from any goroutine.
+// SetFloorDegradedHandler sets the function called on degradation.
 func SetFloorDegradedHandler(fn func(error)) {
 	if fn == nil {
 		floorHandler.Store(nil)
@@ -70,7 +52,6 @@ func noteFloorDegraded(err error) {
 	}
 }
 
-// floorGet is floor.Get for the readers here: a degraded floor is noted and its value used.
 func floorGet(ctx context.Context, f SeqFloor, id string) (uint64, error) {
 	n, err := f.Get(ctx, id)
 	if errors.Is(err, ErrFloorDegraded) {
@@ -80,7 +61,6 @@ func floorGet(ctx context.Context, f SeqFloor, id string) (uint64, error) {
 	return n, err
 }
 
-// floorRaise is floor.Raise for the writers here, with the same rule.
 func floorRaise(ctx context.Context, f SeqFloor, id string, seq uint64) error {
 	err := f.Raise(ctx, id, seq)
 	if errors.Is(err, ErrFloorDegraded) {
@@ -90,11 +70,10 @@ func floorRaise(ctx context.Context, f SeqFloor, id string, seq uint64) error {
 	return err
 }
 
-// BatchSeqFloor is a SeqFloor that can raise many documents at once, with one write: what
-// VerifyIndex uses (a SeqFloor without it is raised one by one).
+// BatchSeqFloor is a SeqFloor that raises many documents at once.
 type BatchSeqFloor interface {
 	SeqFloor
-	// RaiseMany raises each document to its value, as Raise does for one.
+	// RaiseMany raises each document to its value.
 	RaiseMany(ctx context.Context, seqs map[string]uint64) error
 }
 
@@ -123,16 +102,8 @@ func floorRaiseMany(ctx context.Context, f SeqFloor, seqs map[string]uint64) err
 	return nil
 }
 
-// StorageSeqFloor is a SeqFloor over a KV: one entry per document, so concurrent tabs or
-// processes only ever write their own document's value. The highest value is kept (a lower one
-// changes nothing). If the KV fails (a private window, blocked or full storage) the floor
-// keeps working from memory for the life of the process, as MemorySeqFloor does: availability
-// is not traded for a belt-and-braces layer. It does not do so silently: Get and Raise return
-// the value together with an error that wraps ErrFloorDegraded (the keyring and Sharing here
-// note it and go on, see SetFloorDegradedHandler), and Err keeps the last failure for an
-// application that polls (a page showing that this browser is not remembering what it saw).
+// StorageSeqFloor is a SeqFloor over a KV store.
 type StorageSeqFloor struct {
-	// Prefix is put in front of the document ID to make the key.
 	Prefix string
 	Store  KV
 
@@ -148,15 +119,12 @@ func (f *StorageSeqFloor) fail(err error) error {
 	return fmt.Errorf("%w: %w", ErrFloorDegraded, err)
 }
 
-// Err returns the last error of the KV, nil if it has not failed.
 func (f *StorageSeqFloor) Err() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.err
 }
 
-// stored reads the KV's value: 0 when there is none, an error when the KV failed or holds
-// something that is not a number.
 func (f *StorageSeqFloor) stored(docID string) (uint64, error) {
 	v, ok, err := f.Store.Get(f.Prefix + docID)
 	if err != nil || !ok {
@@ -169,8 +137,7 @@ func (f *StorageSeqFloor) stored(docID string) (uint64, error) {
 	return n, nil
 }
 
-// Get implements SeqFloor: the higher of what the KV holds and what this process raised. When
-// the KV failed the value is the memory's and the error wraps ErrFloorDegraded.
+// Get implements SeqFloor: the higher of KV and memory values.
 func (f *StorageSeqFloor) Get(ctx context.Context, docID string) (uint64, error) {
 	m, _ := f.mem.Get(ctx, docID)
 	n, err := f.stored(docID)
@@ -180,17 +147,13 @@ func (f *StorageSeqFloor) Get(ctx context.Context, docID string) (uint64, error)
 	return max(n, m), nil
 }
 
-// Raise implements SeqFloor. When the KV failed the memory was still raised and the error wraps
-// ErrFloorDegraded.
+// Raise implements SeqFloor; after a KV failure memory is used.
 func (f *StorageSeqFloor) Raise(ctx context.Context, docID string, seq uint64) error {
 	_ = f.mem.Raise(ctx, docID, seq)
-	// What is written is the highest this process knows (its memory holds every value it raised
-	// or read, and at least seq), so a damaged stored value, which cannot be compared, is never
-	// replaced by something lower than what this process has already seen.
 	target, _ := f.mem.Get(ctx, docID)
 	n, err := f.stored(docID)
 	if err != nil {
-		// Writing over a damaged value is the one way to repair it, so it is tried.
+		// writing over a damaged value is the one way to repair it
 		if serr := f.Store.Set(f.Prefix+docID, strconv.FormatUint(target, 10)); serr != nil {
 			return f.fail(errors.Join(err, serr))
 		}
@@ -204,7 +167,7 @@ func (f *StorageSeqFloor) Raise(ctx context.Context, docID string, seq uint64) e
 	return nil
 }
 
-// RaiseMany implements BatchSeqFloor (one KV write per document: the KV has no batch).
+// RaiseMany implements BatchSeqFloor with one KV write per document.
 func (f *StorageSeqFloor) RaiseMany(ctx context.Context, seqs map[string]uint64) error {
 	var errs []error
 	for id, seq := range seqs {
@@ -215,27 +178,8 @@ func (f *StorageSeqFloor) RaiseMany(ctx context.Context, seqs map[string]uint64)
 	return errors.Join(errs...)
 }
 
-// FileSeqFloor is a SeqFloor kept in a JSON file ({"<doc id>": seq}), for a server or a
-// command-line client: keep the file where the store's writers cannot write (not in the store).
-// It is written atomically (a temporary file renamed over it, mode 0600, the file and then its
-// directory synced) and, unlike the browser's floor, a failure to read or write it is returned:
-// a server that cannot keep its floor says so.
-//
-// The file is read once and kept in memory (written through on a raise, and read again only if
-// the file changed on disk: its size or time), so a Get costs a stat and a Raise of a value
-// that does not exceed the held one costs nothing; RaiseMany raises any number of documents
-// with one write. Two processes sharing the file merge by taking the higher value on every
-// write, but a write racing another's may lose a value: give each process its own file, or one
-// writer.
-//
-// Runbook, a damaged floor file: Get and Raise return an error naming the file and nothing is
-// overwritten. Move the file away (or delete it) and run Sharing.VerifyIndex: the floor starts
-// empty and the index raises it for every end-to-end document (the documents the index does not
-// list have no floor until their records are next read). Whatever was only in the lost file,
-// such as a floor for a document that is no longer listed, is gone: that protection resumes from
-// what the store says now, as for a fresh client.
+// FileSeqFloor is a SeqFloor kept in a JSON file.
 type FileSeqFloor struct {
-	// Path is the file. It is created on the first Raise; a missing file is an empty floor.
 	Path string
 
 	mu     sync.Mutex
@@ -263,7 +207,6 @@ func (f *FileSeqFloor) stat() (fileStamp, error) {
 	return fileStamp{true, st.Size(), st.ModTime()}, nil
 }
 
-// load returns the floor's values, reading the file only if it is not the one last seen.
 func (f *FileSeqFloor) load() (map[string]uint64, error) {
 	stamp, err := f.stat()
 	if err != nil {
@@ -305,8 +248,7 @@ func (f *FileSeqFloor) Raise(ctx context.Context, docID string, seq uint64) erro
 	return f.RaiseMany(ctx, map[string]uint64{docID: seq})
 }
 
-// RaiseMany implements BatchSeqFloor: every value that is higher than the one held is raised
-// with one write.
+// RaiseMany implements BatchSeqFloor: each value is raised.
 func (f *FileSeqFloor) RaiseMany(_ context.Context, seqs map[string]uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -333,15 +275,14 @@ func (f *FileSeqFloor) RaiseMany(_ context.Context, seqs map[string]uint64) erro
 	}
 	stamp, err := f.stat()
 	if err != nil {
-		f.loaded = false // written; the next read finds out what is there
+		f.loaded = false
 		return nil
 	}
 	f.seqs, f.stamp, f.loaded = next, stamp, true
 	return nil
 }
 
-// syncDir makes a rename in dir durable. Not every platform can sync a directory (Windows, the
-// js/wasm file system): there it is skipped.
+// skipped where a directory cannot be synced (Windows, js/wasm)
 var syncDir = func(dir string) error {
 	if runtime.GOOS == "windows" || runtime.GOOS == "js" {
 		return nil

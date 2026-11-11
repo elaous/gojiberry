@@ -121,7 +121,6 @@ func TestTheWholeServiceRunsOnASQLStore(t *testing.T) {
 	if code, out := r.login(); code != 200 {
 		t.Fatalf("%d %v", code, out)
 	}
-	// A second first-passkey ceremony for the account loses to the first.
 	code, out := r.login()
 	if code != 200 {
 		t.Fatalf("%d %v", code, out)

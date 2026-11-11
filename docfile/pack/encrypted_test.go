@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A fake sealer: the pack never sees a cipher, so any reversible, recognisable transform
-// shows it only moves bytes. seal is "SEAL" plus the message xor 0x5a.
 func seal(p []byte) []byte {
 	out := []byte("SEAL")
 	for _, c := range p {
@@ -31,8 +29,6 @@ func unseal(env []byte) ([]byte, error) {
 	return out, nil
 }
 
-// buildMixed is a pack with a plain document (id1) and an encrypted one (id2, listed as a
-// placeholder with no tags), signed when key is not nil.
 func buildMixed(t testing.TB, key ed25519.PrivateKey) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -85,17 +81,14 @@ func TestEncryptedRoundTrip(t *testing.T) {
 	if err != nil || got.Name() != "Quarterly numbers" || text(got) != "the secret text" || got.Tags()[0] != "finance" {
 		t.Fatalf("%+v %v", got, err)
 	}
-	// A plain record is read as before, and never goes through open.
 	called := false
 	if d, err := r.ReadWith(id1, func([]byte) ([]byte, error) { called = true; return nil, nil }); err != nil || text(d) != "first" || called {
 		t.Errorf("plain record: %v %v", err, called)
 	}
-	// A failing open is an error that keeps the cause.
 	boom := errors.New("wrong key")
 	if _, err := r.ReadWith(id2, func([]byte) ([]byte, error) { return nil, boom }); !errors.Is(err, boom) {
 		t.Errorf("%v", err)
 	}
-	// An opener that returns another document's bytes is refused by the ID check.
 	other, _ := docfile.Open.Marshal(doc(id3, "x", "y"))
 	if _, err := r.ReadWith(id2, func([]byte) ([]byte, error) { return other, nil }); !errors.Is(err, ErrFormat) {
 		t.Errorf("a document of another ID: %v", err)
@@ -114,7 +107,6 @@ func TestEncryptedWithoutAKey(t *testing.T) {
 		t.Fatalf("%q %v", raw, err)
 	}
 
-	// Compact keeps the envelope and its flag, and the entry's placeholder.
 	var out bytes.Buffer
 	if err := Compact(bytes.NewReader(data), int64(len(data)), &out, key); err != nil {
 		t.Fatal(err)
@@ -130,8 +122,6 @@ func TestEncryptedWithoutAKey(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 
-	// Recover of a pack with a cut footer: without the index an encrypted record cannot be
-	// placed (no ID), so it is counted; with an intact index it is carried as Sealed.
 	rec, err := Recover(bytes.NewReader(data), int64(len(data)))
 	if err != nil || !rec.Complete || len(rec.Docs) != 1 || len(rec.Sealed) != 1 || rec.Skipped != 0 || rec.SealedLost != 0 || rec.Sealed[0].Entry.ID != id2 {
 		t.Fatalf("%+v %v", rec, err)
@@ -183,12 +173,10 @@ func TestAppendEncrypted(t *testing.T) {
 	}
 }
 
-// Every bit of the encrypted record's stored bytes and frame is
-// covered: flipping any is found by Verify (or Open) without a key.
 func TestEncryptedTamperIsDetected(t *testing.T) {
 	data := buildMixed(t, ed25519.NewKeyFromSeed([]byte("opendoc encrypted seed 012345678")[:32]))
 	e := open(t, data).Index().Entries[1]
-	for i := int(e.Offset); i < int(e.Offset+frameHead+e.Length+4); i++ { // padding after the data is not checked
+	for i := int(e.Offset); i < int(e.Offset+frameHead+e.Length+4); i++ {
 		bad := flip(data, i)
 		r, err := Open(bytes.NewReader(bad), int64(len(bad)))
 		if err != nil {
@@ -198,8 +186,6 @@ func TestEncryptedTamperIsDetected(t *testing.T) {
 			t.Fatalf("a flipped bit at %d (record starts at %d) was not noticed", i, e.Offset)
 		}
 	}
-	// The flag in the frame: a rewritten flag with a matching header check still disagrees
-	// with the index, and the other way round.
 	reflag := func(b []byte, off uint64, flags byte) []byte {
 		out := append([]byte(nil), b...)
 		out[off+9] = flags
@@ -225,7 +211,6 @@ func TestPlainPacksCarryNoFlag(t *testing.T) {
 			t.Fatal("flag on a plain entry")
 		}
 	}
-	// A plain index entry marshals without field 10, so old packs are byte-identical.
 	if b := (Entry{ID: id1}).marshal(); bytes.Contains(b, []byte{10 << 3}) {
 		t.Errorf("% x", b)
 	}

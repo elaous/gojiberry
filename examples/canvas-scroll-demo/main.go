@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-scroll-demo shows canvas.ScrollView: a fixed-size
-// viewport onto a much larger canvas object (a table, here), clipped
-// like CSS overflow, scrolled by wheel or scrollbar, with the vertical
-// and horizontal scroll lockable. #state mirrors the state as JSON (the
-// e2e test reads it).
 package main
 
 import (

@@ -234,6 +234,5 @@ func TestListRendersItemsThroughTheRenderProp(t *testing.T) {
 	empty := xango.Text("nothing here")
 	mustContain(t, render(t, List(ListProps[int]{Empty: &empty})), "nothing here")
 	mustContain(t, render(t, List(ListProps[int]{})), `<ul class="gj-list"></ul>`)
-	// A missing Item renders empty <li>s rather than panicking.
 	mustContain(t, render(t, List(ListProps[int]{Items: []int{1, 2}})), `<li class="gj-list-item"></li>`)
 }

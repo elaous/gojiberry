@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// fillDoc returns a Document with every field set to a non-zero value, two elements in
-// every list, so that a codec is checked on all of the model.
 func fillDoc() Document {
 	var d Document
 	n := 0
@@ -22,8 +20,6 @@ func fill(v reflect.Value, n *int, depth int) {
 	*n++
 	switch v.Kind() {
 	case reflect.String:
-		// Some awkward characters on purpose: quotes, a newline, a control character,
-		// non-ASCII text.
 		v.SetString("s" + strconv.Itoa(*n) + " \"q\" \\ \n\t\x01 é世")
 	case reflect.Bool:
 		v.SetBool(true)
@@ -58,8 +54,6 @@ func fill(v reflect.Value, n *int, depth int) {
 	}
 }
 
-// TestDumpGolden writes what tools/pbgolden needs to regenerate the golden files (see that command): it does nothing
-// unless -dump names a directory.
 var dumpDir = flag.String("dump", "", "directory to write rich.txt and schema.proto to, for tools/pbgolden")
 
 func TestDumpGolden(t *testing.T) {

@@ -1,7 +1,3 @@
-// Package docsearch is a search over many documents that runs on the person's own device. The index
-// is built from text that was already decrypted there, and it is stored only sealed (Seal, Open) under
-// a key derived from the owner's secret (DeriveKey), so a server that holds the encrypted documents
-// never sees the words in them, nor the index. Nothing here touches the network.
 package docsearch
 
 import (
@@ -18,7 +14,7 @@ import (
 	"unicode"
 )
 
-// Index holds the title and text of each document, by id. The zero value is ready to use.
+// Index holds the title and text of each document.
 type Index struct {
 	docs map[string]*doc
 }
@@ -26,7 +22,7 @@ type Index struct {
 type doc struct {
 	Title string `json:"title"`
 	Text  string `json:"text"`
-	// Updated is the UnixNano of the stored version this was built from (see Refresh).
+	// Updated is the UnixNano of the stored version.
 	Updated int64    `json:"updated,omitempty"`
 	words   []string // lower-case words of the text, rebuilt on load
 	twds    []string // and of the title
@@ -38,11 +34,10 @@ type Hit struct {
 	Title string
 	// Score ranks the hits, higher first.
 	Score float64
-	// Snippet is a few words of the text around the first match, with the match in place.
+	// Snippet is a few words of text around the match.
 	Snippet string
 }
 
-// Add puts a document in the index, replacing an earlier one with the same id.
 func (ix *Index) Add(id, title, text string) {
 	if ix.docs == nil {
 		ix.docs = map[string]*doc{}
@@ -54,13 +49,12 @@ func newDoc(title, text string) *doc {
 	return &doc{Title: title, Text: text, words: words(text), twds: words(title)}
 }
 
-// Remove drops a document (a deleted one must not stay findable).
+// Remove drops a document.
 func (ix *Index) Remove(id string) { delete(ix.docs, id) }
 
 // Len is how many documents are indexed.
 func (ix *Index) Len() int { return len(ix.docs) }
 
-// words splits text into lower-case words (letters and digits, with ' and - inside a word).
 func words(s string) []string {
 	var out []string
 	var cur []rune
@@ -81,9 +75,7 @@ func words(s string) []string {
 	return slices.DeleteFunc(out, func(w string) bool { return w == "" })
 }
 
-// Search returns the documents that contain every word of the query (the last one may be only the
-// start of a word, as in the middle of typing), best first, at most limit (all when limit <= 0). A word in
-// the title counts more than one in the text, and a word used often more than a word used once.
+// Search returns the documents that contain every query word.
 func (ix *Index) Search(query string, limit int) []Hit {
 	terms := words(query)
 	if len(terms) == 0 {
@@ -128,11 +120,10 @@ func count(ws []string, t string, prefix bool) int {
 	return n
 }
 
-// snippet is about 60 characters of text around the first place a query word starts a word.
 func snippet(text string, terms []string) string {
 	lower := []rune(strings.ToLower(text))
 	rs := []rune(text)
-	if len(lower) != len(rs) { // case folding changed the length: fall back to the start
+	if len(lower) != len(rs) {
 		lower = rs
 	}
 	at := -1
@@ -161,15 +152,14 @@ func snippet(text string, terms []string) string {
 	return s
 }
 
-// DeriveKey makes the 32-byte key that seals an index from a secret the person holds (for the
-// encrypted store, one derived from the owner keys), bound to a label such as the store's name.
+// DeriveKey makes the 32-byte key that seals an index.
 func DeriveKey(secret []byte, label string) ([]byte, error) {
 	return hkdf.Key(sha256.New, secret, nil, "gojiberry/docsearch/v1 "+label, 32)
 }
 
 var magic = []byte("GJSI1")
 
-// Seal serializes the index and encrypts it (AES-256-GCM, fresh nonce each time) under key.
+// Seal serializes the index and encrypts it.
 func (ix *Index) Seal(key []byte) ([]byte, error) {
 	aead, err := newAEAD(key)
 	if err != nil {
@@ -187,8 +177,7 @@ func (ix *Index) Seal(key []byte) ([]byte, error) {
 	return aead.Seal(out, nonce, plain, magic), nil
 }
 
-// ErrCorrupt is returned by Open for data that is not a sealed index, was changed, or was sealed under
-// another key. The caller rebuilds the index from the documents.
+// ErrCorrupt is returned by Open for damaged data.
 var ErrCorrupt = errors.New("docsearch: the index cannot be opened")
 
 // Open decrypts what Seal wrote.

@@ -2,15 +2,12 @@ package docfile
 
 import "strings"
 
-// AttachmentScheme starts the URL of an image kept apart in a version 2 pack (docfile/pack): the SHA-256 of its bytes, in
-// hexadecimal, follows it. Such a URL is only ever in a document inside a pack; it is replaced by the data: URL when the
-// pack is imported.
 const AttachmentScheme = "opendoc-att:"
 
-// AttachmentURL is the reference to the attachment with the given hash (64 hexadecimal characters).
+// AttachmentURL is the reference to an attachment.
 func AttachmentURL(hexSum string) string { return AttachmentScheme + hexSum }
 
-// AttachmentHash returns the hash in a reference made by AttachmentURL.
+// AttachmentHash returns the hash in an attachment reference.
 func AttachmentHash(url string) (string, bool) {
 	h, ok := strings.CutPrefix(url, AttachmentScheme)
 	if !ok || len(h) != 64 {
@@ -24,8 +21,7 @@ func AttachmentHash(url string) (string, bool) {
 	return h, true
 }
 
-// MapImages returns a copy of the document in which each image's URL is replaced by what fn returns for it, when fn says
-// to (the second result), in the earlier versions of the document too. The document is not changed.
+// MapImages returns a copy of the document with images changed.
 func (d Document) MapImages(fn func(url string) (string, bool)) Document {
 	content := make([]Item, len(d.Content))
 	copy(content, d.Content)

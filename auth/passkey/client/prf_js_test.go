@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// fakeBrowser makes navigator.credentials.get answer with a credential whose PRF results are
-// built by the JavaScript source js (an expression); get is what the credential is.
 func fakeBrowser(t *testing.T, credential string) {
 	t.Helper()
 	g := js.Global()
@@ -47,7 +45,6 @@ func TestDeriveKeyOutcomes(t *testing.T) {
 	if errors.Is(ErrNoPRF, ErrPRFLength) || errors.Is(ErrPRFLength, ErrNoPRF) {
 		t.Error("the two are told apart")
 	}
-	// A good answer is returned, and the browser's own buffer is zeroed after the copy.
 	g := js.Global()
 	buf := g.Get("Uint8Array").New(32)
 	for i := 0; i < 32; i++ {
@@ -64,7 +61,6 @@ func TestDeriveKeyOutcomes(t *testing.T) {
 			t.Fatalf("byte %d of the browser's buffer was not zeroed", i)
 		}
 	}
-	// The same through a typed-array view (an offset into a larger buffer).
 	big := g.Get("Uint8Array").New(64)
 	for i := 0; i < 64; i++ {
 		big.SetIndex(i, 9)
@@ -77,13 +73,11 @@ func TestDeriveKeyOutcomes(t *testing.T) {
 	if big.Index(16).Int() != 0 || big.Index(47).Int() != 0 || big.Index(15).Int() != 9 || big.Index(48).Int() != 9 {
 		t.Error("only the view was zeroed")
 	}
-	// A bad credential ID hint is refused before the browser is asked.
 	if _, _, err := DeriveKey(ctx, "!!not base64!!", nil); err == nil {
 		t.Error("bad hint")
 	}
 }
 
-// fakePage gives the node test the page globals CreateLocal reads: a location and a localStorage.
 func fakePage(t *testing.T) {
 	t.Helper()
 	g := js.Global()
@@ -94,8 +88,6 @@ func fakePage(t *testing.T) {
 	g.Get("PublicKeyCredential").Set("parseRequestOptionsFromJSON", g.Get("Function").New("return 1"))
 }
 
-// fakeCredentials replaces navigator.credentials with create and get that run the JavaScript
-// function bodies given (each returns a promise).
 func fakeCredentials(t *testing.T, create, get string) {
 	t.Helper()
 	g := js.Global()
@@ -106,9 +98,6 @@ func fakeCredentials(t *testing.T, create, get string) {
 	g.Get("Object").Call("defineProperty", g, "navigator", desc)
 }
 
-// A passkey that was made but cannot do PRF is still in the authenticator: CreateLocal says
-// ErrNoPRF and still returns its ID, so the page can say which passkey to delete, and stores
-// nothing for it.
 func TestCreateLocalNoPRFStillNamesThePasskey(t *testing.T) {
 	fakePage(t)
 	fakeCredentials(t, "return Promise.resolve({ rawId: new Uint8Array([1,2,3,4]).buffer, getClientExtensionResults: function() { return { prf: { enabled: false } }; } });", "return Promise.reject(new Error('x'));")

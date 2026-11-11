@@ -15,7 +15,6 @@ func mediaDoc(m docfile.MediaItem) docfile.Document {
 	return docOf(plain("Before.\n"), docfile.Item{Media: &m}, plain("After.\n"))
 }
 
-// HTML embeds a clip: a player with its caption track, the title as a caption and the transcript under it.
 func TestHTMLEmbedsAClipWithItsCaptionsAndTranscript(t *testing.T) {
 	r := registry()
 	out := string(exportOne(t, r, "html", mediaDoc(docfile.MediaItem{URL: "https://example.org/talk.mp4", Kind: "video", Title: "The mayor's talk",
@@ -49,7 +48,6 @@ func TestHTMLClipWithAnUnsafeAddressHasNoSource(t *testing.T) {
 	}
 }
 
-// The other formats still write a clip as a link with its transcript.
 func TestOtherFormatsStillWriteAClipAsText(t *testing.T) {
 	d := mediaDoc(docfile.MediaItem{URL: "https://example.org/talk.mp4", Title: "Talk", Captions: vtt})
 	for _, f := range []string{"docx", "rtf", "epub", "markdown"} {
@@ -60,8 +58,6 @@ func TestOtherFormatsStillWriteAClipAsText(t *testing.T) {
 	}
 }
 
-// The page content sits in one <main> landmark (after the contents navigation, if there is one), so a screen
-// reader can jump to it and no text is outside a landmark.
 func TestHTMLPutsTheContentInOneMainLandmark(t *testing.T) {
 	snap := longSnapshot(1)
 	snap.TOC = true
@@ -76,7 +72,6 @@ func TestHTMLPutsTheContentInOneMainLandmark(t *testing.T) {
 	}
 }
 
-// A clip written to HTML and read back is the same clip: address, kind, title, size, caption text and transcript.
 func TestHTMLClipComesBackWhole(t *testing.T) {
 	for _, want := range []docfile.MediaItem{
 		{URL: "https://example.org/talk.mp4", Kind: "video", Title: "The mayor's talk", Captions: vtt, Transcript: "Good morning.\nThanks for coming.", Width: 640, Height: 360},

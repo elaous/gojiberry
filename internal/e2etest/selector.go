@@ -14,10 +14,6 @@ import (
 	"sync"
 )
 
-// The selectors (CSS plus :has-text and :text-is) are resolved in the page by a Go
-// program built to wasm, ./selector. It is built once per test binary, and loaded, with
-// the Go runtime's wasm_exec.js of the same toolchain, into every document.
-
 //go:embed selector_loader.js
 var selectorLoader string
 
@@ -27,7 +23,6 @@ var (
 	selectorErr    error
 )
 
-// selectorScript is the script that installs window.__e2e in a page.
 func selectorScript() (string, error) {
 	selectorOnce.Do(func() { selectorSource, selectorErr = buildSelectorScript() })
 	return selectorSource, selectorErr
@@ -70,9 +65,6 @@ func buildSelectorScript() (string, error) {
 	return strings.Replace(script, "/*WASM_B64*/", base64.StdEncoding.EncodeToString(wasm), 1), nil
 }
 
-// selectorDir is the directory of this package's sources. runtime.Caller reports the path
-// the file was compiled from, which under -trimpath is a module-relative path that is no
-// directory on disk; then the package directory is asked of the go command.
 func selectorDir(file string) (string, error) {
 	if dir := filepath.Dir(file); filepath.IsAbs(dir) {
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {

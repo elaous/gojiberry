@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// config is decoded from config.json at transpile time; it must say what the file says.
 func TestConfigIsTheDecodedConfigJSON(t *testing.T) {
 	raw, err := os.ReadFile("config.json")
 	if err != nil {
@@ -35,7 +34,7 @@ func TestPageUsesTheGivenConfigAndEscapesIt(t *testing.T) {
 	if strings.Contains(got, "<b>") || !strings.Contains(got, "<h1>&lt;b&gt;") || !strings.Contains(got, "&amp; B") {
 		t.Errorf("title not escaped in the heading: %s", got)
 	}
-	// The @title annotation wraps the page in a document, with the stylesheet in the head.
+	// The title annotation wraps the page, stylesheet in head.
 	if !strings.HasPrefix(got, "<html><head><title>resource-imports-demo</title><style ") || !strings.HasSuffix(got, "</body></html>") {
 		t.Errorf("not wrapped in a document: %s", got)
 	}

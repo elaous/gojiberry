@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestADamagedSavedFileIsRestoredFromItsPreviousCopy corrupts the file of a document
-// saved in the browser's localStorage, as a cut write or a bad disk would, and opens it:
-// the text of the previous save comes back, and the status line says what happened.
 func TestADamagedSavedFileIsRestoredFromItsPreviousCopy(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Eval(`localStorage.clear()`, nil)
@@ -31,7 +28,6 @@ func TestADamagedSavedFileIsRestoredFromItsPreviousCopy(t *testing.T) {
 		return Object.values(c.docs).some((e) => e.prev && e.sum);
 	})()`)
 
-	// Cut the current file in half.
 	d.Eval(`(() => {
 		const c = JSON.parse(atob(JSON.parse(localStorage.getItem('showcase:catalog:index')).d));
 		const e = Object.values(c.docs)[0];
@@ -47,17 +43,13 @@ func TestADamagedSavedFileIsRestoredFromItsPreviousCopy(t *testing.T) {
 	text := d.State().Str("text")
 	d.OK(strings.Contains(text, "FIRSTSAVE") && !strings.Contains(text, "SECONDSAVE"), "the previous save's text came back: "+text[:min(60, len(text))])
 
-	// Opening it again reads the restored file, quietly.
 	d.Click(".gj-doclist-item .gj-doclist-open")
 	d.WaitFor("a plain open", `(document.querySelector('.gj-saver-status') || {textContent: ''}).textContent.includes('opened')`)
 
-	// And the check finds nothing wrong now.
 	d.Click(".gj-doclist-check")
 	d.WaitFor("the check's report", `(document.querySelector('.gj-saver-status') || {textContent: ''}).textContent.startsWith('Checked 1 documents: all fine')`)
 }
 
-// TestTheCatalogIsUpdatedUnderTheBrowsersLock holds the Web Lock that another tab would
-// hold while it saves, and shows a save in this page waits for it.
 func TestTheCatalogIsUpdatedUnderTheBrowsersLock(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Eval(`localStorage.clear()`, nil)
@@ -67,15 +59,12 @@ func TestTheCatalogIsUpdatedUnderTheBrowsersLock(t *testing.T) {
 	d.Eval(`(() => { window.__held = new Promise((held) => navigator.locks.request('gojiberry-docstore:showcase:#cas', () => new Promise((release) => { window.__release = release; held(true) }))); return 1 })()`, nil)
 	d.Eval(`window.__held`, nil)
 	d.Click(".gj-saver-save")
-	d.Sleep(700) // a negative check: the save must not get through while the lock is held elsewhere
+	d.Sleep(700)
 	d.OK(d.Count(".gj-doclist-item") == 0, "nothing was saved while the lock was held")
 	d.Eval(`window.__release()`, nil)
 	d.WaitSelector(".gj-doclist-item")
 }
 
-// TestTwoTabsDoNotLoseACatalogUpdate plays the other tab: while this page's save waits
-// for the lock, the catalog is changed under it (a folder the other tab made). The save
-// notices the catalog is not the one it read, starts over on the new one, and keeps both.
 func TestTwoTabsDoNotLoseACatalogUpdate(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Eval(`localStorage.clear()`, nil)
@@ -89,8 +78,7 @@ func TestTwoTabsDoNotLoseACatalogUpdate(t *testing.T) {
 	d.Eval(`window.__held`, nil)
 	d.Fill(".gj-saver-name", "second")
 	d.Click(".gj-saver-save-new")
-	d.Sleep(500) // the save has read the catalog and waits for the lock
-	// The other tab's change, made while the lock is held.
+	d.Sleep(500)
 	d.Eval(`(() => {
 		const k = 'showcase:catalog:index';
 		const rec = JSON.parse(localStorage.getItem(k));

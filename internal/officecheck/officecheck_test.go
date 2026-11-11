@@ -1,7 +1,3 @@
-// Package officecheck tests the importers and exporters against LibreOffice, a program that was not written
-// with them: files it writes are imported, and files they write are opened by it. The tests are skipped when
-// LibreOffice is not installed (GOJIBERRY_SOFFICE names the program; GOJIBERRY_REQUIRE_SOFFICE=1 makes its
-// absence a failure).
 package officecheck
 
 import (
@@ -32,8 +28,6 @@ func soffice(t *testing.T) string {
 	return bin
 }
 
-// convert has LibreOffice convert files to format (a --convert-to argument) into a new directory and returns
-// the directory.
 func convert(t *testing.T, bin, infilter, format string, files ...string) string {
 	t.Helper()
 	out := t.TempDir()
@@ -58,7 +52,6 @@ func corpus(t *testing.T) []string {
 	return files
 }
 
-// words is the text of a document as a list of words, whatever its layout.
 func words(d docfile.Document) []string {
 	var b strings.Builder
 	for _, it := range d.Content {
@@ -77,7 +70,6 @@ func words(d docfile.Document) []string {
 	return normal(strings.Fields(b.String()))
 }
 
-// normal takes the punctuation off the ends of words (a full stop may be a word of its own in a result).
 func normal(ws []string) []string {
 	var out []string
 	for _, w := range ws {
@@ -102,8 +94,6 @@ func stats(d docfile.Document) (headings, lists, tables int) {
 	return
 }
 
-// Documents written by LibreOffice (from the corpus of HTML sources) are read by the Word and OpenDocument
-// importers: every word of the source is in the result, in order, and the structure is there.
 func TestImportersReadWhatLibreOfficeWrites(t *testing.T) {
 	bin := soffice(t)
 	src := corpus(t)
@@ -147,7 +137,6 @@ func TestImportersReadWhatLibreOfficeWrites(t *testing.T) {
 	}
 }
 
-// htmlWords is the text of an HTML source, as words, with the tags taken out.
 func htmlWords(t *testing.T, file string) []string {
 	t.Helper()
 	b, err := os.ReadFile(file)
@@ -174,7 +163,6 @@ func htmlWords(t *testing.T, file string) []string {
 	return normal(strings.Fields(strings.NewReplacer("&amp;", "&", "&lt;", "<").Replace(out.String())))
 }
 
-// missing returns the index of the first word of want that is not found, in order, in got; -1 if all are.
 func missing(want, got []string) int {
 	j := 0
 	for i, w := range want {
@@ -189,8 +177,6 @@ func missing(want, got []string) int {
 	return -1
 }
 
-// The files the exporters write open in LibreOffice and read as the document does: converted to text, the
-// words of the document are there, in order.
 func TestLibreOfficeOpensWhatTheExportersWrite(t *testing.T) {
 	bin := soffice(t)
 	c := func(text string, f docfile.Format) docfile.Item {
@@ -219,7 +205,6 @@ func TestLibreOfficeOpensWhatTheExportersWrite(t *testing.T) {
 		if err := os.WriteFile(f, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		// one directory per format: LibreOffice names the output after the input
 		out := convert(t, bin, "", "txt:Text (encoded):UTF8", f)
 		txt, err := os.ReadFile(filepath.Join(out, "doc.txt"))
 		if err != nil {

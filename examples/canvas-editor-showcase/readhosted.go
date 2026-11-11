@@ -13,11 +13,6 @@ import (
 	"github.com/elaous/gojiberry/voice/read/hosted"
 )
 
-// The page's side of the hosted adapter (voice/read/hosted): the voices of a voice server the operator named as
-// "server" in reader-voices.json. Nothing is asked of the server until a person chooses this reader, and the text
-// goes to it only while it reads; the Reader menu says so, and it is offered only when voices that use the internet
-// are allowed.
-
 var hostedUI struct {
 	engine  *hosted.Engine
 	started bool
@@ -25,10 +20,8 @@ var hostedUI struct {
 	msg     string
 }
 
-// hostedAvailable says the operator named a voice server and the person allowed voices that use the internet.
 func hostedAvailable() bool { return piperUI.cfg.Server != "" && networkVoices() }
 
-// ensureHosted creates the engine and fetches the server's list of voices (once).
 func ensureHosted(renderUI func()) {
 	if hostedUI.started || piperUI.cfg.Server == "" {
 		return
@@ -45,7 +38,6 @@ func ensureHosted(renderUI func()) {
 	})
 }
 
-// serverClient is hosted.Client over fetch(): no cookies, no referrer.
 type serverClient struct{ base string }
 
 func (c serverClient) fetch(ctx context.Context, method, path string, body any, done func([]byte, error)) {

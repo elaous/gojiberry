@@ -7,26 +7,18 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// OpenDownload is the question asked before a document is downloaded as an opendocs
-// (.open) file: whether to keep its version history in the file, and how much of the
-// file each part is.
 type OpenDownload struct {
 	// Name is the document's name.
-	Name string
-	// Current is the size in bytes of the current version in the file, History the size
-	// of all the versions together, and Versions how many there are.
+	Name             string
 	Current, History int64
 	Versions         int
-	// Drop is set when the history is to be left out of the file.
-	Drop bool
+	Drop             bool
 	// OnDrop sets Drop; OnConfirm downloads; OnCancel closes the dialog.
 	OnDrop    func(drop bool)
 	OnConfirm func()
 	OnCancel  func()
 }
 
-// SizeText writes a size as the nearest whole KiB, MiB or GiB, with the exact bytes:
-// "340 KiB (348,160 bytes)". Under 1 KiB it is just the bytes.
 func SizeText(n int64) string {
 	exact := groupDigits(n) + " " + tr("size.bytes", "bytes")
 	if n == 1 {
@@ -62,8 +54,6 @@ func groupDigits(n int64) string {
 	return neg + string(out)
 }
 
-// OpenDownloadDialog is the dialog of an OpenDownload: the size of the current version
-// and of the history, a checkbox to drop the history, and what the file will weigh.
 func OpenDownloadDialog(d OpenDownload) xango.Node {
 	line := func(class, text string) xango.Node {
 		return xango.El("p", []xango.Attr{xango.A("class", class)}, xango.Text(text))

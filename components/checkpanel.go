@@ -6,42 +6,26 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// CheckFinding is one problem a document check found, as the panel lists it.
 type CheckFinding struct {
-	// Rule names the check ("image-alt"); Severity is "error" or "warning" and is written as a word,
-	// not only shown by colour.
-	Rule, Severity string
-	// Message says what is wrong, Fix what to do; Text is a few words of what it concerns.
+	Rule, Severity     string
 	Message, Fix, Text string
-	// FixLabel, if set, is the text of a button that does the fix for the person ("Make it level 2");
-	// "" shows no button, because nothing is safe to do for them.
-	FixLabel string
+	FixLabel           string
 }
 
 // CheckPanelProps configures CheckPanel.
 type CheckPanelProps struct {
-	Findings []CheckFinding
-	// Checked says a check has run (an empty list then means "nothing found", not "not run").
-	Checked bool
-	// OnCheck runs the check; OnGo moves to finding i in the document.
-	OnCheck func()
-	OnGo    func(i int)
-	// OnFix does the fix of finding i; the host checks again afterwards.
-	OnFix func(i int)
-	// Gate is what exporting does about errors: "" (nothing), "warn" or "block"; OnGate sets it. Gate is
-	// shown only when OnGate is set. Overridden says the next export is allowed anyway, and OnOverride
-	// allows it (shown while Gate is "block").
+	Findings   []CheckFinding
+	Checked    bool
+	OnCheck    func()
+	OnGo       func(i int)
+	OnFix      func(i int)
 	Gate       string
 	OnGate     func(mode string)
 	Overridden bool
 	OnOverride func()
-	// GateFloor is the least strict gate the operator allows ("" for none, "warn" or "block"). A choice
-	// below it is shown but cannot be pressed, a note says why, and with "block" there is no override
-	// either. The host must also hold Gate at or above it.
-	GateFloor string
+	GateFloor  string
 }
 
-// gateRank orders the gates by how strict they are.
 func gateRank(g string) int {
 	switch g {
 	case "warn":
@@ -52,8 +36,6 @@ func gateRank(g string) int {
 	return 0
 }
 
-// CheckPanel lists the findings of a document accessibility check, each with its fix and a button
-// that goes to it. The summary is a live status, so a reader hears the result of pressing Check.
 func CheckPanel(p CheckPanelProps) xango.Node {
 	run := xango.El("button", []xango.Attr{xango.A("type", "button"), xango.A("id", "gj-check-run"), xango.A("class", "gj-keybindings-button"),
 		xango.On("click", func(xango.Event) {

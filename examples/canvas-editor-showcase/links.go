@@ -12,13 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Share links (roadmap 75) in the People tab. The model is docstore.ACL, the one a server enforces: a
-// link has a role (view or edit) and an end, the list keeps only a hash of its token, an expired or revoked
-// link opens nothing, and "who can see this" is built from the same list the server checks. Here the list
-// lives in memory like the people above it; against a server, HTTPAdapter.CreateLink, RevokeLink and
-// LoadACL do the same over HTTP.
-
-// linkLives are the lifetimes the person can choose; there is no "never".
 var linkLives = []struct {
 	key  string
 	life time.Duration
@@ -29,7 +22,6 @@ var linkLives = []struct {
 	{"30d", 30 * 24 * time.Hour},
 }
 
-// personLives are the ends the person can give to someone they add by name; the first is no end.
 var personLives = []struct {
 	key  string
 	life time.Duration
@@ -40,35 +32,26 @@ var personLives = []struct {
 	{"30d", 30 * 24 * time.Hour},
 }
 
-// linksUI is the state of the share links section.
 type linksUI struct {
-	people *peopleState
-	role   docstore.Role // the role of the next link
-	life   string        // a key of linkLives
-	// created is the link just made, shown once: the token is not kept anywhere the page can show it again.
-	created string
-	// tried is the token being checked, and result what it gives.
+	people        *peopleState
+	role          docstore.Role // the role of the next link
+	life          string        // a key of linkLives
+	created       string
 	tried, result string
 	err           string // why a link could not be made
 	now           func() time.Time
-	// personLife is a key of personLives: how long the people added next keep their access.
-	personLife string
-	// incoming is a share token found in the address when the page opened (#share=). It is offered to the
-	// person and used only when they choose; use applies it and says what happened, stop takes it back.
-	incoming     string
-	use          func(token string) string
-	stop         func()
-	inUse        bool
-	incomingNote string
+	personLife    string
+	incoming      string
+	use           func(token string) string
+	stop          func()
+	inUse         bool
+	incomingNote  string
 }
 
 func newLinks(p *peopleState) *linksUI {
 	return &linksUI{people: p, role: docstore.RoleViewer, life: "7d", personLife: "never", now: time.Now}
 }
 
-// takeFragment reads a share token from the address (#share=<token>) and removes the fragment from the
-// address bar, so the secret does not stay in the history, a screenshot or a copied address. It returns ""
-// when there is none. Nothing is applied: the token is only offered (see offer).
 func takeFragment() string {
 	loc := js.Global().Get("location")
 	hash := loc.Get("hash").String()
@@ -103,7 +86,6 @@ func personLifeLabel(key string) string {
 	return T("links.personNever", "Until I remove them")
 }
 
-// offer is the notice for a share link that came with the address. It asks; it changes nothing by itself.
 func (l *linksUI) offer() xango.Node {
 	if l.incoming == "" && !l.inUse && l.incomingNote == "" {
 		return xango.Frag()
@@ -137,7 +119,6 @@ func (l *linksUI) lifetime() time.Duration {
 	return docstore.DefaultLinkLife
 }
 
-// roleLabel says what a role lets a person do, in plain words.
 func roleLabel(role string) string {
 	switch role {
 	case "owner":
@@ -160,7 +141,6 @@ func lifeLabel(key string) string {
 	return T("links.life.7d", "7 days")
 }
 
-// when writes a deadline for a person: date and time to the minute.
 func when(t time.Time) string { return t.Local().Format("2 Jan 2006 15:04") }
 
 func (l *linksUI) create() {
@@ -235,11 +215,10 @@ func selectOf(id, label string, current string, values [][2]string, on func(stri
 		xango.El("select", []xango.Attr{xango.A("id", id), xango.On("change", func(e xango.Event) { on(xango.EventValue[string](e)) })}, opts...))
 }
 
-// panel is the section: make a link, check one, and the list of who can see the document.
 func (l *linksUI) panel() xango.Node {
 	now := l.now()
 	acl := l.people.acl
-	acl.PruneLinks(now) // an expired link drops off the list as soon as it ends (acl is a copy of the struct; the map is shared)
+	acl.PruneLinks(now)
 	var lives [][2]string
 	for _, c := range linkLives {
 		lives = append(lives, [2]string{c.key, lifeLabel(c.key)})
@@ -322,7 +301,6 @@ func (l *linksUI) panel() xango.Node {
 	return xango.Frag(l.offer(), xango.El("section", []xango.Attr{xango.A("id", "links"), xango.A("aria-labelledby", "links-heading")}, nodes...))
 }
 
-// state is what #state shows of the links, for the tests.
 func (l *linksUI) state() map[string]any {
 	var out []map[string]any
 	for _, v := range l.people.acl.WhoCanSee(l.now()) {

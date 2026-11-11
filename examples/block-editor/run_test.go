@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// failAfter is a writer that accepts n writes and then fails.
 type failAfter struct{ n int }
 
 var errWrite = errors.New("disk full")
@@ -28,7 +27,6 @@ func TestRunPrintsBothReplicasWithTheSameViews(t *testing.T) {
 	if err := run(&out); err != nil {
 		t.Fatal(err)
 	}
-	// Two replicas, each printed as an editor view and an output view.
 	parts := strings.Split(out.String(), "--- ")
 	if len(parts) != 5 || parts[0] != "" {
 		t.Fatalf("want 4 sections, got %d: %q", len(parts)-1, out.String())
@@ -39,7 +37,6 @@ func TestRunPrintsBothReplicasWithTheSameViews(t *testing.T) {
 			t.Errorf("section %d starts %q, want %q", i, parts[i+1], hdr)
 		}
 	}
-	// After the sync both replicas show the same document.
 	if parts[1] != parts[3] || parts[2] != parts[4] {
 		t.Errorf("the replicas print different views:\n%s", out.String())
 	}
@@ -48,21 +45,18 @@ func TestRunPrintsBothReplicasWithTheSameViews(t *testing.T) {
 			t.Errorf("a view lacks %q", want)
 		}
 	}
-	// Blocks come out in their order: heading, line item, note.
 	if h, l, n := strings.Index(parts[2], "<h1>"), strings.Index(parts[2], `class="line-item"`), strings.Index(parts[2], `class="note"`); h < 0 || h >= l || l >= n {
 		t.Errorf("output order: heading %d, line item %d, note %d", h, l, n)
 	}
 }
 
 func TestRunReportsAWriteFailure(t *testing.T) {
-	// Four lines are written for each view pair; failing at any of the first four stops the first replica.
 	for ok := 0; ok < 4; ok++ {
 		w := &failAfter{n: ok}
 		if err := run(w); !errors.Is(err, errWrite) {
 			t.Errorf("failing after %d writes: err = %v", ok, err)
 		}
 	}
-	// A failure while printing the second replica is reported too.
 	if err := run(&failAfter{n: 5}); !errors.Is(err, errWrite) {
 		t.Errorf("failing in the second replica: err = %v", err)
 	}

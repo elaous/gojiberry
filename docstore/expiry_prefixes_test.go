@@ -16,8 +16,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// Every keyspace constant the program exports must be refused by IsDocumentKey, so the expiry
-// sweeper can never adopt it.
 func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 	keys := map[string]string{
 		"docstore.ExpiryPrefix":          docstore.ExpiryPrefix + "x",
@@ -51,7 +49,6 @@ func TestSystemPrefixesCoverExportedConstants(t *testing.T) {
 	}
 }
 
-// irrelevantPrefixConstants are string constants named like a prefix that are not store keys.
 var irrelevantPrefixConstants = map[string]string{
 	"cachePrefix":          "service-worker cache name",
 	"LWWKindPrefix":        "CRDT op kind",
@@ -62,9 +59,6 @@ var irrelevantPrefixConstants = map[string]string{
 
 var prefixConst = regexp.MustCompile(`(?m)^\s*(?:const\s+)?(\w*[Pp]refix\w*)\s*=\s*"([^"]*)"`)
 
-// TestSystemPrefixesCoverEveryPrefixConstant scans the repository for string constants named
-// "...Prefix" whose value ends in a keyspace separator (":" or "/"): each is either a keyspace IsDocumentKey rejects, or is listed above as not one.
-// A new keyspace added anywhere fails this until it is added to systemPrefixes (docstore/expiry.go).
 func TestSystemPrefixesCoverEveryPrefixConstant(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

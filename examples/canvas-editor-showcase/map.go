@@ -17,14 +17,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The map part of the Pictures tab (build tag exp_map, or experimental): a place named by an address, coordinates or a
-// Plus Code becomes a picture of the OpenStreetMap tiles around it, with a marker, its alt text and the credit as its
-// legend. Coordinates and Plus Codes are read here and ask nobody; an address is looked up with Nominatim, and the map
-// is made of tiles from the tile server: both are the public OpenStreetMap ones unless the operator names others in
-// map.json next to the page ({"nominatim": "https://...", "tiles": "https://.../{z}/{x}/{y}.png"}), or ?osm=<address>
-// points both at a mirror (or, in tests, a stand-in): <address>/search and <address>/tiles/{z}/{x}/{y}.png.
-
-// mapForm is what the form shows.
 type mapForm struct {
 	query string
 	zoom  int // 0 means the default
@@ -66,9 +58,6 @@ func mapConfig() (string, string) {
 	return mapSettings.nominatim, mapSettings.tiles
 }
 
-// mapSources are the page's geocoder and tile source, kept for as long as the page is open so that the same address or
-// tile is not asked for twice, and, for the public OpenStreetMap servers, with a gap between requests (their policy is
-// light use: Nominatim one a second). A server the operator names in map.json gets the cache and no gap.
 var mapSources struct {
 	nom, tileURL string
 	geo          *osmmap.PoliteGeocoder
@@ -92,7 +81,6 @@ func mapClients(nom, tileURL string) (*osmmap.PoliteGeocoder, *osmmap.PoliteTile
 	return s.geo, s.tiles
 }
 
-// mapAddressOK: empty (the public server), https, or an address relative to the page; a tile address needs {z}, {x} and {y}.
 func mapAddressOK(a string, tiles bool) bool {
 	if a == "" {
 		return true
@@ -115,7 +103,6 @@ func mapZoomLabel(z int) string {
 
 var mapZooms = []int{17, 14, 11}
 
-// mapSection is the form in the Pictures tab.
 func mapSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	f := &u.mapUI
 	if f.zoom == 0 {
@@ -142,7 +129,6 @@ func mapSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 	return nodes
 }
 
-// insertMap finds the place, draws the map and puts it at the caret.
 func (u *ui) insertMap(flow func() *canvas.TextFlow, redraw, renderUI func()) {
 	f := &u.mapUI
 	fl := flow()
@@ -163,7 +149,7 @@ func (u *ui) insertMap(flow func() *canvas.TextFlow, redraw, renderUI func()) {
 			return
 		}
 		geo, tileSource := mapClients(nom, tiles)
-		if !ok { // a short Plus Code with the name of a place near it ("9G8F+6W Mountain View")
+		if !ok {
 			var short bool
 			if place, short, err = osmmap.LocateShort(ctx, geo, query); short {
 				if err != nil {
@@ -204,7 +190,7 @@ func (u *ui) insertMap(flow func() *canvas.TextFlow, redraw, renderUI func()) {
 		u.insertBytes(fl, "image/png", data, redraw, renderUI, func(im *canvas.Image) {
 			im.Alt = T("map.alt", "Map of %s", name)
 			im.Legend, im.Credit, im.SourceURL = osmmap.Credit, osmmap.Credit, "https://www.openstreetmap.org/copyright"
-			im.W, im.H = 320, 200 // the map is made at twice this size, so it stays sharp
+			im.W, im.H = 320, 200
 		})
 	}()
 }

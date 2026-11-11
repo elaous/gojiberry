@@ -12,13 +12,8 @@ import (
 	"github.com/elaous/gojiberry/docfile/pack"
 )
 
-// PackFormat is the name of the choice "one .opendoc pack" in a Session's formats: the
-// migrated documents are not saved in a store but gathered into one pack that is handed
-// over (Session.Deliver).
 const PackFormat = "opendoc"
 
-// PackSink gathers migrated documents into a .opendoc pack in memory, the folders of the
-// source becoming folders of the pack.
 type PackSink struct {
 	mu      sync.Mutex
 	buf     bytes.Buffer
@@ -68,8 +63,6 @@ func (s *PackSink) Save(_ context.Context, path []string, name, tag string, doc 
 	return nil
 }
 
-// Bytes finishes the pack (signing it with key if not nil) and returns its bytes, and how
-// many documents it holds.
 func (s *PackSink) Bytes(key ed25519.PrivateKey) ([]byte, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

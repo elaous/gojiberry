@@ -7,23 +7,12 @@ import (
 	"strings"
 )
 
-// A table of contents and an alphabetical index are block inline objects
-// that read the document they sit in each time they are measured and
-// drawn, so they stay current as the text changes. The table lists the
-// outline (see Outline) with page numbers; the index lists the terms
-// marked with Format.Index, each with the pages it is on.
-//
-// Page numbers come from the latest layout drawn, so they settle one
-// redraw after a change.
-
 const (
 	tocLineH = 20.0
 	tocFont  = "14px sans-serif"
 	tocBold  = "bold 15px sans-serif"
 )
 
-// pageOfOffset returns the 1-based page of the line holding stream
-// offset o in the latest drawn layout, or 0 if there is none.
 func (f *TextFlow) pageOfOffset(o int) int {
 	for _, ln := range f.lastLay.Lines {
 		if o >= ln.Start && o <= ln.End {
@@ -33,8 +22,6 @@ func (f *TextFlow) pageOfOffset(o int) int {
 	return 0
 }
 
-// The looks of a table of contents (TOCObject.Style): a dotted leader from each heading to its page number, or the
-// heading and the number alone.
 const (
 	TOCDots  = ""
 	TOCPlain = "plain"
@@ -46,7 +33,6 @@ type TOCObject struct {
 	Title string
 	// Style is TOCDots (the default) or TOCPlain.
 	Style string
-	// Depth is the deepest heading level listed (1 to 3); 0 lists them all.
 	Depth int
 	flow  *TextFlow
 	w     float64
@@ -72,8 +58,6 @@ func (o *TOCObject) Entries() []OutlineEntry {
 	return out
 }
 
-// EntryAt reports the heading whose row of the table, drawn with its top-left corner at (ox, oy), holds the point
-// (x, y): the stream offset to go to. The row of the title and the space around the rows give none.
 func (o *TOCObject) EntryAt(x, y, ox, oy float64) (int, bool) {
 	if x < ox || x > ox+o.w || y < oy {
 		return 0, false
@@ -86,8 +70,6 @@ func (o *TOCObject) EntryAt(x, y, ox, oy float64) (int, bool) {
 	return entries[row].Start, true
 }
 
-// tocTargetAt is where a click at (x, y) on a table of contents or an index goes: the heading or the first mark of
-// the term it lists there.
 func (f *TextFlow) tocTargetAt(x, y float64) (int, bool) {
 	for _, ln := range f.Layout().Lines {
 		for _, po := range ln.Objects {
@@ -142,7 +124,6 @@ func (o *TOCObject) DrawAt(p Painter, x, y float64) {
 			lw := p.MeasureTextWidth(label)
 			p.SetFillStyle("#6b7280")
 			if o.Style == TOCDots {
-				// dots from the end of the heading to the number, on a regular grid so they line up from row to row
 				const step = 6.0
 				dot := p.MeasureTextWidth(".")
 				for dx := tx + p.MeasureTextWidth(text) + 6; dx+dot < x+o.w-lw-6; dx += step {
@@ -158,7 +139,6 @@ func (o *TOCObject) DrawAt(p Painter, x, y float64) {
 	}
 }
 
-// ellipsizeTo shortens s to fit w, with an ellipsis, if it is too wide.
 func ellipsizeTo(p Painter, s string, w float64) string {
 	if p.MeasureTextWidth(s) <= w {
 		return s
@@ -166,16 +146,12 @@ func ellipsizeTo(p Painter, s string, w float64) string {
 	return ellipsize(p, s, w)
 }
 
-// IndexEntry is a term and the pages it is marked on.
 type IndexEntry struct {
 	Term  string
 	Pages []int
-	// Start is the stream offset of the term's first mark: where a click on its row goes.
 	Start int
 }
 
-// IndexObject is an alphabetical index of the terms marked with
-// Format.Index.
 type IndexObject struct {
 	// Title is the heading of the index ("Index" if empty).
 	Title string
@@ -185,7 +161,6 @@ type IndexObject struct {
 
 func (o *IndexObject) bindFlow(f *TextFlow) { o.flow = f }
 
-// charIndexTerms lists the index term of every character of items.
 func charIndexTerms(items []Item) []string {
 	var out []string
 	for _, it := range items {
@@ -201,8 +176,6 @@ func charIndexTerms(items []Item) []string {
 	return out
 }
 
-// IndexEntries returns the marked terms, alphabetically (ignoring case),
-// each with the pages it is on (empty before the first draw).
 func (f *TextFlow) IndexEntries() []IndexEntry {
 	byTerm := map[string]map[int]bool{}
 	first := map[string]int{}
@@ -251,8 +224,6 @@ func (o *IndexObject) Entries() []IndexEntry {
 	return o.flow.IndexEntries()
 }
 
-// EntryAt reports the term whose row, drawn with its top-left corner at (ox, oy), holds the point (x, y): the stream
-// offset of its first mark. The row of the title and the space around the rows give none.
 func (o *IndexObject) EntryAt(x, y, ox, oy float64) (int, bool) {
 	if x < ox || x > ox+o.w || y < oy {
 		return 0, false

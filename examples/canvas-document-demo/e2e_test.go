@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// pageJS is the helpers the test evaluates in the page.
 const pageJS = `window.T = {
   s: () => JSON.parse(document.getElementById('state').textContent),
   near: (a, b, eps = 1.5) => Math.abs(a - b) <= eps,
@@ -22,16 +21,10 @@ T.vp = T.s().viewport;
 T.view = (cx, cy) => { const s = T.s(); return [T.vp[0] + cx - s.scroll[0], T.vp[1] + cy - s.scroll[1]]; };
 true`
 
-// TestEndToEnd drives the demo in headless Chromium: the page layout (breaks,
-// column configs persisting across pages, headers/footers/page numbers),
-// scrolling and clipping, then in edit mode dragging a column grip, moving the
-// picture (snapping, with text re-wrapping around it) and editing/formatting the
-// floating note.
 func TestEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Eval(pageJS, nil)
 	ok := d.OK
-	// is evaluates a JavaScript expression of the current state s and the helpers T.
 	is := func(expr string) bool { return d.Bool(`(s => !!(` + expr + `))(T.s())`) }
 	num := func(expr string) float64 { var v float64; d.Eval(`(s => `+expr+`)(T.s())`, &v); return v }
 	str := func(expr string) string { return d.Str(`(s => ` + expr + `)(T.s())`) }
@@ -58,7 +51,6 @@ func TestEndToEnd(t *testing.T) {
 	}
 	page := func(n int) string { return fmt.Sprintf("s.lines.filter((l) => l.page === %d)", n) }
 
-	// --- layout ---
 	ok(is("s.pageCount === 4 && s.pagesUsed === 4 && !s.overflow"), "text fills four pages without overflowing")
 	ok(is("(k => k.has('natural') && k.has('page') && k.has('column'))(new Set(s.breaks.map((b) => b.kind)))"), "natural, user page and user column breaks all occur")
 	ok(is("(b => b.page === 1 && b.col === 0)(s.breaks.find((b) => b.kind === 'column'))"), "the column break was in the first column of page 1")
@@ -67,7 +59,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.bands.some((b) => b.page === 1 && b.xs.length === 2)"), "the column config carries on to page 1 (from a natural break)")
 	ok(is("s.breaks.some((b) => b.kind === 'natural' && b.page === 0 && b.col === 1)"), "a natural page break after the last column of page 0")
 
-	// The Markdown transform: formats, an inline image fitted into the page, a table.
 	for _, k := range []string{"underline", "strike", "super", "sub", "background"} {
 		ok(is("s.decorations."+k+" > 0"), "markdown produced a "+k+" run")
 	}
@@ -77,7 +68,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.bands.some((b) => b.page === 3 && b.xs.length === 1)"), "later pages use the single-column config set after the columns")
 	ok(is(`JSON.stringify(s.pageNumbers) === JSON.stringify(['', 'Page 1', 'Page 2', '— i —'])`), fmt.Sprint("per-page page-number configs: ", js("s.pageNumbers")))
 
-	// --- scrolling and clipping ---
 	ok(is("s.content[1] > s.viewport[3]"), "the document is taller than the viewport")
 	ok(d.Pixel(int(vx+vw)+6, int(vy)+100)[3] == 0 && d.Pixel(int(vx)+100, int(vy+vh)+6)[3] == 0, "the pages are clipped to the viewport")
 	scrollTo(450)
@@ -85,10 +75,8 @@ func TestEndToEnd(t *testing.T) {
 	hx, hy := view(num("s.pageRects[1][0]")+60, num("s.pageRects[1][1]")+28)
 	ok(d.Pixel(int(hx), int(hy))[3] != 0, "the scrolled pages are redrawn")
 
-	// --- edit mode ---
 	d.ToggleMode()
 
-	// Drag a column grip on page 0: the config is shared, so page 1's columns follow.
 	scrollTo(150)
 	band0 := fl(`(b => [...b.widths, b.gap, b.xs[0], b.top])(s.bands.find((b) => b.page === 0 && b.xs.length === 2))`)
 	w0, w1, gap, x0, top := band0[0], band0[1], band0[2], band0[3], band0[4]
@@ -101,8 +89,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(near(after1[0], after0[0]), "the next page keeps the new column widths")
 	ok(is("!s.overflow && s.pagesUsed === 4"), "the document still fits")
 
-	// Headers, footers and page numbers: double click to edit; per page =
-	// previous page or new; the page number is selectable and has settings.
 	ok(is("s.headers[1] === 'Gojiberry Quarterly' && s.headers[2] === 'Gojiberry Quarterly' && s.headers[3] === ''"), "headers inherit down the pages (page 3 removed it)")
 	scrollTo(num("s.pageRects[1][1]") - 40)
 	h1x, h1y := view(num("s.pageRects[1][0]")+100, num("s.pageRects[1][1]")+30)
@@ -114,7 +100,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.headers[0] === 'Gojiberry Quarterly' && s.headers[1] === 'Gojiberry Quarterly (draft)' && s.headers[2] === 'Gojiberry Quarterly (draft)'"), fmt.Sprint("typing makes page 1 its own header, which page 2 inherits: ", js("s.headers")))
 	d.Press("Escape")
 
-	// Select page number 2 (the third page) and change its format.
 	scrollTo(num("s.pageRects[2][1]") + num("s.pageRects[2][3]") - 400)
 	nr := fl("s.numberRects[2]")
 	nx, ny := view(nr[0]+nr[2]/2, nr[1]+nr[3]/2)
@@ -122,7 +107,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.numberSelected.ok && s.numberSelected.page === 2 && s.menu.open"), "clicking a page number selects it and opens its settings menu")
 	labelIdx := int(num("s.menu.labels.findIndex((l) => l.trim().endsWith('Page {n} of {total}'))"))
 	ok(labelIdx >= 0, fmt.Sprint("the menu offers formats: ", js("s.menu.labels.join(' | ')")))
-	// Menu rows: 28px items, 9px separators (labelled "").
 	menu := fl("s.menu.rect")
 	var labels []string
 	d.Eval("T.s().menu.labels", &labels)
@@ -139,7 +123,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.pageNumbers[2] === 'Page 2 of 4' && s.pageNumbers[1] === 'Page 1' && s.pageNumbers[3] === '— i —'"), fmt.Sprint("the format applies from that page on, earlier pages keep theirs: ", js("s.pageNumbers")))
 	ok(is("!s.menu.open"), "the menu closes")
 
-	// Image: move (snaps to 5) and the text wraps around it.
 	scrollTo(num("s.image.visible[1]") - 200)
 	ok(is("s.image.wrap && !T.intrudes("+page(1)+", T.grow(s.image.visible))"), "text wraps around the picture")
 	im := fl("s.image.visible")
@@ -147,7 +130,6 @@ func TestEndToEnd(t *testing.T) {
 	d.CanvasDrag(ix, iy, ix-83, iy)
 	ok(is("s.image.anchor.Page === 1 && s.image.anchor.X === 245 && s.image.anchor.Y === 150"), fmt.Sprint("the anchored picture moved left, snapping to 5 relative to its page: ", js("s.image.anchor")))
 	ok(is("!T.intrudes("+page(1)+", T.grow(s.image.visible))"), "text re-wrapped around the moved picture")
-	// Wrap button (4th in the toolbar) off: text ignores the picture.
 	im = fl("s.image.visible")
 	wx, wy := view(im[0]+3*56+10, im[1]-17)
 	d.CanvasClick(wx, wy)
@@ -155,12 +137,11 @@ func TestEndToEnd(t *testing.T) {
 	d.CanvasClick(wx, wy)
 	ok(is("s.image.wrap"), "wrap back on")
 
-	// Floating note: edit and format.
 	scrollTo(num("s.floating.y") - 220)
 	f := fl("[s.floating.x, s.floating.y, s.floating.w]")
 	fX, fY, fW := f[0], f[1], f[2]
 	ok(is("s.floating.wrap && s.floating.text.startsWith('Floating note')"), "floating note is there")
-	clickView(fX+fW-14, fY+14) // right of the first line of text: caret at its end
+	clickView(fX+fW-14, fY+14)
 	ok(is("s.floating.editing"), "clicking into the note starts editing")
 	d.Press("Shift+Home")
 	sel := fl("s.floating.selection")
@@ -175,7 +156,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Escape")
 	ok(is("!s.floating.editing"), "Escape stops editing")
 
-	// --- more formatting: text color and highlight from the toolbar palettes ---
 	x, y := view(fX+fW-14, fY+14)
 	d.CanvasMove(x, y)
 	d.CanvasClick(x, y)
@@ -193,7 +173,6 @@ func TestEndToEnd(t *testing.T) {
 	pick("mark", 0) // Yellow
 	ok(is("s.floating.items.some((it) => it.Format && it.Format.Background === '#fff475' && it.Format.Color === '#d93025')"), "and highlighted, keeping the color")
 
-	// --- auto-close pairs ---
 	d.Press("ArrowRight") // collapse to the end of the selection
 	d.Type(" (x")
 	ok(is("s.floating.text.includes(' (x)') && s.floating.text.split(')').length === 2"), "typing ( inserts the closing ): "+str("s.floating.text"))
@@ -203,7 +182,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Backspace")
 	ok(is("!s.floating.text.includes('[') && !s.floating.text.includes(']')"), "Backspace between a pair deletes both")
 
-	// --- auto-complete from the words in the text ---
 	d.Type(" Flo")
 	ok(is("s.floating.suggestions.includes('Floating')"), fmt.Sprint("typing a prefix offers completions: ", js("s.floating.suggestions")))
 	d.Press("Tab")
@@ -213,7 +191,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Escape")
 	ok(is("s.floating.suggestions.length === 0 && s.floating.editing"), "Escape dismisses the popup but keeps editing")
 
-	// --- clipboard (through the browser's copy/paste events) ---
 	d.Press("Control+A")
 	ok(is("s.floating.selection[1] - s.floating.selection[0] === s.floating.text.length"), "Ctrl+A selects all the text")
 	copied := d.Str(`(() => {
@@ -233,20 +210,17 @@ func TestEndToEnd(t *testing.T) {
 	ok(str("s.floating.text") == "", "cut removes the selection")
 	d.Type("Floating note")
 
-	// --- select text in the document, copy its format, paste it into the note ---
 	scrollTo(0)
 	hd := fl("(l => [l.x, l.y])(s.lines.find((l) => l.page === 0))")
 	dblView(hd[0]+20, hd[1]+14)
 	ok(str("s.flowSelection.text") == "Quarterly", "double click selects a word of the document: "+str("s.flowSelection.text"))
 	d.Press("Control+Alt+C")
 	ok(is("s.formatClipboard.has && s.formatClipboard.format.Scale === 2 && s.formatClipboard.format.FontWeight === 700"), fmt.Sprint("Ctrl+Alt+C copies the selection's common format: ", js("JSON.stringify(s.formatClipboard.format)")))
-	// A drag-selection across differently formatted text copies only what they share.
 	body := fl("(l => [l.x, l.y])(s.lines.filter((l) => l.page === 0)[2])")
 	dragView(hd[0]+2, hd[1]+14, body[0]+150, body[1]+8)
 	ok(is("s.flowSelection.text.includes('Quarterly Report') && s.flowSelection.text.includes('Markdown')"), "dragging selects across paragraphs")
 	d.Press("Control+Alt+C")
 	ok(is("s.formatClipboard.format.Scale === 0 && s.formatClipboard.format.FontWeight === 0"), "a mixed selection has no common size or weight")
-	// Back to the heading word, then into the note.
 	dblView(hd[0]+20, hd[1]+14)
 	d.Press("Control+Alt+C")
 	f = fl("[s.floating.x, s.floating.y, s.floating.w]")
@@ -259,7 +233,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Control+B")
 	ok(is("s.floating.items[0].Format.FontWeight === 400"), "Ctrl+B toggles bold off (keymap command)")
 
-	// --- registered features: multi-cursor, line operations, Markdown clipboard ---
 	d.Type("a a a")
 	d.Press("Home")
 	d.Press("ArrowRight")
@@ -286,13 +259,11 @@ func TestEndToEnd(t *testing.T) {
 	ok(num("s.floating.cursors") == 2, "Alt+Shift+I puts a cursor at the end of each selected line")
 	d.Press("Escape")
 
-	// Markdown clipboard (the page needs clipboard permission).
 	d.GrantClipboard()
 	d.Press("Control+A")
 	d.Press("Control+Shift+C")
 	d.Sleep(100)
 	md := d.Str(`navigator.clipboard.readText()`)
-	// The note's text is at heading size (Scale 2), which Markdown writes as '#'.
 	ok(md == "# two\n# one", fmt.Sprintf("Ctrl+Shift+C copies the selection as Markdown: %q", md))
 	d.Eval(`navigator.clipboard.writeText('plain **loud** ~~old~~')`, nil)
 	d.Press("Control+A")
@@ -302,7 +273,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("(loud => loud && loud.Format.FontWeight === 700)(s.floating.items.find((i) => i.Text === 'loud')) && (old => old && old.Format.Strike)(s.floating.items.find((i) => i.Text === 'old'))"), "the pasted text carries bold and strike formatting")
 	d.Press("Escape")
 
-	// --- the floating table: text wraps around it; its icon drags it ---
 	scrollTo(num("s.table.rect[1]") - 260)
 	ok(is("s.table.wrap && !T.intrudes("+page(3)+", T.grow(s.table.rect))"), "text wraps around the floating table")
 	ok(is("s.table.anchor.Page === 3 && s.table.anchor.X === 300"), "the table is anchored to page 3")
@@ -312,7 +282,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(is("s.table.anchor.X === 245 && s.table.anchor.Page === 3"), fmt.Sprint("dragging the table icon moves the table, snapping to 5 relative to its page: ", js("s.table.anchor")))
 	ok(is("!T.intrudes("+page(3)+", T.grow(s.table.rect)) && !s.overflow"), "text re-wrapped around the moved table")
 
-	// Move the note by its toolbar's Move button: both axes, snapping.
 	scrollTo(num("s.floating.y") - 220)
 	f = fl("[s.floating.x, s.floating.y]")
 	mx, my := view(f[0]+20, f[1]-17)

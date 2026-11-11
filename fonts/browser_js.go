@@ -12,18 +12,10 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// ErrUnsupported is returned by BrowserLocal when the browser has no
-// Local Font Access API (window.queryLocalFonts, Chromium-based browsers).
 var ErrUnsupported = errors.New("fonts: this browser cannot list locally installed fonts")
 
 type browserLocal struct{}
 
-// BrowserLocal returns a repository of the fonts installed on the user's
-// own machine, listed with the browser's Local Font Access API. The
-// browser asks the user for permission the first time, so call Fonts
-// from a user gesture (a click), with a context that has a deadline: the
-// browser's prompt may never be answered. Its fonts have no URLs: CSS uses
-// installed fonts by name.
 func BrowserLocal() Repository { return browserLocal{} }
 
 func (browserLocal) Name() string { return "This device" }
@@ -33,8 +25,6 @@ func (b browserLocal) Fonts(ctx context.Context) ([]Font, error) {
 	if q.Type() != js.TypeFunction {
 		return nil, ErrUnsupported
 	}
-	// The browser's permission prompt can sit unanswered indefinitely, so
-	// wait for it no longer than ctx allows.
 	type result struct {
 		list js.Value
 		err  error
@@ -77,10 +67,7 @@ func (b browserLocal) Fonts(ctx context.Context) ([]Font, error) {
 	return out, nil
 }
 
-// classifyStyle derives a CSS weight and italic flag from a style name
-// like "Bold Italic" or "Semibold".
 func classifyStyle(style string) (weight int, italic bool) {
-	// "Extra Bold", "Semi-Bold" and "ExtraBold" are one name.
 	s := strings.NewReplacer(" ", "", "-", "", "_", "").Replace(strings.ToLower(style))
 	italic = strings.Contains(s, "italic") || strings.Contains(s, "oblique")
 	for _, w := range []struct {

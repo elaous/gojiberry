@@ -22,7 +22,6 @@ const (
 	FormSelect   FormKind = "select" // one of Options
 )
 
-// FormKinds lists the kinds in the order a bar of them shows.
 var FormKinds = []FormKind{FormText, FormTextArea, FormEmail, FormNumber, FormPhone, FormURL, FormDate, FormCheckbox, FormSelect}
 
 // Valid reports whether k is a kind this package knows.
@@ -35,9 +34,8 @@ func (k FormKind) Valid() bool {
 	return false
 }
 
-// What a form field's Problem reports; a host turns them into words.
 const (
-	FormProblemRequired = "required" // a required field is empty (or a required checkbox is not ticked)
+	FormProblemRequired = "required"
 	FormProblemEmail    = "email"
 	FormProblemNumber   = "number"
 	FormProblemPhone    = "phone"
@@ -47,38 +45,27 @@ const (
 	FormProblemPattern  = "pattern" // the value does not match Pattern
 )
 
-// FormFieldObject is a field of a form in the text: it keeps what the person writes in it (Value) and shows, next to its
-// label, a small eye (fill the field in) and, unless the field is locked, a small pen (change what the field is: its
-// label, kind, placeholder, pattern, options). A locked field cannot have its properties changed, only its value.
-//
-// The canvas draws the field and tells the host which icon was pressed (OnFill, OnEdit); the host asks for the value and
-// the properties, as a panel or a dialog, because the canvas has no text boxes of its own. A checkbox is ticked by
-// pressing it.
 type FormFieldObject struct {
-	Kind FormKind
-	// Name identifies the field in the data a form gives back; Label is what the person sees.
+	Kind        FormKind
 	Name, Label string
 	// Placeholder is shown, dimmed, while the field is empty.
 	Placeholder string
-	// Pattern is a regular expression (Go syntax) the whole value has to match; "" for none.
+	// Pattern: a Go regular expression the whole value must match.
 	Pattern  string
 	Required bool
 	// Options are the choices of a FormSelect.
 	Options []string
-	// Value is what the person wrote: the text, the number as text, the date as 2006-01-02, "true" for a ticked box.
+	// Value is what the person wrote, as text.
 	Value string
-	// Locked keeps the properties as they are: no pen, and the host refuses to change them.
-	Locked bool
-	// LockKey and LockSig are the seal of the lock (package formseal): the public key that locked it and its signature
-	// over the properties, both base64. The canvas only keeps them; the host makes and checks them.
+	// Locked fixes the properties; the host refuses changes.
+	Locked           bool
 	LockKey, LockSig string
 
-	// OnFill and OnEdit are called when the eye or the pen is pressed.
 	OnFill func(*FormFieldObject)
 	OnEdit func(*FormFieldObject)
 
 	w, h         float64
-	eye, pen, cb [4]float64 // the icons and the box of a checkbox, relative to the field's top-left (zero width: none)
+	eye, pen, cb [4]float64
 }
 
 const (
@@ -102,7 +89,7 @@ var (
 	phonePattern = regexp.MustCompile(`^\+?[0-9][0-9 ().\-]{3,}$`)
 )
 
-// PatternError is why Pattern is not a regular expression, "" when it is (or is empty).
+// PatternError explains why Pattern is not a regular expression.
 func (f *FormFieldObject) PatternError() string {
 	if f.Pattern == "" {
 		return ""
@@ -113,8 +100,7 @@ func (f *FormFieldObject) PatternError() string {
 	return ""
 }
 
-// Problem says what is wrong with the value: one of the FormProblem codes, or "" when it is fine. An empty value is fine
-// unless the field is Required.
+// Problem returns the FormProblem code for the value, or "".
 func (f *FormFieldObject) Problem() string {
 	v := strings.TrimSpace(f.Value)
 	if f.Kind == FormCheckbox {
@@ -181,7 +167,6 @@ func (f *FormFieldObject) Empty() bool {
 // Clear empties the field.
 func (f *FormFieldObject) Clear() { f.Value = "" }
 
-// Words is what the exports write for the field: its label and what is in it.
 func (f *FormFieldObject) Words() string {
 	label := strings.TrimSpace(f.Label)
 	if f.Kind == FormCheckbox {
@@ -197,7 +182,6 @@ func (f *FormFieldObject) Words() string {
 	return label + ": " + f.Value
 }
 
-// Measure implements InlineObject.
 func (f *FormFieldObject) Measure(p Painter, maxW, _ float64) (float64, float64) {
 	switch f.Kind {
 	case FormCheckbox:
@@ -214,7 +198,6 @@ func (f *FormFieldObject) Measure(p Painter, maxW, _ float64) (float64, float64)
 	return f.w, f.h
 }
 
-// DrawAt implements InlineObject.
 func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	problem := f.Problem()
 	border := "#8a94a6"
@@ -229,7 +212,6 @@ func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	p.FillRect(x, y+1, f.w, f.h-2)
 	p.SetFillStyle(bg)
 	p.FillRect(x+1, y+2, f.w-2, f.h-4)
-	// the icons, at the right of the top line
 	f.eye, f.pen, f.cb = [4]float64{}, [4]float64{}, [4]float64{}
 	right := f.w - 4
 	if !f.Locked {
@@ -288,7 +270,6 @@ func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	f.icons(p, x, y)
 }
 
-// icons draws the eye, the pen (when there is one) and the lock.
 func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	p.SetStrokeStyle("#5f6b7a")
 	p.SetFillStyle("#5f6b7a")
@@ -328,7 +309,6 @@ func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	}
 }
 
-// clipText cuts s with an ellipsis so that it is at most w wide.
 func clipText(p Painter, s string, w float64) string {
 	if w <= 0 || p.MeasureTextWidth(s) <= w {
 		return s
@@ -340,14 +320,11 @@ func clipText(p Painter, s string, w float64) string {
 	return string(rs) + "…"
 }
 
-// ClickObject is an InlineObject that takes presses: (x, y) are relative to its top-left corner. It reports whether it
-// used the press, and whether that changed the content (so that the document is saved).
+// ClickObject takes presses; (x, y) are relative to its top-left.
 type ClickObject interface {
 	ClickAt(x, y float64) (used, changed bool)
 }
 
-// ClickAt implements ClickObject: the eye asks the host to fill the field in, the pen to change it, and the box of a
-// checkbox ticks or unticks it.
 func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	in := func(r [4]float64) bool { return r[2] > 0 && x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] }
 	switch {
@@ -372,8 +349,7 @@ func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	return false, false
 }
 
-// DragObject is an InlineObject that can be dragged (a table's column or row grip resizes it): (x, y) are relative to
-// the object's top-left corner. DragStart says whether the press began a drag; DragMove reports whether the content changed.
+// DragObject is an inline object that can be dragged.
 type DragObject interface {
 	DragStart(x, y float64) bool
 	DragMove(x, y float64) (changed bool)
@@ -382,7 +358,7 @@ type DragObject interface {
 
 var _ ClickObject = (*FormFieldObject)(nil)
 
-// FormFields lists the form fields in the flow's content, in reading order, those in table cells included.
+// FormFields lists the form fields in reading order.
 func (f *TextFlow) FormFields() []*FormFieldObject {
 	var out []*FormFieldObject
 	for _, it := range f.Items {
@@ -400,7 +376,6 @@ func (f *TextFlow) FormFields() []*FormFieldObject {
 	return out
 }
 
-// Tables lists the tables in the flow's content, in reading order.
 func (f *TextFlow) Tables() []*TableObject {
 	var out []*TableObject
 	for _, it := range f.Items {
@@ -413,7 +388,7 @@ func (f *TextFlow) Tables() []*TableObject {
 	return out
 }
 
-// ClearFormFields empties every form field and reports how many had something in them.
+// ClearFormFields empties every form field; reports how many were filled.
 func (f *TextFlow) ClearFormFields() int {
 	n := 0
 	for _, ff := range f.FormFields() {
@@ -431,7 +406,6 @@ func (f *TextFlow) ClearFormFields() int {
 	return n
 }
 
-// objectDragStart gives a press to the inline object under (x, y) that can be dragged, and remembers it.
 func (f *TextFlow) objectDragStart(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {
@@ -447,7 +421,6 @@ func (f *TextFlow) objectDragStart(x, y float64) bool {
 	return false
 }
 
-// objectClickAt gives a press to the inline object under (x, y) that takes presses.
 func (f *TextFlow) objectClickAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {

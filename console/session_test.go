@@ -62,7 +62,6 @@ func TestSessionRunsCommandsAndKeepsALogAndAPrompt(t *testing.T) {
 	if p = s.Props(); !strings.HasSuffix(texts(p, "out"), "Report Q2") {
 		t.Errorf("%s", texts(p, ""))
 	}
-	// An error is a line of its own, and the session carries on.
 	s.type_("nosuchcommand")
 	p = s.Props()
 	if !strings.Contains(texts(p, "err"), "unknown command") {
@@ -72,7 +71,6 @@ func TestSessionRunsCommandsAndKeepsALogAndAPrompt(t *testing.T) {
 	if p = s.Props(); !strings.HasSuffix(texts(p, "out"), "/Archive") {
 		t.Errorf("%s", texts(p, ""))
 	}
-	// clear empties the log.
 	s.type_("clear")
 	if p = s.Props(); len(p.Lines) != 0 {
 		t.Errorf("%d lines after clear", len(p.Lines))
@@ -134,7 +132,6 @@ func TestSessionImportsPickedFilesAndDeliversExports(t *testing.T) {
 			t.Errorf("%s: %q", name, data)
 		}
 	}
-	// A second export of the same name needs --force, as on a disk.
 	s.type_("export -f markdown notes")
 	if !strings.Contains(texts(s.Props(), "err"), "exists") {
 		t.Errorf("%s", texts(s.Props(), ""))
@@ -144,7 +141,6 @@ func TestSessionImportsPickedFilesAndDeliversExports(t *testing.T) {
 	if _, ok := delivered["all.opendoc"]; !ok {
 		t.Errorf("no pack: %s", texts(s.Props(), ""))
 	}
-	// And the pack can be unpacked from the inbox.
 	s.Files.Add("all.opendoc", delivered["all.opendoc"])
 	s.type_("unpack all.opendoc")
 	if !strings.Contains(texts(s.Props(), "out"), "documents") {
@@ -152,7 +148,6 @@ func TestSessionImportsPickedFilesAndDeliversExports(t *testing.T) {
 	}
 }
 
-// A destructive command asks in the panel and waits for the answer.
 func TestSessionAsksWithYesAndNo(t *testing.T) {
 	ctx := context.Background()
 	s, sv, _ := newTestSession(t)

@@ -1,31 +1,3 @@
-// Package directoryclient is the client of the docstore's key directory (docstore.Server
-// WithDirectory): publish my keys, revoke them, look a person up, enroll an owner key and watch
-// the transparency log for my own address. It runs natively and as js/wasm in a browser (CI vets
-// it with GOOS=js GOARCH=wasm). Besides net/http, age and Ed25519 it depends on the docstore
-// package (the wire types) and docstore/encrypt (the message formats and the audit), which pull
-// in their own dependencies: it is not a standalone minimal client. It does the client's half of
-// every check, so that what it reports rests on what the server proved and not on what it said:
-//
-//   - Publish answers the proof-of-possession challenge with the key's own identity (an age
-//     identity, an SSH one, a passkey's PRF identity), attests an ssh-ed25519 key's binding to the
-//     address, and, when the address is enrolled, signs the operation with the owner key.
-//   - Lookup re-checks every owner signature and attestation itself, and marks a row OwnerSigned
-//     only if the signature verifies AND its key is one the client had pinned for the address
-//     before (Pins; or the audited chain of its own address, State). The signature alone proves
-//     nothing: the row carries the key it was signed with, so the server supplies both. The first
-//     owner key seen for an address is remembered (trust on first use) but marks the row
-//     OwnerUnpinned, not OwnerSigned; a different key later is OwnerChanged; a row that had owner
-//     evidence and lost it, or an unsigned row of an address whose owner key is pinned, is
-//     OwnerDowngraded.
-//   - WatchLog fetches the log since the last position seen, checks the chain and the server's
-//     signatures against pinned keys, checks the head against the one remembered (a log cut back
-//     or rewritten is an error), audits the entries of my address against the owner-key rules,
-//     and reports every entry for my address that I did not make: "someone published a key for
-//     your address".
-//
-// The client holds no session: the caller gives it the signed-in session's token (Token), or an
-// http.Client with the cookie. What the directory guarantees, and what a server holding its key
-// can still do, is in docs/encryption-and-passkeys.md, step 4b.
 package directoryclient
 
 import (
@@ -53,41 +25,25 @@ import (
 
 // Client talks to a docstore server's /directory routes.
 type Client struct {
-	// BaseURL is the server ("https://host", or "" / "/api" for the same origin in a browser).
-	// http is accepted only for a loopback host (localhost, 127.0.0.1, ::1): over plain http every
-	// answer, the pseudonym and the log included, could be rewritten on the way.
+	// BaseURL is the server, such as https://host.
 	BaseURL string
 	// HTTP is the client to use (http.DefaultClient when nil).
 	HTTP *http.Client
-	// Token returns the signed-in session's token, sent as a bearer token; nil sends none (the
-	// HTTP client's cookie jar may carry the session).
+	// Token returns the signed-in session's token.
 	Token func() string
-	// LogKeys are the directory's log public keys by key ID, pinned out of band. WatchLog refuses
-	// to run without them unless TrustServerKeys is set.
+	// LogKeys are the directory's log public keys.
 	LogKeys map[string]ed25519.PublicKey
-	// TrustServerKeys lets WatchLog take the keys the server states for itself. That checks the
-	// chain and that it is consistent, not that the server is the one you meant: pin LogKeys.
+	// TrustServerKeys lets WatchLog take the keys from the server.
 	TrustServerKeys bool
-	// Witnesses are the public keys of the witnesses this client trusts to cosign the log, by
-	// name, pinned out of band; with WitnessQuorum they let WatchLog tell a split view (the
-	// server showing different people different logs) from the one log everybody is shown.
+	// Witnesses are the public keys of the witnesses.
 	Witnesses map[string]ed25519.PublicKey
-	// WitnessQuorum is how many of Witnesses must have cosigned the newest cosigned entry for
-	// WatchLog to accept the log (0: witnesses are not asked). WatchLog then also refuses a log
-	// that ends before the cosigned entry or has another entry there (ErrSplitView).
+	// WitnessQuorum is how many witnesses must sign a head.
 	WitnessQuorum int
-	// Pins holds the owner keys somebody confirmed for an address (the host, the user out of band,
-	// or this client by enrolling a key itself): Lookup marks a row signed by one OwnerPinned. It
-	// never learns a key from a lookup (trust on first use is kept in State.Seen and marks
-	// OwnerFirstSeen only). nil: nothing is pinned.
+	// Pins holds the owner keys someone confirmed.
 	Pins OwnerPins
-	// State, if set, is told the log numbers of the operations this client makes, so WatchLog
-	// does not report them as somebody else's.
+	// State, if set, is told the log numbers seen.
 	State *WatchState
-	// RequireOwner makes Lookup report ErrUnenrolled (with the rows, for display) when the address
-	// has no owner key: such an address has nothing to compare an entry's number or a key's origin
-	// with, so a host that needs more than the server's word must not encrypt to it without the
-	// person confirming the key's fingerprint another way.
+	// RequireOwner makes Lookup refuse unenrolled addresses.
 	RequireOwner bool
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
@@ -100,20 +56,18 @@ func (c *Client) now() time.Time {
 	return time.Now()
 }
 
-// Error is a refusal by the server. Is maps it to the docstore sentinel errors, so
-// errors.Is(err, docstore.ErrDirectoryOwnerRequired) and the like work.
+// Error is a refusal by the server.
 type Error struct {
 	Status int
 	Body   string
 }
 
-// maxErrorBody is how much of a refusal's body an Error keeps: a server (or whatever answers
-// for it) cannot make the client hold or print more.
+// a server cannot make the client hold or print more
 const maxErrorBody = 4 << 10
 
 func (e *Error) Error() string { return fmt.Sprintf("directory: server said %d: %s", e.Status, e.Body) }
 
-// Is implements errors.Is for the docstore directory errors.
+// Is implements errors.Is for the directory's errors.
 func (e *Error) Is(target error) bool {
 	b := strings.ToLower(e.Body)
 	switch target {
@@ -145,13 +99,9 @@ func (e *Error) Is(target error) bool {
 	return false
 }
 
-// ErrInsecureBaseURL is returned for a BaseURL that is plain http to a host that is not the
-// local machine.
+// ErrInsecureBaseURL is returned for a non-HTTPS BaseURL.
 var ErrInsecureBaseURL = errors.New("directoryclient: BaseURL must be https (http is accepted for localhost only)")
 
-// checkBaseURL refuses a BaseURL that would send the session token and read the log over
-// unprotected http. "" and a path ("/api": the page's own origin in a browser) are left to the
-// page's origin.
 func checkBaseURL(base string) error {
 	if base == "" || strings.HasPrefix(base, "/") {
 		return nil
@@ -223,7 +173,6 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	return nil
 }
 
-// Head fetches the signed head of the log and checks its signature against the pinned keys.
 func (c *Client) Head(ctx context.Context) (docstore.DirectoryHead, error) {
 	var h docstore.DirectoryHead
 	if err := c.do(ctx, http.MethodGet, "/directory/log/head", nil, &h); err != nil {
@@ -237,7 +186,6 @@ func (c *Client) Head(ctx context.Context) (docstore.DirectoryHead, error) {
 	return h, nil
 }
 
-// position is the log position an owner signature names: the head now.
 func (c *Client) position(ctx context.Context) (string, error) {
 	h, err := c.Head(ctx)
 	if err != nil {
@@ -246,25 +194,18 @@ func (c *Client) position(ctx context.Context) (string, error) {
 	return encrypt.FormatLogPosition(h.Seq, h.Hash), nil
 }
 
-// note records an operation of this client: the number is the server's, the rest is what the
-// client itself did (see MadeEntry).
 func (c *Client) note(seq int64, op, fingerprint, ownerSig string) {
 	if c.State != nil && seq > 0 {
 		c.State.NoteMade(MadeEntry{Seq: seq, Op: op, Fingerprint: fingerprint, OwnerSig: ownerSig})
 	}
 }
 
-// OwnerKey is an owner signing key, held by the person (never by the server): make one with
-// GenerateOwnerKey, keep it (a browser stores it, a CLI keeps a file), and give it to Publish,
-// Revoke and the enrollment calls.
+// OwnerKey is an owner signing key held by the client.
 type OwnerKey = ed25519.PrivateKey
 
-// OwnerSigner is what signs for an owner key: an OwnerKey, or anything else that is a crypto.Signer
-// with an ed25519.PublicKey, such as a browser key that cannot be copied out. The client never needs
-// the key's bytes, only its signatures.
+// OwnerSigner is what signs for an owner key.
 type OwnerSigner = crypto.Signer
 
-// ownerSet says an OwnerSigner was given: not nil, and not an empty OwnerKey held in an interface.
 func ownerSet(s OwnerSigner) bool {
 	if s == nil {
 		return false
@@ -275,7 +216,6 @@ func ownerSet(s OwnerSigner) bool {
 	return true
 }
 
-// publicOf is the public half of s.
 func publicOf(s OwnerSigner) (ed25519.PublicKey, error) {
 	pub, ok := s.Public().(ed25519.PublicKey)
 	if !ok || len(pub) != ed25519.PublicKeySize {
@@ -290,7 +230,7 @@ func GenerateOwnerKey() (OwnerKey, error) {
 	return priv, err
 }
 
-// ExportOwnerKey is the form an owner key is stored in (base64 of the 32-byte seed).
+// ExportOwnerKey is the form an owner key is stored in.
 func ExportOwnerKey(k OwnerKey) string { return base64.StdEncoding.EncodeToString(k.Seed()) }
 
 // ImportOwnerKey reads ExportOwnerKey's output.
@@ -304,24 +244,19 @@ func ImportOwnerKey(s string) (OwnerKey, error) {
 
 // PublishRequest is what Publish needs.
 type PublishRequest struct {
-	// Email is the signed-in account's address (the owner signature and the attestation name it).
+	// Email is the signed-in account's address.
 	Email string
-	// Key is the public key to publish ("age1..." or an ssh public key line); Label what to call
-	// it. With SSHPrivateKey set, Key may be empty: the public half of that key is published.
+	// Key is the public key to publish.
 	Key, Label string
-	// Identity opens the proof-of-possession challenge: the age identity of Key (an age identity,
-	// encrypt.ParseSSHIdentity's, encrypt.PRFIdentity's for a passkey). Nil sends no proof; a
-	// server that requires one then answers 428.
+	// Identity opens the proof-of-possession challenge.
 	Identity age.Identity
-	// SSHPrivateKey is an unencrypted ssh-ed25519 private key (PEM): the key attests its own
-	// binding to the address. An age or passkey key cannot; the owner signature attests those.
+	// SSHPrivateKey is an unencrypted ssh-ed25519 private key.
 	SSHPrivateKey []byte
-	// Owner signs the operation when the address has an owner key (nil: the server refuses with
-	// 428 if it does).
+	// nil: the server refuses with 428 if an owner key exists
 	Owner OwnerSigner
 }
 
-// Publish publishes a key for the signed-in account's address and returns the server's row.
+// Publish publishes a key for the signed-in account.
 func (c *Client) Publish(ctx context.Context, r PublishRequest) (docstore.DirectoryKey, error) {
 	req := docstore.DirectoryPublish{Key: strings.TrimSpace(r.Key), Label: r.Label}
 	if len(r.SSHPrivateKey) > 0 {
@@ -375,8 +310,7 @@ func (c *Client) Publish(ctx context.Context, r PublishRequest) (docstore.Direct
 	return out, nil
 }
 
-// Revoke removes a key (by fingerprint) from the signed-in account's address. owner signs it when
-// the address has an owner key.
+// Revoke removes a key, by fingerprint, from the directory.
 func (c *Client) Revoke(ctx context.Context, email, fingerprint string, owner OwnerSigner) (docstore.DirectoryKey, error) {
 	var in *docstore.DirectoryRevoke
 	ownerSig := ""
@@ -407,49 +341,21 @@ func (c *Client) Revoke(ctx context.Context, email, fingerprint string, owner Ow
 // Key is a lookup row with the client's own checks.
 type Key struct {
 	docstore.DirectoryKey
-	// OwnerSigned is true only if the row's owner signature verifies here AND the key it was made
-	// with is one the client holds for the address from before this lookup: a key it pinned
-	// (Client.Pins: from an earlier lookup, Enroll, or the host's own record) or, for its own
-	// address, one in the chain WatchLog audited (State.OwnerKeys). docstore's own OwnerSigned
-	// flag is the server's word; this one is not. A signature under a key the row itself carries
-	// proves nothing about the address's owner (the server supplies both), so such a row is
-	// OwnerUnpinned instead.
+	// OwnerSigned is true only if the row's owner signature verifies.
 	OwnerSigned bool
-	// OwnerPinned: the owner key in the row is one that was confirmed for the address (OwnerSigned
-	// says as much): pinned by the host or the user (Client.Pins), enrolled by this client itself,
-	// or in the chain WatchLog audited for the client's own address. OwnerUnpinned: the signature
-	// verifies under the key in the row, but nothing the client held before ties that key to the
-	// address's owner: no confirmed pin existed (the key is now remembered in State, so the next
-	// lookup can tell a change; this lookup's answer is the server's word). OwnerFirstSeen: the
-	// same key an earlier lookup showed first (trust on first use): consistent over time, but still
-	// nobody confirmed it, so it is not OwnerSigned and not OwnerPinned: a server that showed the
-	// wrong key the first time shows the same wrong key every time. Confirm the key out of band
-	// (Pins.Set) or pin it from the owner's own audit. Components show OwnerUnpinned and
-	// OwnerFirstSeen rows as unconfirmed.
+	// OwnerPinned: the row's owner key is the pinned one.
 	OwnerPinned, OwnerUnpinned, OwnerFirstSeen bool
-	// OwnerChanged: another key than the pinned one (or, with none pinned, than the first one seen,
-	// earlier or in the same answer) signed the row: the address has a new owner
-	// key (a rotation or a reset: check WatchLog's report) or somebody enrolled one. The row is not
-	// OwnerSigned.
+	// OwnerChanged: another key than the pinned one signed.
 	OwnerChanged bool
-	// OwnerDowngraded: the row lost the owner evidence it carried when last seen, or the address
-	// has a pinned owner key and the row carries none: a server (or a record) that stopped
-	// showing what it showed. A key published before the owner enrolled shows it too, until it is
-	// published again with the owner's signature.
+	// OwnerDowngraded: the row lost its owner signature.
 	OwnerDowngraded bool
-	// SeqChanged: the row is not owner-signed and the log number of its entry is not the one an earlier
-	// lookup showed for the same key. Nothing signs that number on an address without an owner key, so a
-	// server can name another entry (another address's, for the same public key); it is also what a
-	// republication after a revocation looks like. Enroll an owner key to close it; until then, treat the
-	// row as the server's word.
+	// SeqChanged: the row is not owner-signed.
 	SeqChanged bool
-	// AttestationVerified: the key's own attestation verifies here.
+	// AttestationVerified: the key's own attestation verifies.
 	AttestationVerified bool
 }
 
-// Lookup finds the keys published for an address and checks their owner signatures and
-// attestations itself (see Key). It remembers, per address (State.Seen), which rows carried owner
-// evidence, so that a row that loses it is flagged.
+// Lookup finds the keys published for an address.
 func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	var res struct {
 		Keys []docstore.DirectoryKey `json:"keys"`
@@ -460,10 +366,11 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	addr := strings.ToLower(strings.TrimSpace(email))
 	var pinned string
 	havePin := false
+	// pin the key this client made, never the server's answer
 	if c.Pins != nil {
 		pinned, havePin = c.Pins.Get(email)
 	}
-	audited := c.auditedOwnerKeys(addr) // the chain WatchLog derived for the client's own address
+	audited := c.auditedOwnerKeys(addr)
 	var seen SeenAddress
 	if c.State != nil && c.State.Seen != nil {
 		seen = c.State.Seen[addr]
@@ -480,9 +387,6 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	newSeqs := map[string]int64{}
 	var nowSigned []string
 	anyEvidence := false
-	// ref is the owner key the rows are compared with when none is confirmed: the first one seen
-	// (earlier, from State, or by a row of this answer). refRemembered says it comes from an earlier
-	// lookup.
 	ref, refRemembered := seen.FirstOwner, seen.FirstOwner != ""
 	for _, k := range res.Keys {
 		row := Key{DirectoryKey: k}
@@ -496,25 +400,22 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 			nowSigned = append(nowSigned, k.Fingerprint)
 			switch {
 			case audited[k.Owner.Pub] || (havePin && pinned == k.Owner.Pub):
-				// Confirmed: the audited chain of the client's own address, or a key the host or
-				// user pinned (or this client enrolled itself).
 				row.OwnerSigned, row.OwnerPinned = true, true
 			case havePin:
 				row.OwnerChanged = true
 			case ref == "":
-				ref = k.Owner.Pub // first sight: remembered below, nothing confirms it
+				ref = k.Owner.Pub
 				row.OwnerUnpinned = true
 			case ref != k.Owner.Pub && accepted[k.Owner.Pub]:
-				row.OwnerFirstSeen = true // a key the user accepted after a rotation: remembered, not confirmed
+				row.OwnerFirstSeen = true
 			case ref != k.Owner.Pub:
-				row.OwnerChanged = true // another key than the first one seen (earlier, or in this answer)
+				row.OwnerChanged = true
 			case refRemembered:
-				row.OwnerFirstSeen = true // the same key as an earlier lookup showed: still unconfirmed
+				row.OwnerFirstSeen = true
 			default:
 				row.OwnerUnpinned = true
 			}
 		} else if !k.Revoked && (wasSigned[k.Fingerprint] || havePin || len(audited) > 0 || seen.FirstOwner != "") {
-			// No evidence now: it had some before, or the address's owner key is known.
 			row.OwnerDowngraded = true
 		}
 		row.DirectoryKey.OwnerSigned = row.OwnerSigned
@@ -533,8 +434,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		}
 		merged := seen
 		merged.Enrolled = merged.Enrolled || anyEvidence
-		// Trust on first use: the first owner key seen for an address is remembered here (in the
-		// state the host keeps), not in Pins, which holds only keys somebody confirmed.
+		// trust on first use: remembered in State, not in Pins
 		if merged.FirstOwner == "" {
 			merged.FirstOwner = ref
 		}
@@ -543,7 +443,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 				merged.Signed = append(merged.Signed, fp)
 			}
 		}
-		if len(newSeqs) > 0 { // the first number shown for a key stays the reference
+		if len(newSeqs) > 0 {
 			merged.Seqs = maps.Clone(merged.Seqs)
 			if merged.Seqs == nil {
 				merged.Seqs = map[string]int64{}
@@ -564,13 +464,9 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 	return out, nil
 }
 
-// ErrUnenrolled is returned by Lookup, with the rows, when Client.RequireOwner is set and the address
-// has not enrolled an owner key.
+// ErrUnenrolled is returned by Lookup for an unenrolled address.
 var ErrUnenrolled = errors.New("directoryclient: the address has no owner key, so nothing but the server's word ties these keys to it")
 
-// auditedOwnerKeys is the set of owner keys of the client's own address that WatchLog derived
-// from the log (State.OwnerKeys), when email is that address: keys the client holds from the
-// audited chain rather than from the server's answer of the moment.
 func (c *Client) auditedOwnerKeys(email string) map[string]bool {
 	if c.State == nil || c.State.Email == "" || c.State.Email != email {
 		return nil
@@ -589,8 +485,6 @@ func (c *Client) Enrollment(ctx context.Context, email string) (docstore.Directo
 	return e, err
 }
 
-// enrollRequest builds the request and returns the signature the log entry will carry (the new
-// key's enrollment, the authorizer's rotation, or the new key's acceptance for a reset).
 func (c *Client) enrollRequest(ctx context.Context, email, mode string, owner, authorizer OwnerSigner) (docstore.DirectoryEnroll, error) {
 	var ch docstore.DirectoryEnrollChallenge
 	if err := c.do(ctx, http.MethodPost, "/directory/enroll/challenge", struct{}{}, &ch); err != nil {
@@ -645,30 +539,23 @@ func (c *Client) enroll(ctx context.Context, email, mode string, owner, authoriz
 		return e, err
 	}
 	c.note(e.Seq, mode, encrypt.OwnerFingerprint(pub), sig)
-	// Pin the key this client made and sent, never the one in the server's answer (which is the
-	// server's word and could name another).
 	if c.Pins != nil {
 		c.Pins.Set(email, encrypt.FormatOwnerPub(pub))
 	}
 	return e, nil
 }
 
-// Enroll registers owner as the owner key of the signed-in account's address. The server needs
-// the provider session and the new key's own signature over its challenge. This is trust on first
-// use: whoever is signed in as the address first can enroll first, and the log shows it to
-// everybody who watches the address.
+// Enroll registers owner as the address's owner key.
 func (c *Client) Enroll(ctx context.Context, email string, owner OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpEnroll, owner, nil)
 }
 
-// Rotate replaces the owner key: the new key is signed in by the current one.
+// Rotate replaces the owner key.
 func (c *Client) Rotate(ctx context.Context, email string, current, next OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpRotate, next, current)
 }
 
-// RequestReset asks to replace a lost owner key through the provider session. It is logged at
-// once and takes effect only after the waiting period (24 hours), during which the owner key can
-// still cancel it (CancelReset).
+// RequestReset asks to replace a lost owner key.
 func (c *Client) RequestReset(ctx context.Context) (docstore.DirectoryEnrollment, error) {
 	var e docstore.DirectoryEnrollment
 	err := c.do(ctx, http.MethodPost, "/directory/enroll/reset", struct{}{}, &e)
@@ -678,12 +565,12 @@ func (c *Client) RequestReset(ctx context.Context) (docstore.DirectoryEnrollment
 	return e, err
 }
 
-// CompleteReset installs next as the owner key once the waiting period of RequestReset is over.
+// CompleteReset installs next as the owner key.
 func (c *Client) CompleteReset(ctx context.Context, email string, next OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	return c.enroll(ctx, email, encrypt.OpReset, next, nil)
 }
 
-// CancelReset ends a pending reset, signed by the current owner key.
+// CancelReset ends a pending reset.
 func (c *Client) CancelReset(ctx context.Context, email string, owner OwnerSigner) (docstore.DirectoryEnrollment, error) {
 	pos, err := c.position(ctx)
 	if err != nil {
@@ -701,22 +588,20 @@ func (c *Client) CancelReset(ctx context.Context, email string, owner OwnerSigne
 	return e, nil
 }
 
-// LogAddress is the signed-in owner's pseudonym in the log (and under retired directory keys).
+// LogAddress is the signed-in owner's pseudonym.
 func (c *Client) LogAddress(ctx context.Context) (docstore.DirectoryLogAddress, error) {
 	var a docstore.DirectoryLogAddress
 	err := c.do(ctx, http.MethodGet, "/directory/log/address", nil, &a)
 	return a, err
 }
 
-// OwnerPins holds the owner key confirmed for an address (pinned by the host or the user, or the
-// key this client enrolled); Lookup flags a different one.
+// OwnerPins holds the owner key confirmed for an address.
 type OwnerPins interface {
 	Get(email string) (pub string, ok bool)
 	Set(email, pub string)
 }
 
-// MemoryPins is an OwnerPins in memory; a host that keeps pins across runs implements the
-// interface over its own storage.
+// MemoryPins is an OwnerPins in memory.
 type MemoryPins map[string]string
 
 // Get implements OwnerPins.
@@ -728,13 +613,7 @@ func (m MemoryPins) Get(email string) (string, bool) {
 // Set implements OwnerPins.
 func (m MemoryPins) Set(email, pub string) { m[strings.ToLower(strings.TrimSpace(email))] = pub }
 
-// AcceptOwner is the user's answer to "this address shows another owner key than the first one I
-// saw" (Key.OwnerChanged): after the user has checked the new key with its owner by another way, it
-// is remembered as accepted, and rows signed by it stop being flagged as changed. The first key
-// seen stays accepted too (an owner who rotated still has rows of the old key). It changes only
-// what this client remembers: a key somebody pinned (Pins) or the audited chain of the client's own
-// address is not touched. It is an error when the client keeps no State or the address was never
-// looked up.
+// AcceptOwner is the user's answer to a new owner key.
 func (c *Client) AcceptOwner(email, ownerPub string) error {
 	addr := strings.ToLower(strings.TrimSpace(email))
 	if c.State == nil {

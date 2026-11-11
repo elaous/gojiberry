@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// Text formats are packed as documents to read (build tag exp_textformats): a CSV file as a table, YAML and JSON data as code, a file that is not
-// text is left out.
 func TestPackTakesTextFormats(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")

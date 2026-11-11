@@ -15,8 +15,6 @@ import (
 	"testing"
 )
 
-// An unset GOJIBERRY_DOCSTORE_REPLICAS is said out loud, and a store that shows another writer
-// contradicts a declared 1.
 func TestReplicasUnsetAndContradictedAreSaidLoudly(t *testing.T) {
 	ctx := context.Background()
 	mgr, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://x.test"})
@@ -33,7 +31,6 @@ func TestReplicasUnsetAndContradictedAreSaidLoudly(t *testing.T) {
 	if !strings.Contains(logs.String(), "GOJIBERRY_DOCSTORE_REPLICAS is not set") {
 		t.Errorf("unset: %q", logs)
 	}
-	// Another process (a second start on the same store) is now registered: declared 1 is wrong.
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "1")
 	logs = captureLog(t)
 	if err := withDirectory(ctx, docstore.NewServer(a, "memory").WithAuth(mgr), a, docstore.MemoryLimiters()); err != nil {
@@ -113,7 +110,6 @@ func TestPasskeyChallengesModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWr
 	if _, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), "redis"); err == nil {
 		t.Fatal("an unknown mode is an error")
 	}
-	// store on a store that has conditional writes: shared, quietly.
 	logs := captureLog(t)
 	for _, mode := range []string{"store", "store-required"} {
 		c, err := passkeyChallenges(ctx, docstore.NewMemoryAdapter(), mode)
@@ -124,7 +120,6 @@ func TestPasskeyChallengesModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWr
 	if strings.Contains(logs.String(), "WARNING") {
 		t.Errorf("no warning when it works: %q", logs)
 	}
-	// store on one without: the server keeps running on per-process ceremonies and says so loudly.
 	plain := plainAdapter{docstore.NewMemoryAdapter()}
 	logs = captureLog(t)
 	c, err := passkeyChallenges(ctx, plain, "store")
@@ -139,11 +134,9 @@ func TestPasskeyChallengesModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWr
 	if strings.Count(logs.String(), "\n") < 4 {
 		t.Errorf("the warning is several lines: %q", logs)
 	}
-	// store-required on one without: fatal (an error to Main).
 	if _, err := passkeyChallenges(ctx, plain, "store-required"); err == nil || !strings.Contains(err.Error(), "conditional") {
 		t.Fatalf("store-required must refuse: %v", err)
 	}
-	// memory with several replicas declared: ceremonies are not shared, said once per start.
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "3")
 	logs = captureLog(t)
 	if c, err := passkeyChallenges(ctx, plain, "memory"); c != nil || err != nil || !strings.Contains(logs.String(), "kept in each process") {
@@ -157,7 +150,6 @@ func TestPasskeyChallengesModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWr
 	}
 }
 
-// The two shared-store modes print the same kind of warning and fail the same way.
 func TestSharedStoreWarningIsTheSameForSessionsAndChallenges(t *testing.T) {
 	ctx := context.Background()
 	plain := plainAdapter{docstore.NewMemoryAdapter()}
@@ -286,14 +278,12 @@ func TestSessionsModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWrites(t *t
 	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err == nil || !strings.Contains(err.Error(), "conditional") {
 		t.Fatalf("store-required on such a store must refuse: %v", err)
 	}
-	// Memory with several replicas declared says what that means.
 	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "")
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "3")
 	logs = captureLog(t)
 	if err := withSessions(ctx, plain, m, docstore.MemoryLimiters()); err != nil || !strings.Contains(logs.String(), "unknown to the others") {
 		t.Errorf("%v %q", err, logs)
 	}
-	// No sign-in at all: a set variable is reported, not obeyed.
 	t.Setenv("GOJIBERRY_DOCSTORE_SESSIONS", "store")
 	logs = captureLog(t)
 	if err := withSessions(ctx, docstore.NewMemoryAdapter(), nil, docstore.MemoryLimiters()); err != nil || !strings.Contains(logs.String(), "ignored") {
@@ -301,8 +291,6 @@ func TestSessionsModeIsCheckedAndFallsBackOrRefusesWithoutConditionalWrites(t *t
 	}
 }
 
-// The OpenID Connect login route writes a state record without a sign-in, so withSessions gives it
-// a budget per client address in every mode (memory, store, and the fallback to memory).
 func TestWithSessionsLimitsLoginsPerClientInEveryMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -351,7 +339,6 @@ func TestWithSessionsLimitsLoginsPerClientInEveryMode(t *testing.T) {
 						t.Fatalf("login %d: %d", i+1, rec.Code)
 					}
 				}
-				// An untrusted peer cannot pick its own key with the header.
 				rec := login("198.51.100.1:1001", "203.0.113.7")
 				if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
 					t.Fatalf("over budget: %d, Retry-After %q", rec.Code, rec.Header().Get("Retry-After"))
@@ -360,7 +347,6 @@ func TestWithSessionsLimitsLoginsPerClientInEveryMode(t *testing.T) {
 					t.Fatalf("another address: %d", rec.Code)
 				}
 				if proxies != "" {
-					// A trusted proxy's header names the client; the proxy's own budget is not spent.
 					for i := 0; i < passkey.DefaultBurst; i++ {
 						if rec := login("10.1.1.1:1000", "203.0.113.50"); rec.Code != http.StatusFound {
 							t.Fatalf("via proxy, login %d: %d", i+1, rec.Code)

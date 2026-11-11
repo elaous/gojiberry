@@ -2,20 +2,16 @@ package canvas
 
 import "strings"
 
-// flowSel is a TextFlow's text selection: stream offsets, anchor to
-// caret (so it may run backwards).
 type flowSel struct {
 	anchor, caret int
 	after         bool // the caret is after the breaks at its offset (see Cursor.After)
 	dragging      bool
 }
 
-// Hitter is implemented by overlapping objects (images, floating text,
-// tables) that want presses on them kept away from the text beneath.
+// Hitter is implemented by overlapping objects that take presses.
 type Hitter interface{ ContainsPoint(x, y float64) bool }
 
-// Selection returns the selected range of the text stream, [from, to);
-// from == to means nothing is selected.
+// Selection returns the selected range [from, to); equal means none.
 func (f *TextFlow) Selection() (from, to int) {
 	return min(f.sel.anchor, f.sel.caret), max(f.sel.anchor, f.sel.caret)
 }
@@ -38,8 +34,7 @@ func (f *TextFlow) SelectAll() {
 	f.sel = flowSel{anchor: 0, caret: len(f.data.runes)}
 }
 
-// SelectedText returns the selected text (an inline object contributes
-// nothing).
+// SelectedText returns the selected text; inline objects contribute nothing.
 func (f *TextFlow) SelectedText() string {
 	if !f.HasSelection() {
 		return ""
@@ -57,9 +52,7 @@ func (f *TextFlow) SelectedText() string {
 	return b.String()
 }
 
-// CommonFormat returns the formatting shared by all the selected text --
-// a field is left unset where the selection varies (the minimum common
-// formatting), which is what the format painter copies.
+// CommonFormat returns the formatting shared by the selected text.
 func (f *TextFlow) CommonFormat() Format {
 	f.Layout()
 	from, to := f.Selection()
@@ -76,7 +69,6 @@ func (f *TextFlow) CommonFormat() Format {
 	return CommonFormat(fs...)
 }
 
-// obstructed reports whether (x, y) is on something laid over the text.
 func (f *TextFlow) obstructed(x, y float64) bool {
 	if f.Vertical { // floating objects are not laid around vertical text
 		return false
@@ -92,7 +84,6 @@ func (f *TextFlow) obstructed(x, y float64) bool {
 	return false
 }
 
-// inText reports whether (x, y) is inside some page's text area.
 func (f *TextFlow) inText(x, y float64) bool {
 	for i := range f.pageCount() {
 		px, py, pw, ph := f.pageRect(i)
@@ -103,9 +94,6 @@ func (f *TextFlow) inText(x, y float64) bool {
 	return false
 }
 
-// beginSelect starts a selection drag at (x, y) if it is on the text; a
-// press elsewhere clears the selection. It returns whether anything
-// visible changed.
 func (f *TextFlow) beginSelect(x, y float64) bool {
 	had := f.HasSelection()
 	if f.Painter == nil || f.obstructed(x, y) || !f.inText(x, y) {
@@ -149,7 +137,6 @@ func (f *TextFlow) DoubleClick(x, y float64) bool {
 	return true
 }
 
-// drawSelection tints the selected text of every cursor, line by line.
 func (f *TextFlow) drawSelection(lay Layout) {
 	p := f.Painter
 	p.SetFillStyle(f.ChromeStyle.SelectColor)
@@ -170,7 +157,6 @@ func (f *TextFlow) drawSelection(lay Layout) {
 	}
 }
 
-// SetFormatClipboard implements FormatClipboardSetter.
 func (f *TextFlow) SetFormatClipboard(c *FormatClipboard) { f.formats = c }
 
 var (

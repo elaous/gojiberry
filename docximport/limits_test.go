@@ -18,12 +18,10 @@ func docxWith(t *testing.T, body string) []byte {
 }
 
 func TestHostileInputIsBounded(t *testing.T) {
-	// Nesting far beyond maxDepth is refused rather than walked.
 	deep := strings.Repeat("<w:sdt><w:sdtContent>", 2000) + strings.Repeat("</w:sdtContent></w:sdt>", 2000)
 	if _, err := Import(docxWith(t, deep)); err == nil {
 		t.Error("a 4000-deep document was accepted")
 	}
-	// One wide cell must not allocate a grid of its width times its rows.
 	var tbl strings.Builder
 	tbl.WriteString("<w:tbl>")
 	for range 300 {

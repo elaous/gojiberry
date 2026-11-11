@@ -11,11 +11,6 @@ import (
 	"github.com/elaous/gojiberry/export/remote"
 )
 
-// fidelityState is the Import/Export tab's fidelity panel: the format whose report is shown, and what the last
-// imported file left out.
-//
-// The reports are worked out by the file worker (files.wasm), so they arrive a moment after they are asked for:
-// the panel says it is checking, and render draws it again when the answer is in.
 type fidelityState struct {
 	format     string
 	importName string
@@ -28,7 +23,6 @@ type fidelityState struct {
 	asking map[string]bool
 }
 
-// fidelityReport is an export.Report as the panel shows it.
 func fidelityReport(r export.Report) components.FidelityReport {
 	out := components.FidelityReport{Known: r.Known || r.Complete}
 	for _, l := range r.Losses {
@@ -37,7 +31,6 @@ func fidelityReport(r export.Report) components.FidelityReport {
 	return out
 }
 
-// choose returns the format to show: the one chosen if it is on offer, else the first.
 func (s *fidelityState) choose(exports []components.SaverChoice) string {
 	for _, e := range exports {
 		if e.Name == s.format {
@@ -50,8 +43,6 @@ func (s *fidelityState) choose(exports []components.SaverChoice) string {
 	return ""
 }
 
-// props builds the panel for the document: what exporting it as the chosen format loses, and what the last
-// import left out.
 func (s *fidelityState) props(doc docfile.Document, exports []components.SaverChoice, onFormat func(string)) components.FidelityPanelProps {
 	format := s.choose(exports)
 	return components.FidelityPanelProps{
@@ -62,8 +53,6 @@ func (s *fidelityState) props(doc docfile.Document, exports []components.SaverCh
 	}
 }
 
-// exportReport is what exporting doc as format loses: from the cache, or "pending" while the worker works it
-// out (the panel is drawn again then).
 func (s *fidelityState) exportReport(format string, doc docfile.Document) components.FidelityReport {
 	b, err := docfile.JSON.Marshal(doc)
 	if err != nil {
@@ -102,8 +91,6 @@ func (s *fidelityState) exportReport(format string, doc docfile.Document) compon
 	return components.FidelityReport{Pending: true}
 }
 
-// noteImport asks the worker what a file left out when it was imported (the data is the file's bytes), and
-// shows it when the answer comes.
 func (s *fidelityState) noteImport(format, file string, data []byte) {
 	go func() {
 		rep, err := remote.ImportFidelity(s.caller(), format, data)
@@ -120,8 +107,6 @@ func (s *fidelityState) noteImport(format, file string, data []byte) {
 	}()
 }
 
-// kept is the import report to save with the document: nil when the document was not imported (or the
-// report is still being worked out).
 func (s *fidelityState) kept() *docfile.ImportReport {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,7 +120,6 @@ func (s *fidelityState) kept() *docfile.ImportReport {
 	return r
 }
 
-// restore shows the report a document was saved with (or none, for a document that was not imported).
 func (s *fidelityState) restore(d docfile.Document) {
 	r, ok := d.ImportReport()
 	s.mu.Lock()

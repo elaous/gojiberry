@@ -9,7 +9,7 @@ import (
 
 // Codec is a way to write a Document as bytes.
 type Codec interface {
-	// Name is the format's id ("json", "proto-text", "proto").
+	// Name is the format's id, such as json.
 	Name() string
 	// Label is what a menu shows.
 	Label() string
@@ -44,7 +44,7 @@ var JSON Codec = &format{
 	},
 }
 
-// ProtoText writes the protobuf text format (readable, diffable).
+// ProtoText writes the protobuf text format.
 var ProtoText Codec = &format{
 	name: "proto-text", label: "Protobuf (text)", ext: ".pbtxt", mime: "text/plain",
 	marshal: func(d Document) ([]byte, error) {
@@ -56,7 +56,7 @@ var ProtoText Codec = &format{
 	},
 }
 
-// ProtoBinary writes the protobuf wire format (compact).
+// ProtoBinary writes the protobuf wire format.
 var ProtoBinary Codec = &format{
 	name: "proto", label: "Protobuf (binary)", ext: ".pb", mime: "application/x-protobuf",
 	marshal: func(d Document) ([]byte, error) {
@@ -68,10 +68,7 @@ var ProtoBinary Codec = &format{
 	},
 }
 
-// Open is opendocs' own file format, a .open file: the document as protobuf wire
-// format, byte for byte what ProtoBinary writes, under its own name and extension.
-// Fields are only ever added (a removed one is reserved, its number never reused),
-// so older readers skip what they do not know.
+// Open is opendocs' own file format.
 var Open Codec = &format{
 	name: "open", label: "opendocs (.open)", ext: ".open", mime: "application/vnd.opendocs.document",
 	marshal:   func(d Document) ([]byte, error) { return ProtoBinary.Marshal(d) },
@@ -103,11 +100,8 @@ func ByName(name string) (Codec, error) {
 	return nil, fmt.Errorf("docfile: unknown format %q", name)
 }
 
-// Detect guesses the format of data by its first bytes: JSON starts
-// with '{'; protobuf text with a field name; anything else is binary.
+// Detect guesses the format of data from its first bytes.
 func Detect(data []byte) Codec {
-	// A binary document starts with the tag byte 0x0A, which is also a
-	// newline; it is binary if it parses as such.
 	if len(data) > 0 && data[0] == 0x0A {
 		if _, err := ProtoBinary.Unmarshal(data); err == nil {
 			return ProtoBinary

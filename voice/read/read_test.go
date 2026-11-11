@@ -62,7 +62,6 @@ func TestReadingSkipsTextSuggestedToBeRemoved(t *testing.T) {
 	}
 }
 
-// Each piece knows where it is in the text stream, so that the sentence and the word being spoken can be marked.
 func TestChunksKnowTheirPlaceInTheStream(t *testing.T) {
 	got := Chunks([]components.A11yBlock{
 		{Kind: components.A11yHeading, Level: 1, Text: "Title", Mapped: true, Start: 0},
@@ -78,13 +77,12 @@ func TestChunksKnowTheirPlaceInTheStream(t *testing.T) {
 			t.Errorf("piece %d (%q) spans %d..%d (%v), want %d..%d", i, got[i].Text, f, e, ok, from, to)
 		}
 	}
-	check(0, 0, 5) // the heading; the full stop added after it has no place of its own
+	check(0, 0, 5)
 	check(1, 6, 10)
-	check(2, 12, 24) // the two spaces after "One." are one in the piece, not in the stream
+	check(2, 12, 24)
 	if _, _, ok := got[3].Span(); ok {
 		t.Error("a table row has no place in the stream")
 	}
-	// the word at an index of the piece
 	if f, e, ok := got[2].WordAt(4, 2); !ok || f != 16 || e != 18 { // "is"
 		t.Errorf("WordAt: %d..%d %v", f, e, ok)
 	}
@@ -96,8 +94,6 @@ func TestChunksKnowTheirPlaceInTheStream(t *testing.T) {
 	}
 }
 
-// A struck run is in the stream but not spoken: the positions after it still count it. A footnote's mark takes
-// one place however many digits it shows.
 func TestChunkPlacesSkipSuggestedRemovalsAndCountMarksOnce(t *testing.T) {
 	got := Chunks([]components.A11yBlock{{Kind: components.A11yParagraph, Mapped: true, Start: 100, Text: "the brown red fox12 end", Runs: []components.A11yRun{
 		{Text: "the "}, {Text: "brown ", Change: "del"}, {Text: "red fox"}, {Text: "12", Stream: 1}, {Text: " end"}}}}, "en")
@@ -105,7 +101,6 @@ func TestChunkPlacesSkipSuggestedRemovalsAndCountMarksOnce(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	offs := got[0].Offsets
-	// "the " 100..103, struck "brown " 104..109, "red fox" from 110, the mark at 117, " end" from 118
 	if offs[0] != 100 || offs[4] != 110 || offs[len(offs)-4] != 118 {
 		t.Errorf("offsets %v", offs)
 	}

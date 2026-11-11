@@ -9,12 +9,7 @@ import (
 	"syscall/js"
 )
 
-// storageFn is the one JavaScript function every localStorage access goes through. It is
-// written in JavaScript on purpose: reading the localStorage global itself throws in a private
-// window or with site data blocked (a SecurityError), and syscall/js does not turn an exception
-// thrown by a property read into a Go error (it ends the program); only Invoke does. So the
-// whole access, getter included, runs inside a try block and reports {err} instead of
-// throwing; setItem's quota error is caught the same way.
+// storageFn is the JavaScript function every localStorage access uses.
 var (
 	storageOnce sync.Once
 	storageFn   js.Value
@@ -39,7 +34,7 @@ func storage() js.Value {
 	return storageFn
 }
 
-// localStorageKV is a KV over the browser's localStorage. A failure is returned, never raised.
+// a failure is returned, never raised
 type localStorageKV struct{}
 
 func call(op, key, value string) (res js.Value, err error) {
@@ -68,15 +63,7 @@ func (localStorageKV) Set(key, value string) error {
 	return err
 }
 
-// LocalStorageSeqFloor is a StorageSeqFloor over the browser's localStorage, one entry per
-// document under prefix (use one per signed-in account, for example "gojiberry-floor:<user>:").
-// It survives reloads and new tabs of the same origin, which is where the page's own code runs
-// and a store's writers do not; clearing site data resets it, like a fresh client. When
-// localStorage is unavailable or throws (a private window, blocked or full storage) it works
-// from memory instead, and says so: Get and Raise return the value with an error that wraps
-// ErrFloorDegraded, the keyring and Sharing report it through SetFloorDegradedHandler, and
-// StorageSeqFloor.Err keeps the last failure for a page that polls. A page that offers this layer
-// should show it: this browser is not remembering what it saw.
+// LocalStorageSeqFloor is a StorageSeqFloor over localStorage.
 func LocalStorageSeqFloor(prefix string) *StorageSeqFloor {
 	return &StorageSeqFloor{Prefix: prefix, Store: localStorageKV{}}
 }

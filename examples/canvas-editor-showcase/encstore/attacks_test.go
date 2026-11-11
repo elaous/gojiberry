@@ -11,12 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
-// The attacks of the review of PR #81, each made the way someone who can write the page's
-// localStorage (and nothing else: no key's secret) would make it.
-
-// anchoredRig is an encrypted store with documents that were saved while it was unlocked, so their
-// frames are signed and carry the hash of the owner list: a passkey and a recovery key own it, and
-// the passkey is unlocked after a reload.
 func anchoredRig(t *testing.T) (*rig, string) {
 	t.Helper()
 	r := newRig(t)
@@ -37,10 +31,6 @@ func linkBy(t *testing.T, k NewKey, from, to []Owner) *Link {
 	return &Link{From: f, To: slicesClone(to), Signer: hexOf(k.SignerPub), Sig: hexSig(k.Unlock.Signer.Sign(linkMessage(f, d)))}
 }
 
-// The reproduced attack: a writer sets owners=[attacker] and a journal that adds the attacker to the
-// real keys, sealed by the attacker. The victim unlocks with their own passkey (found through the
-// journal's list) and presses Finish or Undo: nothing may be re-encrypted, and the config must stay
-// as it was.
 func TestAForgedJournalCannotRekeyTheStoreToAnAttacker(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -65,8 +55,6 @@ func TestAForgedJournalCannotRekeyTheStoreToAnAttacker(t *testing.T) {
 	}
 }
 
-// The same journal on the real owner list, signed by a stranger: finishing is refused; undoing is
-// harmless (it goes back to the real list) and is allowed.
 func TestAJournalOnTheRealListSignedByAStrangerIsNotFinished(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -91,9 +79,6 @@ func TestAJournalOnTheRealListSignedByAStrangerIsNotFinished(t *testing.T) {
 	}
 }
 
-// A first-enable journal with no seals, over files that are encrypted already (the config was
-// deleted and a journal put in its place naming the victim's key and the attacker's): the victim's
-// key opens every file, but the files were not sealed under that list.
 func TestASeallessEnableJournalOverAnEncryptedStoreIsNotFinished(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -112,7 +97,6 @@ func TestASeallessEnableJournalOverAnEncryptedStoreIsNotFinished(t *testing.T) {
 	sameSnapshot(t, "the files", r.snapshot(t), before)
 }
 
-// A journal of turning encryption on where the store has owners already is not one.
 func TestAnEnableJournalOverAStoreWithOwnersIsRefused(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -126,9 +110,6 @@ func TestAnEnableJournalOverAStoreWithOwnersIsRefused(t *testing.T) {
 	}
 }
 
-// Item 2: a change that was cut short after every file was converted and is finished with the new
-// key alone must not lock the old keys out: the journal carries the old list's signature over the
-// new one, and it becomes a link.
 func TestFinishingWithOnlyTheNewKeyKeepsTheOldKeys(t *testing.T) {
 	ctx := context.Background()
 	for _, noLink := range []bool{false, true} {
@@ -143,7 +124,6 @@ func TestFinishingWithOnlyTheNewKeyKeepsTheOldKeys(t *testing.T) {
 			if journal.Pending == nil || journal.Pending.Link == nil || journal.Pending.From == "" {
 				t.Fatalf("the journal does not carry the link: %+v", journal.Pending)
 			}
-			// The crash: every file is converted, the journal is what the config says.
 			if noLink {
 				journal.Pending.Link = nil
 			}
@@ -161,7 +141,6 @@ func TestFinishingWithOnlyTheNewKeyKeepsTheOldKeys(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The old keys still open the store.
 			r.open(t, r.saved)
 			r.unlockPasskey(t)
 			r.st.Lock()
@@ -182,8 +161,6 @@ func TestFinishingWithOnlyTheNewKeyKeepsTheOldKeys(t *testing.T) {
 	}
 }
 
-// Stripping the seals from a Version 2 config, or presenting an older Version, does not make a
-// passkey or a recovery key accept a list it has no seal for.
 func TestAConfigWithoutSealsIsRefusedWhateverItsVersion(t *testing.T) {
 	r, rsecret := anchoredRig(t)
 	r.st.Lock()
@@ -208,8 +185,6 @@ func TestAConfigWithoutSealsIsRefusedWhateverItsVersion(t *testing.T) {
 			evil := cloneConfig(good)
 			tamper(&evil)
 			r.open(t, evil)
-			// A list that does not name the key at all is "not one of its keys"; every other
-			// tampering is a changed configuration.
 			refused := func(err error) bool {
 				return errors.Is(err, ErrConfigChanged) || name == "owners replaced, stripped" && errors.Is(err, ErrNotAKey)
 			}
@@ -228,8 +203,6 @@ func TestAConfigWithoutSealsIsRefusedWhateverItsVersion(t *testing.T) {
 	r.unlockPasskey(t)
 }
 
-// An older config that was valid once (its seals and links are genuine) is not the one the files
-// were sealed under: the anchor in the files' signed frames says so.
 func TestAnOlderValidConfigPutBackIsRefused(t *testing.T) {
 	ctx := context.Background()
 	r, rsecret := anchoredRig(t)
@@ -239,7 +212,6 @@ func TestAnOlderValidConfigPutBackIsRefused(t *testing.T) {
 	if err := r.st.AddOwner(ctx, k); err != nil {
 		t.Fatal(err)
 	}
-	// The old list is genuine: without the anchor it unlocks.
 	r.st.Lock()
 	r.open(t, old)
 	if err := r.st.UnlockPasskey(bytes.Clone(r.secret)); !errors.Is(err, ErrConfigChanged) {
@@ -248,13 +220,10 @@ func TestAnOlderValidConfigPutBackIsRefused(t *testing.T) {
 	if err := r.st.UnlockRecovery(rsecret); !errors.Is(err, ErrConfigChanged) {
 		t.Fatalf("recovery: %v", err)
 	}
-	// The current one does.
 	r.open(t, r.saved)
 	r.unlockPasskey(t)
 }
 
-// An SSH key that has no seal yet is checked against the files: a list that adds an owner and has
-// its seals stripped, or one that drops the keys that signed the files, is refused.
 func TestAnSSHKeyWithoutASealIsCheckedAgainstTheFiles(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -283,15 +252,12 @@ func TestAnSSHKeyWithoutASealIsCheckedAgainstTheFiles(t *testing.T) {
 			}
 		})
 	}
-	// The genuine list unlocks it, once and again.
 	r.open(t, good)
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// A configuration that is gone over encrypted files is not "encryption off", and neither is one
-// that cannot be read.
 func TestAMissingOrCorruptConfigOverEncryptedFilesIsNotEncryptionOff(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -304,12 +270,10 @@ func TestAMissingOrCorruptConfigOverEncryptedFilesIsNotEncryptionOff(t *testing.
 	if err := Inspect(ctx, r.raw, Config{}, errors.New("invalid character")); !errors.Is(err, ErrConfigCorrupt) {
 		t.Fatalf("corrupt config: %v", err)
 	}
-	// A plain store with no config is simply off.
 	plain := plainRig(t)
 	if err := Inspect(ctx, plain.raw, Config{}, nil); err != nil {
 		t.Fatalf("a plain store: %v", err)
 	}
-	// Writing is refused in that state: no plain text beside the ciphertext.
 	ro := ReadOnly(r.raw, ErrConfigMissing)
 	if err := ro.Save(ctx, "x", []byte("plain")); !errors.Is(err, ErrConfigMissing) {
 		t.Fatalf("%v", err)
@@ -322,8 +286,6 @@ func TestAMissingOrCorruptConfigOverEncryptedFilesIsNotEncryptionOff(t *testing.
 	}
 }
 
-// Restore rebuilds the configuration from a key that opens the files; the files are encrypted again
-// to it, so the next unlock agrees with the anchor.
 func TestRestoreRebuildsTheConfigFromAKeyThatOpensTheFiles(t *testing.T) {
 	ctx := context.Background()
 	for _, how := range []string{"passkey", "recovery", "ssh"} {
@@ -359,7 +321,6 @@ func TestRestoreRebuildsTheConfigFromAKeyThatOpensTheFiles(t *testing.T) {
 			if len(r.saved.Owners) != 1 || r.st.Interrupted() || !r.st.Unlocked() {
 				t.Fatalf("%+v", r.saved)
 			}
-			// The next load: the restored list agrees with the files, and every document opens.
 			r.open(t, r.saved)
 			switch how {
 			case "passkey":
@@ -384,7 +345,6 @@ func TestRestoreRebuildsTheConfigFromAKeyThatOpensTheFiles(t *testing.T) {
 			}
 		})
 	}
-	// A key that opens nothing restores nothing.
 	r := newRig(t)
 	withPlainDocs(t, r)
 	rk, _ := recovery(t)
@@ -401,7 +361,6 @@ func TestRestoreRebuildsTheConfigFromAKeyThatOpensTheFiles(t *testing.T) {
 	sameSnapshot(t, "after the refusal", r.snapshot(t), before)
 }
 
-// Two tabs over one storage: the one that is out of date refuses to write and locks itself.
 type sharedStorage struct {
 	raw *faultyRaw
 	cfg Config
@@ -458,7 +417,6 @@ func TestAStaleTabCannotOverwriteKeyChangesMadeInAnother(t *testing.T) {
 	for name := range ops {
 		tabs[name] = unlocked()
 	}
-	// Another tab changes the keys.
 	other := unlocked()
 	k, _ := recovery(t)
 	if err := other.AddOwner(ctx, k); err != nil {
@@ -479,13 +437,11 @@ func TestAStaleTabCannotOverwriteKeyChangesMadeInAnother(t *testing.T) {
 	if !sameConfig(sh.cfg, changed) {
 		t.Fatal("a stale tab wrote the config")
 	}
-	// The tab that made the change goes on.
 	if err := other.Adapter().Save(ctx, "00000000-0000-4000-8000-000000000002.open", []byte("x")); err != nil {
 		t.Fatalf("the tab that changed the keys: %v", err)
 	}
 }
 
-// The storage event: a tab that is told the config changed elsewhere locks, unless it is its own.
 func TestAStorageEventLocksATabWhoseConfigChanged(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -512,7 +468,6 @@ func TestAStorageEventLocksATabWhoseConfigChanged(t *testing.T) {
 	}
 }
 
-// Room is counted in the browser's storage units (base64 characters), with a margin on what age adds.
 func TestRoomIsCountedInStorageUnitsWithAMargin(t *testing.T) {
 	ctx := context.Background()
 	r := plainRig(t)
@@ -525,9 +480,8 @@ func TestRoomIsCountedInStorageUnitsWithAMargin(t *testing.T) {
 		units += storedUnits(int64(m.Size))
 		bytesUsed += int64(m.Size)
 	}
-	// Counted in file bytes, as it once was, this much room is plenty for the change (about 12 KB);
-	// in the storage's units, and with the margin on what age adds, it is not (about 18.7 KB).
 	_ = bytesUsed
+	// capacity in storage units plus age overhead, not file bytes
 	r.st.Capacity = units + 18000
 	rk, _ := recovery(t)
 	err := r.st.Enable(ctx, Options{}, passkey(t, r), rk)
@@ -548,8 +502,6 @@ func TestRoomIsCountedInStorageUnitsWithAMargin(t *testing.T) {
 	}
 }
 
-// The stored text of an encrypted store holds none of the documents, and every document file has a
-// signed frame (the anchor is there to be checked).
 func TestEveryDocumentFileCarriesTheOwnerListAnchor(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -578,8 +530,6 @@ func TestEveryDocumentFileCarriesTheOwnerListAnchor(t *testing.T) {
 	}
 }
 
-// The owner-signed index of confidential documents (docstore/encrypt) is signed by an owner key too:
-// when that key is taken out, the index is signed again, or it would no longer verify.
 func TestRemovingTheKeyThatSignedTheIndexSignsItAgain(t *testing.T) {
 	ctx := context.Background()
 	r, rsecret, id := confidentialRig(t)
@@ -614,10 +564,6 @@ func TestRemovingTheKeyThatSignedTheIndexSignsItAgain(t *testing.T) {
 	}
 }
 
-// A seal over an old owner list is not the journal of going back to it: someone with an earlier copy
-// of the storage writes the current Config and a journal From the current list To the old one (a
-// list with a key that was removed since), carrying the old seals and a link signed by the removed
-// key. The unlocking owner pressing Finish must not make the removed key an owner again.
 func TestAReplayedSealOverAnOldListIsNotFinished(t *testing.T) {
 	ctx := context.Background()
 	r, rsecret := anchoredRig(t)
@@ -644,8 +590,6 @@ func TestAReplayedSealOverAnOldListIsNotFinished(t *testing.T) {
 	}
 }
 
-// Finishing with only the new key: the journal's link must be From the journal's From, to its To,
-// and signed by a key of the Config's owners.
 func TestFinishingWithTheNewKeyNeedsTheRightLink(t *testing.T) {
 	ctx := context.Background()
 	cases := map[string]func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link{
@@ -654,7 +598,7 @@ func TestFinishingWithTheNewKeyNeedsTheRightLink(t *testing.T) {
 			return linkBy(t, rk, other, j.To) // validly signed by an owner, but not from this list
 		},
 		"to another list": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
-			return linkBy(t, rk, cfg.Owners, []Owner{ownerOf(xk)}) // from this list, but to a list that is not the journal's
+			return linkBy(t, rk, cfg.Owners, []Owner{ownerOf(xk)})
 		},
 		"direction reversed": func(t *testing.T, j *Pending, cfg Config, rk, xk NewKey) *Link {
 			return linkBy(t, rk, j.To, cfg.Owners)
@@ -690,10 +634,6 @@ func TestFinishingWithTheNewKeyNeedsTheRightLink(t *testing.T) {
 	}
 }
 
-// A genuine link made for an earlier change is not the journal of a new one. AddOwner(X) then
-// RemoveOwner(X) leaves the owner list as it was, so the old link from that list to the one with X
-// still verifies from the current list. Someone with an earlier copy of the storage plants that old
-// journal (its seal and its link); finishing it must not make X an owner again.
 func TestAnOldLinkIsNotReplayedAsAJournalOverALaterCopyOfTheList(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -724,8 +664,6 @@ func TestAnOldLinkIsNotReplayedAsAJournalOverALaterCopyOfTheList(t *testing.T) {
 	}
 }
 
-// The same change made again and cut short is a new journal, with a link of its own: it can be
-// finished although an earlier change from and to the same lists is in the Config's links.
 func TestTheSameChangeMadeAgainCanBeFinished(t *testing.T) {
 	ctx := context.Background()
 	r, _ := anchoredRig(t)
@@ -756,7 +694,6 @@ func TestTheSameChangeMadeAgainCanBeFinished(t *testing.T) {
 	}
 }
 
-// A first link that leads nowhere (or in a circle) does not hide another that reaches the target.
 func TestWalkSearchesPastADeadEndAndEndsInACircle(t *testing.T) {
 	a, _ := recovery(t)
 	b, _ := recovery(t)
@@ -779,8 +716,6 @@ func TestWalkSearchesPastADeadEndAndEndsInACircle(t *testing.T) {
 	}
 }
 
-// OnUnlock names the key that unlocked, and a change that re-encrypts the store reports its progress,
-// ending at all documents done.
 func TestHooksNameTheUnlockingKeyAndReportProgress(t *testing.T) {
 	ctx := context.Background()
 	r, rsecret, _ := confidentialRig(t)

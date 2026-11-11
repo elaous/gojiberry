@@ -1,12 +1,3 @@
-// Command docsh is a command line for a document store: bulk rename, move and tag by
-// pattern, import and export, packs, and repair (see package console for the commands).
-//
-//	docsh -store files:./docs ls -l 'Report *'
-//	docsh -store sqlite:docs.db -n mv 'Report *' Archive/      (dry run)
-//	docsh -store http://localhost:8090 -token T            (an interactive session)
-//	docsh -store files:./docs -f script.txt                (stops at the first error, exits 1)
-//
-// A store is memory, files:DIR, sqlite:FILE.db or the URL of a docstore server.
 package main
 
 import (

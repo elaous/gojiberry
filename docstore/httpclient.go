@@ -15,22 +15,17 @@ import (
 	"time"
 )
 
-// HTTPAdapter is an Adapter that talks to a docstore Server over HTTP.
-// It is how code that cannot reach a database itself (a WASM app in a
-// browser) uses whichever backend the server was configured with --
-// Postgres, SQLite, S3 and so on.
+// HTTPAdapter is an Adapter that talks to a docstore server.
 type HTTPAdapter struct {
 	base   string
 	client *http.Client
-	// Header is added to every request (for example Authorization).
+	// Header is added to every request.
 	Header http.Header
 
 	renewWarn sync.Once // the first unsupported-renew answer is logged
 }
 
-// NewHTTPAdapter returns an adapter for the server at baseURL
-// ("https://host" or "/api" for the same origin). A nil client means
-// http.DefaultClient.
+// NewHTTPAdapter returns an adapter for the server at base.
 func NewHTTPAdapter(baseURL string, client *http.Client) *HTTPAdapter {
 	if client == nil {
 		client = http.DefaultClient
@@ -55,9 +50,7 @@ func (a *HTTPAdapter) do(ctx context.Context, method, path string, body []byte) 
 	return a.client.Do(req)
 }
 
-// StatusError is the error HTTPAdapter returns for a response the server answered with an
-// unexpected status; test with errors.As to act on Status (401 and 403 mean the credentials
-// were refused).
+// StatusError is the error HTTPAdapter returns for an HTTP status.
 type StatusError struct {
 	Status int    // the HTTP status code
 	Text   string // the status line, "403 Forbidden"
@@ -73,9 +66,7 @@ func httpError(resp *http.Response) error {
 	return &StatusError{Status: resp.StatusCode, Text: resp.Status, Body: strings.TrimSpace(string(msg))}
 }
 
-// RedactURL returns raw for a log line: the user name and password, the query and the fragment
-// (where a deployment may put a token) are removed. Text that is not a URL is returned as
-// "<invalid URL>".
+// RedactURL returns raw for a log line, without credentials.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" && u.Host == "" {
@@ -103,8 +94,7 @@ func (a *HTTPAdapter) Save(ctx context.Context, id string, data []byte) error {
 	return nil
 }
 
-// SaveIf implements ConditionalAdapter with If-Match / If-None-Match on the PUT: the
-// server answers 412 when the document changed and 501 when its store cannot say.
+// SaveIf implements ConditionalAdapter over HTTP.
 func (a *HTTPAdapter) SaveIf(ctx context.Context, id string, data []byte, prev string) error {
 	if data == nil {
 		data = []byte{}
@@ -139,9 +129,7 @@ func (a *HTTPAdapter) SaveIf(ctx context.Context, id string, data []byte, prev s
 	return nil
 }
 
-// Load implements Adapter. The server does not send a modification
-// time with a document, so UpdatedAt is the time of the load; List has
-// the real one.
+// Load implements Adapter.
 func (a *HTTPAdapter) Load(ctx context.Context, id string) (Document, error) {
 	resp, err := a.do(ctx, http.MethodGet, docPath(id), nil)
 	if err != nil {
@@ -196,25 +184,14 @@ func (a *HTTPAdapter) Delete(ctx context.Context, id string) error {
 
 type authKey struct{}
 
-// WithAuthorization returns a context whose Authorization header value HTTPAdapter.Renew sends,
-// so a renewal is made with the credentials of the person whose edit caused it (the server
-// checks the same write permission as for a save).
+// WithAuthorization returns a context with the authorization header.
 func WithAuthorization(ctx context.Context, value string) context.Context {
 	return context.WithValue(ctx, authKey{}, value)
 }
 
 var _ Renewer = (*HTTPAdapter)(nil)
 
-// Renew implements Renewer with POST /docs/{id}/renew: the server moves the document's
-// deadline if the caller may write it (see WithAuthorization) and the document is alive.
-//
-// ErrNotFound means the server said the document is gone, and only that: a 404 carrying the
-// marker the docstore server's renew route sets (header X-Gojiberry-Gone: 1 and the JSON body
-// {"error":"gone"}, see GoneHeader). Any other 404, and 405 and 501, is ErrRenewUnsupported (also
-// a *StatusError): a reverse proxy that lost its route during a deploy, a base URL that changed,
-// a docstore older than the route or one that does not expire documents all look like that, and
-// none of them says anything about the document. The first such answer of this adapter is logged
-// with advice.
+// Renew implements Renewer with POST /docs/{id}/renew.
 func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.base+docPath(id)+"/renew", nil)
 	if err != nil {
@@ -230,8 +207,7 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
-		// The error carries the request URL, which may hold credentials: it ends up in the
-		// hub's log.
+		// the URL may hold credentials: it ends up in the hub's log
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			ue.URL = RedactURL(ue.URL)
@@ -254,18 +230,11 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	return nil
 }
 
-// GoneHeader is set, with the value "1" and a JSON body {"error":"gone"}, on the 404 of the renew
-// route that means "this document does not exist or has expired", to tell it from every other
-// 404 (a proxy, a wrong base URL, an older server).
 const GoneHeader = "X-Gojiberry-Gone"
 
-// ErrRenewUnsupported is the error of a renewal the server could not take for the document: the
-// route is missing (404 without GoneHeader), refused the method (405) or not implemented (501).
-// It does not mean the document is gone.
+// ErrRenewUnsupported is returned by servers that lack renew.
 var ErrRenewUnsupported = errors.New("docstore: the server does not support renewals here")
 
-// isGoneAnswer reports whether a 404 is the renew route's "document gone": the marker header and
-// the JSON body.
 func isGoneAnswer(resp *http.Response) bool {
 	if resp.Header.Get(GoneHeader) != "1" {
 		return false

@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// setupModule creates a temp module <tmp>/go.mod + <tmp>/pkg/ and
-// returns the pkg directory, for tests that need a real module root
-// (HCL/proto/capnp loaders generate a subpackage relative to one).
 func setupModule(t *testing.T) (pkgDir string) {
 	t.Helper()
 	root := t.TempDir()
@@ -33,9 +30,6 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return p
 }
 
-// mustCompileAndRun writes src as filename inside dir (a real module's
-// package directory) and confirms `go run` actually compiles and
-// executes it -- not just that it looks plausible.
 func mustCompileAndRun(t *testing.T, dir, filename, src string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte(src), 0o644); err != nil {
@@ -122,12 +116,6 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-// TestTypedJSONImportDecodesIntoUserDeclaredType covers the current
-// design: TypeName in `alias.(TypeName)` must already be declared by
-// the caller (xango does not generate it or infer its shape), so any
-// JSON shape works, not just a top-level object -- including this
-// case, where nested/array/scalar fields all just flow straight into
-// a struct the test itself writes.
 func TestTypedJSONImportDecodesIntoUserDeclaredType(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{
@@ -294,11 +282,6 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-// TestExperimentalExtensionsRejectedWithoutOptIn covers the default
-// (non-experimental) gating boundary for .hcl/.proto/.capnp/.sql --
-// their actual loaders now live in internal/transpile/experimental
-// and are tested there (with Options{Experimental: true}); this only
-// confirms xango refuses to run them silently.
 func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
 	for _, tc := range []struct {
 		ext     string
@@ -324,12 +307,6 @@ func TestExperimentalExtensionsRejectedWithoutOptIn(t *testing.T) {
 	}
 }
 
-// TestTypedJSONAnnotationWorksByDefault confirms the .(TypeName)
-// annotation needs no experimental opt-in: it isn't gated, since it no
-// longer infers/generates anything (see TestTypedJSONImport
-// DecodesIntoUserDeclaredType) -- the only remaining risk is the
-// ordinary one of a hand-written type not matching the data, identical
-// to writing json.Unmarshal by hand.
 func TestTypedJSONAnnotationWorksByDefault(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)
@@ -341,11 +318,6 @@ func TestTypedJSONAnnotationWorksByDefault(t *testing.T) {
 	mustCompileAndRun(t, dir, "main.go", string(out))
 }
 
-// TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile confirms
-// xango doesn't try to verify TypeName actually exists -- that's the Go
-// compiler's job, not a source-to-source transpiler's; using a type
-// xango never heard of should transpile fine and fail where any other
-// undefined-identifier mistake would.
 func TestTypedJSONAnnotationWithUndeclaredTypeFailsAtGoCompile(t *testing.T) {
 	dir := setupModule(t)
 	writeFile(t, dir, "config.json", `{"title": "gojiberry"}`)

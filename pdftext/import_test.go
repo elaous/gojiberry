@@ -44,7 +44,6 @@ func TestImportRejectsOtherData(t *testing.T) {
 
 func TestExtractBytesJoinsEveryPage(t *testing.T) {
 	c := func(s string) docfile.Item { return docfile.Item{Chars: &docfile.Chars{Text: s}} }
-	// enough lines to run onto a second page
 	var long strings.Builder
 	for i := 0; i < 120; i++ {
 		long.WriteString("Line of text number that fills the page\n")

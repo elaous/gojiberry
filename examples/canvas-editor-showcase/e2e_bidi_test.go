@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Hebrew typed into a paragraph of its own is laid out right to left: the arrow keys move by what is seen
-// (the left arrow goes to the next letter in the text), the copy for a screen reader says dir=auto for it, and
-// the paragraph before it is as it was.
 func TestRightToLeftParagraphInTheEditor(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")

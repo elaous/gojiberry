@@ -35,7 +35,6 @@ func TestFromEnv(t *testing.T) {
 	if d.SessionMaxAge != DefaultSessionMaxAge || d.TombstoneTTL != DefaultRecordTTL || d.SessionsPerHour != DefaultSessionsPerHour {
 		t.Fatalf("defaults = %+v", d)
 	}
-	// off by default
 	c, err = FromEnv(func(string) string { return "" })
 	if err != nil || c.Enabled {
 		t.Fatalf("empty env: %+v, %v", c, err)
@@ -79,7 +78,6 @@ func TestMemorySessionStore(t *testing.T) {
 	if _, ok, _ := st.Get(ctx, "b", later); ok {
 		t.Fatal("expired session found")
 	}
-	// SetDoc is a compare-and-set
 	if ok, err := st.SetDoc(ctx, "a", "", "d1", now); !ok || err != nil {
 		t.Fatalf("SetDoc = %v, %v", ok, err)
 	}
@@ -92,7 +90,6 @@ func TestMemorySessionStore(t *testing.T) {
 	if _, err := st.SetDoc(ctx, "zzz", "", "d", now); err != ErrNoSession {
 		t.Fatalf("err = %v", err)
 	}
-	// Extend only moves forward
 	_ = st.Extend(ctx, "a", now.Add(10*time.Minute), now)
 	if s, _, _ := st.Get(ctx, "a", now); !s.Expires.Equal(now.Add(time.Hour)) {
 		t.Fatalf("expires %v", s.Expires)

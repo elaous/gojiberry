@@ -14,53 +14,35 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// The life of a document beyond saving it: versions (snapshots to go back to),
-// the trash (a flag in the catalog: the document stays where it is, so nothing is
-// overwritten and restoring is instant), copies, names and tags. Versions are
-// kept in the same target under keys of their own:
-//
-//	versions/<id>/<time><ext>   a snapshot of the document <id>, <time> in nanoseconds
-//
-// List does not show them, and the document methods refuse them.
 const VersionPrefix = "versions/"
 
-// DefaultMaxVersions is how many snapshots of one document are kept when
-// Saver.MaxVersions is 0; the oldest go first.
 const DefaultMaxVersions = 50
 
-// ErrNotFound is returned for a document or version that is not there.
 var ErrNotFound = docstore.ErrNotFound
 
 // Version is a snapshot of a document.
 type Version struct {
-	Key  string // what LoadVersion and DeleteVersion take
-	ID   string // the document's ID
-	Time time.Time
-	Size int
-	// Name, Pinned and Author come from the version's notes (see SetVersionMeta): a name the person gave
-	// it, whether it is kept when older snapshots are dropped, and who saved it.
+	Key    string // what LoadVersion and DeleteVersion take
+	ID     string // the document's ID
+	Time   time.Time
+	Size   int
 	Name   string
 	Pinned bool
 	Author string
 }
 
-// VersionMeta is what is known of a snapshot besides its time: kept next to the snapshots, in one small
-// record per document (versions/<id>/meta.json), so the snapshots themselves stay as they were saved.
 type VersionMeta struct {
 	Name   string `json:"name,omitempty"`
 	Pinned bool   `json:"pinned,omitempty"`
 	Author string `json:"author,omitempty"`
 }
 
-// ErrPinned is returned when a pinned version is asked to be deleted: unpin it first.
 var ErrPinned = errors.New("saver: this version is pinned: unpin it before deleting it")
 
-// maxVersionName is the longest name of a version, in bytes.
 const maxVersionName = 120
 
 func metaKey(id string) string { return VersionPrefix + id + "/meta.json" }
 
-// versionDoc is the document ID a version key belongs to.
 func versionDoc(key string) string {
 	rest := strings.TrimPrefix(key, VersionPrefix)
 	id, _, _ := strings.Cut(rest, "/")
@@ -97,9 +79,6 @@ func (s *Saver) saveMeta(ctx context.Context, t Target, id string, m map[string]
 	return t.Adapter.Save(ctx, metaKey(id), data)
 }
 
-// SetVersionMeta changes the notes of a snapshot: edit receives the current ones. The name is trimmed
-// and cut to 120 bytes. Two people changing notes of the same document at the same moment can lose
-// one of the changes (the last write wins); the snapshots are never affected.
 func (s *Saver) SetVersionMeta(ctx context.Context, target, key string, edit func(*VersionMeta)) error {
 	if err := checkVersionKey(key); err != nil {
 		return err
@@ -135,7 +114,6 @@ func (s *Saver) RenameVersion(ctx context.Context, target, key, name string) err
 	return s.SetVersionMeta(ctx, target, key, func(v *VersionMeta) { v.Name = name })
 }
 
-// PinVersion keeps a snapshot when older ones are dropped (see Saver.MaxVersions), or lets it go again.
 func (s *Saver) PinVersion(ctx context.Context, target, key string, pinned bool) error {
 	return s.SetVersionMeta(ctx, target, key, func(v *VersionMeta) { v.Pinned = pinned })
 }
@@ -151,14 +129,10 @@ func versionKey(id string, c docfile.Codec, t time.Time) string {
 	return fmt.Sprintf("%s%s/%020d%s", VersionPrefix, id, t.UnixNano(), c.Ext())
 }
 
-// SaveVersion stores a snapshot of doc as a version of the document it
-// belongs to (doc.ID(), which must be set: save the document first), and drops
-// the oldest snapshots beyond Saver.MaxVersions.
 func (s *Saver) SaveVersion(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (Version, error) {
 	return s.SaveVersionBy(ctx, target, c, doc, "")
 }
 
-// SaveVersionBy is SaveVersion that also records who saved the snapshot (author "" records nobody).
 func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, author string) (Version, error) {
 	t, err := s.Target(target)
 	if err != nil {
@@ -169,7 +143,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 		return Version{}, ErrID
 	}
 	if _, err := s.Get(ctx, target, id); err != nil {
-		return Version{}, err // a late snapshot of a deleted document would be an orphan
+		return Version{}, err
 	}
 	now := time.Now()
 	doc.Updated = now.UnixNano()
@@ -178,8 +152,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 		return Version{}, err
 	}
 	key := versionKey(id, c, now)
-	// Two snapshots in one nanosecond cannot happen on a real clock, but keys
-	// must not collide on a coarse one.
+	// keys must not collide on a coarse clock
 	for i := 1; ; i++ {
 		if _, err := t.Adapter.Load(ctx, key); errors.Is(err, docstore.ErrNotFound) {
 			break
@@ -197,7 +170,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 	if vs, err := s.Versions(ctx, target, id); err == nil {
 		kept := 0
 		meta, _ := s.loadMeta(ctx, t, id)
-		for _, v := range vs { // newest first; a pinned snapshot is never dropped and does not count
+		for _, v := range vs { // newest first; a pinned snapshot is never dropped or counted
 			if v.Pinned {
 				continue
 			}
@@ -312,8 +285,6 @@ func (s *Saver) dropVersions(ctx context.Context, t Target, id string) {
 	}
 }
 
-// mark sets or clears the trash flag of each document, in the document and the
-// catalog; it changes nothing unless every ID is there.
 func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed bool) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		for _, id := range ids {
@@ -338,8 +309,7 @@ func (s *Saver) mark(ctx context.Context, target string, ids []string, trashed b
 	})
 }
 
-// Trash moves documents to the trash. They stay where they are, with their
-// versions, so restoring them is instant and loses nothing.
+// Trash moves documents to the trash.
 func (s *Saver) Trash(ctx context.Context, target string, ids ...string) error {
 	return s.mark(ctx, target, ids, true)
 }
@@ -349,7 +319,6 @@ func (s *Saver) Restore(ctx context.Context, target string, ids ...string) error
 	return s.mark(ctx, target, ids, false)
 }
 
-// Trashed lists the documents in the trash, the most recently trashed first.
 func (s *Saver) Trashed(ctx context.Context, target string) ([]Entry, error) {
 	var out []Entry
 	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
@@ -359,8 +328,7 @@ func (s *Saver) Trashed(ctx context.Context, target string) ([]Entry, error) {
 	return out, err
 }
 
-// Purge deletes documents in the trash for good. It checks every ID first and
-// changes nothing if one is missing or not in the trash.
+// Purge deletes documents in the trash for good.
 func (s *Saver) Purge(ctx context.Context, target string, ids ...string) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		for _, id := range ids {
@@ -387,7 +355,6 @@ func (s *Saver) Purge(ctx context.Context, target string, ids ...string) error {
 	})
 }
 
-// EmptyTrash deletes everything in the trash and returns how many it removed.
 func (s *Saver) EmptyTrash(ctx context.Context, target string) (int, error) {
 	list, err := s.Trashed(ctx, target)
 	if err != nil {
@@ -400,9 +367,6 @@ func (s *Saver) EmptyTrash(ctx context.Context, target string) (int, error) {
 	return len(ids), s.Purge(ctx, target, ids...)
 }
 
-// Duplicate saves a copy of the document as a new document, with a new ID and the
-// same format, tags and contents, and returns it. With newName "" the copy is
-// called "Copy of <name>"; names need not be unique.
 func (s *Saver) Duplicate(ctx context.Context, target, id, newName string) (Entry, error) {
 	doc, err := s.Load(ctx, target, id)
 	if err != nil {
@@ -445,8 +409,6 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 	})
 }
 
-// SetTags replaces the tags of a document (trimmed, without repeats; see
-// Document.SetTags).
 func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) error {
 	var clean docfile.Document
 	clean.SetTags(tags)
@@ -466,8 +428,6 @@ func (s *Saver) SetTags(ctx context.Context, target, id string, tags []string) e
 	})
 }
 
-// restoreHistory stores the revisions of an imported document as its versions, at the
-// times they were saved, and keeps the newest MaxVersions of all of them.
 func (s *Saver) restoreHistory(ctx context.Context, target, id string, c docfile.Codec, history []docfile.Revision) error {
 	t, err := s.Target(target)
 	if err != nil {
@@ -496,9 +456,6 @@ func (s *Saver) restoreHistory(ctx context.Context, target, id string, c docfile
 	return nil
 }
 
-// ExportOpen writes a document as one .open file (docfile.Open), with its history when
-// history is set: the document and each of its versions, oldest first. Saving the file
-// somewhere else (Saver.Save) brings the versions back.
 func (s *Saver) ExportOpen(ctx context.Context, target, id string, history bool) ([]byte, error) {
 	data, _, err := s.exportOpen(ctx, target, id, history)
 	return data, err
@@ -513,8 +470,6 @@ func (s *Saver) exportOpen(ctx context.Context, target, id string, history bool)
 	return data, n, err
 }
 
-// loadWithHistory loads a document, with its versions in Document.History (oldest first)
-// when history is set, and says how many there are.
 func (s *Saver) loadWithHistory(ctx context.Context, target, id string, history bool) (docfile.Document, int, error) {
 	doc, err := s.Load(ctx, target, id)
 	if err != nil {
@@ -539,15 +494,11 @@ func (s *Saver) loadWithHistory(ctx context.Context, target, id string, history 
 	return doc, n, nil
 }
 
-// OpenSizes says how big a .open file of a document would be, in bytes: Current is the
-// file with no history, History how much the versions add to it, and Versions how many
-// there are.
 type OpenSizes struct {
 	Current, History int64
 	Versions         int
 }
 
-// OpenSizes measures the .open file of a document, with and without its history.
 func (s *Saver) OpenSizes(ctx context.Context, target, id string) (OpenSizes, error) {
 	bare, _, err := s.exportOpen(ctx, target, id, false)
 	if err != nil {

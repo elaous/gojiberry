@@ -12,12 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The add-ons registry. Things that need a heavy runtime or a model the program should not carry (speech, vision,
-// translation) are scripts the person who runs the page adds, and they offer themselves as properties of one object,
-// window.addons. The page asks for one by name and does without it when it is not there: no feature depends on an
-// add-on, and nothing is fetched for one until a person asks. docs/addons.md lists the names and what each offers.
-
-// addon is window.addons[name], or undefined when the page has no such add-on.
 func addon(name string) js.Value {
 	all := js.Global().Get("addons")
 	if !all.Truthy() {
@@ -26,15 +20,11 @@ func addon(name string) js.Value {
 	return all.Get(name)
 }
 
-// hasAddon says the page has the add-on and it offers the method.
 func hasAddon(name, method string) bool {
 	a := addon(name)
 	return a.Truthy() && a.Get(method).Type() == js.TypeFunction
 }
 
-// ---- what the page does with an add-on's models, and the Add-ons tab ----
-
-// addonsState is what the Add-ons tab knows.
 var addonsState struct {
 	models  map[string][]addonsModel // by add-on name, once asked
 	loading map[string]bool
@@ -48,7 +38,6 @@ var addonsState struct {
 
 type addonsModel = addons.Model
 
-// addonModels asks an add-on for its models; done is called with them.
 func addonModels(name string, done func([]addons.Model, error)) {
 	go func() {
 		a := addon(name)
@@ -66,7 +55,6 @@ func addonModels(name string, done func([]addons.Model, error)) {
 	}()
 }
 
-// addonInstall asks an add-on to download a model; progress gets the bytes so far and the total.
 func addonInstall(name, id string, progress func(done, total int64), done func(error)) {
 	go func() {
 		a := addon(name)
@@ -86,7 +74,6 @@ func addonInstall(name, id string, progress func(done, total int64), done func(e
 	}()
 }
 
-// addonRemove asks an add-on to delete a model.
 func addonRemove(name, id string, done func(error)) {
 	go func() {
 		a := addon(name)
@@ -99,7 +86,6 @@ func addonRemove(name, id string, done func(error)) {
 	}()
 }
 
-// installedModel is the first installed model of an add-on that serves the language ("" for any), or "".
 func installedModel(name, lang string) string {
 	base := strings.ToLower(strings.SplitN(lang, "-", 2)[0])
 	for _, m := range addonsState.models[name] {
@@ -113,7 +99,6 @@ func installedModel(name, lang string) string {
 	return ""
 }
 
-// addonLabel names an add-on for a person. The ids are spelled out so that the translation check sees them.
 func addonLabel(name string) string {
 	switch name {
 	case "piper":
@@ -136,8 +121,6 @@ func addonLabel(name string) string {
 	return name
 }
 
-// addonsPanel is the Add-ons tab: which add-ons this page has and, for those that keep models, the models with their
-// size and licence, to download or remove. Nothing is asked of an add-on until the button is pressed.
 func addonsPanel(u *ui, renderUI func()) xango.Node {
 	if addonsState.models == nil {
 		addonsState.models, addonsState.loading, addonsState.errs = map[string][]addons.Model{}, map[string]bool{}, map[string]string{}
@@ -256,10 +239,8 @@ func addonsPanel(u *ui, renderUI func()) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("id", "addons-panel")}, nodes...)
 }
 
-// a is the add-on called name (short for addon).
 func a(name string) js.Value { return addon(name) }
 
-// nonEmpty drops the empty strings.
 func nonEmpty(in ...string) []string {
 	var out []string
 	for _, s := range in {

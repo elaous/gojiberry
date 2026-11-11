@@ -2,9 +2,6 @@ package crdt
 
 import "testing"
 
-// syncOnce exchanges each doc's pending outbox with the other,
-// simulating the instant a phone finds "a sliver of network" — only
-// the delta since the last sync crosses the wire, not the document.
 func syncOnce(a, b *Doc) {
 	aOps := a.Drain()
 	bOps := b.Drain()
@@ -35,8 +32,6 @@ func TestDisjointEditsConverge(t *testing.T) {
 }
 
 func TestConcurrentEditSameBlockConvergesRegardlessOfOrder(t *testing.T) {
-	// Both replicas start from a shared block, then go offline and
-	// edit it differently before ever syncing — a real conflict.
 	seed := NewDoc("seed")
 	seed.Put(Block{ID: "note", Kind: "paragraph", Content: "rascunho", Order: 0})
 	seedOp := seed.Drain()[0]
@@ -52,8 +47,6 @@ func TestConcurrentEditSameBlockConvergesRegardlessOfOrder(t *testing.T) {
 	phoneOps := phone.Drain()
 	tabletOps := tablet.Drain()
 
-	// Apply in opposite order on each side to prove the result doesn't
-	// depend on delivery order.
 	phone.Apply(tabletOps...)
 	tablet.Apply(phoneOps...)
 
@@ -94,8 +87,6 @@ func TestDeleteWinsWhenLater(t *testing.T) {
 	delOp := a.Delete("1")
 	a.Drain()
 
-	// b never saw the delete yet; a later, unrelated edit on b must
-	// not resurrect the block once the delete op arrives.
 	b.Apply(delOp)
 
 	if _, ok := b.Get("1"); ok {

@@ -23,7 +23,6 @@ func TestADressedTableStaysDressedWhenRowsAndColumnsChange(t *testing.T) {
 	if tb.StyleAt(2, 1).Background != s.BandBG {
 		t.Fatal("bands run on every second row")
 	}
-	// a table dressed by hand is left as the change makes it
 	hand := NewTableFrom([][]string{{"h"}, {"1"}, {"2"}})
 	hand.SetCellStyle(1, 0, CellStyle{Background: "#ffcc00"})
 	hand.InsertRow(1)
@@ -60,7 +59,7 @@ func TestStylesThePersonDefinesJoinTheBuiltInOnes(t *testing.T) {
 	if err := AddTableScheme(TableScheme{Name: "SUNRISE", HeaderBG: "#000"}); err != nil || len(CustomTableSchemes()) != 1 || CustomTableSchemes()[0].HeaderBG != "#000" {
 		t.Fatal("the same name replaces")
 	}
-	RemoveTableScheme("sunrise") // removal is by the exact name, as the picker offers it
+	RemoveTableScheme("sunrise")
 	if len(CustomTableSchemes()) != 1 {
 		t.Fatal("removal is by the exact name")
 	}

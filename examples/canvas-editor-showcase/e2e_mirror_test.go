@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/internal/screenreader"
 )
 
-// phrases are what the screen reader says at every stop of the page, in reading order.
 func phrases(sr *screenreader.Reader) []string {
 	var out []string
 	for _, it := range sr.Items() {
@@ -26,8 +25,6 @@ func hasPhraseWith(list []string, part string) bool {
 	return slices.ContainsFunc(list, func(s string) bool { return strings.Contains(s, part) })
 }
 
-// The mirror's structure as a screen reader meets it: the outline is a navigation landmark whose links go
-// to the headings, a link of the document is a link, the header row of a table is column headers.
 func TestMirrorStructureForAScreenReader(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
@@ -47,16 +44,13 @@ func TestMirrorStructureForAScreenReader(t *testing.T) {
 			t.Errorf("a screen reader should say %q; it reads:\n%s", want, strings.Join(ph, "\n"))
 		}
 	}
-	// The outline comes before the text, so a reader meets it first when it goes by landmarks.
 	if slices.Index(ph, "Document outline, navigation landmark") > slices.Index(ph, "Gojiberry editor, heading, level 1") {
 		t.Error("the outline comes before the text")
 	}
 	d.OK(d.Attr("#a11y-text a[href^='https://github.com']", "rel") == "noopener noreferrer", "the document's link opens safely")
 
-	// Activating an entry of the outline takes the editor's caret to the heading.
 	want := strings.Index(d.State().Str("text"), "Second thoughts")
 	d.OK(want > 0, "the heading is in the text")
-	// A screen reader activates a link with a click event on the (visually hidden) link.
 	d.Eval(`[...document.querySelectorAll('#a11y-text-outline a')].find(a => a.textContent === 'Second thoughts').click()`, nil)
 	d.Wait("s.cursors[0].Caret === " + e2etest.J(len([]rune(d.State().Str("text")[:want]))))
 	d.OK(d.Str(`document.activeElement.textContent`) == "Second thoughts", "and the heading has the keyboard focus, so it is read: "+d.Str(`document.activeElement.textContent`))

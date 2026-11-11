@@ -82,21 +82,18 @@ func TestInsertAndDeleteAdjustMerges(t *testing.T) {
 	if tb.Merges[0].Cols != 2 {
 		t.Errorf("columns after delete: %+v", tb.Merges)
 	}
-	// Deleting the row that holds the owner keeps its text, in the row below.
 	tb2 := grid()
 	tb2.MergeRange(1, 0, 2, 0)
 	tb2.DeleteRow(1)
 	if len(tb2.Merges) != 0 || tb2.Cell(1, 0) != "1 5" && tb2.Cell(1, 0) != "5 1" && tb2.Cell(1, 0) != "1 5" {
 		t.Errorf("owner row deleted: merges %+v, cell %q", tb2.Merges, tb2.Cell(1, 0))
 	}
-	// A merge that is only one row high goes with the row.
 	tb3 := grid()
 	tb3.MergeRange(1, 0, 1, 2)
 	tb3.DeleteRow(1)
 	if len(tb3.Merges) != 0 {
 		t.Errorf("merges %+v", tb3.Merges)
 	}
-	// The last row or column cannot go, and clears everything.
 	one := NewTable(1, 1)
 	one.SetCellStyle(0, 0, CellStyle{Bold: true})
 	one.DeleteRow(0)

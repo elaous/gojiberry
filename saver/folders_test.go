@@ -20,13 +20,11 @@ func TestFoldersHoldDocumentsAndFolders(t *testing.T) {
 		if err != nil || !docfile.ValidID(work.ID) {
 			t.Fatalf("%s: %+v %v", tg.Name, work, err)
 		}
-		// Folders may share a name, like documents.
 		sub1, _ := s.CreateFolder(ctx, tg.Name, work.ID, "2026")
 		sub2, _ := s.CreateFolder(ctx, tg.Name, "", "2026")
 		if sub1.ID == sub2.ID || sub1.Parent != work.ID || sub2.Parent != "" {
 			t.Fatalf("%s: %+v %+v", tg.Name, sub1, sub2)
 		}
-		// A new document goes where its meta says; one in a missing folder goes to the top.
 		d := named("plan")
 		d.SetFolder(sub1.ID)
 		inSub, err := s.Save(ctx, tg.Name, docfile.JSON, d)
@@ -38,7 +36,6 @@ func TestFoldersHoldDocumentsAndFolders(t *testing.T) {
 		if e, _ := s.Save(ctx, tg.Name, docfile.JSON, d2); e.Folder != "" {
 			t.Errorf("%s: a missing folder: %q", tg.Name, e.Folder)
 		}
-		// Saving the document again does not move it; Move does, and the document agrees.
 		again := named("plan")
 		again.SetID(inSub.ID)
 		if e, _ := s.Save(ctx, tg.Name, docfile.JSON, again); e.Folder != sub1.ID {
@@ -60,7 +57,6 @@ func TestFoldersHoldDocumentsAndFolders(t *testing.T) {
 		if g, _ := s.Load(ctx, tg.Name, inSub.ID); g.Folder() != work.ID {
 			t.Errorf("%s: a failed move changed the document", tg.Name)
 		}
-		// Folder operations.
 		if err := s.RenameFolder(ctx, tg.Name, work.ID, "Job"); err != nil {
 			t.Fatal(err)
 		}
@@ -75,7 +71,6 @@ func TestFoldersHoldDocumentsAndFolders(t *testing.T) {
 		if len(path) != 2 || path[0].ID != sub2.ID || path[1].ID != sub1.ID {
 			t.Errorf("%s: path %+v", tg.Name, path)
 		}
-		// Deleting needs an empty folder; a trashed document in it goes to the top level.
 		if err := s.DeleteFolder(ctx, tg.Name, sub2.ID); err == nil {
 			t.Errorf("%s: deleted a folder with a folder in it", tg.Name)
 		}
@@ -184,7 +179,6 @@ func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
 	if fixed, err := s.Repair(ctx, "m"); err != nil || fixed {
 		t.Fatalf("a consistent store needs no repair: %v %v", fixed, err)
 	}
-	// A folder whose catalog write never happened: its record is an orphan.
 	orphan, _ := s.CreateFolder(ctx, "m", "", "Orphan")
 	c, _ := s.readCatalogForTest(ctx, "m")
 	delete(c.Folders, orphan.ID)
@@ -196,7 +190,6 @@ func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
 	if fs, _ := s.Folders(ctx, "m"); len(fs) != 2 {
 		t.Errorf("the folder should be back: %+v", fs)
 	}
-	// A listed document whose file is gone is dropped; a file nobody listed is adopted.
 	_ = mem.Delete(ctx, e.Key)
 	extra := named("late")
 	extra.SetID(docfile.NewID())
@@ -215,9 +208,6 @@ func TestRepairFindsWhatACrashLeftBehind(t *testing.T) {
 	}
 }
 
-// A delete takes the document out of the catalog first and removes its file after.
-// A Repair that lists the store in between must not take the file for a document
-// nobody listed and bring it back.
 func TestRepairDoesNotResurrectADocumentBeingDeleted(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -226,7 +216,6 @@ func TestRepairDoesNotResurrectADocumentBeingDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The catalog no longer lists it; its file is still there (the first half of a delete).
 	c, _ := s.readCatalogForTest(ctx, "m")
 	delete(c.Docs, e.ID)
 	data, _ := json.Marshal(c)
@@ -243,7 +232,6 @@ func TestRepairDoesNotResurrectADocumentBeingDeleted(t *testing.T) {
 	}
 }
 
-// Files the last rebuild left out (unreadable ones) are not work for every Repair.
 func TestRepairLeavesWhatARebuildSkipped(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -263,10 +251,6 @@ func TestRepairLeavesWhatARebuildSkipped(t *testing.T) {
 	}
 }
 
-// A document in the trash whose file is gone has nothing left to keep: deleting its
-// folder removes it, and says so. One whose file is there but does not parse is not
-// destroyed (it may be from a newer version of the library): it goes to the top level
-// of the trash, untouched, and the folder can be deleted.
 func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -285,7 +269,6 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 		return e
 	}
 	good, missing, damaged := mk("good"), mk("missing"), mk("damaged")
-	// Trashing wrote a new file for each: the current one is what the catalog says now.
 	current := func(id string) Entry {
 		e, err := s.Get(ctx, "m", id)
 		if err != nil {
@@ -293,10 +276,9 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 		}
 		return e
 	}
-	// Both copies of these two are gone or wrong, or the previous one would stand in.
 	for _, e := range []Entry{missing, damaged} {
 		cur := current(e.ID)
-		_ = mem.Delete(ctx, e.Key) // the previous copy (the file that was current before the trashing)
+		_ = mem.Delete(ctx, e.Key)
 		if e.ID == missing.ID {
 			_ = mem.Delete(ctx, cur.Key)
 		} else {
@@ -321,7 +303,6 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 		t.Errorf("the folder is gone: %+v", folders)
 	}
 
-	// A store error that is not "the file is missing or damaged" still stops it.
 	g, _ := s.CreateFolder(ctx, "m", "", "Flaky")
 	d := named("flaky")
 	d.SetFolder(g.ID)
@@ -337,7 +318,6 @@ func TestDeleteFolderRemovesTrashedDocumentsWhoseFilesAreGone(t *testing.T) {
 	}
 }
 
-// failingLoads fails loading one key with an error that is not "not found".
 type failingLoads struct {
 	docstore.Adapter
 	key string

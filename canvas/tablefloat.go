@@ -2,8 +2,6 @@ package canvas
 
 import "math"
 
-// tablePress is a press on the table icon, not yet known to be a click
-// (select the table) or a drag (move it).
 type tablePress struct {
 	x, y           float64
 	startX, startY float64
@@ -30,16 +28,13 @@ func (v *TableView) pageSet() *PageSet {
 	return nil
 }
 
-// resolve updates X, Y from the Anchor.
 func (v *TableView) resolve() {
 	if ps := v.pageSet(); v.Anchor != nil && ps != nil {
 		v.X, v.Y = ps.Resolve(*v.Anchor)
 	}
 }
 
-// SetFlow sets the text flow to wrap around and registers the table as
-// one of its obstacles (removing it from any previous flow). Text
-// wraps only while Wrap is on.
+// SetFlow sets the text flow to wrap around the table.
 func (v *TableView) SetFlow(f *TextFlow) {
 	if v.flow != nil {
 		v.flow.RemoveObstacle(v)
@@ -53,14 +48,12 @@ func (v *TableView) SetFlow(f *TextFlow) {
 // Flow returns the flow set with SetFlow.
 func (v *TableView) Flow() *TextFlow { return v.flow }
 
-// Rect returns the table's cells (not its handles or "+" bars): x, y, w, h.
+// Rect returns the table's cell rectangle: x, y, w, h.
 func (v *TableView) Rect() (x, y, w, h float64) {
 	g := v.layout()
 	return v.X, v.Y, g.right() - v.X, g.bottom() - v.Y
 }
 
-// Exclusion implements Obstacle: while Wrap is on, the table plus
-// WrapMargin is off limits to text.
 func (v *TableView) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	if !v.Wrap {
 		return 0, 0, false
@@ -73,8 +66,7 @@ func (v *TableView) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	return x - m, x + w + m, true
 }
 
-// ContainsPoint implements Hitter: the cells, and in edit mode the
-// handles, bars and an open menu, keep presses from the text beneath.
+// ContainsPoint: the cells, and in edit mode the handles.
 func (v *TableView) ContainsPoint(x, y float64) bool {
 	rx, ry, rw, rh := v.Rect()
 	if inRect(x, y, [4]float64{rx, ry, rw, rh}) {
@@ -83,9 +75,6 @@ func (v *TableView) ContainsPoint(x, y float64) bool {
 	return v.mode == ModeEdit && (v.HitTest(x, y).Kind != HitNone || v.menu.HitTest(x, y) >= 0)
 }
 
-// dragTable moves the table while the icon is held down, once the pointer
-// has travelled far enough to be a drag; the position snaps to Snap,
-// relative to the page when anchored.
 func (v *TableView) dragTable(x, y float64) bool {
 	p := v.press
 	dx, dy := x-p.x, y-p.y
@@ -117,8 +106,6 @@ func (v *TableView) dragTable(x, y float64) bool {
 	return true
 }
 
-// MouseUp ends a press on the table icon: if the pointer never moved
-// far, it was a click, and selects the table and opens its menu.
 func (v *TableView) MouseUp(x, y float64) bool {
 	p := v.press
 	if p == nil {
@@ -131,7 +118,6 @@ func (v *TableView) MouseUp(x, y float64) bool {
 	return true
 }
 
-// Moving reports whether the table is being dragged to a new position.
 func (v *TableView) Moving() bool { return v.press != nil && v.press.moved }
 
 var (

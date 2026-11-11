@@ -15,60 +15,34 @@ import (
 	"time"
 )
 
-// Usage over time.
-//
-// The counters of GET /admin/usage (documents, records, bytes, the largest document, the backend's
-// quota in use, and the batches the telemetry receiver took and refused) are sampled into a short
-// series so that an operator can see a trend, not only the present. The series is kept by these rules:
-//
-//   - aggregate only: every number is a count or a size of the whole store, never about a document,
-//     a person, an address or a session. A sample has no identifier of any kind;
-//   - fixed small cardinality: at most UsageHourlyPoints hourly points and UsageDailyPoints daily
-//     points, each with the same seven numbers; an older point is dropped as a newer one comes. The
-//     series can never grow with the number of documents or people;
-//   - retention: 48 hours at hour resolution, 90 days at day resolution. Nothing older is kept;
-//   - kept across restarts: the series is one small record in the store (UsageSeriesKey, written through the
-//     same Adapter as the documents, at most once every ten minutes and whenever a new hour begins). It
-//     holds exactly the points above and nothing else, is read strictly (a field, time or number outside
-//     the rules refuses the whole record and the series starts again, the gap showing as missing points,
-//     never as made-up ones), and is never written to a log. A point is the last sample taken in its hour
-//     (or day), so the totals read at the end of the period. Several server processes on one store each
-//     write their own series and the last write wins.
-//
-// Samples are taken when the operator reads the usage history routes and, with RunUsageSampling, every hour.
-
 // The retention of the series.
 const (
 	UsageHourlyPoints = 48 // two days of hours
 	UsageDailyPoints  = 90 // about three months of days
 )
 
-// UsageSeriesKey is where the series is kept: a reserved key ("usage:" is not reachable through /docs and is
-// not a document, so it never expires by itself).
+// UsageSeriesKey is where the series is stored.
 const UsageSeriesKey = "usage:series"
 
-// usageKeyspace is the reserved keyspace of the persisted series.
+// reserved keyspace of the persisted series
 const usageKeyspace = "usage:"
 
-// usageSaveEvery is the longest a changed point waits to be written, unless a new hour begins (then at once).
 const usageSaveEvery = 10 * time.Minute
 
-// UsagePoint is one sample of the counters, at the start (UTC) of its hour or day.
+// UsagePoint is one sample of the counters.
 type UsagePoint struct {
 	Time      time.Time `json:"time"`
 	Documents int       `json:"documents"`
 	Records   int       `json:"records"`
 	Bytes     int64     `json:"bytes"`
 	Largest   int       `json:"largest"`
-	// QuotaUsed is the backend's quota in use; 0 when the backend does not report one.
+	// QuotaUsed is the backend's quota use.
 	QuotaUsed int64 `json:"quotaUsed"`
-	// Accepted and Refused are the usage batches the telemetry receiver has taken and refused up to
-	// this point (running totals; 0 when it is off).
+	// Accepted and Refused are the usage counts.
 	Accepted int `json:"accepted"`
 	Refused  int `json:"refused"`
 }
 
-// usageSeries is the bounded history. The zero value is ready to use.
 type usageSeries struct {
 	mu        sync.Mutex
 	hourly    []UsagePoint // oldest first, at most UsageHourlyPoints
@@ -76,14 +50,12 @@ type usageSeries struct {
 	lastSaved time.Time
 }
 
-// persisted is the record in the store: the two lists and a version.
 type persistedUsage struct {
 	Version int          `json:"v"`
 	Hourly  []UsagePoint `json:"hourly"`
 	Daily   []UsagePoint `json:"daily"`
 }
 
-// encode is the series as the record to store.
 func (u *usageSeries) encode() []byte {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -91,9 +63,6 @@ func (u *usageSeries) encode() []byte {
 	return out
 }
 
-// decodeUsage reads a stored series strictly. It refuses the whole record for an unknown field, a list longer
-// than the retention, a time that is not the start of its hour (day), points out of order or more than a day
-// ahead of now, or a negative number.
 func decodeUsage(data []byte, now time.Time) (persistedUsage, error) {
 	var p persistedUsage
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -128,8 +97,6 @@ func decodeUsage(data []byte, now time.Time) (persistedUsage, error) {
 	return p, nil
 }
 
-// loadUsageSeries reads the stored series into s.usage, once. A record that is missing, unreadable or not
-// valid leaves the series empty (it is replaced at the next save); nothing is made up.
 func (s *Server) loadUsageSeries(ctx context.Context, now time.Time) {
 	s.usageOnce.Do(func() {
 		doc, err := s.adapter.Load(ctx, UsageSeriesKey)
@@ -150,9 +117,6 @@ func (s *Server) loadUsageSeries(ctx context.Context, now time.Time) {
 	})
 }
 
-// record stores p taken at now: it replaces the point of the same hour (day) or appends a new one, and
-// drops what is past the retention.
-// It reports whether the point opens a new hour (the moment worth saving at once).
 func (u *usageSeries) record(now time.Time, p UsagePoint) (newHour bool) {
 	now = now.UTC()
 	u.mu.Lock()
@@ -175,7 +139,8 @@ func putPoint(s []UsagePoint, p UsagePoint, limit int) []UsagePoint {
 			return s
 		}
 		if p.Time.Before(last) {
-			return s // the clock went back: never reorder or rewrite the past
+			// the clock went back: never reorder or rewrite the past
+			return s
 		}
 	}
 	s = append(s, p)
@@ -185,11 +150,11 @@ func putPoint(s []UsagePoint, p UsagePoint, limit int) []UsagePoint {
 	return s
 }
 
-// UsageHistory is what GET /admin/usage/history reports.
+// UsageHistory is what GET /admin/usage/history returns.
 type UsageHistory struct {
 	Hourly []UsagePoint `json:"hourly"`
 	Daily  []UsagePoint `json:"daily"`
-	// Retention says how much is kept, for a reader of the JSON.
+	// Retention says how much is kept.
 	Retention struct {
 		Hours int `json:"hours"`
 		Days  int `json:"days"`
@@ -204,7 +169,6 @@ func (u *usageSeries) snapshot() UsageHistory {
 	return h
 }
 
-// measureUsage reads the counters of the store now.
 func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 	var out usageResponse
 	metas, err := s.adapter.List(ctx)
@@ -213,7 +177,7 @@ func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 	}
 	for _, m := range metas {
 		if m.ID == UsageSeriesKey || m.ID == TelemetryKey {
-			continue // the monitor's own records are not what it measures
+			continue
 		}
 		if isReservedDocID(m.ID) {
 			out.Records++
@@ -235,7 +199,6 @@ func (s *Server) measureUsage(ctx context.Context) (usageResponse, error) {
 	return out, nil
 }
 
-// sampleUsage adds a sample of u to the series.
 func (s *Server) sampleUsage(u usageResponse) {
 	p := UsagePoint{Documents: u.Documents, Records: u.Records, Bytes: u.Bytes, Largest: u.Largest, QuotaUsed: u.Quota.Used}
 	if u.Telemetry != nil {
@@ -252,7 +215,6 @@ func (s *Server) sampleUsage(u usageResponse) {
 	s.observeUsage(u)
 }
 
-// saveUsageSeries writes the series when a new hour began or the last write is older than usageSaveEvery.
 func (s *Server) saveUsageSeries(now time.Time, newHour bool) {
 	s.usage.mu.Lock()
 	due := newHour || now.Sub(s.usage.lastSaved) >= usageSaveEvery
@@ -268,11 +230,10 @@ func (s *Server) saveUsageSeries(now time.Time, newHour bool) {
 	}
 }
 
-// RunUsageSampling takes a sample of the counters now and then every interval (an hour is right for
-// the hourly series) until ctx ends. A failing store skips that sample.
+// RunUsageSampling takes a sample every interval.
 func (s *Server) RunUsageSampling(ctx context.Context, interval time.Duration) {
 	if !s.sampling.CompareAndSwap(false, true) {
-		return // already running: the history and the observability gauges both ask for it
+		return
 	}
 	defer s.sampling.Store(false)
 	if interval <= 0 {
@@ -299,7 +260,6 @@ func (s *Server) RunUsageSampling(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// operatorOnly reports whether r is a GET from the operator; if not, it has written the refusal.
 func (s *Server) operatorOnly(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -317,7 +277,6 @@ func (s *Server) operatorOnly(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// currentHistory samples now and returns the series.
 func (s *Server) currentHistory(w http.ResponseWriter, r *http.Request) (UsageHistory, bool) {
 	u, err := s.measureUsage(r.Context())
 	if err != nil {
@@ -328,7 +287,6 @@ func (s *Server) currentHistory(w http.ResponseWriter, r *http.Request) (UsageHi
 	return s.usage.snapshot(), true
 }
 
-// handleUsageHistory serves GET /admin/usage/history: the series as JSON.
 func (s *Server) handleUsageHistory(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOnly(w, r) {
 		return
@@ -373,8 +331,6 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// handleUsagePage serves GET /admin/usage/page: the series as a plain HTML page with tables, which
-// needs no script. It carries the same numbers as the JSON and nothing else.
 func (s *Server) handleUsagePage(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOnly(w, r) {
 		return
@@ -387,5 +343,5 @@ func (s *Server) handleUsagePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	_ = usagePageTemplate.Execute(w, h) // an error here is the client going away
+	_ = usagePageTemplate.Execute(w, h)
 }

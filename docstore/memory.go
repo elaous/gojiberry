@@ -14,10 +14,7 @@ func init() {
 	})
 }
 
-// MemoryAdapter is an in-process, non-persistent Adapter. It exists
-// as the reference implementation the other adapters' behavior is
-// tested against, and as a zero-dependency default for tests and
-// local development.
+// MemoryAdapter is an in-process, non-persistent Adapter.
 type MemoryAdapter struct {
 	mu   sync.Mutex
 	docs map[string]Document

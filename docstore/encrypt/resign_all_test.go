@@ -12,11 +12,6 @@ import (
 	"testing"
 )
 
-// Tests of RepairAllOptions.Resign and the BySigner report (docs/roadmap.md, backlog item 5): moving
-// a store from a retired owner signer to a new one.
-
-// signerRotation is the world after the owner got a new signer: the clients that sign hold it and list
-// both keys, one that has not rotated yet holds only the old.
 type signerRotation struct {
 	w       *world
 	newKey  *Signer
@@ -37,7 +32,6 @@ func (w *world) rotate(t *testing.T) signerRotation {
 	return signerRotation{w: w, newKey: nk, ad: ad, sharing: &Sharing{Store: w.inner, Adapter: ad, Signer: nk, OwnerSigners: []ed25519.PublicKey{w.signer.Public()}}}
 }
 
-// onlyNew is an adapter that has dropped the old key from every list (procedure step 3).
 func (r signerRotation) onlyNew() *Adapter {
 	ring := r.w.ring
 	ring.People.OwnerSigners = []ed25519.PublicKey{r.newKey.Public()}
@@ -46,7 +40,6 @@ func (r signerRotation) onlyNew() *Adapter {
 	return ad
 }
 
-// signersOf says, per file of the document, which key signed its frame.
 func (r signerRotation) signersOf(t *testing.T, id string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -94,7 +87,6 @@ func TestRepairAllReportsFramesBySignerAndWritesNothing(t *testing.T) {
 	a, b := w.e2eeDoc(t), w.e2eeDoc(t)
 	r := w.rotate(t)
 	oldFP, newFP := SignerFingerprint(w.signer.Public()), SignerFingerprint(r.newKey.Public())
-	// One document already moved: saved by the new signer (a Save writes one file, not the record).
 	if err := r.ad.Save(ctx, w.mainFile(t, b), []byte("saved after the signerRotation")); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +113,6 @@ func TestRepairAllReportsFramesBySignerAndWritesNothing(t *testing.T) {
 	if by[oldFP].Docs != 2 || by[oldFP].Records != 2 || by[oldFP].Files != len(w.files(t, a))+len(w.files(t, b))-1 {
 		t.Errorf("old signer: %+v (files %d)", by[oldFP], len(w.files(t, a))+len(w.files(t, b)))
 	}
-	// Dry run with Resign: Todo, nothing written.
 	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true, DryRun: true})
 	if err != nil || len(rep.Todo) != 2 || rep.Resigned != 0 || len(rep.OtherSigner) != 0 {
 		t.Fatalf("%v %+v", err, rep)
@@ -140,10 +131,8 @@ func TestRepairAllResignMovesEverythingToTheNewSignerAndIsIdempotent(t *testing.
 	ctx := context.Background()
 	w := newWorld(t)
 	docs := []string{w.e2eeDoc(t), w.e2eeDoc(t), w.history(t)}
-	// A document with a v2 frame as well: Repaired, not Resigned.
 	legacy := w.e2eeDoc(t)
 	w.legacyV2(t, legacy)
-	// A non-document item signed by the old key.
 	item := "expiry:0b1c2d3e-0000-4000-8000-0000000000ee"
 	if err := w.ad.Save(ctx, item, []byte("soon")); err != nil {
 		t.Fatal(err)
@@ -154,7 +143,6 @@ func TestRepairAllResignMovesEverythingToTheNewSignerAndIsIdempotent(t *testing.
 		r.allBy(t, d, oldFP)
 	}
 
-	// Before: a client that dropped the old key refuses every one of them.
 	strict := r.onlyNew()
 	if _, err := strict.Load(ctx, w.mainFile(t, docs[0])); !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("before the re-sign: %v", err)
@@ -178,13 +166,11 @@ func TestRepairAllResignMovesEverythingToTheNewSignerAndIsIdempotent(t *testing.
 	if len(rep.BySigner) == 0 {
 		t.Fatalf("%+v", rep)
 	}
-	// After step 3 everything still opens, with the old key gone from every list.
 	for _, d := range append(docs[:2], legacy) {
 		if _, err := strict.Load(ctx, w.mainFile(t, d)); err != nil {
 			t.Errorf("%s (legacy=%v) after dropping the old key: %v", d, d == legacy, err)
 		}
 	}
-	// And a frame the old key signs now is forged.
 	f := w.mainFile(t, docs[0])
 	rs, err := strict.Ring.Recipients(ctx, f)
 	if err != nil {
@@ -205,8 +191,6 @@ func TestRepairAllResignMovesEverythingToTheNewSignerAndIsIdempotent(t *testing.
 	if _, err := strict.Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Errorf("a frame by the revoked key after step 3: %v", err)
 	}
-	// While the old key is still listed, the frame it wrote opens and is moved on the next run;
-	// then a second run writes nothing and finds only the current signer.
 	if rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true}); err != nil || rep.Resigned != 1 {
 		t.Fatalf("%v %+v", err, rep)
 	}
@@ -226,7 +210,6 @@ func TestRepairAllResignOnlyTheRecord(t *testing.T) {
 	w := newWorld(t)
 	id := w.e2eeDoc(t)
 	r := w.rotate(t)
-	// Frames already by the new key, the record still by the old one.
 	if _, err := r.sharing.Repair(ctx, id); err != nil {
 		t.Fatal(err)
 	}
@@ -299,8 +282,6 @@ func TestRepairAllResignWithConcurrentSaves(t *testing.T) {
 	if err != nil || len(rep.Skipped) != 0 {
 		t.Fatalf("%v %+v", err, rep.Skipped)
 	}
-	// A save that raced the scan was signed by the new key (this adapter's); another run settles
-	// anything else and the last write is the one stored.
 	if rep2, err := r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true}); err != nil || len(rep2.OtherSigner) != 0 || rep2.Left() != 0 {
 		t.Fatalf("%v %+v", err, rep2)
 	}
@@ -318,7 +299,6 @@ func TestRepairAllResignStopsOnAFrameNoListedKeySigned(t *testing.T) {
 	w := newWorld(t)
 	id := w.e2eeDoc(t)
 	r := w.rotate(t)
-	// An adapter that does not list the old key cannot move its frames: forged, reported, not written.
 	s := &Sharing{Store: w.inner, Adapter: r.onlyNew(), Signer: r.newKey}
 	before := w.snapshot(t)
 	rep, err := s.RepairAll(ctx, RepairAllOptions{Resign: true})
@@ -358,9 +338,6 @@ func TestRepairAllResignNeedsTheSharingSignerToBeTheAdapters(t *testing.T) {
 	}
 }
 
-// A Sharing whose Signer is another *Signer built from the same private key as the Adapter's is
-// the same signer (the comparison is of public keys, not of pointers): the document is re-signed
-// as usual and not skipped.
 func TestRepairAllResignAcceptsADistinctSignerOfTheSameKey(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -381,8 +358,6 @@ func TestRepairAllResignAcceptsADistinctSignerOfTheSameKey(t *testing.T) {
 	r.allBy(t, id, SignerFingerprint(r.newKey.Public()))
 }
 
-// An index with no entries and seq 0 signed by the old key is left as it is by ResignIndex (there
-// is nothing to sign), so RepairAll must not report it as IndexResigned.
 func TestRepairAllResignDoesNotReportAnIndexItDidNotWrite(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -407,7 +382,6 @@ func TestRepairAllResignDoesNotReportAnIndexItDidNotWrite(t *testing.T) {
 	}
 }
 
-// failAfterRecord fails the writes of one file, so a re-sign stops after the record was signed.
 func TestRepairAllResignCrashBetweenRecordAndFiles(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -420,7 +394,6 @@ func TestRepairAllResignCrashBetweenRecordAndFiles(t *testing.T) {
 	if err != nil || skippedBy(rep)[id] != SkipError || rep.Resigned != 0 {
 		t.Fatalf("%v %+v", err, rep)
 	}
-	// The record moved, the file did not: with both keys listed everything still opens.
 	if got := r.recordBy(id); got != newFP {
 		t.Fatalf("the record is signed by %s, want the new key", got)
 	}
@@ -430,7 +403,6 @@ func TestRepairAllResignCrashBetweenRecordAndFiles(t *testing.T) {
 	if _, err := r.ad.Load(ctx, f); err != nil {
 		t.Fatalf("both keys listed, after the crash: %v", err)
 	}
-	// The next run finishes it.
 	w.inner.failOn.Store("")
 	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
 	if err != nil || rep.Left() != 0 || rep.Resigned != 1 {
@@ -454,7 +426,6 @@ func TestRepairAllResignDryRunAndLimit(t *testing.T) {
 	if err != nil || len(rep.Todo) != 3 || rep.Resigned != 0 || len(rep.OtherSigner) != 0 || rep.Left() != 3 || !rep.IndexOther || rep.IndexResigned {
 		t.Fatalf("%v %+v", err, rep)
 	}
-	// Without Resign the same documents are Signed and OtherSigner, not Todo.
 	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{DryRun: true})
 	if err != nil || len(rep.Todo) != 0 || len(rep.OtherSigner) != 3 || rep.Signed != 3 || !rep.IndexOther {
 		t.Fatalf("%v %+v", err, rep)
@@ -492,7 +463,6 @@ func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
 	if _, _, err := loadIndex(ctx, w.inner, newOnly, nil); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("the index before: %v", err)
 	}
-	// A run without Resign only reports it.
 	rep, err := r.sharing.RepairAll(ctx, RepairAllOptions{})
 	if err != nil || !rep.IndexOther || rep.IndexResigned || !bytes.Equal(rep.IndexBy, w.signer.Public()) {
 		t.Fatalf("%v %+v", err, rep)
@@ -500,7 +470,6 @@ func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
 	if _, _, err := loadIndex(ctx, w.inner, newOnly, nil); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("a report-only run changed the index: %v", err)
 	}
-	// Sharing.ResignIndex alone makes it load with only the new key, entries unchanged.
 	if err := r.sharing.ResignIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +477,6 @@ func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
 	if err != nil || idx.Docs[id].Level != ProtectionE2EE {
 		t.Fatalf("%v %+v", err, idx)
 	}
-	// RepairAll with Resign does it too, and a second run finds nothing to do.
 	w2 := newWorld(t)
 	w2.e2eeDoc(t)
 	r2 := w2.rotate(t)
@@ -525,8 +493,6 @@ func TestRepairAllResignSignsTheIndexAndItLoadsStrict(t *testing.T) {
 	}
 }
 
-// RevokeSigner signs everything again with the key that stays, runs again if the old key wrote meanwhile, takes
-// the old key out of the lists, and reports what it wrote after the last check.
 func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -534,14 +500,12 @@ func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T
 	r := w.rotate(t)
 	oldKey := w.signer.Public()
 
-	// a holder of the old key writes frames straight into the store, signed by it, with no record to check
 	oldWriter := New(w.inner, Static{To: w.ring.People.Owners, Keys: w.ring.People.Keys})
 	oldWriter.Signer = w.signer
 	passes, removed := 0, 0
 	late := w.mainFile(t, b)
 	o := RevokeSignerOptions{
 		Progress: func(p RepairProgress) {
-			// the old key keeps writing during the first pass: the document just moved gets a new frame signed by it
 			if passes == 0 {
 				passes = 1
 				if err := oldWriter.Save(ctx, w.mainFile(t, p.Doc), []byte("written by the old key during the run")); err != nil {
@@ -551,7 +515,6 @@ func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T
 		},
 		Remove: func(context.Context) error {
 			removed++
-			// and once more, right before it is removed: this one cannot be signed again in time
 			if err := oldWriter.Save(ctx, late, []byte("the last word of the old key")); err != nil {
 				t.Error(err)
 			}
@@ -570,8 +533,6 @@ func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T
 	if len(rep.Late) != 1 || rep.Late[0] != b {
 		t.Errorf("late: %v, want the document the old key wrote last: %s", rep.Late, b)
 	}
-	// The manifest: what the old key had signed when the removal began (the two documents' files), and the
-	// file it wrote after that, during the first pass, is named although it was signed again like the rest.
 	if rep.Manifest < 2 {
 		t.Errorf("the manifest holds %d frames", rep.Manifest)
 	}
@@ -581,10 +542,8 @@ func TestRevokeSignerReplacesTheKeyAndReportsWhatItWroteInTheWindow(t *testing.T
 	if m, err := r.sharing.loadSignerManifest(ctx, SignerFingerprint(oldKey)); err != nil || m == nil || len(m.Frames) != rep.Manifest {
 		t.Errorf("the manifest is kept, signed by the key that stays: %v %+v", err, m)
 	}
-	// document a is the new key's, record and files
 	onlyNew := signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}
 	onlyNew.allBy(t, a, SignerFingerprint(r.newKey.Public()))
-	// the old key's frame in b is refused from now on
 	if _, err := r.sharing.Adapter.Load(ctx, late); !errors.Is(err, ErrForgedFrame) {
 		t.Errorf("the old key's late frame loads: %v", err)
 	}
@@ -605,7 +564,6 @@ func TestRevokeSignerRefusesWhenItCannotMoveEverythingOrWouldRevokeItself(t *tes
 	if _, err := r.sharing.RevokeSigner(ctx, oldKey, RevokeSignerOptions{}); !errors.Is(err, ErrRevokeNeedsSigner) {
 		t.Errorf("no Remove: %v", err)
 	}
-	// a document that cannot be opened cannot be signed again: the key is kept
 	files := w.files(t, w.e2eeDoc(t))
 	if err := w.inner.Save(ctx, files[0], []byte("damaged")); err != nil {
 		t.Fatal(err)
@@ -614,7 +572,6 @@ func TestRevokeSignerRefusesWhenItCannotMoveEverythingOrWouldRevokeItself(t *tes
 	if !errors.Is(err, ErrRevokeCannotResign) || called || rep.Removed || len(rep.Skipped) == 0 {
 		t.Errorf("a damaged document: err %v removed-called %v report %+v", err, called, rep)
 	}
-	// a key that keeps writing stops it after MaxPasses
 	w2 := newWorld(t)
 	doc := w2.e2eeDoc(t)
 	r2 := w2.rotate(t)
@@ -632,7 +589,6 @@ func TestRevokeSignerRefusesWhenItCannotMoveEverythingOrWouldRevokeItself(t *tes
 	}
 }
 
-// A run whose Remove fails is finished by running it again: the signing is found done, and the key goes.
 func TestRevokeSignerIsRestartable(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -659,8 +615,6 @@ func TestRevokeSignerIsRestartable(t *testing.T) {
 	signerRotation{w: w, newKey: r.newKey, ad: r.sharing.Adapter, sharing: r.sharing}.allBy(t, doc, SignerFingerprint(r.newKey.Public()))
 }
 
-// A manifest the removed key wrote itself (signed by it) is not believed: a fresh one is made from the store.
-// A manifest from an earlier, cut-short run is kept, so the frames written between the runs are still named.
 func TestRevokeSignerManifestIsSignedByTheKeyThatStaysAndTheFirstOneIsKept(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -668,7 +622,6 @@ func TestRevokeSignerManifestIsSignedByTheKeyThatStaysAndTheFirstOneIsKept(t *te
 	r := w.rotate(t)
 	oldKey := w.signer.Public()
 	fp := SignerFingerprint(oldKey)
-	// the old key's own manifest claiming it had written nothing
 	forged := signerManifest{Key: fp, At: 1, Frames: nil, Signer: oldKey}
 	forged.Sig = base64.StdEncoding.EncodeToString(w.signer.Sign(forged.message()))
 	data, _ := json.Marshal(forged)
@@ -692,7 +645,6 @@ func TestRevokeSignerManifestIsSignedByTheKeyThatStaysAndTheFirstOneIsKept(t *te
 	if first == nil || !bytes.Equal(first.Signer, r.newKey.Public()) {
 		t.Fatalf("%+v", first)
 	}
-	// the old key writes between the runs; the second run keeps the first manifest and names the file
 	oldWriter := New(w.inner, Static{To: w.ring.People.Owners, Keys: w.ring.People.Keys})
 	oldWriter.Signer = w.signer
 	if err := oldWriter.Save(ctx, w.mainFile(t, doc), []byte("between the runs")); err != nil {

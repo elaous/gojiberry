@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// docHost is a stand-in editor for the get/set requests.
 type docHost struct {
 	host
 	md     string

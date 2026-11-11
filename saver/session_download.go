@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// Download hands a saved document over as a file: in the format, or as saved when
-// format is "" or the session has no Export.
 func (s *Session) Download(ctx context.Context, id, format string) error {
 	if s.Deliver == nil {
 		return errors.New("saver: nowhere to deliver files")
@@ -23,7 +21,6 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 		return err
 	}
 	if format == docfile.Open.Name() {
-		// Ask first whether to keep the history in the file, and say how big each part is.
 		sizes, err := s.Saver.OpenSizes(ctx, s.targetName(), id)
 		if err != nil {
 			return err
@@ -56,15 +53,12 @@ func (s *Session) Download(ctx context.Context, id, format string) error {
 	return nil
 }
 
-// openDialog is the question asked before an .open download.
 type openDialog struct {
 	id, name string
 	sizes    OpenSizes
 	drop     bool
 }
 
-// DownloadOpen delivers the .open file the dialog asked about, with or without the history
-// (as the person chose), and closes the dialog.
 func (s *Session) DownloadOpen(ctx context.Context) error {
 	s.mu.Lock()
 	dlg := s.openDlg
@@ -85,16 +79,12 @@ func (s *Session) DownloadOpen(ctx context.Context) error {
 	return nil
 }
 
-// DownloadPack hands over a folder ("" for all the documents) as one .opendoc pack: folders,
-// tags, the trash flag and each document's history.
 func (s *Session) DownloadPack(ctx context.Context, folder string) error {
 	if s.Deliver == nil {
 		return errors.New("saver: nowhere to deliver files")
 	}
 	var buf bytes.Buffer
 	name := s.folderName(folder)
-	// With keys (PackKeys) confidential documents are sealed into the pack; without, they are left
-	// out and the person is told how many documents and folder names need a key.
 	var seal func(context.Context, string, []byte) ([]byte, error)
 	if s.PackKeys != nil {
 		seal, _ = s.PackKeys()
@@ -137,7 +127,7 @@ func (s *Session) folderName(id string) string {
 	for _, f := range s.folders {
 		if f.ID == id {
 			if f.Protection == ProtectionE2EE {
-				return ConfidentialFolderName // the pack's name is in the clear: not the real one
+				return ConfidentialFolderName
 			}
 			return f.Name
 		}
@@ -145,7 +135,6 @@ func (s *Session) folderName(id string) string {
 	return "documents"
 }
 
-// countWrongKey counts the pack items whose opener said they were sealed for another key.
 func countWrongKey(issues []PackIssue) int {
 	n := 0
 	for _, is := range issues {
@@ -156,7 +145,6 @@ func countWrongKey(issues []PackIssue) int {
 	return n
 }
 
-// pickPack asks for a .opendoc file and imports it.
 func (s *Session) pickPack() {
 	s.Pick(".opendoc", func(name string, data []byte, err error) {
 		s.Pending.Run(func(ctx context.Context) error {
@@ -168,9 +156,6 @@ func (s *Session) pickPack() {
 	})
 }
 
-// ImportPackData imports the .opendoc pack in data into the folder being shown, keeping what is
-// already there (a document with the same ID is always skipped: the UI offers no other policy), and says what came in, what was
-// skipped and what failed, and whether the pack was signed.
 func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) error {
 	s.op.Lock()
 	defer s.op.Unlock()
@@ -192,7 +177,6 @@ func (s *Session) ImportPackData(ctx context.Context, name string, data []byte) 
 		line += " " + msg("saver.packSkipped", "(%d already here, left as they are)", len(rep.Skipped))
 	}
 	if wrong := countWrongKey(rep.NeedsKey); wrong > 0 {
-		// Keys are unlocked here and none opens them: unlocking the store again would not help.
 		line += " " + msg("saver.packWrongKey", "(%d confidential items were sealed for another key: this pack was sealed for another key than the ones unlocked here)", wrong)
 	}
 	if need := len(rep.NeedsKey) - countWrongKey(rep.NeedsKey); need > 0 {
@@ -223,7 +207,6 @@ func (s *Session) formatName() string {
 // CancelOpenDownload closes the dialog without downloading.
 func (s *Session) CancelOpenDownload() { s.set(func() { s.openDlg = nil }) }
 
-// DownloadFolder hands over a ZIP of a folder's documents ("" for all of them).
 func (s *Session) DownloadFolder(ctx context.Context, id string) error {
 	if s.Deliver == nil {
 		return errors.New("saver: nowhere to deliver files")
@@ -241,7 +224,6 @@ func (s *Session) DownloadFolder(ctx context.Context, id string) error {
 	return nil
 }
 
-// CopyLink copies the link to a document or folder and says so.
 func (s *Session) CopyLink(url string) {
 	if s.Copy != nil {
 		s.Copy(url)
@@ -261,7 +243,6 @@ func (s *Session) downloadChoices() []components.DocChoice {
 	return out
 }
 
-// Where is the target and folder a new document would be saved in.
 func (s *Session) Where() (target, folder string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -8,10 +8,6 @@ import (
 	"filippo.io/age"
 )
 
-// collided makes r report the given key tag in its stanza, as two distinct SSH keys whose 4-byte
-// tags collide would (engineered: a real collision costs about 2^32 work). With keyed it still
-// carries the full key's fingerprint, as a recipient from ParseSSHRecipient does; without, it is
-// a raw recipient that only the tag can identify.
 type collided struct {
 	age.Recipient
 	tag string
@@ -34,7 +30,6 @@ func collide(r Recipient, keyed bool) age.Recipient {
 	return collidedKeyed{collided{Recipient: r.Key, tag: "COLL"}}
 }
 
-// collidedKeyed forwards the fingerprint of the wrapped sshKeyed.
 type collidedKeyed struct{ collided }
 
 func (c collidedKeyed) keyFingerprint() string {
@@ -83,14 +78,10 @@ func TestSSHKeyTagCollisionIsToldApartByFullKey(t *testing.T) {
 				}
 			})
 		}
-		// Distinct keys, equal tags, both with their full key: the person is kept.
 		run("distinct keyed", collide(person, true), collide(server, true), true)
-		// The same key (equal tag, equal fingerprint) is still taken for the server's and dropped.
 		run("same keyed", collide(person, true), collide(person, true), false)
-		// A raw server recipient has only a tag: a tag match fails closed (dropped, not admitted).
 		run("server raw", collide(person, true), collide(server, false), false)
 		run("person raw", collide(person, false), collide(server, true), false)
-		// Different tags are never the same key, keyed or not.
 		run("legit", person.Key, server.Key, true)
 	}
 }
@@ -104,8 +95,6 @@ func TestSSHKeyedRecipientStillWraps(t *testing.T) {
 	if err != nil || id.fp != p.r.Fingerprint {
 		t.Fatalf("%+v %v", id, err)
 	}
-	// Wrapping through sshKeyed is the inner recipient's wrapping: same stanza type and tag. (The
-	// rest of a stanza is fresh each time: an ephemeral share, so only Type and Args[0] compare.)
 	k, ok := p.r.Key.(sshKeyed)
 	if !ok {
 		t.Fatalf("the key is %T, want sshKeyed", p.r.Key)

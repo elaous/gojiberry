@@ -7,9 +7,6 @@ import (
 	"syscall/js"
 )
 
-// awaitFileReader blocks until a FileReader fires "load" or "error" --
-// the same channel-bridge idea as awaitIDBRequest, adapted to
-// FileReader's event names and its result living on reader.result.
 func awaitFileReader(reader js.Value) (js.Value, error) {
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
@@ -44,8 +41,7 @@ func fileReaderError(reader js.Value) error {
 	return errors.New("filereader failed")
 }
 
-// File wraps a JS File (or Blob) object, e.g. one returned by
-// html.InputElement.Files or html.DataTransfer.Files.
+// File wraps a JS File or Blob object.
 type File struct {
 	Value js.Value
 }
@@ -53,7 +49,7 @@ type File struct {
 // WrapFile wraps a raw JS File/Blob object as a File.
 func WrapFile(v js.Value) File { return File{Value: v} }
 
-// WrapFiles wraps a JS FileList (or any array-like of File objects).
+// WrapFiles wraps a JS FileList as a slice of File.
 func WrapFiles(v js.Value) []File {
 	out := make([]File, v.Length())
 	for i := range out {
@@ -71,8 +67,7 @@ func (f File) Size() int64 { return int64(f.Value.Get("size").Float()) }
 // Type returns the file's MIME type, or "" if unknown.
 func (f File) Type() string { return f.Value.Get("type").String() }
 
-// ReadAsText reads the file's contents decoded as UTF-8 text, blocking
-// until the read completes.
+// ReadAsText reads the file's contents decoded as UTF-8 text.
 func (f File) ReadAsText() (string, error) {
 	reader := js.Global().Get("FileReader").New()
 	reader.Call("readAsText", f.Value)
@@ -83,8 +78,7 @@ func (f File) ReadAsText() (string, error) {
 	return v.String(), nil
 }
 
-// ReadAsArrayBuffer reads the file's raw contents as bytes, blocking
-// until the read completes.
+// ReadAsArrayBuffer reads the file's raw contents as bytes.
 func (f File) ReadAsArrayBuffer() ([]byte, error) {
 	reader := js.Global().Get("FileReader").New()
 	reader.Call("readAsArrayBuffer", f.Value)
@@ -98,8 +92,7 @@ func (f File) ReadAsArrayBuffer() ([]byte, error) {
 	return out, nil
 }
 
-// ReadAsDataURL reads the file's contents encoded as a data: URL
-// (base64, with a MIME-type prefix), blocking until the read completes.
+// ReadAsDataURL reads the file's contents as a data URL.
 func (f File) ReadAsDataURL() (string, error) {
 	reader := js.Global().Get("FileReader").New()
 	reader.Call("readAsDataURL", f.Value)
@@ -110,9 +103,7 @@ func (f File) ReadAsDataURL() (string, error) {
 	return v.String(), nil
 }
 
-// CreateObjectURL creates a blob: URL referencing f's data, valid until
-// RevokeObjectURL is called or the document unloads. Useful for e.g.
-// setting an <img>/<video>'s src without reading the file into memory.
+// CreateObjectURL creates a blob URL for f's data.
 func CreateObjectURL(f File) string {
 	return js.Global().Get("URL").Call("createObjectURL", f.Value).String()
 }

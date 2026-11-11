@@ -2,25 +2,17 @@ package canvas
 
 import "math"
 
-// Watermark is text or a picture drawn faintly across the middle of a
-// sheet, behind the text. Like a header it belongs to a page and is
-// inherited by the pages after it (Page.Watermark nil = the previous
-// page's); an empty Watermark{} switches it off from that page on.
 type Watermark struct {
-	// Text is the words ("DRAFT"), drawn in Style (default: bold 72px
-	// sans-serif) and Color (default grey).
+	// Text is the words drawn in Style, such as DRAFT.
 	Text  string
 	Style TextStyle
 	Color string
-	// Image is a picture instead of text, scaled to Scale of the sheet's
-	// width (default 0.5), keeping its proportions.
+	// Image is a picture drawn instead of text.
 	Image ImageSource
 	Scale float64
 	// Opacity is 0..1; zero means 0.15.
 	Opacity float64
-	// Angle turns it, in degrees clockwise; zero means -45 (rising
-	// diagonally) for text and 0 for a picture. Straight sets it to
-	// exactly 0 for text.
+	// Angle turns the watermark, in degrees clockwise; zero means -45.
 	Angle    float64
 	Straight bool
 }
@@ -28,8 +20,7 @@ type Watermark struct {
 // None reports whether the watermark shows nothing.
 func (w *Watermark) None() bool { return w == nil || (w.Text == "" && w.Image == nil) }
 
-// Background is a picture filling a sheet, behind everything else. Like
-// a Watermark it is inherited by later pages and Background{} removes it.
+// Background is a picture filling a sheet, behind everything.
 type Background struct {
 	Image ImageSource
 	// Opacity is 0..1; zero means fully opaque.
@@ -50,8 +41,7 @@ const (
 // None reports whether the background shows nothing.
 func (b *Background) None() bool { return b == nil || b.Image == nil }
 
-// ResolvedWatermark returns page i's effective watermark (its own, else
-// the nearest earlier page's), or nil if there is none.
+// ResolvedWatermark returns page i's effective watermark.
 func (ps *PageSet) ResolvedWatermark(i int) *Watermark {
 	for j := min(i, len(ps.Pages)-1); j >= 0; j-- {
 		if w := ps.Pages[j].Watermark; w != nil {
@@ -77,7 +67,6 @@ func (ps *PageSet) ResolvedBackground(i int) *Background {
 	return nil
 }
 
-// drawBackdrop paints sheet i's background picture and watermark.
 func (ps *PageSet) drawBackdrop(i int) {
 	ip, ok := ps.Painter.(ImagePainter)
 	if !ok {
@@ -148,12 +137,10 @@ func orF(v, def float64) float64 {
 	return v
 }
 
-// RemoveScope is how far removing a header, footer, page number or
-// watermark reaches.
+// RemoveScope is how far a removal reaches.
 type RemoveScope int
 
 const (
-	// RemoveThisPage removes it from one page; the pages after keep it.
 	RemoveThisPage RemoveScope = iota
 	// RemoveForward removes it from this page and every later one.
 	RemoveForward
@@ -161,8 +148,7 @@ const (
 	RemoveAll
 )
 
-// RemoveHeader removes the header of the given page as scope says (see
-// the "none" setting of Page.Header).
+// RemoveHeader removes a page's header, as the scope says.
 func (ps *PageSet) RemoveHeader(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -200,9 +186,7 @@ func (ps *PageSet) RemoveFooter(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemovePageNumber removes the page number of the given page as scope
-// says. Removing one page's number keeps the count: the next page shows
-// its own number, not the removed one's.
+// RemovePageNumber removes a page's number, as the scope says.
 func (ps *PageSet) RemovePageNumber(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -222,7 +206,7 @@ func (ps *PageSet) RemovePageNumber(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemoveWatermark removes the watermark of the given page as scope says.
+// RemoveWatermark removes a page's watermark, as the scope says.
 func (ps *PageSet) RemoveWatermark(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -241,8 +225,7 @@ func (ps *PageSet) RemoveWatermark(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemoveBackground removes the background picture of the given page as
-// scope says.
+// RemoveBackground removes a page's background, as the scope says.
 func (ps *PageSet) RemoveBackground(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -261,10 +244,6 @@ func (ps *PageSet) RemoveBackground(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// removeInherited does the inheritance bookkeeping of a removal for any
-// of the per-page settings: field picks the setting out of a Page, none
-// makes the "switched off" value, and keep makes a copy of what the page
-// showed before (nil if nothing), to carry on after a single-page removal.
 func removeInherited[T any](ps *PageSet, page int, scope RemoveScope, field func(*Page) **T, none func() *T, keep func() *T) {
 	switch scope {
 	case RemoveAll:

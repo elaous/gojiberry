@@ -6,23 +6,17 @@ import (
 	"time"
 )
 
-// A MentionNotice is one place a person is mentioned by handle (@ana) in a comment or a reply written by somebody
-// else. It carries no address and no document text beyond the comment itself, so a host can deliver it by any channel
-// it chooses (a list in the page, a push, a mail) without the canvas knowing which.
 type MentionNotice struct {
 	CommentID string
-	Reply     int // the index of the reply, or -1 when the comment itself mentions
+	Reply     int // reply index, or -1 for the comment itself.
 	Author    string
 	Text      string
 	Created   time.Time
 }
 
-// Key identifies the notice, so a host can remember which ones it has already shown or sent.
 func (n MentionNotice) Key() string { return n.CommentID + "#" + strconv.Itoa(n.Reply) }
 
-// MentionsOf lists the comments and replies that mention handle, oldest first, leaving out the ones the person wrote
-// themselves (an author is the person when it is their handle or, with a roster, an address the roster maps to it). With a roster, Author is the handle.
-// Text is the comment as a reader sees it (no address).
+// MentionsOf lists comments and replies that mention handle, oldest first.
 func (s *CommentSet) MentionsOf(handle string) []MentionNotice {
 	handle = strings.TrimPrefix(strings.TrimSpace(handle), "@")
 	if s == nil || handle == "" {
@@ -39,7 +33,7 @@ func (s *CommentSet) MentionsOf(handle string) []MentionNotice {
 		}
 		return false
 	}
-	who := func(author string) string { // the handle, not the address, when the roster knows the person
+	who := func(author string) string {
 		if s.Roster != nil {
 			if h, ok := s.Roster.HandleOf(author); ok {
 				return h
@@ -69,7 +63,7 @@ func (s *CommentSet) MentionsOf(handle string) []MentionNotice {
 	return out
 }
 
-// NewMentions is MentionsOf without the notices whose Key is in done.
+// NewMentions is MentionsOf without notices whose Key is in done.
 func (s *CommentSet) NewMentions(handle string, done map[string]bool) []MentionNotice {
 	var out []MentionNotice
 	for _, n := range s.MentionsOf(handle) {

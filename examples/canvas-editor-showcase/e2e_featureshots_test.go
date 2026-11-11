@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestFeatureShots makes the pictures of docs/features.md: one screenshot of the editor per feature, each in the state
-// the feature is shown in. It does nothing unless GOJIBERRY_FEATURE_SHOTS names the directory to write them to
-// (`make feature-shots` sets it to docs/features/img); run it again when the editor looks different.
 func TestFeatureShots(t *testing.T) {
 	dir := os.Getenv("GOJIBERRY_FEATURE_SHOTS")
 	if dir == "" {
@@ -22,7 +19,7 @@ func TestFeatureShots(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
-	d.Eval(`document.getElementById('state').style.display = 'none'`, nil) // the test page's JSON mirror is not part of the editor
+	d.Eval(`document.getElementById('state').style.display = 'none'`, nil)
 	shot := func(name string) { d.ScreenshotView(filepath.Join(dir, name+".webp")) }
 	of := func(selector, name string) { d.ScreenshotOf(selector, filepath.Join(dir, name+".webp")) }
 	tab := func(id string) {
@@ -30,20 +27,17 @@ func TestFeatureShots(t *testing.T) {
 		d.WaitSelector(`button[data-tab="` + id + `"][aria-selected="true"], button[data-tab="` + id + `"]`)
 	}
 
-	// the editor itself, in view mode and then editing
 	of(".gj-docview-desk", "editor-view")
 	d.ToggleMode()
 	d.CanvasClick(240, 164)
 	of(".gj-docview-desk", "editor-edit")
 
-	// the side panel, one tab at a time
 	for _, id := range []string{"format", "styles", "symbols", "keys", "comments", "review", "outline", "images", "find", "spell",
 		"language", "stats", "share", "people", "migrate", "console", "public", "page", "save", "transfer", "speech", "privacy", "prefs"} {
 		tab(id)
 		of(".gj-docview-sidebar", "tab-"+id)
 	}
 
-	// states
 	tab("check")
 	runCheck(d)
 	of(".gj-docview-sidebar", "tab-check")
@@ -53,7 +47,7 @@ func TestFeatureShots(t *testing.T) {
 	d.Focus("#input")
 	addFootnote(d, "A note at the foot of the page, with its number.")
 	d.CanvasMove(450, 300)
-	d.Wheel(0, 460) // down to the foot of the first page, where its notes are
+	d.Wheel(0, 460)
 	d.Sleep(300)
 	of(".gj-docview-desk", "footnotes")
 	d.Wheel(0, -5000)
@@ -76,7 +70,6 @@ func TestFeatureShots(t *testing.T) {
 	d.Wait("s.spread === true")
 	of(".gj-docview-desk", "spread")
 
-	// formulas typeset in the text: one on a line of its own, one in a sentence
 	d.Click(`button.gj-menubar-button:has-text("View")`)
 	d.Click(`.gj-menubar-panel .gj-menu-label:text-is("Two-page spread")`) // back to one column of pages
 	d.Wait("s.spread === false")
@@ -103,7 +96,6 @@ func TestFeatureShots(t *testing.T) {
 	d.Sleep(500)
 	of(".gj-docview-desk", "math")
 
-	// the typewriter carriage: the page slides left as the line grows, and back right and up on Enter
 	tab("prefs")
 	d.WaitSelector(".gj-prefs-search")
 	d.Fill(".gj-prefs-search", "typewriter")

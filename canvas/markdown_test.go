@@ -11,7 +11,6 @@ type seg struct {
 	F    Format
 }
 
-// segs flattens the Chars items of a transform's output.
 func segs(items []Item) []seg {
 	var out []seg
 	for _, it := range items {
@@ -22,7 +21,6 @@ func segs(items []Item) []seg {
 	return out
 }
 
-// plainOf concatenates all text.
 func plainOf(items []Item) string {
 	var b strings.Builder
 	for _, it := range items {
@@ -123,12 +121,10 @@ func TestMarkdownLinksAndImages(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v", got)
 	}
-	// Image without a resolver: alt text.
 	got = segs(Markdown{}.inline("![a cat](cat.png)", Format{}))
 	if len(got) != 1 || got[0].Text != "[a cat]" || got[0].F.FontStyle != StyleItalic {
 		t.Fatalf("got %+v", got)
 	}
-	// With a resolver.
 	var gotURL, gotAlt string
 	obj := &Rule{}
 	m := Markdown{Images: func(url, alt string) InlineObject { gotURL, gotAlt = url, alt; return obj }}
@@ -139,12 +135,10 @@ func TestMarkdownLinksAndImages(t *testing.T) {
 	if in, ok := items[1].(Inline); !ok || in.Object != obj || in.Block {
 		t.Fatalf("items[1] = %+v", items[1])
 	}
-	// Resolver declining falls back to alt text.
 	m.Images = func(string, string) InlineObject { return nil }
 	if got := plainOf(m.inline("![alt](u)", Format{})); got != "[alt]" {
 		t.Fatalf("got %q", got)
 	}
-	// A bracket without a link target is literal.
 	if got := plainOf(Markdown{}.inline("[just brackets] and [x](", Format{})); got != "[just brackets] and [x](" {
 		t.Fatalf("got %q", got)
 	}
@@ -175,7 +169,6 @@ func TestMarkdownParagraphs(t *testing.T) {
 	}
 }
 
-// paraFormats lists the ParaFormats of items in order.
 func paraFormats(items []Item) []ParaFormat {
 	var out []ParaFormat
 	for _, it := range items {
@@ -203,7 +196,6 @@ func TestMarkdownLists(t *testing.T) {
 	if strings.Join(kinds, " ") != "b0 b0 b1 b2 b0 o0 o0 c0 C0" {
 		t.Fatalf("list items = %v", kinds)
 	}
-	// Laid out they get their markers, numbered by the layout.
 	f, _ := newFlow("", 600, 600)
 	f.Items = items
 	var markers []string
@@ -282,7 +274,6 @@ func TestMarkdownTables(t *testing.T) {
 	if plainOf(items) != "<obj>\nafter" {
 		t.Fatalf("plain = %q", plainOf(items))
 	}
-	// Pipes without a separator row are just text.
 	if got := plainOf(Markdown{}.Transform("a | b")); got != "a | b" {
 		t.Fatalf("got %q", got)
 	}

@@ -1,11 +1,3 @@
-// Package wasmserve is the static file handler for a built wasm app. It does the four things a slow
-// first load depends on (roadmap 82): it serves .wasm as application/wasm (browsers refuse
-// WebAssembly.instantiateStreaming otherwise, falling back to a full download before compiling), it
-// sends a precompressed .br or .gz file beside the original when the browser accepts it (a 26 MB
-// wasm travels as about 7 MB), it compresses the other text-like files itself once and keeps the
-// result, and it sets validators and cache headers so a repeat visit costs a 304.
-//
-//	http.Handle("/", wasmserve.Handler(os.DirFS("dist"), wasmserve.Options{Fallback: "index.html"}))
 package wasmserve
 
 import (
@@ -24,22 +16,11 @@ import (
 	"time"
 )
 
-// Options tune Handler. The zero value serves a directory as is.
+// Options tune Handler.
 type Options struct {
-	// Fallback is the file served for a path that is not a file, for a single-page app whose
-	// addresses like /d/report are handled in the page (usually "index.html"). A path with a file
-	// extension that does not exist is still a 404, so a missing script is not answered with HTML.
-	Fallback string
-	// Immutable says which files may be cached forever (names with a content hash in them). The
-	// default marks nothing: every file is revalidated with its ETag.
-	Immutable func(name string) bool
-	// GzipLevel is the compress/gzip level for what the handler compresses itself (a file with no
-	// precompressed sibling). 0 means gzip.BestCompression, right for a server that compresses a file
-	// once and keeps it; a development server that rebuilds the wasm often wants gzip.BestSpeed.
-	GzipLevel int
-	// ServiceWorker answers /sw.js with the service worker of the app shell (see ServiceWorker), made from
-	// the files of the handler. Off by default: a service worker keeps copies, which a development server
-	// does not want.
+	Fallback      string
+	Immutable     func(name string) bool
+	GzipLevel     int
 	ServiceWorker bool
 }
 
@@ -65,7 +46,7 @@ func Handler(fsys fs.FS, opt Options) http.Handler {
 }
 
 func init() {
-	// The platform's table may lack it, and an unknown type here would break streaming compilation.
+	// the platform table may lack it: unknown type breaks streaming
 	_ = mime.AddExtensionType(".wasm", "application/wasm")
 }
 
@@ -111,8 +92,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if v.encoding != "" {
 		hd.Set("Content-Encoding", v.encoding)
 		if r.Header.Get("Range") == "" {
-			// ServeContent leaves the length out of an encoded response; a progress bar for a
-			// 7 MB wasm needs it. (A ranged answer gets its own length from ServeContent.)
 			hd.Set("Content-Length", strconv.Itoa(len(v.body)))
 		}
 	}
@@ -124,8 +103,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", v.modTime, bytes.NewReader(v.body))
 }
 
-// pick returns the best form of the file for the browser: a precompressed sibling, else our own
-// gzip of a compressible file, else the file as it is.
 func (h *handler) pick(name string, mod time.Time, accept string) (*variant, error) {
 	ctype := mime.TypeByExtension(path.Ext(name))
 	if ctype == "" {
@@ -135,8 +112,7 @@ func (h *handler) pick(name string, mod time.Time, accept string) (*variant, err
 		if !accepts(accept, c.enc) {
 			continue
 		}
-		// A sibling older than its file is left over from an earlier build (a rebuilt main.wasm beside
-		// the previous main.wasm.gz): sending it would serve the old program, so it is skipped.
+		// a sibling older than its file is stale: skipped, never served
 		if st, err := fs.Stat(h.fsys, name+c.ext); err == nil && !st.IsDir() && !st.ModTime().Before(mod) {
 			return h.load(name+c.ext, c.enc, ctype, st.ModTime(), nil)
 		}
@@ -147,7 +123,6 @@ func (h *handler) pick(name string, mod time.Time, accept string) (*variant, err
 	return h.load(name, "", ctype, mod, nil)
 }
 
-// load reads a file (once per name, encoding and modification time) and, with compress, encodes it.
 func (h *handler) load(name, enc, ctype string, mod time.Time, compress func([]byte) ([]byte, error)) (*variant, error) {
 	key := name + "\x00" + enc + "\x00" + mod.UTC().Format(time.RFC3339Nano)
 	h.mu.Lock()
@@ -171,7 +146,7 @@ func (h *handler) load(name, enc, ctype string, mod time.Time, compress func([]b
 	}
 	sum := sha256.Sum256(b)
 	v := &variant{body: b, encoding: enc, etag: `"` + hex.EncodeToString(sum[:8]) + `"`, modTime: mod, ctype: ctype}
-	for k := range h.cache { // a changed file replaces its older forms rather than piling up
+	for k := range h.cache {
 		if strings.HasPrefix(k, name+"\x00"+enc+"\x00") {
 			delete(h.cache, k)
 		}
@@ -197,8 +172,6 @@ func gzipLevelBytes(b []byte, level int) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// compressible says which types gain from gzip (text-like ones and wasm; images and fonts are
-// compressed already).
 func compressible(ctype string) bool {
 	ctype, _, _ = strings.Cut(ctype, ";")
 	switch {
@@ -212,7 +185,6 @@ func compressible(ctype string) bool {
 	return false
 }
 
-// accepts reports whether an Accept-Encoding header lists enc with a quality above zero.
 func accepts(header, enc string) bool {
 	for _, part := range strings.Split(header, ",") {
 		tok, params, _ := strings.Cut(strings.TrimSpace(part), ";")

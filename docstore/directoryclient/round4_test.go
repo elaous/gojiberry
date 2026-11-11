@@ -17,7 +17,6 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
-// logRewriter passes the answers of /directory/log through f (a map of the JSON answer).
 func logRewriter(f func(m map[string]any)) *http.Client {
 	return pathClient("/directory/log", func(body []byte) []byte {
 		var m map[string]any
@@ -40,13 +39,10 @@ func publishN(t *testing.T, c *Client, n int) {
 	}
 }
 
-// S1: with nothing saved, the log must start where the read asked; a server that starts the answer
-// later withheld the start of the log.
 func TestWatchLogRefusesAnAnswerThatStartsLate(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	c := e.client(ana)
-	// An enrolled address is shown the whole log (anyone else gets only their own entries).
 	owner, _ := GenerateOwnerKey()
 	if _, err := c.Enroll(ctx, "ana@x.io", owner); err != nil {
 		t.Fatal(err)
@@ -70,8 +66,6 @@ func TestWatchLogRefusesAnAnswerThatStartsLate(t *testing.T) {
 	if _, err := late.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrLogCut) {
 		t.Fatalf("a first run whose log starts at entry 3: %v", err)
 	}
-	// The same after a filtered read: the unfiltered one continues from the cursor, and must start
-	// right after it.
 	st := &WatchState{}
 	if _, err := c.WatchLog(ctx, "ana@x.io", st, WatchOptions{}); err != nil || st.Seq != 3 || st.Filtered {
 		t.Fatalf("%v %+v", err, st)
@@ -91,8 +85,6 @@ func TestWatchLogRefusesAnAnswerThatStartsLate(t *testing.T) {
 	}
 }
 
-// S7: an address the audited state says is enrolled is shown the whole log; a filtered answer is
-// the server withholding it.
 func TestWatchLogRefusesAFilteredAnswerForAnEnrolledAddress(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -111,16 +103,11 @@ func TestWatchLogRefusesAFilteredAnswerForAnEnrolledAddress(t *testing.T) {
 	if _, err := filt.WatchLog(ctx, "ana@x.io", &st, WatchOptions{Owner: owner}); !errors.Is(err, ErrFilteredEnrolled) {
 		t.Fatalf("%v", err)
 	}
-	// Not enrolled as far as the state knows: a filtered answer is what the server gives anybody
-	// who is not the owner of an enrolled address.
 	if _, err := filt.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); errors.Is(err, ErrFilteredEnrolled) {
 		t.Fatalf("%v", err)
 	}
 }
 
-// Item 24: the audit of this run's own entries also counts. A first run (nothing saved) over a
-// filtered answer that holds the address's enrollment is refused, and nothing is remembered; an
-// address that is not enrolled is still read filtered.
 func TestWatchLogRefusesAFilteredAnswerWhenTheAuditFindsTheEnrollment(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -137,14 +124,11 @@ func TestWatchLogRefusesAFilteredAnswerWhenTheAuditFindsTheEnrollment(t *testing
 	if st.Seq != 0 || st.Enrolled || len(st.Pending) != 0 {
 		t.Fatalf("the refused run remembered something: %+v", st)
 	}
-	// the honest, whole read of the same log is fine
 	if _, err := c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{Owner: owner}); err != nil {
 		t.Fatalf("the whole log: %v", err)
 	}
 }
 
-// S2: the number of an operation is the server's word. The entry there must be what the client did,
-// or it is not the client's, and its pseudonym is not pinned.
 func TestWatchLogHoldsMadeEntriesToWhatTheClientDid(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -158,8 +142,6 @@ func TestWatchLogHoldsMadeEntriesToWhatTheClientDid(t *testing.T) {
 	if _, err := e.client(ana).Enroll(ctx, "ana@x.io", owner); err != nil { // so that ana reads the whole log
 		t.Fatal(err)
 	}
-	// The server answers ana's publication with the number of bo's entry, and reports bo's
-	// pseudonym as hers.
 	liar := &Client{BaseURL: c.BaseURL, Token: c.Token, LogKeys: c.LogKeys, State: c.State, HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		res, err := http.DefaultTransport.RoundTrip(r)
 		if err != nil {
@@ -229,8 +211,6 @@ func TestMadeMismatch(t *testing.T) {
 	}
 }
 
-// S4: what is pinned after an enrollment is the key the client made, not the one the server's
-// answer names.
 func TestEnrollPinsTheClientsOwnKeyNotTheServersAnswer(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -255,7 +235,6 @@ func TestEnrollPinsTheClientsOwnKeyNotTheServersAnswer(t *testing.T) {
 	if m := c.State.Made; len(m) != 1 || m[0].Op != encrypt.OpEnroll || m[0].Fingerprint != encrypt.OwnerFingerprint(owner.Public().(ed25519.PublicKey)) || m[0].OwnerSig == "" {
 		t.Errorf("%+v", m)
 	}
-	// Rotation and reset pin the new key the same way.
 	next, _ := GenerateOwnerKey()
 	if _, err := c.Rotate(ctx, "ana@x.io", owner, next); err != nil {
 		t.Fatal(err)
@@ -265,8 +244,6 @@ func TestEnrollPinsTheClientsOwnKeyNotTheServersAnswer(t *testing.T) {
 	}
 }
 
-// ownerAndRows enrolls ana's owner key, publishes a key and returns a viewer's first and second
-// lookups with the given client set-up.
 func enrolledAna(t *testing.T, e *env) (OwnerKey, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -282,7 +259,6 @@ func enrolledAna(t *testing.T, e *env) (OwnerKey, string) {
 	return owner, encrypt.FormatOwnerPub(owner.Public().(ed25519.PublicKey))
 }
 
-// S5: a key pinned only by trust on first use does not get the strongest mark.
 func TestTrustOnFirstUseIsNotPromotedToPinned(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -302,12 +278,10 @@ func TestTrustOnFirstUseIsNotPromotedToPinned(t *testing.T) {
 	if _, ok := v.Pins.Get("ana@x.io"); ok {
 		t.Error("a lookup wrote a pin")
 	}
-	// Confirmed by the host: the strongest mark.
 	v.Pins.Set("ana@x.io", pub)
 	if rows, _ = v.Lookup(ctx, "ana@x.io"); !rows[0].OwnerSigned || !rows[0].OwnerPinned || rows[0].OwnerFirstSeen {
 		t.Errorf("%+v", rows[0])
 	}
-	// Without a State there is no memory: every lookup is a first sight.
 	n := e.client(bo)
 	n.State = nil
 	for range 2 {
@@ -317,7 +291,6 @@ func TestTrustOnFirstUseIsNotPromotedToPinned(t *testing.T) {
 	}
 }
 
-// With two owner keys in one answer and nothing pinned, the second one is a change.
 func TestSecondOwnerKeyInOneAnswerIsChanged(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -359,7 +332,6 @@ func TestSecondOwnerKeyInOneAnswerIsChanged(t *testing.T) {
 	}
 }
 
-// The chain WatchLog audited for the client's own address confirms a row without any pin.
 func TestAuditedOwnerChainConfirmsARowWithoutPins(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -378,7 +350,6 @@ func TestAuditedOwnerChainConfirmsARowWithoutPins(t *testing.T) {
 	}
 }
 
-// forgeEntry appends, as a holder of the directory key could, a signed entry for the address.
 func forgeEntry(t *testing.T, e *env, in encrypt.LogEntry) int64 {
 	t.Helper()
 	ctx := context.Background()
@@ -399,8 +370,6 @@ func forgeEntry(t *testing.T, e *env, in encrypt.LogEntry) int64 {
 	return entry.Seq
 }
 
-// A void that comes in a later run than the entry it cancels is shown for the entry that was
-// reported before, and once.
 func TestWatchLogShowsAVoidThatCameAfterTheReport(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -421,7 +390,6 @@ func TestWatchLogShowsAVoidThatCameAfterTheReport(t *testing.T) {
 	}
 }
 
-// rewriteBody replaces the body of an answer.
 func rewriteBody(res *http.Response, f func([]byte) []byte) *http.Response {
 	body, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
@@ -430,8 +398,6 @@ func rewriteBody(res *http.Response, f func([]byte) []byte) *http.Response {
 	return res
 }
 
-// A log that starts at entry 1 must start from the zero hash: an answer whose first entry follows
-// something else is a log with its start withheld.
 func TestWatchLogRefusesAFirstEntryThatFollowsSomething(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -454,8 +420,6 @@ func TestWatchLogRefusesAFirstEntryThatFollowsSomething(t *testing.T) {
 	}
 }
 
-// A saved filtered state's signed head must be compared with the chain when the read turns full:
-// whether the full read starts right after it, overlaps it, or starts past it.
 func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -484,7 +448,6 @@ func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
 		t.Fatalf("%v %+v %+v", err, head, saved)
 	}
 
-	// Legitimate switches: the saved hash is the chain's, whatever the cursor.
 	for _, cursor := range []int64{saved.Seq - 1, saved.Seq, saved.Seq + 1} {
 		sw := saved
 		sw.Filtered, sw.Cursor = true, cursor
@@ -493,8 +456,6 @@ func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
 		}
 	}
 
-	// A saved head that is not on the chain: the full read starts after it (cursor = Seq) or overlaps
-	// it (cursor < Seq), or starts past it (cursor > Seq).
 	for _, tc := range []struct{ seq, cursor int64 }{
 		{head.Seq - 1, head.Seq - 1},
 		{head.Seq - 1, head.Seq - 2},
@@ -511,7 +472,6 @@ func TestWatchLogAnchorsAFilteredToFullSwitchToTheSavedHead(t *testing.T) {
 	}
 }
 
-// storeEntry writes a signed entry straight into the server's store (a rogue server's rewrite).
 func storeEntry(t *testing.T, e *env, in encrypt.LogEntry) encrypt.LogEntry {
 	t.Helper()
 	in.At = time.Now().Unix()
@@ -524,9 +484,6 @@ func storeEntry(t *testing.T, e *env, in encrypt.LogEntry) encrypt.LogEntry {
 	return entry
 }
 
-// A filtered state whose cursor is past the saved head (older runs saved it so) must not let a
-// server rewrite the entries between the head and the cursor when the read turns full: the entries
-// after the cursor chain among themselves, and nothing else links them to the saved head.
 func TestWatchLogDetectsARewriteBetweenTheSavedHeadAndAFilteredCursor(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -545,13 +502,11 @@ func TestWatchLogDetectsARewriteBetweenTheSavedHeadAndAFilteredCursor(t *testing
 	if _, err := c.WatchLog(ctx, "ana@x.io", saved, WatchOptions{}); err != nil || saved.Filtered {
 		t.Fatalf("%v %+v", err, saved)
 	}
-	// The server's history after the saved head is a fork: entry head+1 does not follow the head.
 	f1 := storeEntry(t, e, encrypt.LogEntry{Seq: saved.Seq + 1, Prev: strings.Repeat("ab", 32), Op: encrypt.OpPublish, Fingerprint: "SHA256:fork1"})
 	f2 := storeEntry(t, e, encrypt.LogEntry{Seq: saved.Seq + 2, Prev: f1.Hash, Op: encrypt.OpPublish, Fingerprint: "SHA256:fork2"})
 	forgeEntry(t, e, encrypt.LogEntry{Op: encrypt.OpPublish, Fingerprint: "SHA256:fork3"})
 	_ = f2
 
-	// A state an older run saved: filtered, the cursor two past the head.
 	sw := *saved
 	sw.Filtered, sw.Cursor = true, saved.Seq+2
 	before := sw
@@ -563,8 +518,6 @@ func TestWatchLogDetectsARewriteBetweenTheSavedHeadAndAFilteredCursor(t *testing
 	}
 }
 
-// A filtered run whose scan passes the head (the log grew after the head was read) saves a cursor
-// that never passes the saved head, and the next run, filtered or full, goes on from there.
 func TestWatchLogFilteredCursorStaysWithinTheSavedHead(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -590,7 +543,6 @@ func TestWatchLogFilteredCursorStaysWithinTheSavedHead(t *testing.T) {
 	if len(rep.Entries) != 4 {
 		t.Fatalf("the entries past the head are reported with the run that read them: %+v", rep.Entries)
 	}
-	// The entries past the head are read again next time (not reported twice), and the head moves on.
 	rep, err = c.WatchLog(ctx, "ana@x.io", st, WatchOptions{})
 	if err != nil || len(rep.Entries) != 0 || st.Seq != 4 || st.Cursor != 4 {
 		t.Fatalf("%v %+v %+v", err, rep.Entries, st)
@@ -607,8 +559,6 @@ func TestWatchLogFilteredCursorStaysWithinTheSavedHead(t *testing.T) {
 	}
 }
 
-// growingFilteredRun saves a filtered state whose pending entries (1 to 4) include two past the
-// signed head, the way the test above does.
 func growingFilteredRun(t *testing.T) (*env, *Client, *WatchState) {
 	t.Helper()
 	e := newEnv(t)
@@ -631,8 +581,6 @@ func growingFilteredRun(t *testing.T) (*env, *Client, *WatchState) {
 	return e, c, st
 }
 
-// A re-read entry whose number is pending but whose hash is not the one remembered is the server
-// telling two stories: ErrLogCut, state unchanged (the same entry again is simply deduplicated).
 func TestWatchLogRefusesAPendingEntryRewrittenBetweenRuns(t *testing.T) {
 	ctx := context.Background()
 	e, c, st := growingFilteredRun(t)
@@ -650,7 +598,6 @@ func TestWatchLogRefusesAPendingEntryRewrittenBetweenRuns(t *testing.T) {
 	}
 }
 
-// The audit sees each entry once, whether it is pending or read again.
 func TestWatchLogAuditsAReReadEntryOnce(t *testing.T) {
 	ctx := context.Background()
 	_, c, st := growingFilteredRun(t)
@@ -673,7 +620,6 @@ func TestWatchLogAuditsAReReadEntryOnce(t *testing.T) {
 	}
 }
 
-// A filtered state at the head, then a full read with nothing past the head: not a cut.
 func TestWatchLogFilteredToFullSwitchWithNoNewEntries(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -698,8 +644,6 @@ func TestWatchLogFilteredToFullSwitchWithNoNewEntries(t *testing.T) {
 	}
 }
 
-// ownedAna enrolls ana with an owner key and returns a func that publishes n more entries signed
-// by it, so that the address is read in full.
 func ownedAna(t *testing.T, c *Client) (OwnerKey, func(n int)) {
 	t.Helper()
 	ctx := context.Background()
@@ -717,8 +661,6 @@ func ownedAna(t *testing.T, c *Client) (OwnerKey, func(n int)) {
 	}
 }
 
-// The audit must see the pending entries and the newly read ones in the order of the log, whatever
-// order they were gathered in: pending {1, 4} with a saved cursor of 2, and a full read that adds 3.
 func TestWatchLogAuditsPendingAndNewEntriesInLogOrder(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -748,9 +690,6 @@ func TestWatchLogAuditsPendingAndNewEntriesInLogOrder(t *testing.T) {
 	}
 }
 
-// The log grows past the head while the cursor sits at the head: a non-empty read from the head
-// reaches the entry fetch. Honest entries pass; a different entry served at the head's number is
-// a cut; the first entry read must follow the saved head.
 func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 	ctx := context.Background()
 	run := func(t *testing.T, grow func(e *env, publishOwn func(int), st *WatchState), serve func(e *env, since string, m map[string]any)) (*WatchState, error) {
@@ -799,7 +738,7 @@ func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 	})
 	t.Run("another entry at the head", func(t *testing.T) {
 		st, err := run(t, honest, func(e *env, since string, m map[string]any) {
-			if since != "2" { // the fetch of the entry at the head, not the read from it
+			if since != "2" {
 				return
 			}
 			es, _ := m["entries"].([]any)
@@ -832,19 +771,15 @@ func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 }
 
 func TestParseWatchState(t *testing.T) {
-	// First run: nothing saved.
 	if st, err := ParseWatchState(""); err != nil || st.Seq != 0 || len(st.Pending) != 0 {
 		t.Fatalf("empty: %+v %v", st, err)
 	}
-	// A state this version wrote round-trips.
 	want := WatchState{Seq: 7, Hash: "abc", Cursor: 5, Reported: 6}
 	b, _ := json.Marshal(want)
 	got, err := ParseWatchState(string(b))
 	if err != nil || got.Seq != 7 || got.Hash != "abc" || got.Cursor != 5 || got.Reported != 6 {
 		t.Fatalf("round trip: %+v %v", got, err)
 	}
-	// State saved before "made" became records ("made":[5]) and plain damage are refused whole, with the
-	// zero state: not half of it.
 	for name, raw := range map[string]string{
 		"old made format": `{"seq":7,"hash":"abc","cursor":5,"made":[5]}`,
 		"truncated":       `{"seq":7,"hash":"ab`,
@@ -861,7 +796,6 @@ func TestParseWatchState(t *testing.T) {
 	}
 }
 
-// A user who checked the new owner key with its owner accepts it: the warning clears for that key.
 func TestAcceptOwnerClearsTheChangedWarningForThatKey(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -874,7 +808,6 @@ func TestAcceptOwnerClearsTheChangedWarningForThatKey(t *testing.T) {
 	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p1, Identity: id1, Owner: owner}); err != nil {
 		t.Fatal(err)
 	}
-	// Bo sees the first owner key.
 	b := e.client(bo)
 	if _, err := b.Lookup(ctx, "ana@x.io"); err != nil {
 		t.Fatal(err)

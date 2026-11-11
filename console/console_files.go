@@ -68,7 +68,6 @@ func (sh *Shell) rmdir(ctx context.Context, args []string) error {
 	return nil
 }
 
-// folderEmpty is the cheap check that rmdir would succeed (the trash does not count).
 func (sh *Shell) folderEmpty(ctx context.Context, t *tree, id, label string) error {
 	for _, f := range t.folders {
 		if f.Parent == id {
@@ -103,7 +102,6 @@ func (sh *Shell) mv(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Into a folder: the destination names one, or ends in a slash.
 	if id, ferr := sh.folder(t, dest); ferr == nil && (strings.HasSuffix(dest, "/") || len(things) > 1 || destIsFolder(t, id, things)) {
 		return sh.moveInto(ctx, things, id, dest)
 	} else if strings.HasSuffix(dest, "/") {
@@ -150,11 +148,10 @@ func (sh *Shell) mv(ctx context.Context, args []string) error {
 	})
 }
 
-// destIsFolder: a lone source moved to a name that is an existing folder goes into it.
 func destIsFolder(t *tree, id string, things []thing) bool {
 	for _, th := range things {
 		if th.folder != nil && th.folder.ID == id {
-			return false // a folder onto itself is not a move into it
+			return false
 		}
 	}
 	return true

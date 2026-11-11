@@ -18,13 +18,8 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The person's saved themes live in the settings store of package userconfig, as items called
-// "tokens.<name>": on this device always (localStorage, so they work offline) and, when a docstore server is
-// confirmed in the People tab, on the server too, so another device of the same person has them.
-
 const themeCacheKey = "showcase:config"
 
-// themeCache keeps the device's copy of the settings items in localStorage.
 type themeCache struct{}
 
 func (themeCache) Load() map[string]cclient.Entry {
@@ -38,7 +33,6 @@ func (themeCache) Save(m map[string]cclient.Entry) {
 	lsSet(themeCacheKey, string(b))
 }
 
-// themeLibState is the saved-themes part of the page.
 type themeLibState struct {
 	c      *cclient.Client
 	url    string // the server the client talks to ("" none)
@@ -48,7 +42,6 @@ type themeLibState struct {
 
 var themeSlug = regexp.MustCompile(`[^a-z0-9._-]+`)
 
-// themeItem is the settings item name for a theme called name ("" when it has no usable letters).
 func themeItem(name string) string {
 	slug := strings.Trim(themeSlug.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-"), "-.")
 	if slug == "" {
@@ -60,7 +53,6 @@ func themeItem(name string) string {
 	return userconfig.KindTokens + "." + slug
 }
 
-// config is the settings client, made again when the confirmed server changes.
 func (u *ui) config() *cclient.Client {
 	want := ""
 	if u.enc != nil {
@@ -78,7 +70,6 @@ func (u *ui) config() *cclient.Client {
 	return l.c
 }
 
-// syncThemes sends and pulls the settings in the background (only when a server is confirmed) and draws again.
 func (u *ui) syncThemes(renderUI func()) {
 	c := u.config()
 	if u.themeLib.url == "" {
@@ -100,7 +91,6 @@ func (u *ui) syncThemes(renderUI func()) {
 	}()
 }
 
-// savedThemes are the saved sets, by display name.
 func (u *ui) savedThemes() []struct {
 	item string
 	set  tokens.Set
@@ -139,7 +129,6 @@ func (u *ui) savedThemes() []struct {
 	return out
 }
 
-// themeLibrary is the panel of saved themes: save the one being edited under a name, use one, delete one.
 func (u *ui) themeLibrary(use func(tokens.Set), renderUI func()) xango.Node {
 	l := &u.themeLib
 	var rows []xango.Node

@@ -1,10 +1,3 @@
-// Package hosted is the adapter that lets a reader voice on a server read a document aloud (voice/read.Engine): the
-// third one beside the voices of the device and the downloaded Piper voices. The voices are those of a voiceserver
-// (cmd/voiceserver) that an operator runs: the page asks it for the list of voices, and for each sentence sends the
-// text and gets sound back. Unlike the other two, the text leaves the device, so these voices are marked as not local
-// and are offered only when the person allowed voices that use the internet; the page says so while one reads.
-//
-// Like the Piper adapter it knows no browser: the network is the Client port and the speakers are piper.Output.
 package hosted
 
 import (
@@ -20,10 +13,7 @@ import (
 
 // Client talks to the server.
 type Client interface {
-	// Voices gets the server's list of voices (the JSON of GET /voices).
 	Voices(ctx context.Context, done func([]byte, error))
-	// Speech gets the sound (a WAV) of POST /speak for the text, voice ("" for the server's own) and rate. done is
-	// called later on the page's thread; the returned function cancels the request.
 	Speech(ctx context.Context, voice, text string, rate float64, done func([]byte, error)) (cancel func())
 }
 
@@ -58,10 +48,8 @@ func (e *Engine) ID() string { return "hosted" }
 // Label implements read.Engine.
 func (e *Engine) Label() string { return "Voices on a server" }
 
-// Available implements read.Engine: there is a server to ask and a way to play.
 func (e *Engine) Available() bool { return e.Client != nil && e.Output != nil }
 
-// Load fetches the list of voices; done is called when it is in (or failed).
 func (e *Engine) Load(ctx context.Context, done func(error)) {
 	if e.Client == nil {
 		done(ErrNoServer)
@@ -82,7 +70,7 @@ func (e *Engine) Load(ctx context.Context, done func(error)) {
 // Loaded says the list is in.
 func (e *Engine) Loaded() bool { return e.loaded }
 
-// Voices implements read.Engine. They are not local: the text is sent to the server.
+// Voices implements read.Engine.
 func (e *Engine) Voices() []read.Voice {
 	out := make([]read.Voice, 0, len(e.voices))
 	for _, v := range e.voices {
@@ -91,7 +79,6 @@ func (e *Engine) Voices() []read.Voice {
 	return out
 }
 
-// Licence is the address of the terms of a voice, "" when the server gave none.
 func (e *Engine) Licence(id string) string {
 	for _, v := range e.voices {
 		if v.ID == id {
@@ -141,8 +128,6 @@ func (e *Engine) Speak(u read.Utterance, h read.Handler) read.Speech {
 	return s
 }
 
-// pick is the server's voice for a language: the exact tag, else the first of the language (the first of all for an
-// unknown language, like the other engines), else "" (the server's own).
 func (e *Engine) pick(lang string) string {
 	lang = strings.ReplaceAll(lang, "_", "-")
 	base := strings.ToLower(strings.SplitN(lang, "-", 2)[0])
@@ -205,10 +190,8 @@ func (s *speech) guard(h read.Handler) read.Handler {
 	}
 }
 
-// MaxSamples bounds the sound taken from a server (ten minutes at 48 kHz).
 const MaxSamples = 48000 * 600
 
-// DecodeWAV reads a PCM WAV (16-bit, or 32-bit float; mono, or stereo mixed down) as Audio.
 func DecodeWAV(b []byte) (piper.Audio, error) {
 	if len(b) < 12 || string(b[0:4]) != "RIFF" || string(b[8:12]) != "WAVE" {
 		return piper.Audio{}, ErrBadSound
@@ -221,7 +204,7 @@ func DecodeWAV(b []byte) (piper.Audio, error) {
 		body := p + 8
 		end := body + size
 		if size < 0 || end > len(b) {
-			end = len(b) // a stream whose length was not known when the header was written
+			end = len(b)
 		}
 		switch id {
 		case "fmt ":

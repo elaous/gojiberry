@@ -9,15 +9,11 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// SaverSink stores migrated documents in a target of a Saver, under the folder
-// Folder ("" for the top), making the folders of the source as it goes (a folder
-// of that name already there is used).
 type SaverSink struct {
 	Saver  *saver.Saver
 	Target string
 	Folder string
-	// Codec is the format documents are stored in; nil is JSON.
-	Codec docfile.Codec
+	Codec  docfile.Codec
 
 	mu      sync.Mutex
 	folders map[string]string // path joined by "\x00" -> folder ID

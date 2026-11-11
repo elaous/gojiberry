@@ -1,13 +1,10 @@
 package canvas
 
-// Mode is whether a component is being looked at or modified. Every
-// component in this package has both.
+// Mode is whether a component is viewed or modified.
 type Mode int
 
 const (
-	// ModeView (the zero value) renders the component read-only: no
-	// editing affordances (caret, active-cell border, "+" bars, hover
-	// states) are drawn, and pointer and keyboard input is ignored.
+	// ModeView (the zero value) renders the component read-only.
 	ModeView Mode = iota
 	// ModeEdit makes the component interactive.
 	ModeEdit

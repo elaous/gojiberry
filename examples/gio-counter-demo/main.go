@@ -1,14 +1,3 @@
-// Command gio-counter-demo mounts shared.Counter -- the exact same
-// component wasm-counter mounts into a real browser DOM via domrt --
-// into a real native Gio window instead, via gio.Renderer. Run it
-// on a machine with a display:
-//
-//	go run .
-//
-// See gio_test.go for headless verification (no display required):
-// a real, software-rendered Gio frame plus simulated pointer clicks
-// prove Counter's OnInc/OnDec handlers actually fire through the
-// renderer, not just that the process starts without panicking.
 package main
 
 import (

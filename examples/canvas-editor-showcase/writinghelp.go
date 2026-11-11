@@ -13,10 +13,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Writing help (the llm add-on): ask for the selection to be summarised, made plainer or shorter, given another tone or
-// explained. The answer is machine-made text: it is shown for the author to read and change, and goes into the document
-// only when they press a button, never by itself.
-
 var helpState struct {
 	action  helper.Action
 	result  string
@@ -24,11 +20,10 @@ var helpState struct {
 	msg     string
 	from    int // the selection that was asked about
 	to      int
-	whole   string // the whole text when it was asked: the offsets mean something only in it
+	whole   string // offsets mean something only in the whole text
 	replace bool   // the answer can replace the selection
 }
 
-// helpLabel names an action. The ids are spelled out so that the translation check sees them.
 func helpLabel(a helper.Action) string {
 	switch a {
 	case helper.Summarise:
@@ -47,7 +42,6 @@ func helpLabel(a helper.Action) string {
 	return string(a)
 }
 
-// writingHelp is the section of the Language tab, shown when the page has the llm add-on.
 func writingHelp(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	if !llmAddon() {
 		return xango.Frag()
@@ -91,7 +85,6 @@ func writingHelp(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rend
 	return xango.El("div", []xango.Attr{xango.A("id", "help-panel")}, nodes...)
 }
 
-// askHelp sends the selection to the model with the action's prompt.
 func askHelp(u *ui, a helper.Action, fl *canvas.TextFlow, renderUI func()) {
 	if fl == nil || helpState.busy {
 		return
@@ -130,8 +123,6 @@ func askHelp(u *ui, a helper.Action, fl *canvas.TextFlow, renderUI func()) {
 	}()
 }
 
-// useHelp puts the answer in the document: in place of the selection, or after it. It is refused when the text changed
-// since the question, because the range no longer means what it did.
 func useHelp(fl *canvas.TextFlow, replace bool, redraw, renderUI func()) {
 	if fl == nil || helpState.result == "" {
 		return

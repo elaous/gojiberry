@@ -2,9 +2,6 @@ package lang
 
 import "strings"
 
-// ValidTag reports whether s is a well-formed BCP 47 language tag (RFC 5646 syntax: language, extended
-// language, script, region, variants, extensions and private use). It does not look subtags up in the
-// IANA registry. The empty string is valid: ISO 32000 lets /Lang be empty for an unknown language.
 func ValidTag(s string) bool {
 	if s == "" {
 		return true
@@ -31,7 +28,6 @@ func ValidTag(s string) bool {
 	alnum := func(p string, lo, hi int) bool {
 		return all(p, lo, hi, func(c rune) bool { return isAlpha(c) || isNum(c) })
 	}
-	// A wholly private tag: x-subtag(s).
 	if strings.EqualFold(parts[0], "x") {
 		if len(parts) < 2 {
 			return false

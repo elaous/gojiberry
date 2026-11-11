@@ -39,7 +39,6 @@ func TestPeopleListsAndPlugsIn(t *testing.T) {
 			t.Errorf("missing %q in %s", want, got)
 		}
 	}
-	// You cannot remove yourself; nothing offered means nothing drawn.
 	self := render(t, People(PeopleProps{People: []user.Person{{ID: "me@gojiberry.io", Role: "owner"}, {ID: "me2@gojiberry.io", Role: "editor"}}, Self: "me2@gojiberry.io", Remove: p.Remove}))
 	mustNotContain(t, self, "gj-people-remove", "gj-people-invite")
 	bare := render(t, People(PeopleProps{People: p.People}))

@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Two people at one equation: while Ana is changing it, Bo sees it busy (the announcer says who) and his change is
-// refused; once Ana has been quiet for a while the hold ends and Bo can change it.
 func TestAnObjectOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -58,7 +56,6 @@ func TestAnObjectOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	b.Sleep(500)
 	b.OK(b.Str(`document.getElementById('eq-formula-0').value`) != "y^2", "Bo's text was put back: "+b.Str(`document.getElementById('eq-formula-0').value`))
 
-	// Ana stops; the hold runs out a few seconds later and Bo can change it
 	b.WaitForTimeout("the hold ended", `!JSON.parse(document.getElementById("state").textContent).live.holding.includes('Ana=equation:0')`, 25*time.Second)
 	b.Fill("#eq-formula-0", "z^2")
 	a.WaitFor("Ana sees Bo's change", `document.getElementById('eq-formula-0') && document.getElementById('eq-formula-0').value === 'z^2'`)
@@ -66,8 +63,6 @@ func TestAnObjectOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	b.NoErrors()
 }
 
-// A table in the text is held by the person who is changing it (inserting, moving, sorting, resizing by the Styles tab,
-// dressing it): the other sees it busy and their change is refused.
 func TestATableOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -108,20 +103,17 @@ func TestATableOnePersonIsChangingIsBusyForTheOther(t *testing.T) {
 	a.WaitSelector("#tgrip-col-after")
 	a.Click("#tgrip-col-after") // Ana is at it
 	b.WaitFor("Bo sees Ana holding the table", `JSON.parse(document.getElementById("state").textContent).live.holding.includes('Ana=table:0')`)
-	b.CanvasClick(285, 113) // the same grip, lower on Bo's sheet (a line of text above it)
+	b.CanvasClick(285, 113)
 	b.WaitSelector("#tgrip-col-after")
 	b.Click("#tgrip-col-after") // refused
 	b.WaitFor("Bo is told it is busy", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this table.')`)
-	// Dragging a grip's edge to resize is changing the table too: Bo is told, and nothing is resized.
 	b.Eval(`document.querySelector('.gj-announcer').textContent = ''`, nil)
-	b.CanvasDrag(325, 111, 365, 111) // the edge between the first two columns, on the column grips
+	b.CanvasDrag(325, 111, 365, 111)
 	b.WaitFor("Bo is told it is busy when he drags an edge", `document.querySelector('.gj-announcer').textContent.includes('Busy: Ana is changing this table.')`)
 	a.NoErrors()
 	b.NoErrors()
 }
 
-// Text another person typed is in their colour for a few seconds and then normal; with the preference off it is never
-// coloured.
 func TestTextOthersTypeIsColouredForAMomentUnlessSwitchedOff(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))

@@ -13,33 +13,28 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// IndexKey is where the owner-signed index of end-to-end documents is stored. It is in the
-// keys: keyspace on purpose (readable, never expiring, and not a document ID, so it cannot be
-// the record of any document), and is signed like a record, under its own context.
+// IndexKey is where the owner-signed index is stored.
 const IndexKey = KeysPrefix + "index"
 
 const indexContext = "gojiberry/keys-index/v1"
 
-// IndexEntry is what the index says of one end-to-end document: its level and the seq of the
-// keys:<ID> record when it was switched.
+// IndexEntry is what the index says of one end-to-end document.
 type IndexEntry struct {
 	Level string `json:"level"`
 	Seq   uint64 `json:"seq"`
 }
 
-// indexRecord is the signed payload of the index.
 type indexRecord struct {
 	V    int                   `json:"v"`
 	Seq  uint64                `json:"seq"`
 	Docs map[string]IndexEntry `json:"docs,omitempty"`
 }
 
-// Index is the owner's list of end-to-end documents, as read and verified.
+// Index is the owner's list of end-to-end documents.
 type Index struct {
 	// Seq grows with every change to the list.
 	Seq uint64
-	// Docs maps a document (or confidential folder) ID to its entry. Only end-to-end
-	// documents are listed: switching one back to server removes it.
+	// Docs maps a document ID to its protection level.
 	Docs map[string]IndexEntry
 }
 
@@ -47,9 +42,6 @@ func indexMessage(payload []byte) []byte {
 	return append([]byte(indexContext+"\x00"+IndexKey+"\x00"), payload...)
 }
 
-// loadIndex reads and verifies the index. A missing one is empty, unless the floor has seen
-// one (ErrStaleRecord); an older one than the floor's is ErrStaleRecord too; a good one raises
-// the floor.
 func loadIndex(ctx context.Context, store docstore.Adapter, owners []ed25519.PublicKey, floor SeqFloor) (rec indexRecord, digest string, err error) {
 	d, err := store.Load(ctx, IndexKey)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -103,8 +95,7 @@ func loadIndex(ctx context.Context, store docstore.Adapter, owners []ed25519.Pub
 	return rec, digest, nil
 }
 
-// Index returns the owner-signed list of end-to-end documents (empty when none was ever
-// written). A list that does not verify, or is older than the floor's, is an error.
+// Index returns the owner-signed list of end-to-end documents.
 func (s *Sharing) Index(ctx context.Context) (Index, error) {
 	rec, _, err := loadIndex(ctx, s.Store, s.verifiers(), s.SeqFloor)
 	if err != nil {
@@ -117,10 +108,7 @@ func (s *Sharing) Index(ctx context.Context) (Index, error) {
 	return Index{Seq: rec.Seq, Docs: docs}, nil
 }
 
-// setIndex makes the index say a document is at level with the record seq: listed for the
-// end-to-end level (an entry already at that seq or a higher one is left), removed for the
-// server level. It is idempotent, so a SetProtection that failed after the record was written
-// repeats it.
+// idempotent: a failed SetProtection repeats it
 func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64) error {
 	return s.changeIndex(ctx, func(rec *indexRecord) bool {
 		cur, has := rec.Docs[docID]
@@ -142,25 +130,16 @@ func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64)
 	})
 }
 
-// ResignIndex signs the owner-signed index again with Signer, its entries unchanged but for the
-// sequence number: what a store does, besides Resign of every list, when the owner key that
-// signed the index is taken out of OwnerSigners (it would no longer verify). OwnerSigners must
-// still hold the key that signed it now. A store with no index is left as it is.
+// ResignIndex signs the owner-signed index again with the signer.
 func (s *Sharing) ResignIndex(ctx context.Context) error {
 	return s.changeIndex(ctx, func(rec *indexRecord) bool { return rec.Seq > 0 || len(rec.Docs) > 0 })
 }
 
-// changeIndex reads and verifies the index, lets fn change it (false: nothing to write), and
-// writes it back signed with the next sequence number, only if it is still what was read.
 func (s *Sharing) changeIndex(ctx context.Context, fn func(rec *indexRecord) bool) error {
 	if s.Signer == nil {
 		return ErrNoSigner
 	}
 	if _, cas := s.Store.(docstore.ConditionalAdapter); !cas {
-		// No compare-and-swap: two clients changing the index at the same moment would each
-		// write their own version of it and lose the other's entry. The store's Lock, where it
-		// has one, serializes them; without one, serialize index changes yourself (one owner
-		// client at a time) and let VerifyIndex's findings tell you of a document left unlisted.
 		if l, ok := s.Store.(docstore.Locker); ok {
 			unlock, err := l.Lock(ctx)
 			if err != nil {
@@ -203,39 +182,17 @@ func (s *Sharing) changeIndex(ctx context.Context, fn func(rec *indexRecord) boo
 	return docstore.ErrConflict
 }
 
-// IndexFinding is a document the index lists whose record is not what it should be. Err wraps
-// ErrDowngrade and says whether the record is missing or older than the index says.
+// IndexFinding is a problem found in the index.
 type IndexFinding struct {
 	Doc   string
 	Entry IndexEntry
 	Err   error
 }
 
-// ErrIndexUnverifiable is the Err of the finding VerifyIndex returns when the index lists no
-// documents and no floor has ever seen one (no SeqFloor, or an empty one): an index that was
-// deleted cannot be told from one that was never written, so "no end-to-end documents" is only
-// the store's word. It is a warning, not an ErrDowngrade: set a SeqFloor on the Sharing and the
-// StoreKeyring (the first VerifyIndex after an index exists raises it) to turn it into a check.
+// ErrIndexUnverifiable is the Err of an index finding.
 var ErrIndexUnverifiable = errors.New("encrypt: the index of end-to-end documents is empty or missing and no floor has seen one: a deleted index cannot be told from none")
 
-// VerifyIndex compares the owner-signed index with the stored records, for every document it
-// lists, whether or not this client ever opened it: a listed document whose keys:<ID> record
-// is missing, does not verify, is older than the entry's seq, or disagrees with it at the same
-// seq is a finding (ErrDowngrade). Nothing is changed. A client calls it once after sign-in.
-//
-// When the Sharing has a SeqFloor it is raised, as a side effect, to the index's own seq and
-// to every entry's seq (or the record's, if higher), in one batch (BatchSeqFloor: one write for
-// a FileSeqFloor), so from then on the ordinary reads refuse a deleted or older record of any
-// listed document (ErrStaleRecord) even on a client that never saw that document: the index is
-// how a fresh client gets a floor for the documents that matter.
-//
-// The index is only as good as its own freshness: a store writer can delete it or put back an
-// older one (see ErrStaleRecord, and the floor). When it lists nothing and the floor has never
-// seen an index (or there is no floor), a finding with ErrIndexUnverifiable (Doc is IndexKey)
-// says so: that is the one state in which a deleted index looks like an honest empty one. What
-// it adds over the frames is a check that needs no file to be opened, and covers files still
-// in the v1 frame. Without a floor, a client holds no state at all and an index rolled back
-// to an older one that lists fewer documents is not noticed either.
+// VerifyIndex compares the owner-signed index with the store.
 func (s *Sharing) VerifyIndex(ctx context.Context) ([]IndexFinding, error) {
 	idx, _, err := loadIndex(ctx, s.Store, s.verifiers(), s.SeqFloor)
 	if err != nil {
@@ -304,9 +261,6 @@ func levelOf(r sharedRecord) string {
 	return ""
 }
 
-// highestSeq is the highest record seq any stored file of the document was sealed under (every
-// file, snapshots included, that can be opened here), and the floor's value: what a record the
-// owner writes in Recover has to exceed.
 func (s *Sharing) highestSeq(ctx context.Context, docID string) (uint64, error) {
 	var top uint64
 	if s.SeqFloor != nil {
@@ -336,17 +290,7 @@ func (s *Sharing) highestSeq(ctx context.Context, docID string) (uint64, error) 
 	return top, nil
 }
 
-// Recover is the owner's way forward after ErrDowngrade when the record was deleted or an older
-// one put back and the owner knows what it should say: it writes a new signed record for the
-// document with exactly the given protection level and shared keys (the owner's own keys are
-// always recipients and are not listed), numbered above every record any stored file was sealed
-// under and above the floor, marked pending, then re-keys every file of the document to it and
-// clears pending, as SetProtection does. The replayed or missing record is not consulted, so
-// nothing it listed survives unless it is in shared: a person the owner had removed and the
-// replay brought back is not carried over. It needs the Signer. The record keeps its Signed
-// claim (a Recover does not make unsigned files acceptable): an unsigned file left in the document
-// stops the re-key, naming it, unless the owner confirms it with AcceptUnsigned (see there). Check what was lost with
-// Sharing.List before and after; what a person already opened cannot be taken back.
+// Recover is the owner's way forward after ErrDowngrade.
 func (s *Sharing) Recover(ctx context.Context, docID, protection string, shared []Recipient, opts ...RepairOption) (int, error) {
 	want, err := normalizeProtection(protection)
 	if err != nil {

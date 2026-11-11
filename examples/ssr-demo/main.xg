@@ -1,6 +1,3 @@
-// Package main is a small end-to-end demo of gojiberry's SSR path:
-// components with typed props, a conditional branch, and a rendered
-// list, all written as real Go with <tag> expressions.
 package main
 
 import (

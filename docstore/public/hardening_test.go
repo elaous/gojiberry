@@ -20,9 +20,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// ---- helpers
-
-// captureLog returns what the standard logger wrote until the test ends.
 func captureLog(t *testing.T) *lockedBuffer {
 	t.Helper()
 	buf := &lockedBuffer{}
@@ -48,8 +45,6 @@ func (l *lockedBuffer) String() string {
 	return l.b.String()
 }
 
-// hookStore wraps the expiring store: it counts listings and lets a test intercept the save of a
-// public document.
 type hookStore struct {
 	*docstore.ExpiringAdapter
 	lists     atomic.Int64
@@ -57,7 +52,7 @@ type hookStore struct {
 	beforePub func(ctx context.Context, id string, data []byte) error // called before saving "pubdoc/..."
 	listHook  func(ctx context.Context) error                         // called by every ListPrefix before it lists (set before use)
 	saltFail  atomic.Bool                                             // loading or saving the reporter salt fails
-	saltRace  func()                                                  // called before the conditional save of the salt (set before use)
+	saltRace  func()
 }
 
 func (h *hookStore) Load(ctx context.Context, id string) (docstore.Document, error) {
@@ -106,7 +101,6 @@ func (h *hookStore) ListPrefix(ctx context.Context, p string) ([]docstore.Meta, 
 	return h.ExpiringAdapter.ListPrefix(ctx, p)
 }
 
-// envWith builds an env over a hookStore.
 func envWith(t *testing.T, mod func(*Options)) (*env, *hookStore) {
 	t.Helper()
 	var hs *hookStore
@@ -120,9 +114,6 @@ func envWith(t *testing.T, mod func(*Options)) (*env, *hookStore) {
 	return e, hs
 }
 
-// rawRequest sends a request head and the given part of its body on a fresh connection and returns
-// the status line, and whether an answer came within wait. It never finishes the body, so a server
-// that wants the rest of it keeps waiting.
 func rawRequest(t *testing.T, e *env, method, path, token string, contentLength int, sent string, wait time.Duration) (status string, answered bool) {
 	t.Helper()
 	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
@@ -140,8 +131,6 @@ func rawRequest(t *testing.T, e *env, method, path, token string, contentLength 
 	}
 	return strings.TrimSpace(line), true
 }
-
-// ---- finding 1: one address cannot fill the session cap
 
 func TestClientKey(t *testing.T) {
 	for in, want := range map[string]string{
@@ -182,11 +171,9 @@ func TestSingleAddressCannotFillTheSessionCap(t *testing.T) {
 	if sessions.Len() != 2 {
 		t.Fatalf("the attacker holds %d sessions, want 2", sessions.Len())
 	}
-	// everybody else still gets one: the global cap (6) is not used up (a 503 would say so)
 	for _, ip := range []string{"198.51.100.1", "198.51.100.2", "198.51.100.3"} {
 		e.session("X-Forwarded-For", ip)
 	}
-	// and when the attacker's sessions end, its address may start again
 	e.clk.Add(2 * hour)
 	e.session(attacker...)
 }
@@ -220,7 +207,6 @@ func TestIssueRateAndByteQuotaAreKeyedBy64(t *testing.T) {
 	e.want(e.do("POST", "/public/session", "", nil, "X-Forwarded-For", "2001:db8:aaaa:1:2::3"), 429)
 	e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("a"), 80), "X-Forwarded-For", "2001:db8:aaaa:1:1::2"), 201)
 	c, _ := e.session("X-Forwarded-For", "2001:db8:aaaa:2::1")
-	// the daily bytes of the first /64 are shared by every address in it
 	e.want(e.do("POST", "/public/doc", c, bytes.Repeat([]byte("a"), 80), "X-Forwarded-For", "2001:db8:aaaa:1:9::9"), 429)
 }
 
@@ -235,7 +221,6 @@ func TestWriteBudgetIsPerAddressToo(t *testing.T) {
 	e.want(e.do("POST", "/public/doc", a, []byte("1"), hdr(1)...), 201)
 	e.want(e.do("PUT", "/public/doc", a, []byte("2"), hdr(1)...), 204)
 	e.want(e.do("POST", "/public/doc", b, []byte("3"), hdr(2)...), 201)
-	// b has a fresh per-session budget but shares the address budget (3 writes a minute)
 	e.want(e.do("PUT", "/public/doc", b, []byte("4"), hdr(2)...), 429)
 }
 
@@ -303,10 +288,6 @@ func TestMemorySessionStorePerClientCap(t *testing.T) {
 	}
 }
 
-// ---- finding 2: the global storage budget
-
-// countingBlocklist counts the bodies that reached the content check, which comes after the body
-// has been read: a request refused before its body is read never gets there.
 type countingBlocklist struct{ n atomic.Int64 }
 
 func (c *countingBlocklist) Blocked(context.Context, []byte) (bool, error) {
@@ -327,7 +308,6 @@ func TestGlobalStorageBudget(t *testing.T) {
 	if k := e.keys("pubdoc/"); len(k) != 1 {
 		t.Fatalf("documents: %v", k)
 	}
-	// an edit that grows the total past the budget is refused, one that shrinks it is not
 	e.want(e.do("PUT", "/public/doc", a, bytes.Repeat([]byte("a"), 120)), 503)
 	e.want(e.do("PUT", "/public/doc", a, bytes.Repeat([]byte("a"), 90)), 204)
 	e.want(e.do("PUT", "/public/doc", a, bytes.Repeat([]byte("a"), 10)), 204)
@@ -335,14 +315,12 @@ func TestGlobalStorageBudget(t *testing.T) {
 	if h := e.svc.Health(); h.StorageBytes != 100 {
 		t.Fatalf("health %+v", h)
 	}
-	// full: refused before the body is read, so before the content check
 	c, _ := e.session()
 	before := seen.n.Load()
 	e.want(e.do("POST", "/public/doc", c, []byte("ccccc")), 503)
 	if seen.n.Load() != before {
 		t.Fatal("a full store read and screened the body first")
 	}
-	// a discard gives the bytes back
 	e.want(e.do("DELETE", "/public/doc", a, nil), 204)
 	e.want(e.do("POST", "/public/doc", c, bytes.Repeat([]byte("c"), 10)), 201)
 }
@@ -357,8 +335,6 @@ func TestTakedownFreesStorage(t *testing.T) {
 	e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 50)), 201)
 }
 
-// The counter is rebuilt from the store: a restart does not give the budget back, and snapshots of
-// versions that a store keeps count with their documents.
 func TestStorageBudgetSurvivesARestartAndCountsVersions(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.MaxTotalBytes = 100 })
 	a, _ := e.session()
@@ -375,7 +351,6 @@ func TestStorageBudgetSurvivesARestartAndCountsVersions(t *testing.T) {
 	b, _ := e2.session()
 	e2.want(e2.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 60)), 503) // a restarted service remembers
 	e2.want(e2.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 30)), 201)
-	// a version snapshot kept for the document counts: the sweep sees it
 	if err := e.inner.Save(context.Background(), versionsKeyPrefix+d.ID+"/1.open", bytes.Repeat([]byte("v"), 40)); err != nil {
 		t.Fatal(err)
 	}

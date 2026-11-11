@@ -12,8 +12,6 @@ import (
 	"github.com/elaous/gojiberry/wasmserve"
 )
 
-// With the service worker that cmd/wasmdist writes, a repeat visit starts from the browser's copy of the
-// program: it asks the server for the page but not for the 30 MB program.
 func TestServiceWorkerKeepsTheAppForRepeatVisits(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	site := e2etest.NewSite(t)
@@ -45,19 +43,16 @@ func TestServiceWorkerKeepsTheAppForRepeatVisits(t *testing.T) {
 	d.OK(d.Bool(ready), "the worker is installed and has the app in its cache")
 	d.OK(wasmHits.Load() >= 1, "the first visit fetched the program")
 
-	d.Reload() // the worker now controls the page; the load after this one is served from its cache
+	d.Reload()
 	d.OK(d.Bool(`!!navigator.serviceWorker.controller`), "the page is controlled by the worker")
 	before := wasmHits.Load()
 	d.Reload()
 	d.OK(wasmHits.Load() == before, "a repeat visit does not ask the server for the program")
 	d.OK(d.Str(`document.getElementById('state').textContent`) != "", "and the app runs")
 
-	// The worker keeps one cache, named for the version, and nothing of the API.
 	d.OK(d.Int(`(async () => (await caches.keys()).filter(k => k.startsWith('gojiberry-app-')).length)()`) == 1, "one cache")
 	d.OK(d.Int(`(async () => (await (await caches.open((await caches.keys())[0])).keys()).length)()`) == 3, "the cache holds the three files of the shell")
 
-	// The second program (the file formats) is not fetched ahead: the first export fetches it, the worker
-	// keeps it, and a later visit finds it in the cache.
 	d.OK(filesHits.Load() == 0, "nothing of the file formats is downloaded before they are needed")
 	export := func() {
 		d.Click(`button[data-tab="transfer"]`)

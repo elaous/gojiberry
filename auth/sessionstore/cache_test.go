@@ -15,8 +15,6 @@ func fakeClock(start time.Time) (func() time.Time, func(time.Duration)) {
 	return func() time.Time { return now }, func(d time.Duration) { now = now.Add(d) }
 }
 
-// An unknown token is read once per MissFor, not once per request; a session made on another replica
-// is seen after that time; one made here is seen at once.
 func TestUnknownTokensAreReadOncePerSecond(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	a, _ := New(mem)
@@ -34,7 +32,6 @@ func TestUnknownTokensAreReadOncePerSecond(t *testing.T) {
 	if got := b.Stats(); got.Reads != 1 || got.MissHits != 49 {
 		t.Errorf("50 requests with one unknown token: %+v, want 1 read and 49 remembered misses", got)
 	}
-	// a flood of different random tokens still costs a read each, and the maps stay bounded
 	suffix := tok[strings.LastIndexByte(tok, '.'):]
 	for i := range 3 * maxCached {
 		_, _, _ = b.GetSession(ctx, fmt.Sprintf("guess%d%s", i, suffix))
@@ -43,14 +40,12 @@ func TestUnknownTokensAreReadOncePerSecond(t *testing.T) {
 		t.Errorf("the miss map holds %d entries, bound %d", n, maxCached)
 	}
 
-	// a session another replica made after b remembered a miss for its token is seen within MissFor
 	late, _ := New(mem)
 	late.Now = now
 	tok2, _ := a.PutSession(ctx, ana, time.Hour)
 	if _, ok, _ := late.GetSession(ctx, tok2); !ok {
 		t.Fatal("a fresh token is read from the store")
 	}
-	// simulate b having just missed this exact token (a client guessing early), then the session appearing
 	id := sessionKind.id(tok2)
 	b.remember(id, nil, now().Add(DefaultMissFor))
 	if _, ok, _ := b.GetSession(ctx, tok2); ok {
@@ -60,7 +55,6 @@ func TestUnknownTokensAreReadOncePerSecond(t *testing.T) {
 	if _, ok, _ := b.GetSession(ctx, tok2); !ok {
 		t.Error("after MissFor the token is read again and found")
 	}
-	// a session made by this process is seen at once, whatever was remembered
 	b.remember(sessionKind.id("x"), nil, now().Add(time.Hour))
 	tok3, _ := b.PutSession(ctx, ana, time.Hour)
 	b.remember(sessionKind.id(tok3), nil, now().Add(time.Hour)) // would hide it...
@@ -85,8 +79,6 @@ func TestMissCacheCanBeSwitchedOff(t *testing.T) {
 	}
 }
 
-// With CacheFor set a logout on another replica is seen after at most CacheFor; on the replica that
-// handles the logout, at once; with it unset every request reads the store.
 func TestPositiveCacheHasABoundedStaleness(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	a, _ := New(mem)
@@ -114,14 +106,12 @@ func TestPositiveCacheHasABoundedStaleness(t *testing.T) {
 	if _, ok, _ := b.GetSession(ctx, tok); ok {
 		t.Error("after CacheFor the logout is seen")
 	}
-	// the replica that handles the logout forgets at once
 	tok2, _ := a.PutSession(ctx, ana, time.Hour)
 	_, _, _ = b.GetSession(ctx, tok2)
 	_ = b.DeleteSession(ctx, tok2)
 	if _, ok, _ := b.GetSession(ctx, tok2); ok {
 		t.Error("a logout is not seen at once by the replica that handled it")
 	}
-	// the cache never outlives the session
 	short, _ := a.PutSession(ctx, ana, 2*time.Second)
 	_, _, _ = b.GetSession(ctx, short)
 	advance(3 * time.Second)

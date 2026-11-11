@@ -7,8 +7,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A saved equation, code block and diagram reach the exports (roadmap 78).
-
 func elementsDoc() docfile.Document {
 	return docOf(
 		plain("Before\n"),
@@ -32,17 +30,16 @@ func TestSavedEquationIsMathMLInHTMLAndWordsEverywhereElse(t *testing.T) {
 	}
 	for _, format := range []string{"docx", "rtf", "markdown", "text", "pdf"} {
 		out := string(exportOne(t, r, format, d))
-		if format == "pdf" { // the PDF text is not plain bytes: the words are found by reading it back
+		if format == "pdf" {
 			out = textOf(importBack(t, r, "pdf", mustExport(t, r, format, d)))
 		}
 		if !strings.Contains(out, "x squared plus y squared equals z squared") {
 			t.Errorf("%s: the text alternative of the equation is not in the file", format)
 		}
 	}
-	// an equation saved without a text alternative still shows its formula, never nothing
 	bare := docOf(plain("a\n"), docfile.Item{Equation: &docfile.EquationItem{Formula: "x^2"}}, plain("b\n"))
 	for _, format := range []string{"docx", "markdown", "text", "html"} {
-		if !strings.Contains(strings.ReplaceAll(string(exportOne(t, r, format, bare)), `\`, ""), "x^2") { // Markdown escapes the caret
+		if !strings.Contains(strings.ReplaceAll(string(exportOne(t, r, format, bare)), `\`, ""), "x^2") {
 			t.Errorf("%s: an equation with no alternative is shown as nothing", format)
 		}
 	}
@@ -88,7 +85,6 @@ func TestCodeParagraphsAreOneBlockWithTheirLanguage(t *testing.T) {
 	if !strings.Contains(string(md), "```go\nx := 1\ny := 2\n```") {
 		t.Errorf("Markdown fence:\n%s", md)
 	}
-	// a language that cannot be a class name is not written
 	d := docOf(paraItem(docfile.Para{Style: "Code", CodeLang: `"><script>`}), plain("x\n"))
 	out, _ = HTML{}.Export(FromDocument(d))
 	if strings.Contains(string(out), "script") || !strings.Contains(string(out), "<pre><code>x</code></pre>") {
@@ -116,7 +112,6 @@ func TestDiagramLongDescriptionFollowsThePictureAndIsLinkedInHTML(t *testing.T) 
 			t.Errorf("%s: the long description is not in the file", format)
 		}
 	}
-	// without one, the picture is what it was
 	d.Content[len(d.Content)-2].Image.LongDesc = ""
 	if out := string(exportOne(t, r, "html", d)); strings.Contains(out, "describedby") || strings.Contains(out, "longdesc") {
 		t.Errorf("a picture with no long description points to one:\n%s", out)
@@ -133,15 +128,14 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 	r := registry()
 	word := string(exportOne(t, r, "docx", notesDoc()))
 	for _, want := range []string{
-		`w:name="_fnref1"`, `w:anchor="_fn1"`, // the mark is a link to the note
-		`w:name="_fn1"`, `w:anchor="_fnref1"`, // the note has a link back
+		`w:name="_fnref1"`, `w:anchor="_fn1"`,
+		`w:name="_fn1"`, `w:anchor="_fnref1"`,
 		`w:name="_fnref2"`, `w:anchor="_fn2"`, `w:name="_fn2"`, `w:anchor="_fnref2"`,
 	} {
 		if !strings.Contains(word, want) {
 			t.Errorf("Word: %s is missing", want)
 		}
 	}
-	// every anchor names a bookmark that exists, and the bookmark ids are unique
 	ids := map[string]bool{}
 	for _, part := range strings.Split(word, "<w:bookmarkStart ")[1:] {
 		id := part[strings.Index(part, `w:id="`)+6:]
@@ -164,15 +158,14 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 func TestFootnotesLinkBothWaysInRTF(t *testing.T) {
 	rtf := string(exportOne(t, registry(), "rtf", notesDoc()))
 	for _, want := range []string{
-		`{\*\bkmkstart _fnref1}`, `HYPERLINK \\l _fn1`, // the mark is a link to the note
-		`{\*\bkmkstart _fn1}`, `HYPERLINK \\l _fnref1`, // the note has a link back
+		`{\*\bkmkstart _fnref1}`, `HYPERLINK \\l _fn1`,
+		`{\*\bkmkstart _fn1}`, `HYPERLINK \\l _fnref1`,
 		`{\*\bkmkstart _fnref2}`, `HYPERLINK \\l _fn2`, `{\*\bkmkstart _fn2}`, `HYPERLINK \\l _fnref2`,
 	} {
 		if !strings.Contains(rtf, want) {
 			t.Errorf("RTF: %s is missing:\n%s", want, rtf)
 		}
 	}
-	// every link names a bookmark that exists
 	for _, part := range strings.Split(rtf, `HYPERLINK \\l `)[1:] {
 		name := part[:strings.Index(part, "}")]
 		if !strings.Contains(rtf, `{\*\bkmkstart `+name+`}`) {

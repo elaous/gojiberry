@@ -12,8 +12,6 @@ import (
 	"github.com/elaous/gojiberry/collab/wire"
 )
 
-// runner polls a session on a timer and applies what it learns: the others'
-// edits (Session.Poll puts them in the flow), their cursors, the role.
 type runner struct {
 	sess  *collab.Session
 	flow  *canvas.TextFlow
@@ -30,12 +28,10 @@ func newRunner(ctx *cxango.Context, sess *collab.Session, flow *canvas.TextFlow,
 	return r
 }
 
-// stop ends the runner without waiting for it: it is called from the goroutine
-// that owns the canvas, which the loop may be waiting for (Sync). The loop
-// closes the session itself when it sees quit, and does nothing once it has.
+// called on the canvas goroutine: must not wait for the loop
 func (r *runner) stop() {
 	close(r.quit)
-	r.sess.Bridge.Detach() // the flow stops sharing and gets its own undo back
+	r.sess.Bridge.Detach()
 }
 
 func (r *runner) do(f func()) {
@@ -79,16 +75,14 @@ func (r *runner) loop() {
 				redraw = true
 			}
 			s.RefreshPeers()
-			// Tell the others where we are when the cursor moves, and also when
-			// the session becomes ready or reconnects (they know nothing of us
-			// until then, and the cursor may not move for a while).
+			// announce on cursor move, ready or reconnect
 			if f := r.props.Load().TypedFor; f != nil {
 				s.TypedFor = f()
 			}
 			if h := r.props.Load().Holding; h != nil {
 				s.Holding = h()
 			}
-			// A held object is renewed every few seconds, before the hub forgets the presence it came with.
+			// renewed every few seconds, before the hub forgets the presence
 			renew := s.Holding != "" && time.Since(lastPublish) > holdRenew
 			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs, s.Holding); (c != lastCursor || renew) && s.Bridge.Ready() {
 				lastCursor, lastPublish = c, time.Now()
@@ -115,7 +109,6 @@ func (r *runner) loop() {
 	}
 }
 
-// state summarises the session for OnState.
 func (r *runner) state() State {
 	s := r.sess
 	st := State{Replica: s.Replica(), Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Merged: s.Merged, Rejected: s.Rejected, Conflicts: s.Conflicts, ConflictWith: slices.Clone(s.ConflictWith), Err: s.Err}
@@ -143,5 +136,4 @@ func (r *runner) state() State {
 	return st
 }
 
-// holdRenew is how often a held object is announced again.
 const holdRenew = 3 * time.Second

@@ -33,21 +33,18 @@ func TestTrashPlugsIntoABackendAndActsOnIDs(t *testing.T) {
 	n := Trash(p)
 	html := render(t, n)
 	mustContain(t, html, "the live list", `data-id="a"`, `data-id="b"`, "Empty trash", "Restore", "Delete forever")
-	// Two documents with one name are two rows with their own IDs.
 	if strings.Count(html, "same name") != 2 {
 		t.Errorf("both documents listed: %s", html)
 	}
 	for _, h := range findHandlers(n, "click") {
 		h(xango.Event{})
 	}
-	// Empty trash (first in the header) acts on all of them, row buttons on their own ID.
 	if len(b.restored) != 2 || b.restored[0][0] != "a" || b.restored[1][0] != "b" {
 		t.Errorf("restored %v", b.restored)
 	}
 	if len(b.purged) != 3 || len(b.purged[0]) != 2 || b.purged[1][0] != "a" || b.purged[2][0] != "b" {
 		t.Errorf("purged %v", b.purged)
 	}
-	// With nothing in the trash only the children show.
 	empty := render(t, Trash(TrashProps{Children: p.Children}))
 	mustContain(t, empty, "the live list")
 	mustNotContain(t, empty, "Empty trash")
@@ -163,7 +160,7 @@ func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
 	html := render(t, n)
 	mustContain(t, html, "gj-breadcrumbs", ">Documents<", `aria-current="page"`, ">Work<", "📁 2026", `data-id="f2"`,
 		"Work / 2026", "Move to…", "gj-doclist-newfolder", `value="Ideas"`)
-	mustNotContain(t, html, `value="folder:f1"`) // the folder the document is in is not a place to move it to
+	mustNotContain(t, html, `value="folder:f1"`)
 	for _, h := range findHandlers(n, "click") {
 		h(xango.Event{})
 	}
@@ -177,7 +174,6 @@ func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
 			t.Errorf("missing %q in %s", want, got)
 		}
 	}
-	// The top-level move option and a placeholder that does nothing.
 	log = nil
 	for _, h := range findHandlers(n, "change") {
 		h(xango.Event{Value: "top"})
@@ -186,7 +182,6 @@ func TestDocListShowsFoldersBreadcrumbAndMoves(t *testing.T) {
 	if !strings.Contains(strings.Join(log, " "), "move:d1:") || strings.Count(strings.Join(log, " "), "move:") != 1 {
 		t.Errorf("top / placeholder: %v", log)
 	}
-	// With none of it plugged in there is no breadcrumb, folder or move control.
 	bare := render(t, DocList(DocListProps{Docs: props.Docs}))
 	mustNotContain(t, bare, "gj-breadcrumbs", "gj-doclist-folder", "gj-doclist-move", "gj-doclist-newfolder")
 }
@@ -226,7 +221,6 @@ func TestDocListLinkAndDownload(t *testing.T) {
 		t.Errorf("downloads %v", got)
 	}
 
-	// With formats, a menu instead of a button.
 	got = nil
 	p.DownloadFormats = []DocChoice{{Name: "txt", Label: "Text"}}
 	n = DocList(p)
@@ -239,7 +233,6 @@ func TestDocListLinkAndDownload(t *testing.T) {
 		t.Errorf("menu: %v", got)
 	}
 
-	// Left out when not plugged in.
 	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs})), "gj-doclist-link", "gj-doclist-download")
 	mustNotContain(t, render(t, DocList(DocListProps{Docs: docs, Link: p.Link})), "gj-doclist-link") // nowhere to copy to
 }
@@ -288,7 +281,6 @@ func TestMigratePanel(t *testing.T) {
 		}
 	}
 
-	// Progress while it runs, the report after.
 	p.Busy, p.Done, p.Total, p.Current = true, 2, 5, "Plan.docx"
 	mustContain(t, render(t, Migrate(p)), "<progress", "2 of 5: Plan.docx")
 	p.Busy, p.Reported, p.Imported, p.Failed = false, true, 4, []MigrateFailure{{Name: "Bad", Err: "not a Word file"}}
@@ -320,7 +312,6 @@ func TestRecipientsListAddWithAConfirmedFingerprintAndRemove(t *testing.T) {
 	p.Draft, p.ParseError = "nonsense", "not an SSH public key"
 	mustContain(t, render(t, Recipients(p)), "gj-recip-error", `role="alert"`, "not an SSH public key")
 
-	// A parsed key asks for its fingerprint; Add is disabled until it is typed exactly.
 	p.Draft, p.ParseError = "ssh-ed25519 AAAA cy", ""
 	p.Parsed = &RecipientRow{Label: "cy", Type: "ssh-ed25519", Fingerprint: "SHA256:cy"}
 	html = render(t, Recipients(p))
@@ -348,16 +339,13 @@ func TestRecipientsListAddWithAConfirmedFingerprintAndRemove(t *testing.T) {
 	if draft == "" && confirm == "" {
 		t.Error("typing is reported")
 	}
-	// Without Add and Remove there are no controls.
 	html = render(t, Recipients(RecipientsProps{Shared: p.Shared, Pending: p.Pending}))
 	mustNotContain(t, html, "gj-recip-remove", "gj-recip-form")
-	// The Remove result count is reported, and a notice can show it.
 	if removedCount != 3 {
 		t.Errorf("OnRemoved got %d", removedCount)
 	}
 	mustContain(t, render(t, Recipients(RecipientsProps{Notice: RemovedNotice(removedCount), Pending: p.Pending})),
 		`role="status"`, "3 stored files were encrypted again")
-	// The draft is the textarea's child text as well as its value.
 	p.Draft = "ssh-ed25519 AAAA <cy>"
 	mustContain(t, render(t, Recipients(p)), `rows="3"`, `ssh-ed25519 AAAA &lt;cy&gt;</textarea>`)
 }
@@ -395,7 +383,6 @@ func TestPasskeyControlStates(t *testing.T) {
 	if len(did) != 2 || did[0] != "signin" || did[1] != "create:ana@opendocs.io" {
 		t.Errorf("%v", did)
 	}
-	// Create needs an address.
 	p.Email = ""
 	html = render(t, Passkey(p))
 	if i := strings.Index(html, `class="gj-passkey-create"`); i < 0 || !strings.Contains(html[i:i+strings.Index(html[i:], ">")], "disabled") {
@@ -505,8 +492,6 @@ func TestDocListPackButtons(t *testing.T) {
 	mustNotContain(t, render(t, DocList(DocListProps{Pending: &Pending{Inline: true}})), "gj-doclist-import-pack")
 }
 
-// Choices with a Group go under a heading, the groups in the order they first appear;
-// a choice with none stays loose, after the headings when it comes after them.
 func TestDownloadFormatsAreGroupedInOrderOfAppearance(t *testing.T) {
 	p := DocListProps{
 		Docs:     []Doc{{ID: "x", Name: "X"}},
@@ -532,11 +517,9 @@ func TestDownloadFormatsAreGroupedInOrderOfAppearance(t *testing.T) {
 			t.Errorf("%s should come before %s: %s", order[i-1], order[i], html)
 		}
 	}
-	// B two is inside the Beta group, not after Alpha.
 	if at(">B two<") > at(`label="Alpha"`) {
 		t.Error("grouped options stay together")
 	}
-	// The loose option is not inside a heading: the last optgroup closes before it.
 	if at(">Loose<") < strings.LastIndex(html, "</optgroup>") {
 		t.Error("an ungrouped option is not under a heading")
 	}
@@ -584,19 +567,16 @@ func TestDocListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	}
 	n := DocList(p)
 	html := render(t, n)
-	// A lock on each confidential document (two) and the folder (one), each with its label.
 	if c := strings.Count(html, "🔒"); c != 3 {
 		t.Fatalf("want three locks, got %d: %s", c, html)
 	}
 	mustContain(t, html, `aria-label="Confidential document"`, `aria-label="Confidential folder"`, "Make confidential", "Make not confidential")
-	// Reveal only where the name is hidden: one document and one folder.
 	if c := strings.Count(html, "gj-doclist-reveal"); c != 1 {
 		t.Errorf("document Reveal buttons: %d", c)
 	}
 	if c := strings.Count(html, "gj-doclist-folder-reveal"); c != 1 {
 		t.Errorf("folder Reveal buttons: %d", c)
 	}
-	// Each action asks first, with the confirm button saying what it does, and says what changes.
 	for _, h := range findHandlers(n, "click") {
 		h(xango.Event{})
 	}
@@ -611,15 +591,11 @@ func TestDocListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	if !slices.Contains(labels, "Make confidential") || !slices.Contains(labels, "Make not confidential") {
 		t.Errorf("confirm labels %v", labels)
 	}
-	// With no operations nothing is drawn but the lock.
 	plain := render(t, DocList(DocListProps{Docs: p.Docs, Pending: &Pending{Inline: true}}))
 	mustNotContain(t, plain, "gj-doclist-protect", "gj-doclist-reveal")
 	mustContain(t, plain, "🔒")
 }
 
-// The placeholder of a hidden name is stored in English (saver.ConfidentialName, in catalogs and
-// packs) and drawn in the interface's language: the list, the trash, the folder rows and the
-// accessible names say it in es, fr and de, and what the host passed in Name is never shown.
 func TestHiddenNamesAreDrawnTranslatedNeverStoredTranslated(t *testing.T) {
 	defer func(old func(string, string) string) { Translate = old }(Translate)
 	cat := i18n.Default()
@@ -645,13 +621,10 @@ func TestHiddenNamesAreDrawnTranslatedNeverStoredTranslated(t *testing.T) {
 		html := render(t, DocList(p))
 		mustContain(t, html, ">"+tc.doc, "📁 "+tc.folder)
 		if tc.lang != "en" {
-			// The English constant is not drawn as a name; it is only what is stored.
 			mustNotContain(t, html, ">Confidential document", "📁 Confidential folder")
 		}
 		trashHTML := render(t, Trash(TrashProps{Docs: []Doc{{ID: "x", Name: "Confidential document", Confidential: true, NameHidden: true}}, Pending: &Pending{Inline: true}}))
 		mustContain(t, trashHTML, tc.doc)
-		// The "Make confidential" buttons of the rows have names of their own: the two hidden
-		// documents are told apart by a short ID, the revealed one by its name.
 		labels := map[string]int{}
 		for _, m := range regexp.MustCompile(`class="gj-doclist-(?:protect|reveal)"[^>]*aria-label="([^"]*)"|aria-label="([^"]*)"[^>]*class="gj-doclist-(?:protect|reveal)"`).FindAllStringSubmatch(html, -1) {
 			labels[m[1]+m[2]]++
@@ -673,8 +646,6 @@ type codedErr struct{}
 func (codedErr) Error() string       { return "English from the server" }
 func (codedErr) PasskeyCode() string { return "account_exists" }
 
-// The answer "another tab already made the first passkey" is shown in the interface's language,
-// other failures as the server said them.
 func TestPasskeyShowsAlreadyCreatedInTheInterfaceLanguage(t *testing.T) {
 	old := Translate
 	defer func() { Translate = old }()

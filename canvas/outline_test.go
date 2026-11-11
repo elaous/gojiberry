@@ -50,8 +50,6 @@ func TestBookmarkCommandsAndLinks(t *testing.T) {
 	if got := f.Bookmarks(); !reflect.DeepEqual(got, []Bookmark{{Name: "middle", Start: 6, End: 10}}) {
 		t.Fatalf("%+v", got)
 	}
-	// With nothing selected the character at the caret is named; a name in
-	// use moves.
 	f.SetCursors([]Cursor{At(0)})
 	if !runCmd(f, st, CmdBookmarkAdd, "middle") {
 		t.Fatal("move")
@@ -64,13 +62,11 @@ func TestBookmarkCommandsAndLinks(t *testing.T) {
 	if got := f.Bookmarks(); len(got) != 2 || got[1].Name != "end" || got[1].Start != 15 {
 		t.Fatalf("%+v", got)
 	}
-	// Ordering follows the text; the bookmark follows the text through edits.
 	f.SetCursors([]Cursor{At(0)})
 	f.InsertText(">>")
 	if got := f.Bookmarks(); got[0].Start != 0 || got[0].End != 3 || got[1].Start != 17 {
 		t.Fatalf("the bookmark follows its text (and grows with text typed at its start): %+v", got)
 	}
-	// Go to.
 	f.SetCursors([]Cursor{At(5)})
 	if !runCmd(f, st, CmdBookmarkGoto, "end") || f.Cursors()[0] != At(17) {
 		t.Fatalf("goto: %v", f.Cursors())
@@ -78,7 +74,6 @@ func TestBookmarkCommandsAndLinks(t *testing.T) {
 	if runCmd(f, st, CmdBookmarkGoto, "nope") || runCmd(f, st, CmdBookmarkGoto, "") {
 		t.Fatal("no such bookmark")
 	}
-	// Remove at the caret.
 	f.SetCursors([]Cursor{At(17)})
 	if !runCmd(f, st, CmdBookmarkRemove, "x") || len(f.Bookmarks()) != 1 {
 		t.Fatalf("%+v", f.Bookmarks())
@@ -123,14 +118,12 @@ func TestLinkToBookmarkAndReveal(t *testing.T) {
 	if _, y, _, _ := f.CaretRect(f.Bookmarks()[0].Start); y-scrollMargin != top {
 		t.Fatalf("the bookmark is at the top of the view: %v vs %v", y, top)
 	}
-	// A link to a missing bookmark is opened as a link.
 	f.Items[1] = Chars{Text: "target", Format: Format{Link: "#missing"}}
 	sv.ScrollTo(0, 0)
 	sv.MouseDown(8*8, 10)
 	if opened != "#missing" {
 		t.Fatalf("opened %q", opened)
 	}
-	// GotoOffset from outside an event, then RevealPending.
 	sv.ScrollTo(0, 0)
 	f.GotoOffset(f.Bookmarks()[0].Start)
 	if !sv.RevealPending() || sv.RevealPending() {

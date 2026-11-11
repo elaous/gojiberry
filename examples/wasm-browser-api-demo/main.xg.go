@@ -2,8 +2,6 @@
 
 //go:build js && wasm
 
-// Package main demos domrt/browser: localStorage read/write and a
-// fetch() call, both wrapped in idiomatic Go instead of raw syscall/js.
 package main
 
 import (

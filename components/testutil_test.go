@@ -7,10 +7,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// render renders n to an HTML string, failing the test on error --
-// every component test in this package goes through this instead of
-// asserting against the xango.Node tree directly, since HTML output is
-// what a real page actually gets.
 func render(t *testing.T, n xango.Node) string {
 	t.Helper()
 	html, err := xango.RenderString(n)
@@ -20,12 +16,6 @@ func render(t *testing.T, n xango.Node) string {
 	return html
 }
 
-// findHandlers walks n's whole tree and returns every event handler
-// attached under the given event name (e.g. "click"), in document
-// order. Tests use this to fire a component's wiring directly --
-// verifying an OnClick/OnChange/etc. prop actually reaches a real
-// xango.On(...) attribute in the rendered tree -- without needing a
-// browser or domrt.
 func findHandlers(n xango.Node, event string) []xango.EventHandler {
 	var out []xango.EventHandler
 	var walk func(xango.Node)
@@ -43,7 +33,6 @@ func findHandlers(n xango.Node, event string) []xango.EventHandler {
 	return out
 }
 
-// mustContain fails the test if html doesn't contain every one of want.
 func mustContain(t *testing.T, html string, want ...string) {
 	t.Helper()
 	for _, w := range want {
@@ -53,7 +42,6 @@ func mustContain(t *testing.T, html string, want ...string) {
 	}
 }
 
-// mustNotContain fails the test if html contains any of unwanted.
 func mustNotContain(t *testing.T, html string, unwanted ...string) {
 	t.Helper()
 	for _, w := range unwanted {

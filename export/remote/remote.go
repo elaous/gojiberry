@@ -1,12 +1,3 @@
-// Package remote lets a program use the heavy file formats of package export (Word, OpenDocument, PDF, RTF,
-// EPUB and HTML in and out, and the fidelity reports) without linking them: the work is done by another
-// program, reached through a Caller. In the showcase the other program is a second wasm in a web worker
-// (examples/canvas-editor-showcase/files), loaded when a file is first imported or exported, which keeps about
-// four megabytes out of the program every visitor downloads.
-//
-// A Caller is one request and its answer, which blocks: call it from a goroutine of its own, never from a
-// handler that JavaScript invoked (that would block the event loop the answer needs). The other side is
-// package export/remote/serve.
 package remote
 
 import (
@@ -26,10 +17,9 @@ const (
 	OpImportFidelity = "import-fidelity" // in: the file; out: an export.Report as JSON
 )
 
-// Caller sends one request to the program that does the work and returns its answer.
 type Caller func(op, format string, in []byte) ([]byte, error)
 
-// The formats the other program offers. serve's tests check that they are those export.Register adds.
+// The formats the other program offers.
 var (
 	Exporters = []transfer.Format{
 		{Name: "html", Label: "Web page (HTML)", Exts: []string{".html"}, MIME: "text/html"},
@@ -47,7 +37,6 @@ var (
 	}
 )
 
-// Register adds the heavy formats to r as proxies that ask call, in the order export.Register adds them.
 func Register(r *transfer.Registry, call Caller) {
 	export.RegisterAccepted(r)
 	for _, f := range Exporters {
@@ -112,8 +101,6 @@ func report(call Caller, op, format string, in []byte) (export.Report, error) {
 	return r, nil
 }
 
-// WordImport is docximport.Import done by the other program, for code that takes an import function (the
-// migration from Google Docs and OneDrive).
 func WordImport(call Caller) func([]byte) (docfile.Document, error) {
 	return importer{f: Importers[0], call: call}.Import
 }

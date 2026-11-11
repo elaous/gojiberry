@@ -7,12 +7,9 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// passkeyType is encrypt.TypePasskey (components does not import the encryption package).
+// encrypt.TypePasskey: components does not import encryption
 const passkeyType = "passkey-prf"
 
-// needsSecondKey says whether adding a passkey must wait for a key that is not a passkey: the
-// document is confidential and none of the owner's keys is anything but a passkey
-// (encrypt.CheckRecoverableOwner counts the owner's keys only).
 func needsSecondKey(p RecipientsProps) bool {
 	if !p.Confidential {
 		return false
@@ -25,14 +22,6 @@ func needsSecondKey(p RecipientsProps) bool {
 	return true
 }
 
-// verifiedMark is the mark next to a key, strongest first: "verified e-mail, signed by its owner"
-// when the address's owner key signed the publication (ownerSigned: holds against the server that
-// runs the directory too), "verified e-mail, signed by the key" when the key attested the binding
-// itself, plain "verified e-mail", or a label only that needs its fingerprint confirmed. None
-// says the key is safe. With ownerEnrolled and no owner signature a verified key also carries a
-// note: the address has an owner key and this key was not signed by it. With by (the host of
-// the directory that answered) a mark says whose word it is: "verified by host", and the stronger
-// marks end with "(host)".
 func verifiedMark(verified, attested, ownerSigned, ownerEnrolled bool, by string) xango.Node {
 	if verified && ownerSigned {
 		return xango.El("span", []xango.Attr{xango.A("class", "gj-doc-meta gj-recip-mark gj-recip-verified gj-recip-owner-signed"),
@@ -59,8 +48,6 @@ func verifiedMark(verified, attested, ownerSigned, ownerEnrolled bool, by string
 		xango.Text(tr("recipients.labelOnly", "label only: confirm the fingerprint")))
 }
 
-// directoryPicker is the "find a person" step: an e-mail, a lookup in the store's directory and
-// the keys it lists, each with its verified mark and a button that fills the draft.
 func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 	if p.Directory == nil {
 		return nil
@@ -114,8 +101,6 @@ func directoryPicker(p RecipientsProps, busy bool) []xango.Node {
 	return nodes
 }
 
-// myKeyControl is "Add my passkey as a key" with its states: not supported, ready, a second
-// key needed first (and the recovery key, shown once), and the fingerprint once added.
 func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 	if p.AddMyPasskey == nil {
 		return nil
@@ -135,8 +120,7 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 		box = append(box,
 			xango.El("p", append(cls("gj-doc-error gj-recip-need-second"), xango.A("role", "alert")), xango.Text(msg)),
 			docButton("gj-recip-add-mine", tr("recipients.addMine", "Add my passkey as a key"), true, nil))
-		// Without OnRecoveryKey the secret could not be shown, and the key it belongs to would
-		// already be an owner key: so the button is left out then.
+		// without OnRecoveryKey the secret could not be shown: button left out
 		if p.CreateRecoveryKey != nil && p.OnRecoveryKey != nil && p.RecoverySecret == "" {
 			box = append(box, docButton("gj-recip-recovery", tr("recipients.createRecovery", "Create a recovery key"), busy, func() {
 				p.Pending.Run(func(ctx context.Context) error {
@@ -156,8 +140,6 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 			}))
 	}
 	if !needsSecondKey(p) && p.CreateRecoveryKey != nil && p.OnRecoveryKey != nil && p.RecoverySecret == "" {
-		// Not required as the second key, but offered: a store with a passkey and an SSH key may
-		// want a recovery key too (the host leaves CreateRecoveryKey out when it has one).
 		box = append(box, docButton("gj-recip-recovery", tr("recipients.createRecovery", "Create a recovery key"), busy, func() {
 			p.Pending.Run(func(ctx context.Context) error {
 				secret, err := p.CreateRecoveryKey(ctx)
@@ -178,9 +160,6 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 	return []xango.Node{xango.El("div", cls("gj-recip-my"), box...)}
 }
 
-// recoveryKeyShown shows the recovery key's secret, once: copyable and downloadable, with the
-// warning that it must be kept offline and cannot be recovered. It exists only while the host
-// passes RecoverySecret; "I have saved it" calls OnRecoveryDone, after which the host drops it.
 func recoveryKeyShown(p RecipientsProps) []xango.Node {
 	if p.RecoverySecret == "" {
 		return nil
@@ -200,8 +179,7 @@ func recoveryKeyShown(p RecipientsProps) []xango.Node {
 		nodes = append(nodes, docButton("gj-recip-download", tr("recipients.download", "Download"), false, func() { p.Download("recovery-key.txt", secret+"\n") }))
 	}
 	if p.CommitRecoveryKey != nil {
-		// The key is not an owner key yet: it becomes one only after the person says they saved the
-		// secret and confirms.
+		// not an owner key until the person confirms saving the secret
 		nodes = append(nodes,
 			xango.El("div", cls("gj-recip-recovery-ack"), Checkbox(CheckboxProps{Label: tr("recipients.recoveryAck", "I have saved this recovery key somewhere safe"),
 				Checked: p.RecoveryAcknowledged, OnChange: p.OnRecoveryAcknowledge})),
@@ -217,8 +195,6 @@ func recoveryKeyShown(p RecipientsProps) []xango.Node {
 	return []xango.Node{xango.El("div", cls("gj-recip-recovery-box"), nodes...)}
 }
 
-// ownerControls are the buttons of an owner key's row: replace (a passkey) and remove, each asking
-// first, with the reason when removing is not possible.
 func ownerControls(p RecipientsProps, r RecipientRow, busy bool) []xango.Node {
 	var out []xango.Node
 	name := r.Label
@@ -243,8 +219,6 @@ func ownerControls(p RecipientsProps, r RecipientRow, busy bool) []xango.Node {
 	return out
 }
 
-// publishControl is "Publish my keys" and its notice: independent of any document, shown whenever
-// the host passes Publish (or a notice to say why it cannot).
 func publishControl(p RecipientsProps, busy bool) []xango.Node {
 	var nodes []xango.Node
 	if p.Publish != nil {
@@ -261,8 +235,6 @@ func publishControl(p RecipientsProps, busy bool) []xango.Node {
 	return []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-recip-publish-box")}, nodes...)}
 }
 
-// plainVerified is the text of the plain verified mark: "verified e-mail", or "verified by host"
-// when the host of the directory that said so is known.
 func plainVerified(by string) string {
 	if by != "" {
 		return trf("recipients.verifiedBy", "verified by %s", by)
@@ -270,7 +242,6 @@ func plainVerified(by string) string {
 	return tr("recipients.verified", "verified e-mail")
 }
 
-// withHost names the directory after a stronger mark's text.
 func withHost(text, by string) string {
 	if by == "" {
 		return text
@@ -278,7 +249,6 @@ func withHost(text, by string) string {
 	return text + " (" + by + ")"
 }
 
-// dirNote is a row's note, or nothing.
 func dirNote(note string) xango.Node {
 	if note == "" {
 		return xango.Frag()

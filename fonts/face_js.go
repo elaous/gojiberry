@@ -7,10 +7,6 @@ import (
 	"syscall/js"
 )
 
-// LoadFace registers a font file (ttf, otf, woff, woff2) with the browser
-// as family at the variant's weight and style, so canvas text drawn in
-// it uses it. done, if set, is called when it has loaded (or failed), on
-// the browser's event loop; redraw the canvas there.
 func LoadFace(family string, v Variant, data []byte, done func(error)) {
 	finish := func(err error) {
 		if done != nil {

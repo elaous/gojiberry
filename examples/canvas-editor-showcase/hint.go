@@ -11,14 +11,8 @@ import (
 	"github.com/elaous/gojiberry/imagehint"
 )
 
-// Drafting a description of a picture on the device (roadmap 61, step 3). It is off until the person turns it on
-// (Preferences > Editor); the pixels are read in the page and never sent anywhere; and what it makes is a draft
-// shown beside the field, which the author reads and chooses to use or not. It is a rough start from the shape
-// and the colours (imagehint), not what the picture shows.
-
 func hintOn() bool { return curPrefs.Hint == "on" }
 
-// hintColour is the word for a colour in the page's language.
 func hintColour(name string) string {
 	switch name {
 	case imagehint.Black:
@@ -47,7 +41,6 @@ func hintColour(name string) string {
 	return T("img.hint.brown", "brown")
 }
 
-// hintPhrase is a hint as a sentence in the page's language.
 func hintPhrase(h imagehint.Hint) string {
 	shape := map[string]string{
 		"wide":   T("img.hint.wide", "Wide picture"),
@@ -71,13 +64,8 @@ func hintPhrase(h imagehint.Hint) string {
 	return out + "."
 }
 
-// describeAddon says the page has the describe add-on (window.addons.describe), which drafts a description from what
-// the picture shows, on this device:
-//
-//	describe({image: Uint8Array /* PNG, longer side at most 768 */, mime: "image/png", language, model}) -> Promise<{text}>
 func describeAddon() bool { return hasAddon("describe", "describe") }
 
-// draftWithAddon asks the add-on for a draft of the picture at index i; the draft appears when it comes.
 func (u *ui) draftWithAddon(i int, src *canvas.HTMLImage, renderUI func()) {
 	png, ok := src.PNG(768)
 	if !ok {
@@ -108,8 +96,6 @@ func (u *ui) draftWithAddon(i int, src *canvas.HTMLImage, renderUI func()) {
 	}()
 }
 
-// draftFor drafts the description of the picture at index i of the document, in the page's language: from what the
-// picture shows when the describe add-on is there, else from its shape and colours.
 func (u *ui) draftFor(i int, im *canvas.Image, renderUI func()) {
 	src, ok := im.Src.(*canvas.HTMLImage)
 	if !ok {
@@ -139,7 +125,6 @@ func (u *ui) draftFor(i int, im *canvas.Image, renderUI func()) {
 	u.imageMsg = ""
 }
 
-// draftNote says where a draft came from, so that the author knows how far to trust it.
 func draftNote(by string) string {
 	if by == "describe" {
 		return T("img.hint.draftAddon", "A draft from what the picture shows, made on this device by the describe add-on. It can be wrong: read it and change it: ")

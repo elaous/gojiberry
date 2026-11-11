@@ -1,17 +1,10 @@
 //go:build js && wasm
 
-// Package dom wraps browser DOM/canvas/WebGL objects (Document,
-// Element, Window, Context2D, Context3D, observers, drag-and-drop) as
-// typed Go structs, each with a Get/Call escape hatch onto the
-// underlying js.Value for anything not covered by a typed method.
 package html
 
 import "syscall/js"
 
-// DomNode is implemented by Element and every element type in this
-// package that embeds it (CanvasElement, AnchorElement, ButtonElement,
-// SelectElement, InputElement, ...), so code that only needs the
-// common DOM operations can accept any of them interchangeably.
+// DomNode is implemented by element types.
 type DomNode interface {
 	JSValue() js.Value
 	Get(name string) js.Value
@@ -52,14 +45,7 @@ type DomNode interface {
 	SetScrollTop(y int)
 }
 
-// Element wraps a DOM Element/Node. Get/Call cover anything without a
-// typed method below, the same escape hatch as the rest of this package.
-//
-// Element is also the base every more specific element type
-// (CanvasElement, AnchorElement, ButtonElement, SelectElement,
-// InputElement, ...) embeds to pick up the common methods below; use
-// the As* cast helpers (AsCanvas, AsAnchor, ...) to obtain one of those
-// from a plain Element.
+// Element wraps a DOM Element or Node.
 type Element struct {
 	Element js.Value
 }
@@ -67,7 +53,7 @@ type Element struct {
 // JSValue returns the underlying js.Value, satisfying DomNode.
 func (e *Element) JSValue() js.Value { return e.Element }
 
-// ParentElement returns e's parent element, or nil if e has none.
+// ParentElement returns e's parent element, or nil.
 func (e *Element) ParentElement() *Element {
 	parent := e.Element.Get("parentElement")
 	if parent.IsUndefined() || parent.IsNull() {
@@ -86,20 +72,17 @@ func (e *Element) SetID(id string) {
 	e.Element.Set("id", id)
 }
 
-// GetClassName returns e's class attribute. On an SVG element this is
-// unreliable -- className there is an SVGAnimatedString object, not a
-// plain string -- use ClassListContains (see svg.go) instead.
+// GetClassName returns e's class attribute.
 func (e *Element) GetClassName() string {
 	return e.Element.Get("className").String()
 }
 
-// SetClassName sets e's class attribute. On an SVG element use
-// ClassListAdd/ClassListRemove instead (see GetClassName's doc comment).
+// SetClassName sets e's class attribute.
 func (e *Element) SetClassName(className string) {
 	e.Element.Set("className", className)
 }
 
-// GetTagName returns e's tag name (e.g. "DIV"), uppercased per the DOM spec.
+// GetTagName returns e's tag name, uppercased.
 func (e *Element) GetTagName() string {
 	return e.Element.Get("tagName").String()
 }
@@ -109,13 +92,12 @@ func (e *Element) GetTextContent() string {
 	return e.Element.Get("textContent").String()
 }
 
-// SetTextContent replaces e's children with a single text node containing text.
+// SetTextContent replaces e's children with a text node.
 func (e *Element) SetTextContent(text string) {
 	e.Element.Set("textContent", text)
 }
 
-// GetAttribute returns the named HTML attribute's value, or "" when the
-// element has no such attribute (use HasAttribute to tell it from an empty one).
+// GetAttribute returns an attribute's value, or "" when absent.
 func (e *Element) GetAttribute(name string) string {
 	v := e.Element.Call("getAttribute", name)
 	if v.IsNull() || v.IsUndefined() {
@@ -134,13 +116,7 @@ func (e *Element) SetAttribute(name, value string) {
 	e.Element.Call("setAttribute", name, value)
 }
 
-// QuerySelector returns the first descendant of e matching the CSS
-// selector, in document order, or nil when nothing matches -- the
-// same subtree-scoped semantics as the DOM's own element-level
-// querySelector. Meaningful on any element that can have children;
-// on a void (self-closing) element like <input> or <br> there are no
-// descendants to match, so it always returns nil, exactly as in the
-// browser. For a document-wide search use Document.QuerySelector.
+// QuerySelector returns the first descendant matching a CSS selector.
 func (e *Element) QuerySelector(selector string) *Element {
 	v := e.Element.Call("querySelector", selector)
 	if v.IsNull() || v.IsUndefined() {
@@ -149,9 +125,7 @@ func (e *Element) QuerySelector(selector string) *Element {
 	return &Element{Element: v}
 }
 
-// QuerySelectorAll returns every descendant of e matching the CSS
-// selector, in document order -- empty when nothing matches. See
-// QuerySelector for the subtree scoping.
+// QuerySelectorAll returns every descendant matching a CSS selector.
 func (e *Element) QuerySelectorAll(selector string) []Element {
 	return wrapAll(e.Element.Call("querySelectorAll", selector))
 }
@@ -191,30 +165,25 @@ func (e *Element) AddEventListener(event string, callback js.Func) {
 	e.Element.Call("addEventListener", event, callback)
 }
 
-// RemoveEventListener removes a listener previously registered with the same callback value.
+// RemoveEventListener removes a listener added with the same callback.
 func (e *Element) RemoveEventListener(event string, callback js.Func) {
 	e.Element.Call("removeEventListener", event, callback)
 }
 
-// Click synthesizes a click on e, the same as a user click would (and,
-// for elements with default click behavior like <a>/<input>, triggers
-// that behavior too).
+// Click synthesizes a click on e.
 func (e *Element) Click() { e.Element.Call("click") }
 
-// Get returns a named property not covered by a typed getter above
-// (e.g. Get("dataset"), Get("style"), Get("checked")).
+// Get returns a named property not covered by a getter.
 func (e *Element) Get(name string) js.Value {
 	return e.Element.Get(name)
 }
 
-// Call invokes a method not covered by a typed wrapper above (e.g.
-// Call("closest", selector), Call("insertAdjacentHTML", pos, html)).
+// Call invokes a method not covered by a wrapper.
 func (e *Element) Call(method string, args ...any) js.Value {
 	return e.Element.Call(method, args...)
 }
 
-// Set assigns a named property not covered by a typed setter above
-// (e.g. Set("checked", true), Set("width", 100)).
+// Set assigns a named property not covered by a setter.
 func (e *Element) Set(name string, value any) {
 	e.Element.Set(name, value)
 }

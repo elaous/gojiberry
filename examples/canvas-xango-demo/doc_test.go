@@ -12,8 +12,6 @@ import (
 	cxango "github.com/elaous/gojiberry/canvas/xango"
 )
 
-// painter records the text drawn; every rune is 8px wide. It stands in for the browser's 2D
-// context, so the xango tree of app.xg can be rendered and drawn without a browser.
 type painter struct{ texts []string }
 
 func (p *painter) SetFillStyle(string)           {}
@@ -61,8 +59,6 @@ func render(t *testing.T, st State) (*cxango.Root, *painter) {
 	return root, p
 }
 
-// furniture is what the page set resolves for every page: the header text and the page number text,
-// the same two lists the browser entry point publishes in #state.
 func furniture(root *cxango.Root) (headers, numbers []string) {
 	ps := root.Find(cxango.TagPage, 0).(*canvas.PageSet)
 	for i := range ps.Pages {
@@ -129,7 +125,6 @@ func TestDocPassesTheModeToTheFlow(t *testing.T) {
 	}
 }
 
-// A new state re-renders the same tree: the canvas components are updated in place, not replaced.
 func TestRerenderUpdatesTheComponentsInPlace(t *testing.T) {
 	p := &painter{}
 	root := cxango.NewRoot(canvas.NewStage(p, 0, 0))

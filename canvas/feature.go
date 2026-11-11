@@ -5,18 +5,6 @@ import (
 	"slices"
 )
 
-// A Feature is a self-contained editing capability -- multiple cursors,
-// line operations, Markdown copy and paste -- packaged as a component of
-// its own. It registers Commands (and default key chords for them) with
-// a Registry; the Stage's Registry decides which features exist, so a
-// feature is switched on by registering it and off by leaving it out:
-//
-//	st := canvas.NewStage(p, w, h)          // DefaultFeatures
-//	st.Features = canvas.NewRegistry(canvas.LineOps{}, myFeature{})
-//
-// Features act on an EditTarget, so they work with any editable
-// component (FloatingText implements it) and are testable without a
-// canvas.
 type Feature interface {
 	// Name identifies the feature ("multi-cursor").
 	Name() string
@@ -24,15 +12,9 @@ type Feature interface {
 	Install(r *Registry)
 }
 
-// Cursor is one caret with an optional selection: Anchor is where the
-// selection started and Caret the end that moves; equal means no
-// selection. Offsets are in runes.
 type Cursor struct {
 	Anchor, Caret int
-	// After says the caret sits after any page or column break at its
-	// offset (on the line that starts there) rather than before it: in
-	// a TextFlow both are the same offset. Only a TextFlow has the
-	// distinction; others ignore it.
+	// After places the caret after a break at its offset.
 	After bool
 }
 
@@ -45,41 +27,27 @@ func (c Cursor) Empty() bool { return c.Anchor == c.Caret }
 // At returns a Cursor with no selection at offset o.
 func At(o int) Cursor { return Cursor{Anchor: o, Caret: o} }
 
-// Edit replaces the runes [From, To) with Items (Chars only; other items
-// are ignored). From == To inserts; no Items deletes.
 type Edit struct {
 	From, To int
 	Items    []Item
-	// AfterOps puts an insertion after the page and column breaks at
-	// offset From instead of in front of them (TextFlow only).
+	// AfterOps inserts after breaks at From instead of before them.
 	AfterOps bool
 }
 
-// EditTarget is what a Feature edits: text with one or more cursors.
 type EditTarget interface {
-	// EditText returns the whole text. Anything that is not text (an
-	// inline object) is one placeholder rune, so offsets line up.
 	EditText() string
 	// Slice returns the runes [from, to) with their formatting.
 	Slice(from, to int) []Item
 	// Cursors returns every cursor.
 	Cursors() []Cursor
-	// SetCursors replaces the cursors (at least one; the first is the
-	// primary one). Offsets are clamped to the text.
 	SetCursors([]Cursor)
-	// Replace applies non-overlapping edits, given in any order, as one
-	// change. Cursors are not moved: call SetCursors afterwards.
 	Replace(edits []Edit)
 }
 
-// Editable is implemented by components that have an EditTarget while
-// they are being edited (nil otherwise).
+// Editable is implemented by components that expose an EditTarget.
 type Editable interface{ EditTarget() EditTarget }
 
-// Clipboard is the system clipboard as the browser allows a page to use
-// it: Write puts text on it, Read fetches the text asynchronously. A
-// Stage's Bind fills it in; either may be nil (the command then does
-// nothing).
+// Clipboard is the system clipboard: Write, and Read asynchronously.
 type Clipboard struct {
 	Write func(text string)
 	Read  func(fn func(text string))
@@ -90,15 +58,9 @@ type CommandContext struct {
 	Target    EditTarget
 	Clipboard *Clipboard
 	Formats   *FormatClipboard
-	// Redraw asks the Stage to redraw; needed only by commands that
-	// finish later (an asynchronous clipboard read).
-	Redraw func()
-	// Prompt asks the user for a line of text (a link address); ok is
-	// false if they cancelled. Nil when the host cannot ask.
-	Prompt func(message, initial string) (text string, ok bool)
-	// EditNote asks for a longer text in a dialog of the host's, one that can show how much of the limit max is used
-	// while the person types; done is called with the text (ok false: cancelled), possibly after the command returned.
-	// Nil when the host has no such dialog: the command then uses Prompt.
+	Redraw    func()
+	Prompt    func(message, initial string) (text string, ok bool)
+	// EditNote asks for a longer text, with the limit shown.
 	EditNote func(title, initial string, max int, done func(text string, ok bool))
 	// OpenLink opens a URL.
 	OpenLink func(url string)
@@ -107,8 +69,7 @@ type CommandContext struct {
 // CommandFunc runs a command; it reports whether it applied.
 type CommandFunc func(*CommandContext) bool
 
-// CommandInfo describes a registered command, for menus and a key
-// bindings editor.
+// CommandInfo describes a registered command for menus and key editors.
 type CommandInfo struct {
 	Name    Command
 	Title   string
@@ -139,8 +100,7 @@ func DefaultFeatures() []Feature {
 	return []Feature{History{}, MultiCursor{}, LineOps{}, MarkdownClipboard{}, Breaks{}, Paragraphs{}, TextCase{}, Links{}, Styles{}, Comments{}, Bookmarks{}, Notes{}, PageFurniture{}}
 }
 
-// Register installs f. It panics on a duplicate feature or command
-// name, which is a programming error.
+// Register installs f; a duplicate feature or command name panics.
 func (r *Registry) Register(f Feature) {
 	for _, g := range r.features {
 		if g.Name() == f.Name() {
@@ -153,8 +113,6 @@ func (r *Registry) Register(f Feature) {
 	r.current = ""
 }
 
-// AddCommand registers fn under name; chord, if not empty, is its
-// default key binding (see Keymap).
 func (r *Registry) AddCommand(name Command, title, chord string, fn CommandFunc) {
 	if _, dup := r.funcs[name]; dup {
 		panic(fmt.Sprintf("canvas: command %q registered twice", name))
@@ -166,9 +124,7 @@ func (r *Registry) AddCommand(name Command, title, chord string, fn CommandFunc)
 	}
 }
 
-// AddGlobalCommand is AddCommand for a command that needs no text to act on
-// (find, say, which a viewer may use too): it runs with CommandContext.Target
-// nil when nothing is being edited, so fn must not use it without checking.
+// Target is nil when nothing is being edited
 func (r *Registry) AddGlobalCommand(name Command, title, chord string, fn CommandFunc) {
 	r.AddCommand(name, title, chord, fn)
 	if r.global == nil {
@@ -209,13 +165,8 @@ func (r *Registry) Run(cmd Command, ctx *CommandContext) bool {
 	return ok && (ctx.Target != nil || r.global[cmd]) && fn(ctx)
 }
 
-// --- helpers shared by features --------------------------------------
-
-// textRunes returns the target's text as runes.
 func textRunes(t EditTarget) []rune { return []rune(t.EditText()) }
 
-// normalize sorts cursors by position and merges overlapping or equal
-// ones.
 func normalize(cs []Cursor) []Cursor {
 	out := slices.Clone(cs)
 	slices.SortStableFunc(out, func(a, b Cursor) int {
@@ -234,7 +185,7 @@ func normalize(cs []Cursor) []Cursor {
 		if n := len(merged); n > 0 {
 			pf, pt := merged[n-1].Range()
 			cf, ct := c.Range()
-			// Two empty cursors at one offset stay two when they sit on different sides of a break there.
+			// two empty cursors at one offset stay two across a break
 			sides := cf == pt && cf == pf && c.Empty() && merged[n-1].Empty() && c.After != merged[n-1].After
 			if !sides && (cf < pt || (cf == pt && (cf == pf || c.Empty() || merged[n-1].Empty()))) {
 				merged[n-1] = Cursor{Anchor: pf, Caret: max(pt, ct)}
@@ -246,7 +197,6 @@ func normalize(cs []Cursor) []Cursor {
 	return merged
 }
 
-// lineStart returns the offset of the start of the line containing o.
 func lineStart(rs []rune, o int) int {
 	for o > 0 && rs[o-1] != '\n' {
 		o--
@@ -254,8 +204,6 @@ func lineStart(rs []rune, o int) int {
 	return o
 }
 
-// lineEnd returns the offset of the end of the line containing o (the
-// '\n' or the end of the text).
 func lineEnd(rs []rune, o int) int {
 	for o < len(rs) && rs[o] != '\n' {
 		o++
@@ -263,7 +211,6 @@ func lineEnd(rs []rune, o int) int {
 	return o
 }
 
-// plainItems wraps s as an Items slice with no format.
 func plainItems(s string) []Item {
 	if s == "" {
 		return nil
@@ -271,8 +218,6 @@ func plainItems(s string) []Item {
 	return []Item{Chars{Text: s}}
 }
 
-// itemsLen counts the text-stream offsets items take: the runes of the
-// Chars, one per inline object (breaks and column configs take none).
 func itemsLen(items []Item) int {
 	n := 0
 	for _, it := range items {
@@ -286,9 +231,7 @@ func itemsLen(items []Item) int {
 	return n
 }
 
-// ObjectHolder is implemented by an EditTarget that can hold more than
-// text: inline objects, page and column breaks and column configs (a
-// TextFlow). Others keep only the Chars of what is inserted.
+// ObjectHolder is an EditTarget that holds inline objects and breaks.
 type ObjectHolder interface{ HoldsObjects() bool }
 
 func holdsObjects(t EditTarget) bool {
@@ -296,12 +239,8 @@ func holdsObjects(t EditTarget) bool {
 	return ok && h.HoldsObjects()
 }
 
-// editCursors applies gen at every cursor of t, in document order: gen
-// gets the cursor and the text and returns the range to replace and what
-// to put there; afterwards each cursor is a plain one after its
-// insertion.
 func editCursors(t EditTarget, gen func(c Cursor, rs []rune) (from, to int, ins []Item)) {
-	// In suggestion mode an edit proposes the change instead of making it.
+	// in suggestion mode an edit proposes the change instead of making it
 	if f, ok := t.(*TextFlow); ok && f.proposalsOn() {
 		f.proposalEdits(gen)
 		return

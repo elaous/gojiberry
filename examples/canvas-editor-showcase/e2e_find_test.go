@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestFindAndReplace drives the find and replace: Ctrl+F opens the bar, matches
-// are counted and highlighted, the buttons step through them, options narrow the
-// search, and Replace all edits the text as one undo step.
 func TestFindAndReplace(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OK(!d.State().Bool("find.open"), "the find bar is closed at first")
@@ -47,7 +44,6 @@ func TestFindAndReplace(t *testing.T) {
 	d.OK(d.Count(".gj-find-error") == 1, "a bad regular expression is shown as an error")
 	d.Click(".gj-find-regex")
 
-	// Editing: Replace all.
 	d.ToggleMode()
 	d.Focus("#input")
 	d.Press("Control+h")

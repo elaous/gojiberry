@@ -25,7 +25,6 @@ func docOf(items ...docfile.Item) docfile.Document {
 	return docfile.Document{Title: "Fidelity", Content: items}
 }
 
-// inlinePair is a paragraph with one run that has the format, and the same paragraph with the run plain.
 func inlinePair(f docfile.Format) pair {
 	return pair{
 		with:    docOf(plain("before "), ch("marked", f), plain(" after\n")),
@@ -35,7 +34,6 @@ func inlinePair(f docfile.Format) pair {
 
 func paraItem(p docfile.Para) docfile.Item { return docfile.Item{Para: &p} }
 
-// blockPair is a paragraph with the paragraph format and the same paragraph without it.
 func blockPair(p docfile.Para) pair {
 	return pair{
 		with:    docOf(paraItem(p), plain("the paragraph\n"), plain("next\n")),
@@ -51,9 +49,6 @@ func rows4() []docfile.TableRow {
 	return []docfile.TableRow{{Cells: []string{"a", "b", "c"}}, {Cells: []string{"d", "e", "f"}}, {Cells: []string{"g", "h", "i"}}}
 }
 
-// pair is a document using one feature and the same document with the feature left out. Where the feature is
-// folded into another construct (a rule into a line of characters), folded is what the document turns into:
-// the exporters must write it exactly as they write the folded document.
 type pair struct {
 	with, without docfile.Document
 	folded        *docfile.Document
@@ -63,7 +58,6 @@ func suggestionMark() string {
 	return canvas.ProposalMark{Kind: canvas.ProposalInsert, ID: "s1", Author: "Ann", Time: time.Unix(1700000000, 0)}.String()
 }
 
-// featurePairs has a pair for every Feature (a test checks that none is missing).
 func featurePairs() map[Feature]pair {
 	bold := docfile.Format{FontWeight: 700}
 	m := map[Feature]pair{
@@ -224,9 +218,6 @@ func registry() *transfer.Registry {
 
 var dateRE = regexp.MustCompile(`<meta property="dcterms:modified">[^<]*</meta>|D:\d{14}[^)]*|/CreationDate ?\([^)]*\)|/ModDate ?\([^)]*\)|/ID ?\[[^\]]*\]`)
 
-// normalised hides what changes from one export to the next of the same document (dates and ids).
-// A zip (Word, EPUB) is reduced to its entries' names and contents: the file's own bytes carry the time it was
-// written. Search in what this returns for the words of a zip's parts (they are stored uncompressed here).
 func normalised(b []byte) []byte {
 	if zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b))); err == nil {
 		var out bytes.Buffer
@@ -254,12 +245,6 @@ func exportOne(t *testing.T, r *transfer.Registry, format string, d docfile.Docu
 	return normalised(data)
 }
 
-// TestFidelityMatrixMatchesTheExporters is what keeps a loss from becoming silent: for every feature and
-// format it exports a document with the feature and the same document without it, and the table must say what
-// happened. A feature the table calls Dropped must leave the file unchanged (the format does not write it); one
-// it calls Kept or Simplified must change it; one folded into another construct must be written exactly as that
-// construct. An exporter that starts losing a feature, or stops losing it, fails here until the table (and with
-// it the report people see) is updated.
 func TestFidelityMatrixMatchesTheExporters(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()

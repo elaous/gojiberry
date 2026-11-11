@@ -55,7 +55,6 @@ func TestWasmTypeAndOnTheFlyGzip(t *testing.T) {
 	if rec.Header().Get("Vary") != "Accept-Encoding" || rec.Header().Get("Cache-Control") != "no-cache" || rec.Header().Get("Etag") == "" {
 		t.Fatalf("%v", rec.Header())
 	}
-	// without gzip in Accept-Encoding: the file as it is
 	plainRec := get(h, "GET", "/main.wasm", nil)
 	if plainRec.Header().Get("Content-Encoding") != "" || plainRec.Body.Len() != len(site()["main.wasm"].Data) {
 		t.Fatalf("identity: %v %d", plainRec.Header(), plainRec.Body.Len())

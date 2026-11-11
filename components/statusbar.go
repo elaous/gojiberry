@@ -7,10 +7,7 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// StatusItem is one thing the status bar says. ID names it (the item gets
-// data-item="ID"); Live makes screen readers announce changes to it (a save
-// state); Title is a longer hint; State, if set, goes in data-state for styling
-// ("failed" is drawn as an error).
+// StatusItem is one thing the status bar says.
 type StatusItem struct {
 	ID, Text, Title, State string
 	Live                   bool
@@ -21,9 +18,6 @@ type StatusBarProps struct {
 	Items []StatusItem
 }
 
-// StatusBar is the line at the bottom of a document window: items side by side
-// (page setup, page count, save state, where the caret is in the headings,
-// word count...). An item with no text is left out.
 func StatusBar(props StatusBarProps) xango.Node {
 	var kids []xango.Node
 	for _, it := range props.Items {
@@ -45,9 +39,6 @@ func StatusBar(props StatusBarProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-statusbar")}, kids...)
 }
 
-// HeadingPath is the headings the caret is under, from the top one down:
-// the heading at index (OutlineIndexAt) and the nearest shallower one before it,
-// and so on up. It is empty when index is -1.
 func HeadingPath(entries []canvas.OutlineEntry, index int) []string {
 	if index < 0 || index >= len(entries) {
 		return nil

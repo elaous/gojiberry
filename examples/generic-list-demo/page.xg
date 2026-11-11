@@ -1,6 +1,3 @@
-// Package main shows a generic component and a render prop written in
-// .xg: List[Person] takes typed items and a function that turns each
-// one into markup -- markup that can itself use more components.
 package main
 
 import (

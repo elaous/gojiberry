@@ -1,13 +1,5 @@
 //go:build js && wasm
 
-// Package sw lets a Go/WASM binary run as a browser service worker: it
-// runs in the ServiceWorkerGlobalScope (no DOM, event-driven), reachable
-// via js.Global() the same way a page's `self` is. wasm_exec.js only
-// needs globalThis/crypto/performance/TextEncoder/TextDecoder, all of
-// which the service worker scope provides, so the same Go WASM runtime
-// that runs a page also runs a service worker -- it just needs a JS
-// bootstrap file that does `importScripts('wasm_exec.js')` instead of
-// a <script> tag, since a classic service worker has no DOM to attach one.
 package sw
 
 import (
@@ -16,46 +8,35 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// Event wraps a raw JS event object common to every service worker
-// lifecycle/fetch event.
+// Event wraps a raw service worker event object.
 type Event struct{ raw js.Value }
 
-// Raw returns the underlying JS event, for anything this package
-// doesn't wrap.
+// Raw returns the underlying JS event.
 func (e Event) Raw() js.Value { return e.raw }
 
-// ExtendableEvent is install/activate: the browser waits for
-// WaitUntil's work to finish before completing the lifecycle
-// transition (e.g. finishing pre-caching before the worker installs).
+// ExtendableEvent is an install or activate event.
 type ExtendableEvent struct{ Event }
 
-// WaitUntil extends the event's lifetime until work returns, via the
-// event's real waitUntil(promise) -- work runs on its own goroutine so
-// this call doesn't block the JS event loop.
+// WaitUntil extends the event's lifetime until work returns.
 func (e ExtendableEvent) WaitUntil(work func() error) {
 	e.raw.Call("waitUntil", domrt.ToPromise(func() (js.Value, error) {
 		return js.Null(), work()
 	}))
 }
 
-// FetchEvent is dispatched for every request this worker's scope
-// controls.
+// FetchEvent is dispatched for each request in the worker's scope.
 type FetchEvent struct{ Event }
 
-// Request returns the raw JS Request object, suitable for passing
-// straight to CachesMatch or fetch().
+// Request returns the raw JS Request object.
 func (e FetchEvent) Request() js.Value { return e.raw.Get("request") }
 
-// RespondWith supplies the response for this request via the event's
-// real respondWith(promise) -- work runs on its own goroutine so this
-// call doesn't block the JS event loop.
+// RespondWith supplies the response for this request.
 func (e FetchEvent) RespondWith(work func() (js.Value, error)) {
 	e.raw.Call("respondWith", domrt.ToPromise(work))
 }
 
 func addSelfListener(name string, fn func(js.Value)) {
-	// Never released: these listeners must live for the entire service
-	// worker lifetime, which for a classic worker script is the process.
+	// never released: listeners live as long as the service worker
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		var v js.Value
 		if len(args) > 0 {
@@ -67,17 +48,17 @@ func addSelfListener(name string, fn func(js.Value)) {
 	js.Global().Call("addEventListener", name, cb)
 }
 
-// OnInstall registers the worker's install handler.
+// OnInstall registers the install handler.
 func OnInstall(fn func(ExtendableEvent)) {
 	addSelfListener("install", func(v js.Value) { fn(ExtendableEvent{Event{v}}) })
 }
 
-// OnActivate registers the worker's activate handler.
+// OnActivate registers the activate handler.
 func OnActivate(fn func(ExtendableEvent)) {
 	addSelfListener("activate", func(v js.Value) { fn(ExtendableEvent{Event{v}}) })
 }
 
-// OnFetch registers the worker's fetch handler.
+// OnFetch registers the fetch handler.
 func OnFetch(fn func(FetchEvent)) {
 	addSelfListener("fetch", func(v js.Value) { fn(FetchEvent{Event{v}}) })
 }
@@ -97,7 +78,7 @@ func CacheAddAll(cache js.Value, urls []string) error {
 	return err
 }
 
-// CachesKeys wraps caches.keys(): the names of every cache this origin has.
+// CachesKeys wraps caches.keys: the names of every cache.
 func CachesKeys() ([]string, error) {
 	v, err := domrt.Await(js.Global().Get("caches").Call("keys"))
 	if err != nil {
@@ -116,15 +97,13 @@ func CachesDelete(name string) error {
 	return err
 }
 
-// CachePut wraps cache.put(request, response). A response can be read once, so put a
-// clone (response.clone()) and answer with the original.
+// CachePut wraps cache.put(request, response).
 func CachePut(cache, request, response js.Value) error {
 	_, err := domrt.Await(cache.Call("put", request, response))
 	return err
 }
 
-// CachesMatch wraps caches.match(request), returning ok=false on a
-// cache miss (not treated as an error).
+// CachesMatch wraps caches.match; ok is false on a miss.
 func CachesMatch(request js.Value) (js.Value, bool) {
 	v, err := domrt.Await(js.Global().Get("caches").Call("match", request))
 	if err != nil || v.IsUndefined() || v.IsNull() {
@@ -133,9 +112,7 @@ func CachesMatch(request js.Value) (js.Value, bool) {
 	return v, true
 }
 
-// ClaimClients wraps self.clients.claim(), which lets an activating
-// worker start controlling already-open pages immediately instead of
-// only pages opened after this activation.
+// ClaimClients wraps self.clients.claim.
 func ClaimClients() error {
 	_, err := domrt.Await(js.Global().Get("clients").Call("claim"))
 	return err

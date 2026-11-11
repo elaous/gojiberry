@@ -10,29 +10,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// newRouter builds the real Echo instance this demo serves, with the
-// same three security middlewares wired ahead of the page route as
-// ../gin-ssr-demo, all three built into Echo itself this time:
-//
-//   - middleware.SecureWithConfig: the header-based protections
-//     (X-Frame-Options, X-Content-Type-Options, X-XSS-Protection,
-//     Content-Security-Policy, Referrer-Policy,
-//     Strict-Transport-Security) that gofiber/fiber's own helmet
-//     middleware covers. HSTSMaxAge is set purely for demonstration --
-//     this demo has no TLS listener, so the header is emitted but
-//     browsers only act on it over a real https connection; a real
-//     deployment would only set this behind TLS.
-//   - middleware.CORSWithConfig: a real (non-wildcard) CORS policy --
-//     only AllowOrigins may make cross-origin requests, and only with
-//     AllowMethods, not Echo's own wildcard-everything default.
-//   - middleware.RateLimiterWithConfig: Echo's built-in per-client rate
-//     limiter, backed by the same golang.org/x/time/rate token bucket
-//     the Gin demo wires by hand in its own ratelimit.go, since Gin
-//     ships no equivalent of its own.
-//
-// It's a separate func (not inlined into main) so main_test.go can spin
-// up a real *httptest.Server against the exact same instance without
-// going through main's blocking Start.
 func newRouter() *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true

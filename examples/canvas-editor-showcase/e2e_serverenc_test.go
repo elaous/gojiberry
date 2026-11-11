@@ -13,10 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The end-to-end encrypted store can live on the docstore server the person confirmed: choosing that (and
-// reloading) makes the store's target "server", the documents on the server are ciphertext, a reload
-// starts locked, and the recovery key unlocks it. A second browser with nothing stored finds encrypted
-// files and no key list, and restores the store from the recovery key.
 func TestEncryptedStoreOnTheServer(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -43,7 +39,6 @@ func TestEncryptedStoreOnTheServer(t *testing.T) {
 	d.Sleep(600)
 	saveConfidential(d, "Server secret")
 
-	// On the server the files are ciphertext: not a trace of the document's text.
 	ctx := context.Background()
 	metas, err := backing.List(ctx)
 	if err != nil || len(metas) == 0 {
@@ -66,7 +61,6 @@ func TestEncryptedStoreOnTheServer(t *testing.T) {
 		t.Error("no file on the server is encrypted")
 	}
 
-	// A reload starts locked, and the recovery key opens the store again.
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)
 	d.WaitFor("the panel", "document.querySelector('#enc-status')")
@@ -76,8 +70,6 @@ func TestEncryptedStoreOnTheServer(t *testing.T) {
 	d.Click("#enc-unlock-recovery")
 	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 
-	// The store keeps when each key was used, from which device: name this one, unlock again, and the keys
-	// list says so (the record is in the store, so the other devices read it too).
 	d.Click(`button[data-tab="people"]`)
 	d.WaitSelector("#enc-device-label")
 	d.Fill("#enc-device-label", "kitchen tablet")
@@ -95,8 +87,6 @@ func TestEncryptedStoreOnTheServer(t *testing.T) {
 	code := strings.TrimPrefix(d.Text("#enc-keylist-code"), "Key list code: ")
 	d.OK(strings.Contains(keyList, "gojiberry-keylist/1") && !strings.Contains(keyList, "AGE-SECRET-KEY") && code != "", "the key list is public text with a code: "+code)
 
-	// Another browser with nothing stored: the server has encrypted files but this browser has no key list,
-	// which the page says, and the recovery key restores the store.
 	other := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
 	other.Click(`button[data-tab="people"]`)
 	other.WaitSelector("#dir-offer-review")

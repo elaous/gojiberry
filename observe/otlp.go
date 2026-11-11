@@ -17,15 +17,7 @@ import (
 	"time"
 )
 
-// The OpenTelemetry sink. It speaks OTLP over HTTP with the JSON encoding, which every OpenTelemetry
-// Collector and most backends (Grafana, Honeycomb, SigNoz, Datadog's agent and others) accept, so it needs
-// nothing but the standard library: no OpenTelemetry SDK, no protobuf, no module of its own, and it is in
-// every build. Metrics go to {endpoint}/v1/metrics and traces to {endpoint}/v1/traces.
-//
-// What it sends is what the allowlists let through and nothing else: metrics named gojiberry.<metric> with
-// the allowlisted label values as attributes (counters as delta sums, histograms as count, sum, min and max,
-// gauges as the last value) and sampled spans with their allowlisted attributes. Resource attributes are only
-// service.name. No address, header, query or body ever reaches a Sink.
+// The OpenTelemetry sink.
 const (
 	envOTLPEndpoint        = "OTEL_EXPORTER_OTLP_ENDPOINT"
 	envOTLPMetricsEndpoint = "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"
@@ -43,17 +35,15 @@ func init() { RegisterSink("otlp", newOTLPFromEnv) }
 type OTLPConfig struct {
 	// MetricsURL and TracesURL are the full URLs ({endpoint}/v1/metrics and /v1/traces).
 	MetricsURL, TracesURL string
-	// Headers are sent on every request (typically an API key); they are never logged or described.
+	// never logged or described
 	Headers map[string]string
 	// Service is the service.name resource attribute.
 	Service string
-	// Interval is how often aggregates are sent. Zero is 30 seconds; negative disables the timer.
+	// Interval is how often aggregates are sent.
 	Interval time.Duration
-	// Client is used for the requests; nil is a client with a 10 second timeout.
-	Client *http.Client
+	Client   *http.Client
 }
 
-// OTLP is a Sink that exports aggregates and sampled spans over OTLP/HTTP JSON.
 type OTLP struct {
 	cfg    OTLPConfig
 	mu     sync.Mutex
@@ -92,8 +82,7 @@ func NewOTLP(cfg OTLPConfig) (*OTLP, error) {
 	return o, nil
 }
 
-// checkOTLPURL requires https, except for a loopback host (a local collector), and refuses credentials,
-// a query or a fragment in the URL (keys go in the headers variable, where they are never shown).
+// https only, except loopback: keys go in headers, never the URL
 func checkOTLPURL(s string) error {
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -217,7 +206,6 @@ func (o *OTLP) resource() map[string]any {
 	return map[string]any{"attributes": []otlpAttr{sAttr("service.name", o.cfg.Service)}}
 }
 
-// metricsBody takes the held aggregates and turns them into an OTLP metrics export request (nil if none).
 func (o *OTLP) metricsBody(now time.Time) []byte {
 	o.mu.Lock()
 	series, start := o.series, o.since
@@ -307,8 +295,7 @@ func (o *OTLP) tracesBody(spans []SpanData) []byte {
 	return b
 }
 
-// Flush implements Sink: it sends what is held now. What cannot be sent is dropped (and counted), not kept
-// without bound.
+// Flush implements Sink: it sends what is held now.
 func (o *OTLP) Flush(ctx context.Context) error {
 	var errs []error
 	if b := o.metricsBody(time.Now()); b != nil {
@@ -358,7 +345,6 @@ func (o *OTLP) post(ctx context.Context, target string, body []byte) error {
 	return nil
 }
 
-// Close implements Sink: it stops the timer and sends the rest.
 func (o *OTLP) Close(ctx context.Context) error {
 	select {
 	case <-o.stop:
@@ -369,7 +355,7 @@ func (o *OTLP) Close(ctx context.Context) error {
 	return o.Flush(ctx)
 }
 
-// Describe implements Describer: the destinations (without credentials) and the counts, never the headers.
+// never the headers
 func (o *OTLP) Describe() any {
 	o.mu.Lock()
 	defer o.mu.Unlock()

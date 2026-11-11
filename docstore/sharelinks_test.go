@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// linkFixture is a server with an owner, a document shared with one named viewer, and a clock the test
-// moves.
 type linkFixture struct {
 	t        *testing.T
 	h        http.Handler
@@ -42,7 +40,6 @@ func newLinkFixture(t *testing.T) *linkFixture {
 
 func (f *linkFixture) advance(d time.Duration) { f.clock.Add(int64(d / time.Second)) }
 
-// do sends a request as a session token (may be "") carrying a share token (may be "").
 func (f *linkFixture) do(method, path, body, session, share string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -90,7 +87,6 @@ func TestViewLinkReadsButCannotWriteOrDeleteOrManage(t *testing.T) {
 	f.want(http.StatusForbidden, f.do(http.MethodPut, "/docs/doc1", "hacked", f.stranger, tok), "view link cannot write, signed in")
 	f.want(http.StatusUnauthorized, f.do(http.MethodPost, "/docs/doc1/renew", "", "", tok), "view link cannot renew")
 	f.want(http.StatusUnauthorized, f.do(http.MethodDelete, "/docs/doc1", "", "", tok), "view link cannot delete")
-	// A link never reaches the access list: not to read it, replace it or make more links.
 	f.want(http.StatusForbidden, f.do(http.MethodGet, "/docs/doc1/acl", "", "", tok), "link cannot read the access list")
 	f.want(http.StatusForbidden, f.do(http.MethodGet, "/docs/doc1/acl", "", f.stranger, tok), "link cannot read the access list, signed in")
 	f.want(http.StatusForbidden, f.do(http.MethodPut, "/docs/doc1/acl", `{"grants":{"stranger@example.com":"editor"}}`, f.stranger, tok), "link cannot replace the access list")
@@ -109,7 +105,6 @@ func TestEditLinkWritesButCannotDeleteOrManage(t *testing.T) {
 	}
 	f.want(http.StatusUnauthorized, f.do(http.MethodDelete, "/docs/doc1", "", "", tok), "edit link cannot delete")
 	f.want(http.StatusForbidden, f.do(http.MethodPut, "/docs/doc1/acl", `{}`, f.stranger, tok), "edit link cannot replace the access list")
-	// A wrong or truncated token opens nothing.
 	f.want(http.StatusUnauthorized, f.do(http.MethodPut, "/docs/doc1", "x", "", tok[:len(tok)-1]), "a wrong token")
 	f.want(http.StatusUnauthorized, f.do(http.MethodPut, "/docs/doc1", "x", "", "short"), "a short token")
 }
@@ -126,7 +121,6 @@ func TestExpiredLinkIsRefusedAtTheDeadline(t *testing.T) {
 	f.want(http.StatusUnauthorized, f.do(http.MethodGet, "/docs/doc1", "", "", tok), "at the deadline")
 	f.advance(24 * time.Hour)
 	f.want(http.StatusUnauthorized, f.do(http.MethodGet, "/docs/doc1", "", "", tok), "long after")
-	// A named person keeps their own access when a link they also hold has expired.
 	f.want(http.StatusOK, f.do(http.MethodGet, "/docs/doc1", "", f.viewer, tok), "the named viewer with an expired link")
 }
 
@@ -179,7 +173,6 @@ func TestOnlyTheOwnerMakesLinksAndTheTokenIsNeverStored(t *testing.T) {
 	if l, ok := acl.Links[id]; !ok || l.Role != RoleViewer || l.Expires.Sub(l.Created) != 5*time.Hour {
 		t.Fatalf("the owner's list: %+v", acl.Links)
 	}
-	// Replacing the access list neither adds links from the body nor drops the ones made.
 	f.want(http.StatusNoContent, f.do(http.MethodPut, "/docs/doc1/acl", `{"grants":{},"links":{"`+LinkID("forged-token-forged-token-forged-xx")+`":{"role":"editor","expires":"2999-01-01T00:00:00Z"}}}`, f.owner, ""), "owner replaces the list")
 	f.want(http.StatusUnauthorized, f.do(http.MethodPut, "/docs/doc1", "x", "", "forged-token-forged-token-forged-xx"), "a link smuggled in through PUT")
 	f.want(http.StatusOK, f.do(http.MethodGet, "/docs/doc1", "", "", tok), "the made link survives a PUT of the list")
@@ -194,7 +187,6 @@ func TestLinkRequestsAreValidated(t *testing.T) {
 	} {
 		f.want(http.StatusBadRequest, f.do(http.MethodPost, "/docs/doc1/acl", body, f.owner, ""), body)
 	}
-	// No hours means the default week; the limit of live links holds.
 	rec := f.do(http.MethodPost, "/docs/doc1/acl", `{"role":"viewer"}`, f.owner, "")
 	var out createLinkResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
@@ -211,10 +203,8 @@ func TestLinkRequestsAreValidated(t *testing.T) {
 
 func TestLinksDoNotOpenADocumentThatHasNoAccessList(t *testing.T) {
 	f := newLinkFixture(t)
-	// doc2 was never shared: it is open to everyone as before, and a header changes nothing.
 	f.want(http.StatusNoContent, f.do(http.MethodPut, "/docs/doc2", "x", "", ""), "an unshared document")
 	tok, _, _ := f.newLink("viewer", 1)
-	// A token of doc1 does not open another shared document.
 	f.want(http.StatusNoContent, f.do(http.MethodPut, "/docs/doc3/acl", `{}`, f.stranger, ""), "stranger shares doc3")
 	f.want(http.StatusNoContent, f.do(http.MethodPut, "/docs/doc3", "private", f.stranger, ""), "stranger writes doc3")
 	f.want(http.StatusUnauthorized, f.do(http.MethodGet, "/docs/doc3", "", "", tok), "doc1's link on doc3")

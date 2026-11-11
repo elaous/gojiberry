@@ -6,13 +6,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// MediaFindings checks one embedded clip for the text that stands for it (roadmap 68): a video needs
-// captions, audio needs a transcript, and a clip needs a name. Check calls it for every clip in a document
-// (offset and item say where it is); a host that inserts media calls it with offset and item 0 on the clip
-// about to be inserted, and refuses or asks while it returns an error, so a clip is never added with nothing
-// for a deaf reader.
-//
-// It judges that text exists, not that it is good: captions that say nothing pass.
 func MediaFindings(m docfile.MediaItem, offset, item int) []Finding {
 	var out []Finding
 	name := strings.TrimSpace(m.Title)

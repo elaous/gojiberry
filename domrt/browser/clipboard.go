@@ -8,17 +8,14 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// WriteClipboardText writes text to the system clipboard, blocking
-// until the browser confirms it (or denies it, e.g. missing
-// permission or an insecure/non-focused document).
+// WriteClipboardText writes text to the system clipboard.
 func WriteClipboardText(text string) error {
 	promise := js.Global().Get("navigator").Get("clipboard").Call("writeText", text)
 	_, err := domrt.Await(promise)
 	return err
 }
 
-// ReadClipboardText reads the current system clipboard text, blocking
-// until the browser responds.
+// ReadClipboardText reads the current system clipboard text.
 func ReadClipboardText() (string, error) {
 	promise := js.Global().Get("navigator").Get("clipboard").Call("readText")
 	v, err := domrt.Await(promise)

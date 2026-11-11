@@ -1,14 +1,3 @@
-// Package main demos xango SSR under Echo (github.com/labstack/echo/v4):
-// xango.Render only needs an io.Writer, and *echo.Response (via
-// c.Response().Writer) satisfies that directly, the same way
-// http.ResponseWriter did in the plain net/http version of this demo
-// (examples/http-server-demo) and *gin.Context.Writer did in the Gin
-// version (examples/gin-ssr-demo) -- Echo's routing, binding, and
-// middleware stack are untouched, xango just replaces html/template as
-// the thing producing the response body. See router.go for how the
-// three security middlewares (secure headers, CORS, per-client rate
-// limiting) -- all built into Echo itself here, unlike Gin -- are
-// wired in ahead of it.
 package main
 
 import (

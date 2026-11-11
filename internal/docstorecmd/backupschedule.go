@@ -14,20 +14,16 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// defaultKeep is how many dated backups `docstore backup -dir` keeps when -keep is not given.
 const defaultKeep = 7
 
-// backupName matches the files `docstore backup -dir` writes, and only those: rotation never touches another file
-// in the directory.
+// matches only files backup writes: rotation never touches others
 var backupName = regexp.MustCompile(`^gojiberry-backup-\d{8}T\d{6}Z\.tar$`)
 
-// scheduledName is the file of a backup made at t (UTC, so the names sort by time).
 func scheduledName(t time.Time) string {
 	return "gojiberry-backup-" + t.UTC().Format("20060102T150405Z") + ".tar"
 }
 
-// rotateBackups deletes the oldest backups in dir (files of the form scheduledName) until keep remain, and returns how
-// many it deleted. It is called only after a new backup was written, so a failing store never costs the last good ones.
+// only after a new backup, so failure keeps old ones
 func rotateBackups(dir string, keep int) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -50,9 +46,6 @@ func rotateBackups(dir string, keep int) (int, error) {
 	return removed, nil
 }
 
-// runScheduledBackups writes a dated backup into dir, rotates the old ones to keep, and, with every > 0, does it
-// again every that long until ctx ends. A failed round is reported and tried again at the next one (a one-off run exits
-// 1); each round writes one audit event. It returns the exit status.
 func runScheduledBackups(ctx context.Context, adapter docstore.Adapter, dir string, keep int, every time.Duration, stdout, stderr io.Writer, log *audit.Logger) int {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		_, _ = fmt.Fprintf(stderr, "docstore: backup failed: %v\n", err)

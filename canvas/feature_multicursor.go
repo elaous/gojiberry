@@ -1,22 +1,8 @@
 package canvas
 
-// MultiCursor is the multi-cursor feature, as in VS Code:
-//
-//   - Ctrl/Cmd+click adds a cursor before the clicked character
-//     (FloatingText handles the click itself; a plain click goes back
-//     to one cursor, and so does Escape).
-//   - Ctrl/Cmd+D selects the word at the caret; pressing it again adds
-//     the next occurrence of the selected text.
-//   - Ctrl/Cmd+Shift+L selects every occurrence at once.
-//   - Alt+Shift+I puts a cursor at the end of every line of the
-//     selection.
-//   - Ctrl/Cmd+Alt+Up and Down add a cursor on the line above or below.
-//
-// Typing, Backspace, Delete, Enter, the arrow keys, Home and End then
-// act at every cursor.
+// MultiCursor adds VS Code-style multiple cursors.
 type MultiCursor struct{}
 
-// Command names.
 const (
 	CmdAddNextMatch     Command = "cursor.add-next-match"
 	CmdSelectAllMatches Command = "cursor.select-all-matches"
@@ -26,10 +12,8 @@ const (
 	CmdClearCursors     Command = "cursor.clear"
 )
 
-// Name implements Feature.
 func (MultiCursor) Name() string { return "multi-cursor" }
 
-// Install implements Feature.
 func (MultiCursor) Install(r *Registry) {
 	r.AddCommand(CmdAddNextMatch, "Add selection to next match", "Mod+D", func(c *CommandContext) bool { return addNextMatch(c.Target) })
 	r.AddCommand(CmdSelectAllMatches, "Select all matches", "Mod+Shift+L", func(c *CommandContext) bool { return selectAllMatches(c.Target) })
@@ -46,8 +30,6 @@ func (MultiCursor) Install(r *Registry) {
 	})
 }
 
-// wordBounds returns the word (letters, digits, underscore) around
-// offset o; ok is false if o is not in or next to a word.
 func wordBounds(rs []rune, o int) (from, to int, ok bool) {
 	from, to = o, o
 	for from > 0 && isIdentRune(rs[from-1]) {
@@ -59,8 +41,6 @@ func wordBounds(rs []rune, o int) (from, to int, ok bool) {
 	return from, to, from < to
 }
 
-// findRunes returns the first index >= from where needle occurs in
-// hay, or -1.
 func findRunes(hay, needle []rune, from int) int {
 	for i := max(from, 0); i+len(needle) <= len(hay); i++ {
 		match := true
@@ -97,8 +77,6 @@ func addNextMatch(t EditTarget) bool {
 		f, _ := c.Range()
 		taken[f] = true
 	}
-	// The next occurrence after the last cursor that has no cursor yet,
-	// wrapping around to the start.
 	var first, after = -1, -1
 	for p := 0; ; {
 		i := findRunes(rs, needle, p)
@@ -162,8 +140,7 @@ func cursorsAtLineEnds(t EditTarget) bool {
 			out = append(out, At(lineEnd(rs, from)))
 			continue
 		}
-		// A selection that ends at the very start of a line does not
-		// include that line.
+		// a selection ending at a line start does not include that line
 		if to > from && rs[to-1] == '\n' {
 			to--
 		}

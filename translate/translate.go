@@ -1,6 +1,3 @@
-// Package translate is the client for cmd/translateserver, which holds the
-// translation API key (DeepL) so a browser build never does. It uses net/http,
-// which in the wasm build goes through the browser's fetch.
 package translate
 
 import (
@@ -18,29 +15,23 @@ import (
 type Client struct {
 	// BaseURL is where the server is ("https://host" or "/translate-api").
 	BaseURL string
-	// Header is sent with every request (a token, see the server's guard).
-	Header http.Header
-	// HTTP is the client to use; nil means one with a 30 second timeout.
-	HTTP *http.Client
+	Header  http.Header
+	HTTP    *http.Client
 }
 
 // Result is a translation.
 type Result struct {
-	Text string
-	// Detected is the language the server found the source to be in.
+	Text     string
 	Detected string
 }
 
-// Translator turns text into another language. The Client (a server holding an API key) is one; the page has another
-// over the translate add-on, which runs on the device.
+// Translator turns text into another language.
 type Translator interface {
 	Translate(ctx context.Context, text, target, source string) (Result, error)
 }
 
 var _ Translator = Client{}
 
-// Translate translates text into target (a DeepL language code such as "DE",
-// "FR" or "EN-GB"); source "" lets the server detect it.
 func (c Client) Translate(ctx context.Context, text, target, source string) (Result, error) {
 	if strings.TrimSpace(text) == "" {
 		return Result{}, nil

@@ -19,19 +19,12 @@ type Callbacks struct {
 	OnTable        func(*cv.Table)
 }
 
-// Doc is the whole editor canvas as one tree: a scrolling viewport over
-// three pages, the editable text flow (Markdown to start with), a picture
-// the text wraps around, a floating note and a floating table. The
-// editing features are registered explicitly, to show where to add or
-// remove one.
 func Doc(state State, cb Callbacks) xango.Node {
 	return canvas.Canvas(canvas.CanvasProps{Width: 920, Height: 640, Mode: state.Mode, Role: state.Role, Features: state.Features(), Children: []xango.Node{xango.Child(shared(state, canvas.ScrollView(canvas.ScrollViewProps{X: 10, Y: 10, Width: 900, Height: 620, LockH: !state.Spread, Typewriter: state.Typewriter, TypewriterX: state.TypewriterX, Children: []xango.Node{canvas.TextFlow(canvas.TextFlowProps{X: 0, Y: 0, Width: 880, Source: state.Source, Items: state.Items, Transform: state.Transform(), PageCount: state.Pages, PageWidth: state.PageWidth(), PageHeight: state.PageHeight(), Spread: state.Spread, Styles: state.Styles, AutoClose: state.AutoClose(), TextScale: state.TextScale, Theme: state.Theme, PeerPalette: state.PeerPalette, StrongCaret: state.StrongCaret, Hyphenator: state.Hyphenator(), Margins: state.Setup.MarginList(), OnChange: cb.OnFlow, OnHoverLink: cb.OnHoverLink, OnTurn: cb.OnTurn, Comments: state.Comments, Footnotes: state.Footnotes, Author: state.Author, OnHoverComment: cb.OnHoverComment, Pages: func(page xango.Node, n int) xango.Node {
 		return xango.Frag(xango.Child(runningHeader(state, n)), xango.Child(page), xango.Child(watermark(n)), xango.Child(runningFooter(state, n)))
 	}}), xango.Child(picture(state)), canvas.FloatingText(canvas.FloatingTextProps{Text: state.Note, Opacity: 0.95, Anchor: &cv.Anchor{Page: 0, X: 330, Y: 250}, Wrap: true, Vocabulary: []string{"Gojiberry", "canvas", "feature"}, OnChange: cb.OnNote}), canvas.Table(canvas.TableProps{Cells: [][]string{{"Feature", "Keys"}, {"Multi-cursor", "Ctrl+D"}, {"Move line", "Alt+Up/Down"}}, Anchor: &cv.Anchor{Page: 1, X: 60, Y: 200}, Wrap: true, OnChange: cb.OnTable})}})))}})
 }
 
-// watermark puts DRAFT across every sheet but the first: the later sheets
-// inherit the first one that sets it.
 func watermark(n int) xango.Node {
 	if n == 0 {
 		return xango.Frag()
@@ -47,8 +40,6 @@ func picture(state State) xango.Node {
 	return canvas.Image(canvas.ImageProps{Source: state.Image, Width: 120, Height: 80, Anchor: &cv.Anchor{Page: 1, X: 330, Y: 40}, Wrap: true, Alt: "A sample picture used to try text wrapping"})
 }
 
-// shared makes the document multi-user when the page was opened on one: the
-// Collab element wraps what is shared and leaves the rest of the tree alone.
 func shared(state State, content xango.Node) xango.Node {
 	if state.Live == nil {
 		return content

@@ -7,12 +7,10 @@ type MenuItem struct {
 	Disabled  bool
 	Danger    bool // drawn in the danger color (e.g. "Delete")
 	Separator bool // a divider line; Label/Action are ignored
-	// Swatch, if set, draws a small square of that CSS color before the
-	// label (a color palette item).
+	// Swatch draws a small colour square before the label.
 	Swatch string
 }
 
-// swatchW is the room a swatch takes before the label.
 const swatchW = 22
 
 // MenuStyle controls how a Menu looks.
@@ -49,16 +47,7 @@ func DefaultMenuStyle() MenuStyle {
 	}
 }
 
-// Menu is a context menu drawn on a canvas. Unlike the other
-// components in this package it has no view/edit modes -- a menu only
-// exists to be interacted with, and is invisible while closed.
-//
-// Open it at a point with Open, route pointer and keyboard events
-// through MouseMove/MouseDown/HandleKey while IsOpen, and call Draw
-// last (after everything else) so it paints on top. Clicking an
-// enabled item closes the menu and then runs its Action; clicking
-// outside closes it and reports the click as not handled so the caller
-// can process it normally.
+// Menu is a context menu drawn on a canvas.
 type Menu struct {
 	Style   MenuStyle
 	Painter Painter
@@ -77,20 +66,15 @@ func NewMenu(p Painter) *Menu {
 // Hover returns the highlighted item's index, or -1.
 func (m *Menu) Hover() int { return m.hover }
 
-// SetHover highlights item i (ignored unless it can be chosen); -1
-// clears the highlight.
 func (m *Menu) SetHover(i int) {
 	if i < 0 || m.enabled(i) {
 		m.hover = i
 	}
 }
 
-// Activate runs item i as if it had been clicked: it closes the menu and
-// then calls the item's Action. Disabled items and separators do nothing.
+// Activate runs item i as if clicked.
 func (m *Menu) Activate(i int) { m.activate(i) }
 
-// Rect returns the open menu's rectangle (x, y, w, h); all zero while it
-// is closed.
 func (m *Menu) Rect() (x, y, w, h float64) {
 	if !m.open {
 		return 0, 0, 0, 0
@@ -98,7 +82,6 @@ func (m *Menu) Rect() (x, y, w, h float64) {
 	return m.x, m.y, m.w, m.height()
 }
 
-// Labels returns the open menu's item labels, with "" for separators.
 func (m *Menu) Labels() []string {
 	var out []string
 	for _, it := range m.items {
@@ -128,15 +111,11 @@ func (m *Menu) itemHeight(it MenuItem) float64 {
 	return m.Style.ItemHeight
 }
 
-// Open shows items with the menu's top-left corner at (x, y), shifted
-// as needed to stay inside a boundsW x boundsH canvas (a zero bound
-// disables clamping on that axis).
 func (m *Menu) Open(items []MenuItem, x, y, boundsW, boundsH float64) {
 	m.OpenWithin(items, x, y, [4]float64{0, 0, boundsW, boundsH})
 }
 
-// OpenWithin is Open keeping the menu inside the bounds rectangle (x,
-// y, w, h); a zero width or height disables clamping on that axis.
+// OpenWithin is Open, keeping the menu inside bounds.
 func (m *Menu) OpenWithin(items []MenuItem, x, y float64, bounds [4]float64) {
 	m.items = items
 	m.Painter.SetFont(m.Style.Font)
@@ -163,7 +142,6 @@ func (m *Menu) OpenWithin(items []MenuItem, x, y float64, bounds [4]float64) {
 	m.hover = -1
 }
 
-// HitTest returns the index of the item at (x, y), or -1.
 func (m *Menu) HitTest(x, y float64) int {
 	if !m.open || x < m.x || x >= m.x+m.w || y < m.y {
 		return -1
@@ -183,8 +161,7 @@ func (m *Menu) enabled(i int) bool {
 	return i >= 0 && i < len(m.items) && !m.items[i].Separator && !m.items[i].Disabled
 }
 
-// MouseMove updates the highlighted item; it returns true if a redraw
-// is needed.
+// MouseMove updates the highlight; reports whether a redraw is needed.
 func (m *Menu) MouseMove(x, y float64) bool {
 	if !m.open {
 		return false
@@ -198,10 +175,6 @@ func (m *Menu) MouseMove(x, y float64) bool {
 	return changed
 }
 
-// MouseDown handles a press at (x, y) and reports whether the menu
-// consumed it: true for a press on an item (enabled, or not) or on the
-// menu's padding; false -- after closing the menu -- for a press
-// outside it (or when the menu wasn't open).
 func (m *Menu) MouseDown(x, y float64) bool {
 	if !m.open {
 		return false
@@ -226,9 +199,6 @@ func (m *Menu) activate(i int) {
 	}
 }
 
-// HandleKey handles ArrowUp/ArrowDown (move, skipping separators and
-// disabled items), Enter (activate) and Escape (close). While open the
-// menu is modal: it reports every key as consumed.
 func (m *Menu) HandleKey(key string) bool {
 	if !m.open {
 		return false

@@ -21,7 +21,6 @@ func TestLoadHunspellDecodesTheCharacterSetTheAffixFileNames(t *testing.T) {
 	if m := has(d, "größe", "für"); len(m) != 0 {
 		t.Errorf("not decoded: %v", m)
 	}
-	// UTF-8 bytes under the same SET line are left as they are.
 	d = LoadHunspell([]byte("1\ngröße\n"), aff, HunspellOptions{})
 	if m := has(d, "größe"); len(m) != 0 {
 		t.Errorf("UTF-8 was decoded twice: %v", m)
@@ -42,7 +41,6 @@ func TestCrossProductsMakeTheFormsWithAPrefixAndASuffix(t *testing.T) {
 	if plain.Has("unloveable") || !plain.Has("loveable") || !plain.Has("unlove") {
 		t.Error("without cross products only single affixes")
 	}
-	// The embedded English reading is the single-level one.
 	if FromHunspell(string(dic), string(aff)).Has("unloveable") {
 		t.Error("FromHunspell stays single level")
 	}
@@ -116,7 +114,6 @@ func TestNeedAffixForbiddenWordAndNumericFlags(t *testing.T) {
 }
 
 func TestSuggestionsUseTheLanguagesLettersCommonMistakesAndKeyboard(t *testing.T) {
-	// TRY: the language's own letters, so a missing ü is found.
 	d := LoadHunspell([]byte("2\nfür\nkind\n"), []byte("TRY ürn\n"), HunspellOptions{})
 	c := NewChecker(d)
 	if got := c.Suggest("fur", 3); !slices.Contains(got, "für") {
@@ -125,7 +122,6 @@ func TestSuggestionsUseTheLanguagesLettersCommonMistakesAndKeyboard(t *testing.T
 	if got := NewChecker(New("für")).Suggest("fur", 3); slices.Contains(got, "für") {
 		t.Error("the Latin alphabet has no ü: the plain dictionary should not find it")
 	}
-	// REP: a common mistake, anchored or not.
 	d = LoadHunspell([]byte("3\nfoto\ntelefon\nafon\n"), []byte("REP 3\nREP ph f\nREP ^ph f\nREP on$ ong\n"), HunspellOptions{})
 	c = NewChecker(d)
 	if got := c.Suggest("photo", 3); !slices.Contains(got, "foto") {
@@ -134,7 +130,6 @@ func TestSuggestionsUseTheLanguagesLettersCommonMistakesAndKeyboard(t *testing.T
 	if got := c.Suggest("telephon", 3); !slices.Contains(got, "telefon") {
 		t.Errorf("REP ph->f inside the word: %v", got)
 	}
-	// KEY: a letter next to the right one beats an unrelated edit of the same size.
 	d = LoadHunspell([]byte("2\nkind\nkimb\n"), []byte("KEY qwertyuiop|asdfghjkl|zxcvbnm\n"), HunspellOptions{})
 	got := NewChecker(d).Suggest("kimd", 2)
 	if len(got) < 1 || got[0] != "kind" {

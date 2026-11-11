@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// plainRig is a store with encryption off and three documents (and versions) saved in the clear.
 func plainRig(t *testing.T) *rig {
 	r := newRig(t)
 	withPlainDocs(t, r)
@@ -19,9 +18,6 @@ func plainRig(t *testing.T) *rig {
 	return r
 }
 
-// everyFailure runs op on a fresh rig made by setup, failing the nth write of the storage, for
-// each n until op gets through (it then wrote fewer than n times). check sees the rig after each
-// failure, with what the storage held before. Returns how many failures were tried.
 func everyFailure(t *testing.T, setup func(t *testing.T) *rig, op func(r *rig) error, check func(t *testing.T, r *rig, before map[string]string, cfgBefore Config)) int {
 	t.Helper()
 	tried := 0
@@ -61,7 +57,6 @@ func TestEnableFailsAtEveryStepAndLeavesTheStoreAsItWas(t *testing.T) {
 			if r.st.Enabled() || r.st.Interrupted() || len(r.saved.Owners) != 0 || r.saved.Pending != nil {
 				t.Errorf("not as it was: enabled %v interrupted %v saved %+v", r.st.Enabled(), r.st.Interrupted(), r.saved)
 			}
-			// Nothing is half on: the clear documents still read, and a retry goes through.
 			if !strings.Contains(r.stored(t), "text of alpha") {
 				t.Error("the clear documents are not as they were")
 			}
@@ -78,8 +73,6 @@ func TestEnableFailsAtEveryStepAndLeavesTheStoreAsItWas(t *testing.T) {
 	}
 }
 
-// The journal comes first: if it cannot be written nothing has been touched, and if the commit
-// cannot be written the files are put back.
 func TestEnableFailsWhenTheKeyListCannotBeKept(t *testing.T) {
 	ctx := context.Background()
 	for _, failAt := range []int{1, 2} {
@@ -105,7 +98,6 @@ func TestEnableFailsWhenTheKeyListCannotBeKept(t *testing.T) {
 	}
 }
 
-// A store that says "written" and keeps something else is caught by the read-back.
 func TestAStoreThatLiesAboutAWriteIsCaught(t *testing.T) {
 	ctx := context.Background()
 	for _, n := range []int{1, 3, 5} {
@@ -124,10 +116,6 @@ func TestAStoreThatLiesAboutAWriteIsCaught(t *testing.T) {
 	}
 }
 
-// The browser's quota is the likely failure: with room to spare for what age adds the change goes
-// through; when the storage is nearly full a store that knows its capacity refuses before it
-// writes anything (not even the journal), and one that does not know finds out when a write fails
-// and puts everything back.
 func TestQuotaIsCheckedBeforeAnythingIsWritten(t *testing.T) {
 	ctx := context.Background()
 	r := plainRig(t)
@@ -144,7 +132,6 @@ func TestQuotaIsCheckedBeforeAnythingIsWritten(t *testing.T) {
 		t.Errorf("the check came late: %d journal writes, %d file writes", r.persist, r.raw.writes)
 	}
 	sameSnapshot(t, "after the refusal", r.snapshot(t), before)
-	// Plenty of room: it goes through.
 	r.st.Capacity = int64(used + 100<<10)
 	rk2, _ := recovery(t)
 	if err := r.st.Enable(ctx, Options{}, passkey(t, r), rk2); err != nil {
@@ -169,8 +156,6 @@ func TestQuotaFailureMidWayPutsEverythingBack(t *testing.T) {
 	}
 }
 
-// crash makes a failure that also stops the rollback (every write from the nth on fails, and so
-// does keeping the key list after the journal): all the store can do is leave the journal.
 func (r *rig) crashAt(n int) {
 	r.raw.failAt, r.raw.failFrom = n, true
 	r.failPersist = func(p int) error {
@@ -196,7 +181,6 @@ func TestACrashDuringEnableIsFinishedOrUndoneOnTheNextLoad(t *testing.T) {
 			if !r.st.Interrupted() {
 				t.Fatal("the store does not know it is interrupted")
 			}
-			// The next load: the journal is in the config; the storage is a mix.
 			r.raw.heal()
 			r.failPersist = nil
 			r.open(t, r.saved)
@@ -217,8 +201,6 @@ func TestACrashDuringEnableIsFinishedOrUndoneOnTheNextLoad(t *testing.T) {
 			if enc == 0 || plain == 0 {
 				t.Fatalf("the crash left %d encrypted and %d clear files: not a mix", enc, plain)
 			}
-			// Until it is settled: reads work (the clear ones as they are), writes are refused, and
-			// nothing can be made confidential.
 			if err := r.st.Adapter().Save(ctx, "00000000-0000-4000-8000-000000000001.open", []byte("x")); !errors.Is(err, ErrInterrupted) {
 				t.Errorf("a write while interrupted: %v", err)
 			}
@@ -266,9 +248,6 @@ func TestACrashDuringEnableIsFinishedOrUndoneOnTheNextLoad(t *testing.T) {
 	}
 }
 
-// Sealing files that are still in the clear needs no private key, but once some file is encrypted a
-// seal-less journal (nobody could sign it: SSH keys only) is finished only by a key that opens every
-// encrypted file, so it was sealed to it: an SSH-only enable cut short is finished with the SSH key.
 func TestAnInterruptedSSHOnlyEnableFinishesWithTheSSHKey(t *testing.T) {
 	ctx := context.Background()
 	r := plainRig(t)
@@ -284,7 +263,6 @@ func TestAnInterruptedSSHOnlyEnableFinishesWithTheSSHKey(t *testing.T) {
 	r.raw.heal()
 	r.failPersist = nil
 	r.open(t, r.saved)
-	// Some files are encrypted already: without the key nothing vouches for the journal.
 	if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
 		t.Fatalf("finishing without a key: %v", err)
 	}
@@ -309,7 +287,6 @@ func TestAnInterruptedSSHOnlyEnableFinishesWithTheSSHKey(t *testing.T) {
 	}
 }
 
-// A seal-less enable journal over files that are all still in the clear is finished without a key.
 func TestAnSSHOnlyEnableThatConvertedNothingFinishesWithoutAKey(t *testing.T) {
 	ctx := context.Background()
 	r := plainRig(t)
@@ -331,8 +308,6 @@ func TestAnSSHOnlyEnableThatConvertedNothingFinishesWithoutAKey(t *testing.T) {
 	}
 }
 
-// A journal that a store writer made up is not finished: it must carry the signature of one of the
-// store's own keys.
 func TestAForgedJournalIsNotFinished(t *testing.T) {
 	ctx := context.Background()
 	r, _ := encryptedRig(t)
@@ -344,7 +319,6 @@ func TestAForgedJournalIsNotFinished(t *testing.T) {
 	if err := r.st.Recover(ctx, true); !errors.Is(err, ErrConfigChanged) {
 		t.Fatalf("an unsigned journal: %v", err)
 	}
-	// Signed by a key that is not an owner: no better.
 	cfg.Pending.Seals = []Seal{makeSeal(attackerKey.Unlock.Signer, cfg.Pending.To)}
 	r.open(t, cfg)
 	r.unlockPasskey(t)

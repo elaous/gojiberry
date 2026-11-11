@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The people-and-keys page is under the accessibility gate.
 func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()

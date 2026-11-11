@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// A name record whose offset+length passes 65535 must be skipped, not
-// wrapped around by uint16 arithmetic into a slice-bounds panic.
 func TestParseNameTableOffsetOverflow(t *testing.T) {
 	const recSize = 12
 	storage := make([]byte, 70000)

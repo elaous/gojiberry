@@ -17,11 +17,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// ---- recordings kept between visits ----
-
-// speechKeyFor is the key the Speech tab's kept data is sealed under, with the vault, or why there is none. With an
-// encrypted store it is the unlocked owner key's (so a locked store keeps and reads nothing); without one, the
-// per-device key the browser holds non-extractable (see speechkeep.go).
 func (u *ui) speechKeyFor() ([]byte, sealedVault, string) {
 	var secret []byte
 	if e := u.enc; e != nil && (e.broken != nil || e.store.Enabled()) {
@@ -47,7 +42,6 @@ func (u *ui) speechKeyFor() ([]byte, sealedVault, string) {
 	return key, idbVault{}, ""
 }
 
-// loadKept reads what was kept, once a visit, when the person asked for that.
 func (s *speechUI) loadKept() {
 	if !s.keep || s.loaded || s.key == nil {
 		return
@@ -72,7 +66,6 @@ func (s *speechUI) loadKept() {
 	}()
 }
 
-// persist brings the kept copy in step with the recordings and the corrections (when the person asked for it).
 func (s *speechUI) persist() {
 	if !s.keep || s.key == nil {
 		return
@@ -93,7 +86,6 @@ func (s *speechUI) persist() {
 	}()
 }
 
-// setKeep turns keeping on or off. Turning it on needs a key first; turning it off removes what was kept.
 func (s *speechUI) setKeep(on bool) {
 	if s.key == nil {
 		return
@@ -128,10 +120,6 @@ func (s *speechUI) keepNode() xango.Node {
 		xango.El("p", []xango.Attr{xango.A("style", "font-size:12px;margin:2px 0")}, xango.Text(T("speech.keepHint", "Off by default. They are sealed with a key only this browser holds (or your encrypted store's key), kept nowhere else, and removed when you turn this off or delete them."))))
 }
 
-// ---- learning from corrections ----
-
-// dictationAftermath is what follows a dictation: earlier corrections that apply to it, each with a button to use it,
-// and the button that learns from the person's own correction of it (the text they selected).
 func (s *speechUI) dictationAftermath() xango.Node {
 	if s.last.text == "" {
 		return xango.Frag(s.correctionsNode())
@@ -169,7 +157,6 @@ func (s *speechUI) correctionsNode() xango.Node {
 		}, s.corr.Len() == 0))
 }
 
-// applyFix puts an earlier correction into the document where the dictation is, if the words are still there.
 func (s *speechUI) applyFix(sg speechcoach.Suggestion) {
 	l := &s.last
 	if s.host.Slice == nil || s.host.Replace == nil || s.host.Slice(l.from+sg.Start, l.from+sg.End) != sg.Heard {
@@ -184,7 +171,6 @@ func (s *speechUI) applyFix(sg speechcoach.Suggestion) {
 	s.render()
 }
 
-// learn compares the dictation with the words the person selected in the document and remembers what they changed.
 func (s *speechUI) learn() {
 	sel := ""
 	if s.host.Selected != nil {
@@ -206,20 +192,12 @@ func (s *speechUI) learn() {
 	s.render()
 }
 
-// ---- contributing to research ----
-
-// researchState is the optional contribution to a research endpoint (speechcoach.Contribution): nothing is
-// sent unless the person typed an address, was shown the exact package, and confirmed that package in this
-// sitting.
 type researchState struct {
 	endpoint string
 	plan     *speechcoach.Plan
 	consent  speechcoach.Contribution
 }
 
-// noCredentials sends a request with the browser's fetch and nothing of the person's: no cookies or sign-in
-// (credentials "omit"), no referrer, and no following a redirect to another address. The research server
-// learns only the package and the random token.
 type noCredentials struct{}
 
 func (noCredentials) Do(r *http.Request) (resp *http.Response, err error) {

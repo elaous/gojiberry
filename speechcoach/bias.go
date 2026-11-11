@@ -6,11 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// Vocabulary is the person's own list of words and short phrases they say often (names, places, terms,
-// the way they greet someone). It biases a recogniser toward those spellings by being sent as its initial
-// prompt (whisper.cpp's --prompt, voice/listen.Options.Prompt); nothing is trained. A prompt is a hint,
-// not a guarantee: it helps with names and rare words and does not teach a recogniser a new way of
-// speaking.
 type Vocabulary struct {
 	terms []string
 }
@@ -23,8 +18,6 @@ const (
 // Terms lists the entries, oldest first.
 func (v *Vocabulary) Terms() []string { return append([]string(nil), v.terms...) }
 
-// Add keeps a term (trimmed, control characters dropped, no duplicates ignoring case). It reports whether
-// the list changed; a term that is empty or too long, or a full list, is refused.
 func (v *Vocabulary) Add(term string) bool {
 	term = strings.Join(strings.Fields(cleanLine(term)), " ")
 	if term == "" || utf8.RuneCountInString(term) > MaxTermLen || len(v.terms) >= MaxTerms {
@@ -39,7 +32,6 @@ func (v *Vocabulary) Add(term string) bool {
 	return true
 }
 
-// Remove deletes a term (ignoring case); it reports whether there was one.
 func (v *Vocabulary) Remove(term string) bool {
 	for i, t := range v.terms {
 		if strings.EqualFold(t, strings.TrimSpace(term)) {
@@ -50,10 +42,6 @@ func (v *Vocabulary) Remove(term string) bool {
 	return false
 }
 
-// Prompt builds the initial prompt: the terms, then the words from the correction memory, separated by
-// commas, within maxBytes (a whole term is never cut; ones that do not fit are left out). The newest
-// terms are chosen first when space runs out, then the correction words by how often they were chosen;
-// the text is written oldest to newest.
 func (v *Vocabulary) Prompt(c *Corrections, maxBytes int) string {
 	var all []string
 	for i := len(v.terms) - 1; i >= 0; i-- {
@@ -90,7 +78,6 @@ func (v *Vocabulary) Prompt(c *Corrections, maxBytes int) string {
 // Marshal saves the list.
 func (v *Vocabulary) Marshal() ([]byte, error) { return json.Marshal(v.terms) }
 
-// UnmarshalVocabulary reads what Marshal wrote, keeping only the terms Add would take.
 func UnmarshalVocabulary(b []byte) (*Vocabulary, error) {
 	var ts []string
 	if err := json.Unmarshal(b, &ts); err != nil {

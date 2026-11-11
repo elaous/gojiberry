@@ -14,10 +14,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A comment names people by handle. An address of someone with access is written down as their @handle, so the
-// address is not in the document; an address of someone without access sends the author back to the question
-// (comment) or stays in the draft with the reason (reply), and nothing with it is saved; once that person has
-// access, the same address works.
 func TestMentionsNeverWriteDownAnAddressWithNoAccess(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -41,7 +37,6 @@ func TestMentionsNeverWriteDownAnAddressWithNoAccess(t *testing.T) {
 	body := d.Text(".gj-comment")
 	d.OK(strings.Contains(body, "cc @you please") && !strings.Contains(body, "eve@"), "the comment holds the handle and no address: "+body)
 
-	// a reply with an address of someone with no access stays a draft, with the reason beside it
 	d.Fill(".gj-comment-input", "and eve@example.org too")
 	d.Click(".gj-comment-send")
 	d.WaitSelector(".gj-comment-note")
@@ -49,7 +44,6 @@ func TestMentionsNeverWriteDownAnAddressWithNoAccess(t *testing.T) {
 	d.OK(d.Count(".gj-comment-reply") == 0 && d.Value(".gj-comment-input") == "and eve@example.org too", "no reply was saved and the draft is kept")
 	d.OK(!strings.Contains(d.Str(`document.getElementById('a11y-text').textContent`), "eve@"), "the address is not in the reading copy either")
 
-	// once she has access, the same words work and become her handle
 	d.Click(`button[data-tab="people"]`)
 	d.Fill(".gj-people-invite-id", "eve@example.org")
 	d.WaitFor("the invite button to enable", `!document.querySelector('.gj-people-invite').disabled`)
@@ -65,8 +59,6 @@ func TestMentionsNeverWriteDownAnAddressWithNoAccess(t *testing.T) {
 	d.NoErrors()
 }
 
-// Two people suggest changes at the same place from two real browsers on one shared document: both see both
-// suggestions, the texts agree, and when one accepts a suggestion the other's list follows, down to none.
 func TestSuggestionsFromTwoBrowsersConverge(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -112,14 +104,12 @@ func TestSuggestionsFromTwoBrowsersConverge(t *testing.T) {
 		d.OK(strings.Contains(all, "RED") && strings.Contains(all, "BLUE") && strings.Contains(all, "Ana") && strings.Contains(all, "Bo"), "each list names both people and both changes: "+all)
 	}
 
-	// Ana accepts the first one in her list; Bo's list follows, with the same one left
 	left := func(d *e2etest.Tab) string { return d.Text(".gj-proposal-text") }
 	a.Click(".gj-proposal:first-child .gj-proposal-accept")
 	a.WaitFor("one is left for Ana", `document.querySelectorAll('.gj-proposal').length === 1`)
 	b.WaitFor("one is left for Bo", `document.querySelectorAll('.gj-proposal').length === 1`)
 	b.OK(left(a) == left(b), "both lists show the same suggestion: "+left(a)+" / "+left(b))
 
-	// Bo rejects what is left; neither list has anything, and the text is the original plus the accepted words
 	b.Click(".gj-proposal-reject")
 	a.WaitFor("none left for Ana", `!document.querySelector('.gj-proposal')`)
 	b.WaitFor("none left for Bo", `!document.querySelector('.gj-proposal')`)
@@ -130,8 +120,6 @@ func TestSuggestionsFromTwoBrowsersConverge(t *testing.T) {
 	b.NoErrors()
 }
 
-// Bo is told when Ana mentions him in a comment: the announcer says so, the Comments tab lists it until he marks it
-// as read, and Ana, who wrote it, has nothing to be told.
 func TestAMentionedPersonIsToldAndCanMarkItRead(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))

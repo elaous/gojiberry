@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Reads of the log have budgets of their own (dir-log-ip, dir-log-all-N), apart from lookups' (dir-lookup-ip,
-// dir-lookup-all-N), so polling the log never uses up lookups and the reverse.
 func TestLogReadsAndLookupsHaveSeparateSharedBudgets(t *testing.T) {
 	mk := func(spent string) *dirEnv {
 		return newDirEnvWith(t, nil, func(s *docstore.Server) {
@@ -23,7 +21,6 @@ func TestLogReadsAndLookupsHaveSeparateSharedBudgets(t *testing.T) {
 	}
 	user := auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true}
 
-	// The log's shared budgets spent: lookups still work, and a second log read is refused.
 	e := mk("dir-log")
 	tok := e.token(user)
 	if rec := e.do("GET", "/directory/log", tok, ""); rec.Code != 200 {
@@ -38,7 +35,6 @@ func TestLogReadsAndLookupsHaveSeparateSharedBudgets(t *testing.T) {
 		}
 	}
 
-	// The lookups' shared budgets spent: the log still reads.
 	e = mk("dir-lookup")
 	tok = e.token(user)
 	if code, _ := e.lookup(tok, "bo@x.io"); code != 200 {

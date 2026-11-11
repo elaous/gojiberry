@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// painter measures text as 8px per rune and draws nothing.
 type painter struct{}
 
 func (painter) SetGlobalAlpha(float64)      {}
@@ -41,7 +40,6 @@ func (painter) Stroke()                           {}
 func (painter) FillText(string, float64, float64) {}
 func (painter) MeasureTextWidth(t string) float64 { return 8 * float64(utf8.RuneCountInString(t)) }
 
-// newFlow is an editable flow with the caret in its text.
 func newFlow(items ...canvas.Item) *canvas.TextFlow {
 	f := canvas.NewTextFlow("", 10, 30, 160, 200)
 	f.Items = items
@@ -52,8 +50,6 @@ func newFlow(items ...canvas.Item) *canvas.TextFlow {
 	return f
 }
 
-// normalized renders a flow's content so that equal documents compare equal
-// whatever the fragmentation into runs.
 func normalized(f *canvas.TextFlow) string {
 	var items []canvas.Item
 	for _, it := range f.ContentItems() {
@@ -80,7 +76,6 @@ func exchange(a, b *Bridge) {
 	b.Apply(ao...)
 }
 
-// pair returns two bridged flows holding the same document.
 func pair(t *testing.T, items ...canvas.Item) (*Bridge, *Bridge) {
 	t.Helper()
 	a, err := New("a", newFlow(items...))
@@ -146,7 +141,6 @@ func TestTypingAndFormattingSync(t *testing.T) {
 	if text(b.Flow) != "hello, world" {
 		t.Fatalf("typing syncs: %q", text(b.Flow))
 	}
-	// B selects "world" and makes it bold; A sees it.
 	b.Flow.SetCursors([]canvas.Cursor{{Anchor: 7, Caret: 12}})
 	b.Flow.ApplyFormat(func(f *canvas.Format) { f.FontWeight = 700 })
 	a.Apply(b.Drain()...)
@@ -159,7 +153,6 @@ func TestTypingAndFormattingSync(t *testing.T) {
 	if !found || normalized(a.Flow) != normalized(b.Flow) {
 		t.Fatalf("formatting syncs: %s", normalized(a.Flow))
 	}
-	// And backspacing.
 	click(a.Flow, 6)
 	a.Flow.HandleKey("Backspace", false)
 	b.Apply(a.Drain()...)
@@ -194,7 +187,6 @@ func TestCursorsStayBesideTheirCharacters(t *testing.T) {
 	if len(cs) != 2 || cs[0] != (canvas.Cursor{Anchor: 9, Caret: 14}) || cs[1] != canvas.At(5) {
 		t.Fatalf("both cursors moved with their text: %v", cs)
 	}
-	// A deleted character's neighbour keeps the caret near where it was.
 	click(a.Flow, 8)
 	a.Flow.HandleKey("Backspace", false)
 	b.Apply(a.Drain()...)
@@ -223,7 +215,6 @@ func TestCommentsRepliesAndStylesTravel(t *testing.T) {
 	if len(b.Flow.Styles) != 2 {
 		t.Fatalf("styles: %d", len(b.Flow.Styles))
 	}
-	// Two replies written at the same time both survive.
 	a.Flow.Comments.Update(c.ID, func(c *canvas.Comment) {
 		c.Replies = append(c.Replies, canvas.Reply{Author: "ana", Text: "one", Created: time0(1)})
 	})
@@ -239,7 +230,6 @@ func TestCommentsRepliesAndStylesTravel(t *testing.T) {
 			t.Fatalf("both replies survive, in time order: %+v", cm.Replies)
 		}
 	}
-	// Resolving and deleting travel; the set stays the same object.
 	set := b.Flow.Comments
 	a.Flow.Comments.Update(c.ID, func(c *canvas.Comment) { c.Resolved = true })
 	a.Sync()
@@ -268,7 +258,6 @@ func TestUnsupportedContentIsRefused(t *testing.T) {
 	if _, err := New("a", reserved); err == nil {
 		t.Fatal("reserved characters")
 	}
-	// A later unshareable edit is reported and does not break sharing.
 	a, _ := pair(t, canvas.Chars{Text: "fine"})
 	a.Flow.Items = append(a.Flow.ContentItems(), canvas.Inline{Object: oddObject{}})
 	a.Flow.Touch()
@@ -326,12 +315,10 @@ func TestDiffRunes(t *testing.T) {
 	if diffRunes([]rune("same"), []rune("same")) != nil {
 		t.Fatal("no edits for equal text")
 	}
-	// Two far-apart edits stay two edits.
 	es := diffRunes([]rune("aXbbbbbbbbbbbbbbbbbbbbYc"), []rune("abbbbbbbbbbbbbbbbbbbbc"))
 	if len(es) != 2 {
 		t.Fatalf("%+v", es)
 	}
-	// Huge middles fall back to one replacement.
 	big1, big2 := []rune(strings.Repeat("a", 3000)), []rune(strings.Repeat("b", 3000))
 	if es := diffRunes(big1, big2); len(es) != 1 || es[0].del != 3000 {
 		t.Fatalf("%d edits", len(es))
@@ -353,7 +340,6 @@ func TestAtomsRoundTripFormats(t *testing.T) {
 	if growsAtEnd("link") || growsAtEnd("comment") || !growsAtEnd("fontWeight") {
 		t.Fatal("grow rules")
 	}
-	// A control atom without a payload is dropped; a plain object rune is text.
 	items := itemsFromAtoms([]atom{{r: ctlPara, attrs: map[string]string{}}, {r: objRune, attrs: map[string]string{}}, {r: 'x', attrs: map[string]string{}}})
 	if len(items) != 1 || items[0].(canvas.Chars).Text != "￼x" {
 		t.Fatalf("%#v", items)
@@ -367,8 +353,6 @@ func TestAtomsRoundTripFormats(t *testing.T) {
 	}
 }
 
-// Two flows edited at random, synchronised at random moments, end up with
-// the same document -- and the replica always agrees with its own flow.
 func TestRandomEditingConverges(t *testing.T) {
 	for trial := 0; trial < 100; trial++ {
 		rng := rand.New(rand.NewSource(int64(trial)))
@@ -439,7 +423,6 @@ func TestRandomEditingConverges(t *testing.T) {
 		if normalized(a.Flow) != normalized(b.Flow) {
 			t.Fatalf("trial %d diverged:\n a %s\n b %s", trial, normalized(a.Flow), normalized(b.Flow))
 		}
-		// The replica agrees with its flow.
 		for i, br := range bridges {
 			want, _ := atomsFromItems(br.Flow.ContentItems())
 			have := br.read()
@@ -459,7 +442,6 @@ func time0(n int64) time.Time { return time.Unix(0, n) }
 
 func TestSlideEditFollowsTheCaret(t *testing.T) {
 	old, cur := []rune("hello"), []rune("helo")
-	// Deleting one of the two l's: the diff picks the second; the caret says the first.
 	e := diffRunes(old, cur)[0]
 	if e.at != 3 {
 		t.Fatalf("the diff alone deletes the second l: %+v", e)
@@ -470,7 +452,6 @@ func TestSlideEditFollowsTheCaret(t *testing.T) {
 	if got := slideEdit(old, cur, e, 0); got.at != e.at {
 		t.Fatalf("a caret outside the run changes nothing: %+v", got)
 	}
-	// Typing the second of two equal letters.
 	old2, cur2 := []rune("helo"), []rune("hello")
 	e2 := diffRunes(old2, cur2)[0]
 	got := slideEdit(old2, cur2, e2, 4) // caret after the typed l (offset 4 in "hell|o")
@@ -480,15 +461,12 @@ func TestSlideEditFollowsTheCaret(t *testing.T) {
 	if got := slideEdit(old2, cur2, e2, 99); got.at != e2.at {
 		t.Fatalf("%+v", got)
 	}
-	// A replacement is left alone.
 	rep := edit{at: 1, del: 1, ins: []rune("x")}
 	if got := slideEdit(old, cur, rep, 1); got.at != 1 || string(got.ins) != "x" {
 		t.Fatalf("%+v", got)
 	}
 }
 
-// Two clients that open an empty document together and start from the same
-// content must end with one copy of it, not two.
 func TestSimultaneousSeedingMakesOneCopy(t *testing.T) {
 	start := func() *canvas.TextFlow {
 		return newFlow(canvas.Chars{Text: "Starting text"}, canvas.Break{}, canvas.Chars{Text: "second line"})
@@ -513,8 +491,6 @@ type urlSource struct{ url string }
 func (urlSource) Size() (w, h float64) { return 40, 30 }
 func (u urlSource) URL() string        { return u.url }
 
-// An inline image is shared by where it came from; the other side shows it as
-// a placeholder (or the real image if docfile.ImageLoader can supply it).
 func TestInlineImageIsShared(t *testing.T) {
 	img := canvas.NewImage(urlSource{"https://img.example/cat.png"}, 0, 0)
 	img.Placement, img.W, img.H = canvas.PlaceInline, 80, 60
@@ -532,7 +508,6 @@ func TestInlineImageIsShared(t *testing.T) {
 	if found == nil || found.URL != "https://img.example/cat.png" || found.Width != 80 {
 		t.Fatalf("the image did not arrive: %+v", items)
 	}
-	// An image with no URL cannot be shared: refuse it, as before.
 	bare := canvas.NewImage(fakeSize{}, 0, 0)
 	bare.Placement = canvas.PlaceInline
 	if _, err := New("c", newFlow(canvas.Inline{Object: bare})); err == nil {
@@ -544,7 +519,6 @@ type fakeSize struct{}
 
 func (fakeSize) Size() (w, h float64) { return 10, 10 }
 
-// Different starting content from two clients is kept whole, not interleaved.
 func TestSimultaneousSeedingOfDifferentContentKeepsBoth(t *testing.T) {
 	a, _ := Join("a", newFlow(canvas.Chars{Text: "AAAAAAAAAAAA"}))
 	b, _ := Join("b", newFlow(canvas.Chars{Text: "bbbb"}))
@@ -564,15 +538,11 @@ func TestSimultaneousSeedingOfDifferentContentKeepsBoth(t *testing.T) {
 	}
 }
 
-// Two people suggesting changes at the same time, in different places and in the same place: the copies
-// converge, every proposal is there with its own author, and accepting or rejecting one on one side
-// settles it on the other.
 func TestSuggestionsFromTwoPeopleConverge(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "the brown fox runs fast"})
 	a.Flow.Author, b.Flow.Author = "ana", "bo"
 	a.Flow.Suggesting, b.Flow.Suggesting = true, true
 
-	// ana replaces "brown" with "red"; bo, meanwhile, strikes "fast" and, in the same place as ana, types "big "
 	a.Flow.SetCursors([]canvas.Cursor{{Anchor: 4, Caret: 9}})
 	a.Flow.InsertText("red")
 	b.Flow.SetCursors([]canvas.Cursor{{Anchor: 19, Caret: 23}})
@@ -608,7 +578,6 @@ func TestSuggestionsFromTwoPeopleConverge(t *testing.T) {
 		t.Fatalf("both see the same number: %d vs %d", len(a.Flow.Proposals()), len(b.Flow.Proposals()))
 	}
 
-	// ana accepts bo's removal; bo rejects ana's replacement: both settle on both sides
 	a.Flow.Suggesting, b.Flow.Suggesting = false, false
 	if !a.Flow.AcceptProposal(struck.ID) {
 		t.Fatal("accept")

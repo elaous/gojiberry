@@ -1,13 +1,3 @@
-// Command pbgolden regenerates the golden files of docfile/testdata with the protobuf library, so that the codecs of
-// package docfile are checked against an encoder they did not write. Usage, from the repository root:
-//
-//	go test ./docfile -run TestDumpGolden -count=1 -dump=/tmp/pb   # writes /tmp/pb/rich.txt and /tmp/pb/schema.proto
-//	cd tools && go run ./pbgolden /tmp/pb/schema.proto /tmp/pb/rich.txt ../docfile/testdata/rich.pb ../docfile/testdata/rich.pbtxt
-//	cp /tmp/pb/schema.proto docfile/testdata/schema.proto
-//
-// It reads the proto text our own codec wrote for fillDoc(), loads it into a message built from the schema, and writes
-// that message again in binary and in text. Run on the old schema and the old rich.pbtxt it gives the committed files
-// byte for byte, which is the check that the pipeline itself is right.
 package main
 
 import (

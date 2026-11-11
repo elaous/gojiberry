@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The first thing the keyboard reaches is a pair of skip links, past the title, menus and toolbar: one to the
-// document, one to the side panel. They are out of sight until focused, and choosing one moves the focus.
 func TestSkipLinksAreTheFirstStopAndMoveTheFocus(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	text := func() string { return d.Str(`(document.activeElement.textContent || '').trim()`) }

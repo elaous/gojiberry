@@ -11,8 +11,6 @@ import (
 
 func seedOf(b byte) []byte { return []byte(strings.Repeat(string([]byte{b}), 32)) }
 
-// A directory key can be removed from the retired list without the older log entries of an address
-// becoming unmatchable: the pseudonyms under it were recorded (signed) while it was listed.
 func TestRemovedDirectoryKeysPseudonymsAreKept(t *testing.T) {
 	ctx := context.Background()
 	store, clk := docstore.NewMemoryAdapter(), newTestClock()
@@ -23,7 +21,6 @@ func TestRemovedDirectoryKeysPseudonymsAreKept(t *testing.T) {
 	e.mustEnroll(priv) // an owner-state entry under key 1's pseudonym
 	p1 := d1.LogAddressFor("ana@x.io")
 
-	// rotation 1: key 2 current, key 1 listed. Startup records the alias.
 	d2 := &AdapterDirectory{Store: store, Signer: mustSigner(t, seedOf(2), seedOf(1)), Now: clk.Now}
 	if _, err := d2.Startup(ctx); err != nil {
 		t.Fatal(err)
@@ -36,8 +33,6 @@ func TestRemovedDirectoryKeysPseudonymsAreKept(t *testing.T) {
 		t.Fatalf("no alias record: %v", err)
 	}
 
-	// key 1 removed. Without start-up the new process does not know the alias, and the old
-	// entries of the address are unmapped; after Startup they are matched again.
 	cold := &AdapterDirectory{Store: store, Signer: mustSigner(t, seedOf(2)), Now: clk.Now}
 	if un, err := cold.UnmappedAddresses(ctx); err != nil || un.Count != 1 {
 		t.Fatalf("without the alias loaded: %+v %v", un, err)
@@ -52,13 +47,11 @@ func TestRemovedDirectoryKeysPseudonymsAreKept(t *testing.T) {
 	if un, err := d3.UnmappedAddresses(ctx); err != nil || un.Count != 0 {
 		t.Fatalf("with the alias: %+v %v", un, err)
 	}
-	// the owner is told the older pseudonym, so can still read the older entries
 	la, err := dirService{d3}.LogAddress(ctx, ana)
 	if err != nil || la.Address != p2 || !slices.Equal(la.Previous, []string{p1}) {
 		t.Fatalf("log address: %+v %v", la, err)
 	}
 
-	// rotation 2: key 3 current, key 2 listed, key 1 already gone: the alias is carried along
 	d4 := &AdapterDirectory{Store: store, Signer: mustSigner(t, seedOf(3), seedOf(2)), Now: clk.Now}
 	if _, err := d4.Startup(ctx); err != nil {
 		t.Fatal(err)
@@ -77,7 +70,6 @@ func TestRemovedDirectoryKeysPseudonymsAreKept(t *testing.T) {
 	}
 }
 
-// An alias record somebody with store access wrote, or one altered, is not believed.
 func TestAnAlteredAliasRecordIsIgnored(t *testing.T) {
 	ctx := context.Background()
 	store, clk := docstore.NewMemoryAdapter(), newTestClock()

@@ -1,21 +1,3 @@
-// Package htmlimport reads an HTML page into a docfile.Document.
-//
-// It reads what a document needs and leaves the page out:
-//
-//   - headings (h1 to h6), paragraphs, block quotes, preformatted text and code, horizontal rules
-//   - bullet and numbered lists, with nesting
-//   - strong, em, u, s and del, sup and sub, mark, code, and the colour and background colour of an element's
-//     style attribute
-//   - links (http, https, mailto and in-page only; a javascript: or data: link is dropped, the text stays)
-//   - pictures whose source is a data: URL, with their alternative text (a picture on a server is not
-//     fetched: an importer must not make a request for a page's author)
-//   - tables (the text of each cell, with column spans) and the language of an element (lang)
-//   - the title
-//
-// Not read: scripts, styles, forms and controls, frames, embedded objects, SVG and canvas, audio and video,
-// and layout (columns, floats, positions, margins). Inspect counts these, so a person can be told what an
-// import leaves out. The parser is the HTML5 one of golang.org/x/net/html, so broken markup reads the way a
-// browser reads it; the input is limited in size and depth.
 package htmlimport
 
 import (
@@ -56,7 +38,7 @@ type Skipped struct {
 	Graphics int // svg and canvas
 	Images   int // pictures that are not data: URLs (not fetched)
 	Links    int // links whose address is not http, https, mailto or in-page
-	Layout   int // elements with a position, float, column or margin of their own
+	Layout   int
 }
 
 // Total is the number of skipped elements.
@@ -103,7 +85,6 @@ func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	if body == nil {
 		body = root
 	}
-	// vertical text: the page (the html or the body element) is set in a vertical writing mode
 	for _, n := range []*html.Node{find(root, atom.Html), body} {
 		if n != nil && verticalStyle(attr(n, "style")) {
 			l := r.doc.PageLayout()
@@ -117,8 +98,6 @@ func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	return r.doc, r.skipped, nil
 }
 
-// verticalStyle says whether an inline style sets a vertical writing mode (vertical-rl, vertical-lr, or the old
-// tb-rl and tb-lr).
 func verticalStyle(style string) bool {
 	for _, decl := range strings.Split(style, ";") {
 		k, v, ok := strings.Cut(decl, ":")
@@ -181,7 +160,6 @@ func (r *reader) text(s string, f docfile.Format) {
 	}
 }
 
-// endLine ends the paragraph being written, once.
 func (r *reader) endLine() {
 	if c := r.doc.Content; len(c) > 0 {
 		if l := c[len(c)-1]; l.Chars != nil && strings.HasSuffix(l.Chars.Text, "\n") {
@@ -201,7 +179,6 @@ func isBlock(a atom.Atom) bool {
 	return false
 }
 
-// blocks reads the children of n, which are blocks and inline runs mixed.
 func (r *reader) blocks(n *html.Node, f docfile.Format, depth, level int) {
 	if depth > maxDepth {
 		return
@@ -223,7 +200,6 @@ func (r *reader) inlineText(s string, f docfile.Format) {
 	}
 	s = collapse(s)
 	if c := r.doc.Content; s == " " || strings.HasPrefix(s, " ") {
-		// no space at the start of a line
 		if len(c) == 0 || c[len(c)-1].Chars != nil && strings.HasSuffix(c[len(c)-1].Chars.Text, "\n") || c[len(c)-1].Para != nil {
 			s = strings.TrimLeft(s, " ")
 		}
@@ -246,7 +222,7 @@ func (r *reader) element(n *html.Node, f docfile.Format, depth, level int) {
 		}
 		return
 	case atom.Head:
-		for c := n.FirstChild; c != nil; c = c.NextSibling { // the scripts and styles of the page are counted, not read
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.ElementNode {
 				r.element(c, f, depth+1, level)
 			}
@@ -357,7 +333,6 @@ func (r *reader) element(n *html.Node, f docfile.Format, depth, level int) {
 	r.blocks(n, f, depth, level)
 }
 
-// safeLink allows the addresses a document may carry.
 func safeLink(h string) bool {
 	if strings.HasPrefix(h, "#") {
 		return true
@@ -370,7 +345,7 @@ func safeLink(h string) bool {
 	case "http", "https", "mailto":
 		return true
 	case "":
-		return false // a relative address points at nothing once the page is gone
+		return false
 	}
 	return false
 }
@@ -389,7 +364,6 @@ func hex6(c string) string {
 	return c
 }
 
-// styled applies the colours of an element's style attribute and counts layout it leaves out.
 func (r *reader) styled(n *html.Node, f docfile.Format) docfile.Format {
 	st := attr(n, "style")
 	if st == "" {
@@ -407,7 +381,6 @@ func (r *reader) styled(n *html.Node, f docfile.Format) docfile.Format {
 	return f
 }
 
-// mediaURL allows the addresses a clip may point at: a web address or one on the same site (no scheme).
 func mediaURL(h string) bool {
 	u, err := url.Parse(strings.TrimSpace(h))
 	if err != nil {
@@ -420,7 +393,6 @@ func mediaURL(h string) bool {
 	return false
 }
 
-// dimension reads a whole number of pixels, or 0.
 func dimension(s string) float64 {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 0 || n > 20000 {
@@ -429,7 +401,6 @@ func dimension(s string) float64 {
 	return float64(n)
 }
 
-// mediaIn is the audio or video element directly inside a figure, or nil.
 func mediaIn(fig *html.Node) *html.Node {
 	for c := fig.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode && (c.DataAtom == atom.Audio || c.DataAtom == atom.Video) {
@@ -439,10 +410,6 @@ func mediaIn(fig *html.Node) *html.Node {
 	return nil
 }
 
-// media reads a clip: the player's address and size, its caption track (an inline WebVTT data: URL is kept as
-// the text of the track, a web address as the address), and, from the figure around it when there is one, the
-// title (figcaption) and the transcript (the details element). A clip with no usable address is still kept, so
-// its title and transcript are not lost.
 func (r *reader) media(n, fig *html.Node) {
 	m := &docfile.MediaItem{Kind: docfile.MediaVideo, Title: strings.TrimSpace(attr(n, "aria-label"))}
 	if n.DataAtom == atom.Audio {
@@ -540,7 +507,6 @@ func (r *reader) list(n *html.Node, f docfile.Format, depth, level int, ordered 
 			g.Lang = l
 		}
 		g = r.styled(c, g)
-		// the item's own text first, the lists inside it after
 		for k := c.FirstChild; k != nil; k = k.NextSibling {
 			if k.Type == html.ElementNode && (k.DataAtom == atom.Ul || k.DataAtom == atom.Ol) {
 				continue
@@ -565,7 +531,7 @@ type tcell struct {
 	text    string
 	colSpan int
 	rowSpan int
-	field   *docfile.FormFieldItem // a control in the cell, read as the cell's form field
+	field   *docfile.FormFieldItem
 }
 
 func (r *reader) table(tbl *html.Node) {
@@ -586,7 +552,7 @@ func (r *reader) table(tbl *html.Node) {
 						r.cells++
 						tc := tcell{text: strings.TrimSpace(collapse(text(d))), colSpan: atoi(attr(d, "colspan")), rowSpan: atoi(attr(d, "rowspan"))}
 						if tc.field = r.cellField(d); tc.field != nil {
-							tc.text = tc.field.Words() // the cell's text is the field's words, as in the editor
+							tc.text = tc.field.Words()
 						}
 						row = append(row, tc)
 					}
@@ -662,7 +628,6 @@ func atoi(s string) int {
 	return n
 }
 
-// trimEnd drops the empty lines the last block leaves.
 func (r *reader) trimEnd() {
 	c := r.doc.Content
 	for len(c) > 0 {
@@ -675,7 +640,6 @@ func (r *reader) trimEnd() {
 	r.doc.Content = c
 }
 
-// control is the input, select or textarea inside a label, nil when there is none.
 func control(n *html.Node) *html.Node {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type != html.ElementNode {
@@ -692,7 +656,6 @@ func control(n *html.Node) *html.Node {
 	return nil
 }
 
-// ownText is the text of a label without that of its control (the options of a list are not its name).
 func ownText(n, skip *html.Node) string {
 	var sb strings.Builder
 	var walk func(*html.Node)
@@ -724,15 +687,12 @@ func clip(s string) string {
 	return s
 }
 
-// formField reads an input, select or textarea as a form field of the document, with what is written in it. Passwords,
-// hidden values, files and the other kinds a document has no field for are left out and counted.
 func (r *reader) formField(c *html.Node, label string) {
 	if ff, ok := r.fieldOf(c, label); ok {
 		r.add(docfile.Item{Form: &ff})
 	}
 }
 
-// fieldOf reads the control as a field; false (counted) for one a document has no field for.
 func (r *reader) fieldOf(c *html.Node, label string) (docfile.FormFieldItem, bool) {
 	ff := docfile.FormFieldItem{
 		Name:        clip(attr(c, "name")),
@@ -784,7 +744,6 @@ func (r *reader) fieldOf(c *html.Node, label string) (docfile.FormFieldItem, boo
 	return ff, true
 }
 
-// cellField reads the first control in a table cell as the cell's field, with the label of the <label> that wraps it.
 func (r *reader) cellField(d *html.Node) *docfile.FormFieldItem {
 	c := control(d)
 	if c == nil {

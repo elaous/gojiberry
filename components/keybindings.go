@@ -10,21 +10,12 @@ import (
 
 // KeyBindingsProps configures KeyBindings.
 type KeyBindingsProps struct {
-	// Commands are the commands to list (canvas.Registry.Commands, plus
-	// any built-in ones such as bold); their Title is shown.
-	Commands []canvas.CommandInfo
-	// Keymap is what is bound now (canvas.Stage.EffectiveKeymap) and
-	// Defaults what it started as (nil to hide the "modified" marks and
-	// reset buttons).
+	Commands         []canvas.CommandInfo
 	Keymap, Defaults canvas.Keymap
 	// Query filters the list by title, feature or chord.
-	Query string
-	// Recording is the command waiting for a key press ("" for none).
-	// While it is set the row shows a capture box that takes the next
-	// chord: the box reports it with OnBind.
+	Query     string
 	Recording canvas.Command
-	// Message is a line shown above the list (a conflict warning).
-	Message string
+	Message   string
 	// Mac shows chords the Mac way.
 	Mac bool
 
@@ -36,12 +27,6 @@ type KeyBindingsProps struct {
 	OnResetAll func()
 }
 
-// KeyBindings renders the key bindings editor: every command with its
-// shortcut, a search box, and per row Change (press the new keys), Clear
-// and Reset. It is controlled: the caller owns Recording and applies
-// OnBind/OnClear/OnReset to the Stage (canvas.Stage.Rebind) and says what
-// happened in Message. A modifier-only press is ignored and Escape
-// cancels.
 func KeyBindings(props KeyBindingsProps) xango.Node {
 	cmds := append([]canvas.CommandInfo(nil), props.Commands...)
 	sort.SliceStable(cmds, func(i, j int) bool {
@@ -164,10 +149,6 @@ func KeyBindings(props KeyBindingsProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-keybindings")}, out...)
 }
 
-// ChordFromKey builds the chord string (canvas.Chord) for a key press,
-// reading letters and digits from the physical key the way the canvas
-// does. ok is false for a press of a modifier on its own, and for one
-// with no Ctrl, Cmd or Alt (the canvas only runs shortcuts that have one).
 func ChordFromKey(k xango.KeyData) (chord string, ok bool) {
 	switch k.Key {
 	case "Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "Dead":

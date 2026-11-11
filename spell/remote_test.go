@@ -26,7 +26,6 @@ func gz(t *testing.T, s string) []byte {
 	return b.Bytes()
 }
 
-// A directory of dictionaries as the operator would host them.
 func dictFS(t *testing.T) fstest.MapFS {
 	deAff := "SET UTF-8\nTRY enisrtalhdu\nCOMPOUNDFLAG Z\nCOMPOUNDMIN 3\nREP 1\nREP ae ä\nKEY qwertzuiop|asdfghjkl|yxcvbnm\n"
 	deDic := "4\nhaus/Z\ntür/Z\nfähre\nschloss\n"
@@ -112,7 +111,6 @@ func TestADictionaryIsLoadedOnceWithItsCompoundsAndSuggestions(t *testing.T) {
 	if err != nil || again != d || hits.Load() != after {
 		t.Errorf("the second load asks nobody: %v %v", err, hits.Load())
 	}
-	// Many callers at once share one load.
 	r2, hits2, _ := hosted(t)
 	var wg sync.WaitGroup
 	for range 8 {
@@ -138,7 +136,6 @@ func TestMissingAndBadNamesAreRefusedAndFailuresAreNotKept(t *testing.T) {
 			t.Errorf("%q: %v", lang, err)
 		}
 	}
-	// a server that fails once is asked again next time
 	var fail atomic.Bool
 	fail.Store(true)
 	srv := &dictserver.Server{FS: dictFS(t)}
@@ -168,7 +165,6 @@ func TestTheServerHandlesCompressionCachingAndStrangeRequests(t *testing.T) {
 		for i := 0; i+1 < len(hdr); i += 2 {
 			req.Header.Set(hdr[i], hdr[i+1])
 		}
-		// no transparent decompression: see what the server sent
 		resp, err := (&http.Client{Transport: &http.Transport{DisableCompression: true}}).Do(req)
 		if err != nil {
 			t.Fatal(err)

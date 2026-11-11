@@ -10,19 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Service serves a signed-in person's items over HTTP, under Prefix (default "/me/config"):
-//
-//	GET    /me/config          {"items":["prefs","styles"]}
-//	GET    /me/config/{name}   the item's bytes; ETag is its revision
-//	PUT    /me/config/{name}   store the body; If-Match: "<revision>" is required ("0" for a new item)
-//	DELETE /me/config/{name}   remove it; If-Match is required too
-//
-// A stale If-Match gets 412 with the current ETag, so the client can fetch, merge and send again.
-// PUT and DELETE need If-Match so that a page on another site cannot make a signed-in browser
-// change settings: sending that header cross-origin takes a CORS preflight, which the guard
-// answers. Nothing is signed in: 401, and no body says whether an item exists. Answers are
-// no-store. The server keeps the bytes it is sent: a client that wants them hidden from the operator
-// encrypts them with the owner's keys before the PUT, as it does a document. Mount it with docstore.Server.WithRoutes(prefix + "/", svc).
 type Service struct {
 	A docstore.Adapter
 	// Who names the person making the request (docstore.Server.UserKey).
@@ -133,8 +120,6 @@ func (v *Service) list(w http.ResponseWriter, r *http.Request, st *Store) {
 	_, _ = w.Write(b)
 }
 
-// fail answers an error (and reports true), or reports false for nil. The answers carry no stored
-// value and no detail of the store.
 func (v *Service) fail(w http.ResponseWriter, err error) bool {
 	switch {
 	case err == nil:
@@ -155,7 +140,6 @@ func (v *Service) fail(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// ifMatch reads the required If-Match header as a revision.
 func ifMatch(w http.ResponseWriter, r *http.Request) (int, bool) {
 	h := strings.Trim(strings.TrimSpace(r.Header.Get("If-Match")), `"`)
 	n, err := strconv.Atoi(h)

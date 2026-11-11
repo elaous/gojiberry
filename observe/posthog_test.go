@@ -90,7 +90,6 @@ func TestPostHogKeepsWhatFailedForRetryAndDropsWhatCannotPass(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "phc_k") {
 		t.Fatalf("a failure is reported without the key: %v", err)
 	}
-	// A server that is down for a moment loses nothing: the aggregate waits for the next interval and grows meanwhile.
 	if len(p.series) != 1 {
 		t.Fatalf("the failed aggregate is kept: %d series", len(p.series))
 	}
@@ -117,7 +116,6 @@ func TestPostHogKeepsWhatFailedForRetryAndDropsWhatCannotPass(t *testing.T) {
 		t.Error("what was sent is gone")
 	}
 
-	// A refusal for good (a wrong key) drops the batch and the rest, counted, and keeps nothing.
 	c.mu.Lock()
 	c.code = 401
 	c.mu.Unlock()

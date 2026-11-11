@@ -2,8 +2,6 @@ package canvas
 
 import "testing"
 
-// CaretFormat is the format the next typed text takes: that of the character before the caret, or the
-// pending format set by Ctrl+B with nothing selected.
 func TestCaretFormatIsWhatTheNextTextWouldTake(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "plain ", Format: Format{}}, Chars{Text: "bold", Format: Format{FontWeight: 700}})
 	f.SetCursors([]Cursor{At(3)})

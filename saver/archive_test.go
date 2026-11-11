@@ -72,7 +72,6 @@ func TestArchiveDrawsFoldersAsDirectories(t *testing.T) {
 		if plans != 2 {
 			t.Errorf("%s: two documents named plan: %v", tg.Name, got)
 		}
-		// The archive holds the document as saved.
 		zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 		for _, f := range zr.File {
 			if strings.HasSuffix(f.Name, "budget.json") {
@@ -100,12 +99,10 @@ func TestArchiveSkipsALockedConfidentialDocumentAndReportsIt(t *testing.T) {
 	if _, err := s.Save(ctx, "m", docfile.JSON, named("plain")); err != nil {
 		t.Fatal(err)
 	}
-	// Open: it is in the archive under its real name.
 	data, _, skipped, err := s.ArchiveReport(ctx, "m", "")
 	if err != nil || len(skipped) != 0 || len(zipNames(t, data)) != 2 {
 		t.Fatalf("%v %v %v", zipNames(t, data), skipped, err)
 	}
-	// Locked: the others come, the locked one is skipped and reported.
 	mem.locked.Store(true)
 	mem.only = secret
 	data, _, skipped, err = s.ArchiveReport(ctx, "m", "")

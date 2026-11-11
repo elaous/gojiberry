@@ -1,24 +1,3 @@
-// Package docximport reads a Word (.docx) file into a docfile.Document.
-//
-// Word 365 and Google Docs (File > Download > Microsoft Word) both produce
-// this format, so one importer serves both. It reads the OOXML directly:
-//
-//   - paragraphs, with headings (by style name), quotes, code (a monospace
-//     font or a code style), bullet and numbered lists (from numbering.xml,
-//     with their nesting level) and alignment
-//   - runs: bold, italic, underline, strike-through, super and subscript,
-//     colour, highlight, size and font
-//   - hyperlinks, tabs, line breaks and page breaks
-//   - tables (the text of each cell)
-//   - pictures (embedded, as data: URLs, with their size and alternative text)
-//   - footnotes, tracked changes (as suggestions), the document language and
-//     the language of a run
-//
-// Not read: comments, headers and footers, text boxes, charts and shapes,
-// equations, endnotes, fields, bookmarks, columns, paragraph indents and
-// spacing, and styles' own formatting (only their names and list/heading
-// roles). Inspect counts these in a file, so a person can be told what an
-// import will leave out.
 package docximport
 
 import (
@@ -39,14 +18,12 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// ErrNotDocx is returned for data that is not a Word document.
 var ErrNotDocx = errors.New("docximport: not a .docx file")
 
 const (
-	relNS     = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-	emuPerPx  = 9525
-	maxImages = 200
-	// Limits on what one file may cost to read: untrusted input.
+	relNS         = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+	emuPerPx      = 9525
+	maxImages     = 200
 	maxTotalBytes = 256 << 20 // all entries read, together
 	maxImageBytes = 64 << 20  // all pictures kept, together
 	maxDepth      = 256       // element nesting
@@ -55,11 +32,8 @@ const (
 	maxCells      = 200_000
 )
 
-// headingScales are the sizes the canvas gives heading levels 1-5.
 var headingScales = [5]float64{2, 1.6, 1.35, 1.2, 1.05}
 
-// node is a parsed XML element, with namespaces dropped from names. An
-// attribute in the relationships namespace is also kept as "r:<name>".
 type node struct {
 	name  string
 	attrs map[string]string
@@ -88,7 +62,6 @@ func (n *node) children(name string) []*node {
 	return out
 }
 
-// find returns the first descendant called name.
 func (n *node) find(name string) *node {
 	for _, k := range n.kids {
 		if k.name == name {
@@ -150,7 +123,6 @@ func parseXML(data []byte) (*node, error) {
 	return root, nil
 }
 
-// reader holds what is needed while one document is converted.
 type reader struct {
 	files   map[string]*zip.File
 	rels    map[string]string       // relationship id -> target (resolved against word/)
@@ -166,7 +138,7 @@ type reader struct {
 	imageBytes   int
 	cells        int
 	comments     map[string]bool // imported comment IDs
-	openComments []string        // the comment ranges open at this point of the body, outermost first
+	openComments []string
 	seenNotes    map[string]bool
 	pics         map[string]string // picture target -> data URL
 }
@@ -228,7 +200,6 @@ func Import(data []byte) (docfile.Document, error) {
 	}
 	if b := body.child("body"); b != nil {
 		r.blocks(b.kids)
-		// vertical text: the section's text direction runs top to bottom (tbRl, or tbRlV with the Latin text upright)
 		if sp := b.child("sectPr"); sp != nil {
 			if td := sp.child("textDirection"); td != nil && strings.HasPrefix(td.attr("val"), "tbRl") {
 				l := r.doc.PageLayout()
@@ -267,8 +238,6 @@ func (r *reader) loadStyles() {
 			r.styles[s.attr("styleId")] = strings.ToLower(name.attr("val"))
 		}
 	}
-	// The language the document's text is in unless a run says otherwise (w:lang in the default run
-	// properties): the document's language.
 	if dd := st.child("docDefaults"); dd != nil {
 		if rp := dd.child("rPrDefault"); rp != nil {
 			if rpr := rp.child("rPr"); rpr != nil {
@@ -322,7 +291,6 @@ func (r *reader) loadNotes() {
 	}
 }
 
-// plainText is the text of a paragraph, ignoring formatting.
 func plainText(n *node) string {
 	var sb strings.Builder
 	var walk func(*node)
@@ -351,7 +319,6 @@ func (r *reader) text(s string, f docfile.Format) {
 	}
 }
 
-// blocks converts body-level elements.
 func (r *reader) blocks(kids []*node) {
 	for _, k := range kids {
 		switch k.name {
@@ -363,7 +330,7 @@ func (r *reader) blocks(kids []*node) {
 			r.openComment(k.attr("id"))
 		case "commentRangeEnd":
 			r.closeComment(k.attr("id"))
-		case "sdt": // a content control: its content is what counts
+		case "sdt":
 			if c := k.child("sdtContent"); c != nil {
 				r.blocks(c.kids)
 			}
@@ -436,8 +403,6 @@ func (r *reader) table(tbl *node) {
 	if len(grid) == 0 {
 		return
 	}
-	// Place the cells on the column grid: a cell is gridSpan wide and the columns
-	// it spans after the first are covered.
 	type placed struct {
 		cell
 		col int
@@ -458,7 +423,7 @@ func (r *reader) table(tbl *node) {
 	for i := range cells {
 		cells[i] = make([]string, cols)
 	}
-	owner := map[int]int{} // column -> row of the cell a vertical merge there started in
+	owner := map[int]int{}
 	merges := map[[2]int]*docfile.TableMerge{}
 	for ri, pr := range rows {
 		for _, p := range pr {
@@ -473,7 +438,6 @@ func (r *reader) table(tbl *node) {
 					merges[[2]int{or, c}].Rows = ri - or + 1
 					continue
 				}
-				// A continuation with nothing above it is an ordinary cell.
 				fallthrough
 			default:
 				delete(owner, c)
@@ -520,7 +484,6 @@ func allBold(p *node) bool {
 	return n > 0
 }
 
-// childOrNil is child that tolerates a nil receiver.
 func (n *node) childOrNil(name string) *node {
 	if n == nil {
 		return nil
@@ -528,7 +491,6 @@ func (n *node) childOrNil(name string) *node {
 	return n.child(name)
 }
 
-// find2 returns every descendant called name, not looking inside one.
 func (n *node) find2(name string) []*node {
 	var out []*node
 	for _, k := range n.kids {
@@ -541,7 +503,6 @@ func (n *node) find2(name string) []*node {
 	return out
 }
 
-// at gives the style a place in the table.
 func at(st docfile.TableCellStyle, row, col int) docfile.TableCellStyle {
 	st.Row, st.Col = row, col
 	return st
@@ -626,23 +587,19 @@ func (r *reader) paragraph(p *node) {
 	}
 	r.runs(p.kids, docfile.Format{}, info)
 	if c := r.doc.Content; len(c) > 0 && c[len(c)-1].Equation != nil {
-		return // an equation is a line of its own: no empty line after it
+		return
 	}
 	r.text("\n", docfile.Format{})
 }
 
-// runs converts a paragraph's children (runs, hyperlinks) with the format
-// they inherit.
 func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
-	var lastDel *canvas.ProposalMark // a deletion just read, which an insertion right after it by the same person completes
+	var lastDel *canvas.ProposalMark
 	for _, k := range kids {
 		if k.name != "del" && k.name != "ins" {
 			lastDel = nil
 		}
 		switch k.name {
 		case "del", "ins":
-			// A tracked change: the text becomes a suggestion (Word's revision by its author) to accept or reject.
-			// A deletion followed at once by an insertion of the same author and time is one replacement.
 			kind := canvas.ProposalInsert
 			if k.name == "del" {
 				kind = canvas.ProposalDelete
@@ -666,7 +623,6 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 			}
 			continue
 		case "r":
-			// Hidden text right after an equation is the words that stand for it (what the exporter writes).
 			if rpr := k.child("rPr"); rpr != nil && rpr.child("vanish") != nil {
 				if c := r.doc.Content; len(c) > 0 && c[len(c)-1].Equation != nil {
 					if alt := strings.TrimSpace(plainText(k)); alt != c[len(c)-1].Equation.Formula {
@@ -693,14 +649,11 @@ func (r *reader) runs(kids []*node, inherit docfile.Format, info paraInfo) {
 		case "oMathPara":
 			r.equation(k, false)
 		case "oMath":
-			// next to text in its paragraph it stands in the line (Word's inline equation); alone it is a line of its own
 			r.equation(k, textAround(kids, k))
 		}
 	}
 }
 
-// textAround says the paragraph's children hold visible text besides the node (hidden text, which the exporter writes
-// for the words of an equation, does not count).
 func textAround(kids []*node, except *node) bool {
 	for _, k := range kids {
 		if k == except || k.name != "r" {
@@ -716,8 +669,6 @@ func textAround(kids []*node, except *node) bool {
 	return false
 }
 
-// equation reads an Office Math equation into an equation item (of its own line, or in the line when inline): the formula in the linear
-// notation (with no alternative text of its own: the formula stands for it).
 func (r *reader) equation(m *node, inline bool) {
 	formula := linearFormula(m)
 	if formula == "" {
@@ -793,7 +744,6 @@ func (r *reader) runFormat(rpr *node, inherit docfile.Format, info paraInfo) doc
 		}
 	}
 	if l := rpr.child("lang"); l != nil {
-		// A run in a language of its own (not the document's), so a screen reader can switch voice.
 		if v := l.attr("val"); v != "" && v != r.defLang && canvas.ValidLang(v) {
 			f.Lang = v
 		}
@@ -889,7 +839,6 @@ func (r *reader) picture(d *node) {
 	r.add(docfile.Item{Image: img})
 }
 
-// trimEnd drops the empty line the last paragraph's break leaves.
 func (r *reader) trimEnd() {
 	c := r.doc.Content
 	for len(c) > 0 {

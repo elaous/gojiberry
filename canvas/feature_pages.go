@@ -1,7 +1,6 @@
 package canvas
 
-// PageEditor is implemented by a target that knows the sheets it flows
-// into and where the caret is on them (a TextFlow with Pages).
+// PageEditor is implemented by targets that flow into sheets.
 type PageEditor interface {
 	// PageSet returns the sheets, or nil.
 	PageSet() *PageSet
@@ -11,10 +10,8 @@ type PageEditor interface {
 
 var _ PageEditor = (*TextFlow)(nil)
 
-// PageSet implements PageEditor.
 func (f *TextFlow) PageSet() *PageSet { return f.Pages }
 
-// CaretPage implements PageEditor.
 func (f *TextFlow) CaretPage() int {
 	if ln, ok := f.lineAt(f.sel.caret); ok {
 		return ln.Page
@@ -22,31 +19,23 @@ func (f *TextFlow) CaretPage() int {
 	return 0
 }
 
-// PageFurniture is the page-level commands for a TextFlow that flows into
-// a PageSet: removing the header, footer, page number, watermark or
-// background picture from one page, from this page on, or from all pages
-// (the "none" choice; the caret's page is the one meant); setting a
-// watermark from this page on; and the two-page spread view.
+// PageFurniture commands remove headers, footers and other page furniture.
 type PageFurniture struct{}
 
-// Name implements Feature.
 func (PageFurniture) Name() string { return "page-furniture" }
 
-// Command names are built as "page.<what>.remove-<scope>": for example
-// CmdPageRemove("header", RemoveForward).
+// Command names are page.<what>.remove-<scope>.
 const (
 	CmdSetWatermark Command = "page.watermark.set"
 	CmdSpread       Command = "page.spread"
 	CmdSpreadBook   Command = "page.spread-book"
 )
 
-// CmdPageRemove names the command removing what ("header", "footer",
-// "number", "watermark", "background") with the given scope.
+// CmdPageRemove names the command removing what from a scope.
 func CmdPageRemove(what string, scope RemoveScope) Command {
 	return Command("page." + what + ".remove-" + [...]string{"page", "forward", "all"}[scope])
 }
 
-// Install implements Feature.
 func (PageFurniture) Install(r *Registry) {
 	pages := func(c *CommandContext) (*PageSet, int, bool) {
 		pe, ok := c.Target.(PageEditor)

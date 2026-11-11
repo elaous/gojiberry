@@ -24,15 +24,13 @@ func footnoteDoc() docfile.Document {
 	}
 }
 
-// A footnote's mark links to its note and the note links back, in the PDF: two link annotations per footnote, each
-// going to a named place, and the file is still valid tagged PDF.
 func TestPDFFootnotesLinkBothWays(t *testing.T) {
 	data, err := PDF{}.Export(FromDocument(footnoteDoc()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(data)
-	if n := strings.Count(s, "/Subtype /Link") / 2; n != 4 { // each annotation is found twice: itself and its tag
+	if n := strings.Count(s, "/Subtype /Link") / 2; n != 4 {
 		t.Errorf("%d link annotations, want 4 (a mark and a way back for each of two notes)", n)
 	}
 	if n := len(regexp.MustCompile(`/Dest`).FindAllString(s, -1)); n < 4 {
@@ -45,7 +43,6 @@ func TestPDFFootnotesLinkBothWays(t *testing.T) {
 	if err != nil || len(txt) == 0 || !strings.Contains(txt[0], "Source of the second.") {
 		t.Fatalf("text: %q %v", txt, err)
 	}
-	// A document with no footnote has no internal link.
 	plain, _ := PDF{}.Export(FromDocument(docfile.Document{Content: []docfile.Item{{Chars: &docfile.Chars{Text: "no notes\n"}}}}))
 	if strings.Contains(string(plain), "/Dest") {
 		t.Error("an internal link without a footnote")

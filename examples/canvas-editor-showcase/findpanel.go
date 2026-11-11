@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// findState is the find and replace bar's state.
 type findState struct {
 	open, replace bool
 	opts          canvas.FindOptions
@@ -21,8 +20,6 @@ type findState struct {
 	text          string // the text the matches were found in
 }
 
-// refreshFind searches again; jump moves to the first match at or after the
-// caret and selects it, otherwise the current match stays where it is.
 func (u *ui) refreshFind(flow *canvas.TextFlow, scroll func(), jump bool) {
 	f := &u.find
 	f.err, f.matches = "", nil
@@ -62,7 +59,6 @@ func (u *ui) refreshFind(flow *canvas.TextFlow, scroll func(), jump bool) {
 	}
 }
 
-// stepFind goes to the next (1) or previous (-1) match.
 func (u *ui) stepFind(flow *canvas.TextFlow, scroll func(), dir int) {
 	f := &u.find
 	if flow == nil || len(f.matches) == 0 {
@@ -75,18 +71,16 @@ func (u *ui) stepFind(flow *canvas.TextFlow, scroll func(), dir int) {
 	scroll()
 }
 
-// closeFind removes the highlights and the bar.
 func (u *ui) closeFind(flow *canvas.TextFlow) {
 	u.find = findState{opts: u.find.opts, repl: u.find.repl}
 	if flow != nil {
 		flow.ClearSearch()
 	}
 	if u.tab == "find" {
-		u.tab = "format" // what the sidebar shows when no tab is chosen: and its button is the marked one
+		u.tab = "format"
 	}
 }
 
-// findPanel is the Find tab.
 func findPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(), redraw, renderUI func()) xango.Node {
 	f := &u.find
 	fl := flow()

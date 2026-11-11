@@ -15,9 +15,6 @@ type ConfirmProps struct {
 	OnCancel     func() // also called on a backdrop click, the same as clicking Cancel
 }
 
-// Confirm is a Dialog preset for a yes/no decision, rendered with
-// role="alertdialog" (per ARIA, for a dialog demanding an immediate
-// response) instead of Dialog's default role="dialog".
 func Confirm(props ConfirmProps) xango.Node {
 	confirmLabel := props.ConfirmLabel
 	if confirmLabel == "" {

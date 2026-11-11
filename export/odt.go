@@ -11,11 +11,7 @@ import (
 	"strings"
 )
 
-// ODT renders a Snapshot to an OpenDocument text file (ODF 1.2), the format of LibreOffice, Collabora and
-// many public offices. Like DOCX it is written directly: real hyperlinks, embedded pictures with their
-// alternative text, super and subscript, nested bullet and numbered lists, headings, quotes, code, tables
-// with spans and shading, real footnotes, the language of the document and of a run, and the running
-// header and footer of the print layout with page-number fields.
+// ODT renders a Snapshot to an OpenDocument text file.
 type ODT struct{}
 
 const odfNS = `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"`
@@ -26,17 +22,13 @@ type odtBuilder struct {
 	order  []string          // the keys in the order they were made
 	cells  map[string]string // table cell and paragraph styles by key
 	corder []string
-	// sizes are the automatic styles of table columns and rows a person sized (see table).
-	sizes []string
-	media map[string][]byte
-	imgs  int
-	notes map[int]string // footnote text by number
-	// open lists, outermost first: true is a numbered list
-	open []bool
-	// cur is the index of the block being written; marks names the bookmark of each heading the table of
-	// contents links to.
-	cur   int
-	marks map[int]string
+	sizes  []string
+	media  map[string][]byte
+	imgs   int
+	notes  map[int]string // footnote text by number
+	open   []bool
+	cur    int
+	marks  map[int]string
 }
 
 func (b *odtBuilder) textStyle(f Format) string {
@@ -79,7 +71,6 @@ func (b *odtBuilder) textStyle(f Format) string {
 	return n
 }
 
-// odtText writes text with the spaces, tabs and line ends ODF wants as elements.
 func odtText(s string) string {
 	var sb strings.Builder
 	spaces := 0
@@ -153,7 +144,6 @@ func listStyle(numbered bool) string {
 	return "LB"
 }
 
-// item opens the list item for a block at its level, closing and opening lists as needed.
 func (b *odtBuilder) item(level int, numbered bool) {
 	level = min(level, 8)
 	b.closeLists(level + 1)
@@ -204,10 +194,6 @@ func (b *odtBuilder) cellStyle(fill string, align int, keep bool) (cell, para st
 	return
 }
 
-// contents writes the table of contents that starts the document (when the snapshot asks for one and has
-// headings) as a real ODF index: an entry per heading linked to a bookmark on it, with the tab and page number
-// the entries have in LibreOffice. The page numbers are placeholders until the person updates the index
-// (Tools > Update > All Indexes), which makes LibreOffice work them out; only it knows its pages.
 func (b *odtBuilder) contents(snap Snapshot) {
 	if !snap.TOC {
 		return
@@ -420,7 +406,6 @@ func (ODT) Export(snap Snapshot) ([]byte, error) {
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	// The mimetype comes first and is stored, so a reader can tell the type from the first bytes.
 	if err := zipMimetype(zw, "application/vnd.oasis.opendocument.text"); err != nil {
 		return nil, err
 	}
@@ -514,7 +499,6 @@ func (b *odtBuilder) automaticStyles() string {
 	return sb.String()
 }
 
-// odtStyles is styles.xml: the named styles, the page and its running header and footer.
 func odtStyles(snap Snapshot) string {
 	in := func(px float64) string { return fmt.Sprintf("%.3fin", px/96) }
 	th := themeOf(snap)
@@ -566,7 +550,6 @@ func odtStyles(snap Snapshot) string {
 		`<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1">` + hf.String() + `</style:master-page></office:master-styles></office:document-styles>`
 }
 
-// odtDecor writes a header or footer part with the fields as ODF fields.
 func odtDecor(text, title string) string {
 	var sb strings.Builder
 	lit := func(s string) {
@@ -600,8 +583,6 @@ func odtDecor(text, title string) string {
 	return sb.String()
 }
 
-// contentsStyles are the paragraph styles of the table of contents entries: indented by level, with a right tab
-// stop at the edge of the text that has dots in front of it.
 func contentsStyles(snap Snapshot) string {
 	width := (snap.PageWidth - snap.MarginLeft - snap.MarginRight) / 96
 	if width <= 0 {
@@ -615,7 +596,6 @@ func contentsStyles(snap Snapshot) string {
 	return sb.String()
 }
 
-// odtBodySize is the default font size: 11pt, or the theme's body size.
 func odtBodySize(th docTheme) string {
 	if th.bodyPt > 0 {
 		return strconv.FormatFloat(th.bodyPt, 'f', -1, 64) + "pt"
@@ -623,7 +603,6 @@ func odtBodySize(th docTheme) string {
 	return "11pt"
 }
 
-// odtTextColour is the fo:color attribute of the default text, or nothing.
 func odtTextColour(th docTheme) string {
 	if th.text == "" {
 		return ""
@@ -631,8 +610,6 @@ func odtTextColour(th docTheme) string {
 	return ` fo:color="#` + strings.ToLower(th.text) + `"`
 }
 
-// odtPageColour is the page background attribute of the page layout, or nothing.
-// odtWriting is the writing mode of the page: vertical lines from right to left for vertical text.
 func odtWriting(snap Snapshot) string {
 	if !snap.Vertical {
 		return ""
@@ -647,7 +624,6 @@ func odtPageColour(th docTheme) string {
 	return ` fo:background-color="#` + strings.ToLower(th.background) + `"`
 }
 
-// odtLinkStyle is the character style links use ("Internet_20_link"), in the theme's link colour or the usual blue.
 func odtLinkStyle(th docTheme) string {
 	link := "0563c1" // the usual blue
 	if th.link != "" {

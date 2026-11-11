@@ -9,7 +9,6 @@ import (
 	"github.com/chromedp/cdproto/input"
 )
 
-// A key as the browser sees it.
 type keyDef struct {
 	key, code string
 	vk        int64
@@ -58,7 +57,6 @@ var punct = map[rune]punctKey{
 	']': {221, "BracketRight"}, '}': {221, "BracketRight"}, '\'': {222, "Quote"}, '"': {222, "Quote"},
 }
 
-// keyOf describes a key given by name ("ArrowLeft") or as the character it types.
 func keyOf(name string) keyDef {
 	if k, ok := named[name]; ok {
 		return k
@@ -75,8 +73,7 @@ func keyOf(name string) keyDef {
 	case unicode.IsDigit(c) && c < 128:
 		k.code, k.vk = "Digit"+name, int64(c)
 	default:
-		// US layout: the virtual key and code of the key that types it. (Using the
-		// character's own value would collide, "(" being 40, the same as ArrowDown.)
+		// US layout: a character's own value would collide with key codes
 		if p, ok := punct[c]; ok {
 			k.vk, k.code = p.vk, p.code
 		}
@@ -84,7 +81,6 @@ func keyOf(name string) keyDef {
 	return k
 }
 
-// splitKeys parses "Control+Shift+c" into its modifiers and the key.
 func splitKeys(spec string) (mods []string, key string) {
 	parts := strings.Split(spec, "+")
 	if spec == "+" || strings.HasSuffix(spec, "++") {

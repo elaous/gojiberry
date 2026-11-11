@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// The mentions marked as read are kept in this browser, so that they stay read when the page is opened again. They are
-// kept under the title of the document (comment ids are only unique within a document), and a document that is renamed
-// shows its mentions again, which errs toward telling the person. Only the keys are kept (a comment id and a reply
-// number), never the text; at most mentionsReadMax are kept, the oldest dropped first.
-
 const (
 	mentionsReadKey = "showcase:mentions-read"
 	mentionsReadMax = 500
@@ -26,7 +21,6 @@ func readMentionList() []string {
 	return all
 }
 
-// syncMentionsRead loads the read marks of the current document when the title is not the one loaded.
 func (u *ui) syncMentionsRead() {
 	if u.mentionsRead != nil && u.mentionsReadFor == u.title {
 		return
@@ -40,7 +34,6 @@ func (u *ui) syncMentionsRead() {
 	}
 }
 
-// markMentionRead marks a mention (canvas.MentionNotice.Key) as read and keeps the mark.
 func (u *ui) markMentionRead(key string) {
 	u.syncMentionsRead()
 	if u.mentionsRead[key] {

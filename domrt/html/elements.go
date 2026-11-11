@@ -4,12 +4,10 @@ package html
 
 import "syscall/js"
 
-// CanvasElement is an Element known to be a <canvas>. See
-// CanvasElement.GetContext2D/GetContext3D (in canvas2d.go/canvas3d.go)
-// for its rendering contexts.
+// CanvasElement is an Element known to be a canvas.
 type CanvasElement struct{ Element }
 
-// AsCanvas casts e to a CanvasElement, or returns nil if e isn't a <canvas>.
+// AsCanvas casts e to a CanvasElement, or returns nil.
 func (e *Element) AsCanvas() *CanvasElement {
 	if e.GetTagName() != "CANVAS" {
 		return nil
@@ -29,8 +27,7 @@ func (c *CanvasElement) Height() int { return c.Get("height").Int() }
 // SetHeight sets the canvas's pixel height.
 func (c *CanvasElement) SetHeight(h int) { c.Set("height", h) }
 
-// ToDataURL returns the canvas's current bitmap encoded as mimeType
-// (e.g. "image/png", "image/jpeg").
+// ToDataURL returns the canvas bitmap encoded as mimeType.
 func (c *CanvasElement) ToDataURL(mimeType string) string {
 	return c.Call("toDataURL", mimeType).String()
 }
@@ -38,7 +35,7 @@ func (c *CanvasElement) ToDataURL(mimeType string) string {
 // AnchorElement is an Element known to be an <a>.
 type AnchorElement struct{ Element }
 
-// AsAnchor casts e to an AnchorElement, or returns nil if e isn't an <a>.
+// AsAnchor casts e to an AnchorElement, or returns nil.
 func (e *Element) AsAnchor() *AnchorElement {
 	if e.GetTagName() != "A" {
 		return nil
@@ -67,14 +64,13 @@ func (a *AnchorElement) SetRel(rel string) { a.Set("rel", rel) }
 // Download returns the anchor's download attribute (the suggested filename).
 func (a *AnchorElement) Download() string { return a.Get("download").String() }
 
-// SetDownload sets the anchor's download attribute, marking it as a download
-// link and suggesting name as the saved filename.
+// SetDownload marks the anchor as a download.
 func (a *AnchorElement) SetDownload(name string) { a.Set("download", name) }
 
 // ButtonElement is an Element known to be a <button>.
 type ButtonElement struct{ Element }
 
-// AsButton casts e to a ButtonElement, or returns nil if e isn't a <button>.
+// AsButton casts e to a ButtonElement, or returns nil.
 func (e *Element) AsButton() *ButtonElement {
 	if e.GetTagName() != "BUTTON" {
 		return nil
@@ -97,7 +93,7 @@ func (b *ButtonElement) SetType(t string) { b.Set("type", t) }
 // SelectElement is an Element known to be a <select>.
 type SelectElement struct{ Element }
 
-// AsSelect casts e to a SelectElement, or returns nil if e isn't a <select>.
+// AsSelect casts e to a SelectElement, or returns nil.
 func (e *Element) AsSelect() *SelectElement {
 	if e.GetTagName() != "SELECT" {
 		return nil
@@ -105,7 +101,7 @@ func (e *Element) AsSelect() *SelectElement {
 	return &SelectElement{Element: *e}
 }
 
-// SelectedIndex returns the index of the currently selected option, or -1 if none.
+// SelectedIndex returns the selected option's index, or -1.
 func (s *SelectElement) SelectedIndex() int { return s.Get("selectedIndex").Int() }
 
 // SetSelectedIndex selects the option at index.
@@ -125,7 +121,7 @@ func (s *SelectElement) Options() []Element {
 // InputElement is an Element known to be an <input>.
 type InputElement struct{ Element }
 
-// AsInput casts e to an InputElement, or returns nil if e isn't an <input>.
+// AsInput casts e to an InputElement, or returns nil.
 func (e *Element) AsInput() *InputElement {
 	if e.GetTagName() != "INPUT" {
 		return nil
@@ -151,10 +147,7 @@ func (i *InputElement) Disabled() bool { return i.Get("disabled").Bool() }
 // SetDisabled enables or disables the input.
 func (i *InputElement) SetDisabled(disabled bool) { i.Set("disabled", disabled) }
 
-// Files returns the selected files for a type="file" input as raw JS
-// File objects (empty for other input types or when nothing is
-// selected). Wrap each with browser.WrapFile to read its name/size/type
-// or its contents -- see domrt/browser's File API.
+// Files returns the selected files of a file input.
 func (i *InputElement) Files() []js.Value {
 	files := i.Get("files")
 	if files.IsUndefined() || files.IsNull() {

@@ -7,13 +7,10 @@ type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
 	Disabled bool
-	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
 	Label    string
 	OnChange func(value string)
 }
 
-// DatePicker renders a styled native date input, letting the browser
-// handle the actual calendar UI/locale formatting/keyboard input.
 func DatePicker(props DatePickerProps) xango.Node {
 	attrs := []xango.Attr{
 		xango.A("type", "date"),

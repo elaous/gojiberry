@@ -8,14 +8,11 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 )
 
-// Another person changing the paragraph that is being edited here is reported; a change in another
-// paragraph, or to text nobody here touched lately, is not.
 func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "the brown fox\nsecond line\nthird line"})
 	var got []Conflict
 	a.OnConflict = func(c Conflict) { got = append(got, c) }
 
-	// Ana types in the first paragraph; Bo, at the same time, in the same one.
 	click(a.Flow, 13)
 	a.Flow.InsertText(" ANA")
 	click(b.Flow, 3)
@@ -31,7 +28,6 @@ func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 		t.Errorf("copies differ: %q vs %q", text(a.Flow), text(b.Flow))
 	}
 
-	// Bo now changes the third paragraph; Ana's recent paragraph is the first: nothing to report.
 	got = nil
 	click(b.Flow, 28)
 	b.Flow.InsertText("!")
@@ -40,7 +36,6 @@ func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 		t.Errorf("a change elsewhere was reported: %+v", got)
 	}
 
-	// Ana edits the second paragraph, and Bo's change arrives after the window: not a conflict.
 	click(a.Flow, 24)
 	a.Flow.InsertText("?")
 	then := now
@@ -54,8 +49,6 @@ func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 	}
 }
 
-// Two paragraphs with the same words are told apart by their characters, not their text: a change to the
-// other one is not a conflict.
 func TestConflictTellsEqualParagraphsApart(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "same words\nsame words\nend"})
 	var got []Conflict
@@ -68,7 +61,6 @@ func TestConflictTellsEqualParagraphsApart(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("a change to the other paragraph was reported: %+v", got)
 	}
-	// and the same paragraph is
 	click(a.Flow, 3)
 	a.Flow.InsertText("a")
 	click(b.Flow, 4)
@@ -79,7 +71,6 @@ func TestConflictTellsEqualParagraphsApart(t *testing.T) {
 	}
 }
 
-// The window is the bridge's to set.
 func TestConflictWindowIsConfigurable(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "one line"})
 	var got []Conflict
@@ -98,7 +89,6 @@ func TestConflictWindowIsConfigurable(t *testing.T) {
 	}
 }
 
-// The name of someone who has left is still known when their change is reported.
 func TestConflictNamesSomeoneWhoLeft(t *testing.T) {
 	s := &Session{names: map[string]string{"b": "Bo"}, Peers: nil}
 	s.noteConflict(Conflict{Replicas: []string{"b", "z"}})

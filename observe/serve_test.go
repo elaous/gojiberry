@@ -39,8 +39,6 @@ func TestRoutesOfTheOtherServersAreTemplatesOfTheAllowlist(t *testing.T) {
 	}
 }
 
-// A WebSocket upgrade (the collaboration hub's /docs/{id}/ws) must still reach the real connection
-// through the middleware's writer.
 func TestMiddlewareLetsAConnectionBeHijacked(t *testing.T) {
 	o, _ := newObs()
 	h := Middleware(o, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

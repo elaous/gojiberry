@@ -12,8 +12,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Page geometry used for formats that have pages (CSS pixels, 96 to the
-// inch): US Letter with 3/4 inch margins.
+// Page geometry in CSS pixels, for paged formats.
 const (
 	defaultPageWidth  = 816
 	defaultPageHeight = 1056
@@ -22,35 +21,22 @@ const (
 
 var headingScales = [5]float64{2, 1.6, 1.35, 1.2, 1.05}
 
-// line is one paragraph while the content is being read.
 type line struct {
-	runs []docfile.Chars
-	para docfile.Para
-	// after are the blocks of non-text content (an image, a table cell) this
-	// line stands for; such a line has no text of its own.
+	runs  []docfile.Chars
+	para  docfile.Para
 	after []Block
-	// start is where the line begins in the text stream (see Block.Start).
 	start int
 }
 
-// FromDocument turns a saved document into the format-agnostic Snapshot the
-// exporters read: one Block per paragraph (heading, list item, quote, code),
-// table cell or image, with character formatting as Segments.
+// FromDocument turns a saved document into a format-agnostic Snapshot.
 func FromDocument(d docfile.Document) Snapshot { return fromDocument(acceptedView(d), false) }
 
-// FromDocumentTracked is FromDocument that keeps the suggested changes: a run proposed to be added has
-// Format.Change Inserted and one proposed to be removed has Deleted (with who and when), for a format that
-// can show them (HTML, EPUB and Word write them as insertions and deletions). FromDocument shows the
-// document as it would be with every suggestion accepted, which is what a format that cannot show
-// them (plain text, Markdown, PDF, RTF) writes, so struck text never reaches a file that cannot strike it.
+// FromDocumentTracked is FromDocument that keeps suggested changes.
 func FromDocumentTracked(d docfile.Document) Snapshot { return fromDocument(d, false) }
 
-// FromDocumentWithMedia is FromDocumentTracked for a format that can embed audio and video (HTML): clips stay
-// clips (MediaClip blocks) instead of becoming a link with the transcript as text.
+// FromDocumentWithMedia is FromDocumentTracked for clip-embedding formats.
 func FromDocumentWithMedia(d docfile.Document) Snapshot { return fromDocument(d, true) }
 
-// acceptedView is the document with every suggestion accepted: text proposed to be removed is gone and text
-// proposed to be added is ordinary text.
 func acceptedView(d docfile.Document) docfile.Document {
 	has := false
 	for _, it := range d.Content {
@@ -81,7 +67,7 @@ func acceptedView(d docfile.Document) docfile.Document {
 
 func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 	if !keepMedia {
-		d = d.MediaAsText() // a format that cannot embed a clip writes it as a link with its transcript as text
+		d = d.MediaAsText() // Formats without embedded clips write a link.
 	}
 	snap := Snapshot{
 		Title:     d.Title,
@@ -102,8 +88,6 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			snap.MarginTop, snap.MarginRight, snap.MarginBottom, snap.MarginLeft = l.Margins[0]/0.75, l.Margins[1]/0.75, l.Margins[2]/0.75, l.Margins[3]/0.75
 		}
 	}
-	// A table of contents the document holds stands for the contents the exports write at the start (once, never
-	// two lists): its title, look and depth are the ones used.
 	tocHeld := false
 	for _, it := range d.Content {
 		if it.TOC != nil {
@@ -127,19 +111,17 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 
 	var lines []line
 	cur := line{}
-	pos := 0 // where the next rune of the content falls in the text stream
+	pos := 0
 	flush := func() {
 		lines = append(lines, cur)
 		cur = line{start: pos}
 	}
-	// pending ends the paragraph being read before a block that is not text, if
-	// it has anything in it (an empty one is only the start of the next line).
 	pending := func() {
 		if len(cur.runs) > 0 || cur.para.List.Kind != 0 {
 			flush()
 		}
 	}
-	tocPos := -1 // where the held table of contents is in the stream
+	tocPos := -1
 	for _, it := range d.Content {
 		switch {
 		case it.TOC != nil:
@@ -174,11 +156,9 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			pending()
 			after := []Block{{Start: pos, Kind: Image, ImageSrc: it.Image.URL, ImageW: it.Image.Width, ImageH: it.Image.Height, ImageAlt: it.Image.Alt, ImageDecorative: it.Image.Decorative, ImageCredit: it.Image.Credit, ImageSourceURL: it.Image.SourceURL}}
 			if d := strings.TrimSpace(it.Image.LongDesc); d != "" {
-				// the long description is text after the picture, so that every format carries it
 				after = append(after, Block{Start: -1, Kind: Paragraph, DescribesImage: true, Segments: []Segment{{Text: d}}})
 			}
 			if lg := strings.TrimSpace(it.Image.Legend); lg != "" {
-				// the legend is a paragraph in italics under the picture, so that every format carries it
 				legend := Block{Start: -1, Kind: Paragraph, Segments: []Segment{{Text: lg, Format: Format{Italic: true}}}}
 				after = append([]Block{after[0], legend}, after[1:]...)
 			}
@@ -193,7 +173,6 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			pos++
 			cur.start = pos
 		case it.Form != nil:
-			// a form field is written as its label and what is in it, in the line it stands in
 			if w := it.Form.Words(); w != "" {
 				style := ""
 				if b, err := json.Marshal(it.Form); err == nil {
@@ -203,8 +182,6 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 			}
 			pos++
 		case it.Equation != nil && it.Equation.Inline:
-			// a formula in the line is written as the words that stand for it (the text alternative), so that every
-			// format keeps it in its sentence
 			if w := it.Equation.Words(); w != "" {
 				cur.runs = append(cur.runs, docfile.Chars{Text: w, Format: docfile.Format{Style: formulaStyle + it.Equation.Formula}})
 			}
@@ -224,7 +201,6 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 		}
 	}
 	lines = append(lines, cur)
-	// A trailing empty paragraph is only the end of the text.
 	for len(lines) > 0 && len(lines[len(lines)-1].runs) == 0 && len(lines[len(lines)-1].after) == 0 && lines[len(lines)-1].para.List.Kind == 0 {
 		lines = lines[:len(lines)-1]
 	}
@@ -242,9 +218,6 @@ func fromDocument(d docfile.Document, keepMedia bool) Snapshot {
 	return snap
 }
 
-// tableLines gives a table's cells as marker lines blocksFrom turns into
-// table-cell blocks, with their merges (spans, and the cells they cover) and
-// bold.
 func tableLines(t *docfile.TableItem, start int) []line {
 	rows := len(t.Rows)
 	cols := 0
@@ -310,7 +283,7 @@ func tableLines(t *docfile.TableItem, start int) []line {
 
 func blocksFrom(lines []line) []Block {
 	var out []Block
-	var counts []int // the position within each level of the numbered list being read
+	var counts []int
 	for _, ln := range lines {
 		if len(ln.after) > 0 { // a table cell
 			out = append(out, ln.after...)
@@ -323,7 +296,7 @@ func blocksFrom(lines []line) []Block {
 		case level > 0:
 			b.Kind, b.Level = Heading1+BlockKind(level-1), level
 			if level > 3 {
-				b.Kind, b.Level = Heading3, level // levels 4 to 6 are a Heading3 block that says its level
+				b.Kind, b.Level = Heading3, level // Levels 4 to 6 are Heading3 blocks with their level.
 			}
 		case ln.para.List.Kind == 1: // bullet
 			b.Kind = BulletItem
@@ -369,7 +342,6 @@ func blocksFrom(lines []line) []Block {
 			counts = counts[:0]
 		}
 		if n := len(out); b.Kind == Code && n > 0 && out[n-1].Kind == Code && out[n-1].CodeLang == b.CodeLang && len(out[n-1].Segments) == 1 {
-			// the lines of one code block are paragraphs of their own in the editor: one block in the file
 			out[n-1].Segments = []Segment{{Text: out[n-1].Segments[0].Text + "\n" + b.Segments[0].Text}}
 			continue
 		}
@@ -378,11 +350,6 @@ func blocksFrom(lines []line) []Block {
 	return out
 }
 
-// headingLevel is 1-5 when the line is a heading: its paragraph style is
-// "Title" or "Heading n", or every run has a heading's scale.
-// HeadingLevel is the level (1 to 6) of a paragraph made of these runs with this paragraph style, or 0
-// if it is not a heading: the style "Title" or "Heading N", else every run at a heading's scale. It is
-// what FromDocument uses (which gives a heading of level 4 to 6 the kind Heading3 and its real level in Block.Level).
 func HeadingLevel(runs []docfile.Chars, style string) int { return headingLevel(runs, style) }
 
 func headingLevel(runs []docfile.Chars, style string) int {
@@ -422,8 +389,6 @@ func allMonospace(runs []docfile.Chars) bool {
 	return true
 }
 
-// segmentsOf maps runs to segments; U+2028 (a soft line break) becomes a
-// SoftBreak segment.
 func segmentsOf(runs []docfile.Chars) []Segment {
 	var out []Segment
 	for _, r := range runs {
@@ -467,14 +432,10 @@ func segmentsOf(runs []docfile.Chars) []Segment {
 	return out
 }
 
-// noteRefStyle marks the run of a footnote's number while a document is turned into a snapshot (no
-// stored style name starts with a NUL).
 const noteRefStyle = "\x00note:"
 
-// formFieldStyle likewise marks the run of a form field, followed by the field as JSON.
 const formFieldStyle = "\x00formfield:"
 
-// formulaStyle likewise marks the run of an inline formula, followed by the formula's notation.
 const formulaStyle = "\x00formula:"
 
 func itoa(n int) string {
@@ -488,9 +449,6 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// tocBlock is the index of the block a table of contents at stream offset pos comes before: the first block that
-// starts at or after it, moved back to the first cell of a table it would fall inside; past the last block when
-// the contents are at the end.
 func tocBlock(blocks []Block, pos int) int {
 	for i, b := range blocks {
 		if b.Start < 0 || b.Start < pos {
@@ -504,7 +462,6 @@ func tocBlock(blocks []Block, pos int) int {
 	return len(blocks)
 }
 
-// imageCredit is the line kept with a picture found in an image repository: its credit and the page it came from.
 func imageCredit(b Block) string {
 	switch {
 	case b.ImageCredit != "" && b.ImageSourceURL != "":
@@ -515,7 +472,6 @@ func imageCredit(b Block) string {
 	return b.ImageSourceURL
 }
 
-// sizeOf is the size set at i, 0 when there is none.
 func sizeOf(sizes []float64, i int) float64 {
 	if i < 0 || i >= len(sizes) || sizes[i] != sizes[i] || sizes[i] < 0 {
 		return 0

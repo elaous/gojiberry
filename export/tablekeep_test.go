@@ -24,8 +24,6 @@ func TestKeepRowWithNext(t *testing.T) {
 	}
 }
 
-// A table's rows are not split across pages, and its header row and the row before the last stay with the row
-// after them, so no row is left alone at the foot or the head of a page, in each paged format.
 func TestTableRowsAreKeptTogetherInEveryFormat(t *testing.T) {
 	snap := keepTable(4)
 	data, err := DOCX{}.Export(snap)

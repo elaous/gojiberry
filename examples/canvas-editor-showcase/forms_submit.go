@@ -12,10 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Submitting is its own experiment (build tag exp_forms_submit, or experimental): a form is for filling in, printing,
-// sharing or sending filled; naming an address a web form sends its answers to is not part of the default product.
-
-// submitNodes is the address box and the button that saves the document as a web form.
 func submitNodes(u *ui, fl *canvas.TextFlow, renderUI func()) []xango.Node {
 	return []xango.Node{
 		xango.El("label", nil, xango.Text(T("forms.submitTo", "Address for the answers of a web form (https or mailto)")),
@@ -24,7 +20,6 @@ func submitNodes(u *ui, fl *canvas.TextFlow, renderUI func()) []xango.Node {
 	}
 }
 
-// downloadWebForm saves the document as a web page whose form fields send their answers to the address given.
 func (u *ui) downloadWebForm(fl *canvas.TextFlow, renderUI func()) {
 	if fl == nil {
 		return

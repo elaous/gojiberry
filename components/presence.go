@@ -9,27 +9,17 @@ import (
 
 // PresencePeer is one person at the document.
 type PresencePeer struct {
-	// Name is shown (and its initials); Color is their cursor color; User
-	// is who the server says they are (an e-mail address); Role is what
-	// they may do ("owner", "editor", "viewer").
 	Name, Color, User, Role string
 }
 
 // PresenceProps configures Presence.
 type PresenceProps struct {
 	// Self is you; Peers are everyone else.
-	Self  PresencePeer
-	Peers []PresencePeer
-	// Status is the connection: "online", "connecting" or "offline" (""
-	// shows nothing about the connection).
-	Status string
-	// Pending is how many of your changes have not reached the server yet.
+	Self    PresencePeer
+	Peers   []PresencePeer
+	Status  string
 	Pending int
-	// Role is your own role, shown as a badge ("View only" for a viewer).
-	Role string
-	// OnWhere, if set, adds a "Where is <name>?" button for each of the other people; it is called with
-	// that person, and the host says where they are (WhereSentence) in the live region. The cursors are
-	// never announced as they move: the position is given only on request.
+	Role    string
 	OnWhere func(PresencePeer)
 }
 
@@ -47,10 +37,6 @@ func initials(name string) string {
 	return string(out)
 }
 
-// Presence shows who else is in the document -- a round avatar per person in
-// their cursor color, with their name and role as the tip -- the state of the
-// connection, and, for a viewer, a "View only" badge. It is controlled; feed
-// it from collab.Session.
 func Presence(props PresenceProps) xango.Node {
 	avatar := func(p PresencePeer, self bool) xango.Node {
 		title := p.Name

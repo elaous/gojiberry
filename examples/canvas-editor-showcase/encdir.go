@@ -17,59 +17,34 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The key directory of a docstore server, for the People tab: find a person by e-mail (the
-// verified or label-only mark comes from what the server answered) and "Publish my keys". The page
-// has no sign-in of its own, so the server and, if it needs one, a session token are settings kept
-// in this browser (localStorage). The calls go through dirclient.Directory, so they follow the API
-// when it changes.
-//
-// What the directory is given, and what it can say, makes its address a trust decision, so a link
-// does not make it: a page opened with ?docstore=https://host only OFFERS the address, and nothing
-// is sent to it until the person has confirmed it in a dialog that names the host. The address must
-// be https (http only for a host on this machine), it is confirmed again whenever it changes, a
-// session token belongs to one address and is dropped when the address changes (the token field is
-// a password field), and every "verified" mark says which host it is that vouches for it.
-
 const (
 	dirURLKey      = "showcase-enc:docstore"
 	dirOKKey       = "showcase-enc:docstore-ok"   // the address the person confirmed
 	dirTokenKey    = "showcase-enc:docstoken"     // the session token
 	dirTokenURLKey = "showcase-enc:docstoken-for" // the address the token was given for
-	dirRequireKey  = "showcase-enc:require-owner" // "1": do not rely on a key of an address with no owner key
+	dirRequireKey  = "showcase-enc:require-owner"
 )
 
 type dirUI struct {
-	url, token string // the confirmed directory and its token: the only address anything is sent to
-	urlDraft   string
-	// requireOwner is the person's setting: a key of an address that has not enrolled an owner key is shown
-	// without the verified mark and with a note to confirm its fingerprint another way.
-	requireOwner bool
-	tokenDraft   string
-	dir          dirclient.Directory
-	// offer is an address that was put forward (by a link, or found in storage without the
-	// person's confirmation) and waits for the person to confirm it; refused says why one was not
-	// even offered.
+	url, token     string
+	urlDraft       string
+	requireOwner   bool
+	tokenDraft     string
+	dir            dirclient.Directory
 	offer, refused string
-	// ask is the page's confirmation dialog (Asker.AskWith).
-	ask func(label, message string, do func())
-	// render draws the page again (set by the page); the owner key is loaded in the background.
-	render func()
-	// changed, if set, is called after the server address was confirmed or forgotten (the server store follows it).
-	changed func()
+	ask            func(label, message string, do func())
+	render         func()
+	changed        func()
 
-	email    string
-	rows     []components.DirRow
-	searched bool
-	// verified is what the directory said of each fingerprint in the last lookup; verifiedAdded of
-	// the keys that were added from a verified row. Never set from what was pasted.
-	verified      map[string]bool
-	verifiedAdded map[string]bool
-	// marks and marksAdded are the stronger marks of the same fingerprints (attested, owner-signed).
+	email             string
+	rows              []components.DirRow
+	searched          bool
+	verified          map[string]bool
+	verifiedAdded     map[string]bool
 	marks, marksAdded map[string]dirMarks
-	// keys is the last lookup as the client saw it, for the owner keys the person may confirm.
-	keys      []dirclient.Key
-	keysEmail string
-	notice    string
+	keys              []dirclient.Key
+	keysEmail         string
+	notice            string
 
 	owner ownerUI // the owner key of my address (encowner.go)
 
@@ -109,7 +84,7 @@ func newDirUI() dirUI {
 			d.url = clean
 		}
 	}
-	// The token belongs to the address it was given for.
+	// the token belongs to the address it was given for
 	d.requireOwner = lsGet(dirRequireKey) == "1"
 	d.token = lsGet(dirTokenKey)
 	if d.token != "" && (d.url == "" || lsGet(dirTokenURLKey) != d.url) {
@@ -120,7 +95,7 @@ func newDirUI() dirUI {
 	if q := js.Global().Get("location").Get("search").String(); q != "" {
 		if v, err := url.ParseQuery(strings.TrimPrefix(q, "?")); err == nil {
 			if u := strings.TrimSpace(v.Get("docstore")); u != "" {
-				// Never applied from a link: offered, and the person decides.
+				// never applied from a link: offered, and the person decides
 				if clean, _, err := checkDirURL(u); err != nil {
 					d.refused = T("dir.refused", "The key directory address %q was not used: %s", u, err.Error())
 				} else if clean != d.url {
@@ -134,7 +109,6 @@ func newDirUI() dirUI {
 	return d
 }
 
-// setRequireOwner keeps the setting and builds the client again with it.
 func (d *dirUI) setRequireOwner(on bool, e *encUI) {
 	d.requireOwner = on
 	if on {
@@ -153,7 +127,6 @@ func (d *dirUI) notifyChanged() {
 	}
 }
 
-// host is the host of the confirmed directory, which every verified mark names.
 func (d *dirUI) host() string {
 	if _, h, err := checkDirURL(d.url); err == nil {
 		return h
@@ -161,7 +134,6 @@ func (d *dirUI) host() string {
 	return ""
 }
 
-// verifiedBy is the host to put on a verified mark (none for a mark that is not one).
 func (d *dirUI) verifiedBy(verified bool) string {
 	if verified {
 		return d.host()
@@ -169,8 +141,6 @@ func (d *dirUI) verifiedBy(verified bool) string {
 	return ""
 }
 
-// use makes clean the directory (the person confirmed it). A new address drops the session token:
-// it was given for the old one. The same address keeps it.
 func (d *dirUI) use(clean, token string) {
 	if clean != d.url {
 		d.token = ""
@@ -195,7 +165,6 @@ func (d *dirUI) use(clean, token string) {
 	d.notifyChanged()
 }
 
-// clear forgets the directory and its token.
 func (d *dirUI) clear() {
 	d.url, d.token, d.offer, d.refused = "", "", "", ""
 	d.urlDraft, d.tokenDraft, d.demoToken, d.rows, d.searched, d.notice = "", "", "", nil, false, ""
@@ -208,8 +177,6 @@ func (d *dirUI) clear() {
 	d.notifyChanged()
 }
 
-// confirm asks about an address before it is used: the dialog names the host, and says what the
-// directory is given.
 func (d *dirUI) confirm(clean, token string, e *encUI) {
 	_, host, _ := checkDirURL(clean)
 	do := func() { d.use(clean, token); e.render() }
@@ -232,8 +199,6 @@ func (d *dirUI) connect() {
 	d.loadWatch()
 }
 
-// sessionToken is the token the person set, or, for the demo server (it hands one out at
-// /demo/provider-session; a real server has no such route), that one.
 func (d *dirUI) sessionToken(ctx context.Context) (string, error) {
 	if d.token != "" {
 		return d.token, nil
@@ -247,7 +212,7 @@ func (d *dirUI) sessionToken(ctx context.Context) (string, error) {
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", nil // not a demo server: no token, and the directory says sign in
+		return "", nil
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -261,7 +226,6 @@ func (d *dirUI) sessionToken(ctx context.Context) (string, error) {
 	return d.demoToken, nil
 }
 
-// dirErr puts the directory's failures in the interface's language.
 func dirErr(err error) error {
 	var msg string
 	switch {
@@ -285,11 +249,8 @@ func dirErr(err error) error {
 	return &shownError{msg: msg, err: err}
 }
 
-// dirMarks are the marks beyond "verified" that a row earned: what this client checked itself.
 type dirMarks struct{ Attested, OwnerSigned, OwnerEnrolled bool }
 
-// dirRows turns a lookup into the picker's rows. The marks are what the client proved (the key's own
-// attestation, an owner signature by a key somebody confirmed), never the server's word alone.
 func (d *dirUI) dirRows(keys []dirclient.Key) []components.DirRow {
 	rows := make([]components.DirRow, 0, len(keys))
 	for _, k := range keys {
@@ -299,8 +260,6 @@ func (d *dirUI) dirRows(keys []dirclient.Key) []components.DirRow {
 	return rows
 }
 
-// decorate gives a recipient row the marks the directory earned for its fingerprint (added: the
-// ones it had when the key was added).
 func (d *dirUI) decorate(r *components.RecipientRow, added bool) {
 	v, m := d.verified[r.Fingerprint], d.marks[r.Fingerprint]
 	if added {
@@ -310,7 +269,6 @@ func (d *dirUI) decorate(r *components.RecipientRow, added bool) {
 	r.Attested, r.OwnerSigned, r.OwnerEnrolled = v && m.Attested, v && m.OwnerSigned, v && m.OwnerEnrolled
 }
 
-// wire plugs the directory into the Recipients props: the picker, and Publish.
 func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 	if d.dir == nil {
 		return
@@ -322,8 +280,7 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 			return nil, dirErr(err)
 		}
 		if unenrolled {
-			// The rows are shown, but the server's word alone is not a verification: no verified mark, and the
-			// person is told to confirm the fingerprint another way before adding the key.
+			// the server's word alone is not a verification: no verified mark
 			for i := range keys {
 				if !keys[i].OwnerEnrolled {
 					keys[i].Verified = false
@@ -359,8 +316,7 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 	props.PublishNotice = d.notice
 }
 
-// publish publishes the owner's keys that are meant to be found (a passkey's and an SSH key's;
-// never a recovery key, which stays offline) for the signed-in account's address.
+// never a recovery key: it stays offline
 func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 	d.notice = ""
 	n := 0
@@ -368,7 +324,7 @@ func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 		if o.Kind == encstore.KindRecovery {
 			continue
 		}
-		// the proof of possession needs the private side, which is held only while that key is unlocked
+		// proof of possession needs the private side, held only while unlocked
 		id, _ := e.store.IdentityFor(o.Public)
 		req := dirclient.PublishRequest{Key: o.Public, Label: o.Label, Identity: id, Email: d.owner.email, Owner: d.owner.key}
 		if _, err := d.dir.Publish(ctx, req); err != nil {
@@ -384,7 +340,6 @@ func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 	return nil
 }
 
-// settingsPanel is where the directory server and token are set.
 func (d *dirUI) settingsPanel(e *encUI) []xango.Node {
 	status := T("dir.unset", "No key directory is set: pick people by pasting their keys. Set a docstore server to find them by e-mail and to publish your keys.")
 	if d.dir != nil {
@@ -442,8 +397,6 @@ func tokenLabel(d *dirUI) string {
 	return T("dir.tokenLabel", "Session token, if the server needs one")
 }
 
-// save applies what was typed: an unchanged address only changes the token; a new one is checked
-// and then confirmed in a dialog that names its host before anything uses it.
 func (d *dirUI) save(e *encUI) {
 	raw := strings.TrimSpace(d.urlDraft)
 	if raw == "" {
@@ -464,10 +417,9 @@ func (d *dirUI) save(e *encUI) {
 		e.render()
 		return
 	}
-	d.confirm(clean, "", e) // a token typed for another address is dropped: it is given once the address is confirmed
+	d.confirm(clean, "", e)
 }
 
-// seqNote warns when the log number of an unsigned row is not the one the first look showed.
 func seqNote(k dirclient.Key) string {
 	if !k.SeqChanged {
 		return ""

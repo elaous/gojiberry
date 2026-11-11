@@ -16,11 +16,9 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// formsHolder is embedded in ui: the Forms tab's state (the field being filled in or changed, and the last message).
 type formsHolder struct {
 	forms formsState
-	// cell is the table cell the next field is put in, when on (numbers count from 1, as the formulas' letters and numbers do).
-	cell struct {
+	cell  struct {
 		on                 bool
 		table, row, column int
 	}
@@ -34,23 +32,14 @@ func formsMenuItem(u *ui, fl func() *canvas.TextFlow, redraw, renderUI func()) c
 	return components.MenuItem{Label: T("menu.forms", "Form fields"), Items: formsMenu(u, fl, redraw, renderUI)}
 }
 
-// The Forms tab: a bar of the field types to add at the caret, the fields of the document with what is in them, and the
-// two things the eye and the pen on a field ask for: filling it in (a box fit for its kind, with the problem with the
-// value said at once) and changing what the field is (its label, kind, placeholder, pattern, options). Insert > Form
-// fields has the same kinds, and Clear form fields. A locked field has no pen and its properties cannot be changed; the
-// owner locks and unlocks.
-
-// formsState is what the tab is showing: the field being filled in or changed, and the last message.
 type formsState struct {
-	target *canvas.FormFieldObject
-	edit   bool // the pen, not the eye
-	msg    string
-	focus  bool
-	// submitTo is the address the downloaded web form sends the answers to.
+	target   *canvas.FormFieldObject
+	edit     bool // the pen, not the eye
+	msg      string
+	focus    bool
 	submitTo string
 }
 
-// formKindLabel is the name of a kind. The ids are spelled out so that the translation check sees them.
 func formKindLabel(k canvas.FormKind) string {
 	switch k {
 	case canvas.FormTextArea:
@@ -73,7 +62,6 @@ func formKindLabel(k canvas.FormKind) string {
 	return T("forms.kind.text", "Text")
 }
 
-// formProblemText says what is wrong with a value, in words.
 func formProblemText(code string) string {
 	switch code {
 	case canvas.FormProblemRequired:
@@ -96,12 +84,11 @@ func formProblemText(code string) string {
 	return ""
 }
 
-// wireForms makes the eye and the pen of every field in the flow open the Forms tab.
 func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 	if fl == nil {
 		return
 	}
-	for _, o := range fl.Tables() { // a field in a table cell: the press that lands on the cell
+	for _, o := range fl.Tables() {
 		o.View.OnFieldFill = func(_, _ int, ff *canvas.FormFieldObject) {
 			if !u.openField(ff, false, renderUI) {
 				return
@@ -142,13 +129,10 @@ func (u *ui) wireForms(fl *canvas.TextFlow, redraw, renderUI func()) {
 	}
 }
 
-// canEditFormProps says the properties of the field may be changed here: the person can edit, the document is in edit
-// mode and the field is not locked.
 func (u *ui) canEditFormProps(ff *canvas.FormFieldObject) bool {
 	return u.stateRef != nil && u.stateRef.Role.CanEdit() && u.stateRef.Mode == canvas.ModeEdit && !ff.Locked
 }
 
-// addFormField puts a new field of the kind at the caret.
 func (u *ui) addFormField(fl *canvas.TextFlow, kind canvas.FormKind, redraw, renderUI func()) {
 	if fl == nil || u.stateRef == nil || !u.stateRef.Role.CanEdit() || u.stateRef.Mode != canvas.ModeEdit {
 		u.forms.msg = T("forms.needEdit", "Switch to edit mode to add or change form fields.")
@@ -197,7 +181,6 @@ func (u *ui) addFormField(fl *canvas.TextFlow, kind canvas.FormKind, redraw, ren
 	renderUI()
 }
 
-// clearFormFields empties every field.
 func (u *ui) clearFormFields(fl *canvas.TextFlow, redraw, renderUI func()) {
 	if fl == nil {
 		return
@@ -209,7 +192,6 @@ func (u *ui) clearFormFields(fl *canvas.TextFlow, redraw, renderUI func()) {
 	renderUI()
 }
 
-// formsMenu is Insert > Form fields.
 func formsMenu(u *ui, fl func() *canvas.TextFlow, redraw, renderUI func()) []components.MenuItem {
 	var items []components.MenuItem
 	for _, k := range canvas.FormKinds {
@@ -221,14 +203,12 @@ func formsMenu(u *ui, fl func() *canvas.TextFlow, redraw, renderUI func()) []com
 		components.MenuItem{Label: T("forms.clear", "Clear form fields"), OnSelect: func() { u.clearFormFields(fl(), redraw, renderUI) }})
 }
 
-// formsPanel is the Forms tab.
 func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	fl := flow()
 	canEdit := state.Role.CanEdit() && state.Mode == canvas.ModeEdit
 	isOwner := state.Role == canvas.RoleOwner || state.Role == "" // no role set: the one person who has the document
 	nodes := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("forms.title", "Form fields")))}
 
-	// the bar of the kinds
 	var bar []xango.Node
 	for _, k := range canvas.FormKinds {
 		k := k
@@ -256,7 +236,7 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "forms-message"), xango.A("role", "status")}, xango.Text(u.forms.msg)))
 	}
 
-	// the field being filled in or changed: held while it is (renewed at each change), let go when it is closed
+	// field in use: held, renewed per change, let go on close
 	if t := u.forms.target; t != nil && !u.claim(fieldKey(t.Name), T("lock.field", "form field"), renderUI) {
 		u.forms.target = nil
 	} else if t == nil {
@@ -272,7 +252,6 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		}
 	}
 
-	// the fields of the document
 	var fields []*canvas.FormFieldObject
 	if fl != nil {
 		fields = fl.FormFields()
@@ -358,7 +337,6 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 	return xango.El("div", []xango.Attr{xango.A("id", "forms-panel")}, nodes...)
 }
 
-// tableOfField is the table and cell that hold the field, nil when it is not in a table.
 func tableOfField(fl *canvas.TextFlow, ff *canvas.FormFieldObject) (*canvas.TableObject, int, int) {
 	for _, o := range fl.Tables() {
 		for pos, f := range o.View.Table.Fields {
@@ -370,7 +348,6 @@ func tableOfField(fl *canvas.TextFlow, ff *canvas.FormFieldObject) (*canvas.Tabl
 	return nil, 0, 0
 }
 
-// formFieldOffset is where the field is in the text, as a caret position.
 func formFieldOffset(fl *canvas.TextFlow, target *canvas.FormFieldObject) int {
 	offset := 0
 	for _, it := range fl.Slice(0, utf8.RuneCountInString(fl.EditText())) {
@@ -394,7 +371,6 @@ func formFieldOffset(fl *canvas.TextFlow, target *canvas.FormFieldObject) int {
 	return 0
 }
 
-// formFiller is the box the eye opens: an input fit for the kind, with the problem with the value said as it is typed.
 func formFiller(u *ui, fl *canvas.TextFlow, t *canvas.FormFieldObject, redraw, renderUI func()) xango.Node {
 	label := strings.TrimSpace(t.Label)
 	if label == "" {
@@ -459,7 +435,6 @@ func formFiller(u *ui, fl *canvas.TextFlow, t *canvas.FormFieldObject, redraw, r
 	return xango.El("section", []xango.Attr{xango.A("id", "forms-filler"), xango.A("class", "gj-doc-item")}, kids...)
 }
 
-// formPropsEditor is what the pen opens: the properties of the field.
 func formPropsEditor(u *ui, fl *canvas.TextFlow, t *canvas.FormFieldObject, redraw, renderUI func()) xango.Node {
 	touch := func() { fl.Touch(); redraw() }
 	var kindOpts []xango.Node
@@ -507,8 +482,6 @@ func formPropsEditor(u *ui, fl *canvas.TextFlow, t *canvas.FormFieldObject, redr
 	return xango.El("section", []xango.Attr{xango.A("id", "forms-editor"), xango.A("class", "gj-doc-item")}, kids...)
 }
 
-// downloadAnswers saves the answers written in the fields as a JSON object or a CSV row. Fields with a problem are
-// saved as they are, and the message says so.
 func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()) {
 	if fl == nil {
 		return
@@ -544,7 +517,6 @@ func (u *ui) downloadAnswers(fl *canvas.TextFlow, format string, renderUI func()
 	renderUI()
 }
 
-// cellTargetNodes is the choice to put the next field in a table cell instead of at the caret: which table, row and column.
 func (u *ui) cellTargetNodes(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	if fl == nil || len(fl.Tables()) == 0 {
 		return nil
@@ -558,7 +530,6 @@ func (u *ui) cellTargetNodes(fl *canvas.TextFlow, redraw, renderUI func()) []xan
 		}))
 	}
 	nodes := []xango.Node{
-		// the same as the eye and the pen at the top right of each table, for every table at once, and for the keyboard
 		xango.El("div", []xango.Attr{xango.A("style", "display:flex;flex-wrap:wrap;gap:6px")},
 			btn("forms-see-all", T("forms.seeAll", "See all (values of the tables)"), func() { fl.ShowTableFormulas(false); redraw(); renderUI() }, false),
 			btn("forms-edit-all", T("forms.editAll", "Edit all (formulas and fields of the tables)"), func() { fl.ShowTableFormulas(true); redraw(); renderUI() }, false)),
@@ -578,7 +549,6 @@ func (u *ui) cellTargetNodes(fl *canvas.TextFlow, redraw, renderUI func()) []xan
 	return nodes
 }
 
-// openField opens a field to fill in or to change, unless somebody else is at it.
 func (u *ui) openField(ff *canvas.FormFieldObject, edit bool, renderUI func()) bool {
 	if !u.claim(fieldKey(ff.Name), T("lock.field", "form field"), renderUI) {
 		return false
@@ -587,7 +557,6 @@ func (u *ui) openField(ff *canvas.FormFieldObject, edit bool, renderUI func()) b
 	return true
 }
 
-// release lets the object go.
 func (u *ui) release(key string) {
 	if u.hold.key == key {
 		u.hold.key = ""

@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// fakePainter records draw calls; every rune measures 8px wide.
 type fakePainter struct{ calls []string }
 
 func (f *fakePainter) rec(format string, a ...any) {
@@ -47,7 +46,6 @@ func (f *fakePainter) DrawImage(_ ImageSource, sx, sy, sw, sh, dx, dy, dw, dh fl
 
 var _ ImagePainter = (*fakePainter)(nil)
 
-// fakeImage is an ImageSource of a fixed size.
 type fakeImage struct{ w, h float64 }
 
 func (i fakeImage) Size() (float64, float64) { return i.w, i.h }

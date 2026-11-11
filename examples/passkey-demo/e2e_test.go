@@ -13,9 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestPasskeysInARealBrowser runs the whole thing in headless Chrome with a virtual authenticator
-// (no dialog): make an account with a passkey, add a second, sign in again without typing, and
-// remove one; the last one stays.
 func TestPasskeysInARealBrowser(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()
@@ -43,12 +40,10 @@ func TestPasskeysInARealBrowser(t *testing.T) {
 	d.Click(".gj-passkey-create")
 	d.WaitFor("a new account signed in", `document.getElementById('status').textContent === 'signed in' && document.querySelectorAll('.gj-passkey-item').length === 1`)
 
-	// The same authenticator cannot hold two passkeys for one account: the page says so.
 	d.Fill(".gj-passkey-label", "Again")
 	d.Click(".gj-passkey-add")
 	d.WaitSelector(".gj-doc-error")
 	d.OK(strings.Contains(d.Text(".gj-doc-error"), "already has a passkey"), "a second passkey on the same authenticator is refused: "+d.Text(".gj-doc-error"))
-	// A second passkey, on another authenticator (a phone), named.
 	d.RemoveVirtualAuthenticator(laptop)
 	d.VirtualAuthenticator()
 	d.Fill(".gj-passkey-label", "Phone")
@@ -56,14 +51,12 @@ func TestPasskeysInARealBrowser(t *testing.T) {
 	d.WaitFor("two passkeys", "document.querySelectorAll('.gj-passkey-item').length === 2")
 	d.OK(strings.Contains(strings.Join(d.Texts(".gj-passkey-item .gj-doc-name"), ","), "Phone"), "the new passkey has its name")
 
-	// A fresh visit: sign in with no user name, the authenticator offers the account.
 	d.ReloadPage()
 	d.WaitSelector(".gj-passkey-signin")
 	d.OK(d.Text("#status") == "not signed in", "the session was in the page only")
 	d.Click(".gj-passkey-signin")
 	d.WaitFor("signed in with a passkey", `document.getElementById('status').textContent === 'signed in' && document.querySelectorAll('.gj-passkey-item').length === 2`)
 
-	// Remove one (asks first); the last stays.
 	confirm := func() { d.Click(`[role="alertdialog"] .gj-dialog-actions button:last-child`) }
 	d.Click(".gj-passkey-item:last-child .gj-passkey-remove")
 	confirm()
@@ -76,9 +69,6 @@ func TestPasskeysInARealBrowser(t *testing.T) {
 	d.NoErrors()
 }
 
-// TestPasskeyAsAnEncryptionKey derives an age key from the passkey's PRF output in a real
-// browser: asking twice gives the same key. (Different passkeys give different keys on real
-// authenticators; Chrome's virtual one does not promise that, so it is covered by the unit tests.)
 func TestPasskeyAsAnEncryptionKey(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()

@@ -14,12 +14,6 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
-// Postgres is exercised with sqlmock instead of a live database: this
-// sandbox has no Docker daemon available to run a real Postgres
-// container, but the adapter's query-building and error-translation
-// logic (docstore.ErrNotFound on a missing row, RowsAffected on delete) is
-// fully native and worth covering without one.
-
 func TestPostgresAdapterSaveInsertsWithUpsert(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

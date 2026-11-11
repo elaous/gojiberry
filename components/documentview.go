@@ -8,28 +8,15 @@ type DocumentViewProps struct {
 	Title string
 	// OnTitle, if set, makes the title an editable text box.
 	OnTitle func(title string)
-	// MenuBar is the row of menus (components.MenuBar), shown beside the
-	// title.
 	MenuBar xango.Node
 	// Toolbar is the formatting toolbar under it (buttons, selectors).
-	Toolbar xango.Node
-	// Canvas is the document itself: the <canvas> and its hidden input.
-	Canvas xango.Node
-	// Sidebar is an optional panel to the right (outline, key bindings,
-	// link preview...).
-	Sidebar *xango.Node
-	// Status is the line at the bottom ("Page 2 of 3 · 412 words").
-	Status string
-	// StatusBar, if set, replaces Status with the structured bar (see StatusBar).
+	Toolbar   xango.Node
+	Canvas    xango.Node
+	Sidebar   *xango.Node
+	Status    string
 	StatusBar *xango.Node
 }
 
-// DocumentView lays out a word-processor window around a canvas editor,
-// the way Google Docs does: the title and a menu bar across the top, a
-// toolbar under them, the document on a grey desk in the middle with an
-// optional sidebar beside it, and a status line at the bottom. It is
-// plain structure -- header, toolbar, main (desk and sidebar), footer --
-// with a stylesheet (documentview.css); everything inside is yours.
 func DocumentView(props DocumentViewProps) xango.Node {
 	title := xango.Node(xango.El("span", []xango.Attr{xango.A("class", "gj-docview-title")}, xango.Text(props.Title)))
 	if props.OnTitle != nil {
@@ -40,8 +27,6 @@ func DocumentView(props DocumentViewProps) xango.Node {
 		})
 	}
 	main := []xango.Node{xango.El("div", []xango.Attr{xango.A("class", "gj-docview-desk"), xango.A("tabindex", "-1")}, props.Canvas)}
-	// Skip links, the first things a keyboard reaches: past the title, menus and toolbar to the document, and
-	// to the side panel. Each moves the focus (a link to "#id" would not work under a <base href>).
 	skip := func(class, label string) xango.Node {
 		return xango.El("a", []xango.Attr{xango.A("href", "#"), xango.A("class", "gj-skip-link"),
 			xango.On("click", func(e xango.Event) {
@@ -62,7 +47,7 @@ func DocumentView(props DocumentViewProps) xango.Node {
 		xango.El("nav", []xango.Attr{xango.A("class", "gj-skip"), xango.A("aria-label", tr("docview.skip", "Skip links"))}, links...),
 		xango.El("header", []xango.Attr{xango.A("class", "gj-docview-top")}, title,
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-menubar")}, props.MenuBar)),
-		// a labelled region, so the toolbar is inside a landmark like the rest of the page
+		// a labelled region, so the toolbar is inside a landmark
 		xango.El("div", []xango.Attr{xango.A("role", "region"), xango.A("aria-label", tr("docview.toolbar", "Toolbar"))},
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-toolbar"), xango.A("role", "toolbar"), xango.A("aria-label", tr("docview.toolbar", "Toolbar"))}, props.Toolbar)),
 		xango.El("main", []xango.Attr{xango.A("class", "gj-docview-main")}, main...),

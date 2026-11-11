@@ -7,9 +7,6 @@ import (
 	"github.com/elaous/gojiberry/complete"
 )
 
-// --- auto-closing pairs ------------------------------------------------
-
-// DefaultAutoClose is the code-editor set: " ' ` ( [ {.
 func DefaultAutoClose() map[rune]rune {
 	return map[rune]rune{'(': ')', '[': ']', '{': '}', '"': '"', '\'': '\'', '`': '`'}
 }
@@ -23,8 +20,6 @@ func (ft *FloatingText) isCloser(r rune) bool {
 	return false
 }
 
-// betweenPair reports whether the caret sits between an opener and its
-// closer, with nothing selected.
 func (ft *FloatingText) betweenPair() bool {
 	if ft.caret != ft.anchor || ft.caret == 0 || ft.caret >= len(ft.runes) {
 		return false
@@ -33,10 +28,6 @@ func (ft *FloatingText) betweenPair() bool {
 	return ok && closer == ft.runes[ft.caret].r
 }
 
-// typeRune handles one typed character with auto-closing: it wraps a
-// selection in a pair, overtypes a closer already ahead of the caret, or
-// inserts a pair -- except where that would be annoying: a quote after a
-// letter (an apostrophe) or an opener in front of a word.
 func (ft *FloatingText) typeRune(r rune) {
 	closer, isOpener := ft.AutoClose[r]
 	from, to := ft.Selection()
@@ -72,10 +63,7 @@ func (ft *FloatingText) typeRune(r rune) {
 	ft.replace(from, to, []fRune{{r, f}})
 }
 
-// InsertText types s at the caret, replacing any selection (edit mode,
-// while editing). A single typed character gets auto-closing and
-// completion; longer text (a paste) is inserted as is. Carriage returns
-// are dropped.
+// InsertText types s at the caret, replacing any selection.
 func (ft *FloatingText) InsertText(s string) bool {
 	s = strings.ReplaceAll(s, "\r", "")
 	if ft.mode != ModeEdit || !ft.editing || s == "" {
@@ -113,8 +101,6 @@ func (ft *FloatingText) PasteText(text string) bool {
 	return ok
 }
 
-// --- completion --------------------------------------------------------
-
 // Completer suggests completions for a partly typed word.
 type Completer interface {
 	// Complete returns candidate whole words for the prefix, best first.
@@ -124,7 +110,6 @@ type Completer interface {
 // CompleterFunc adapts a function to Completer.
 type CompleterFunc func(prefix string) []string
 
-// Complete implements Completer.
 func (f CompleterFunc) Complete(prefix string) []string { return f(prefix) }
 
 const (
@@ -134,8 +119,6 @@ const (
 
 func isIdentRune(r rune) bool { return isWordRune(r) || r == '_' }
 
-// wordBeforeCaret returns the identifier prefix ending at the caret and
-// where it starts.
 func (ft *FloatingText) wordBeforeCaret() (string, int) {
 	start := ft.caret
 	for start > 0 && isIdentRune(ft.runes[start-1].r) {
@@ -148,8 +131,6 @@ func (ft *FloatingText) wordBeforeCaret() (string, int) {
 	return b.String(), start
 }
 
-// defaultComplete suggests the longer words in the text and Vocabulary
-// that start with prefix (see completeWords).
 func (ft *FloatingText) defaultComplete(prefix string) []string {
 	rs := make([]rune, len(ft.runes))
 	for i, fr := range ft.runes {
@@ -158,9 +139,6 @@ func (ft *FloatingText) defaultComplete(prefix string) []string {
 	return completeWords(string(rs), ft.Vocabulary, prefix)
 }
 
-// completeWords is the one ranking behind every completion popup in the
-// canvas: package complete's index of the text's own words (most used and
-// most recent first) and the vocabulary, capped at maxSuggestions.
 func completeWords(text string, vocabulary []string, prefix string) []string {
 	var ix complete.Index
 	ix.AddText(text)
@@ -189,8 +167,6 @@ func (ft *FloatingText) closeSuggestions() {
 	}
 }
 
-// updateSuggestions recomputes the completion popup for the word before
-// the caret.
 func (ft *FloatingText) updateSuggestions() {
 	ft.closeSuggestions()
 	if ft.mode != ModeEdit || !ft.editing || ft.caret != ft.anchor || ft.Painter == nil {
@@ -225,7 +201,6 @@ func (ft *FloatingText) updateSuggestions() {
 	m.SetHover(0)
 }
 
-// acceptSuggestion replaces the word being typed with the completion.
 func (ft *FloatingText) acceptSuggestion(word string) {
 	f := ft.typingFormat()
 	ins := make([]fRune, 0, len(word))
@@ -245,8 +220,6 @@ func (ft *FloatingText) Suggestions() []string {
 	}
 	return ft.sugg.Labels()
 }
-
-// --- color palette ------------------------------------------------------
 
 var (
 	textColors = []struct{ name, css string }{
@@ -269,7 +242,6 @@ func (ft *FloatingText) palMenu() *Menu {
 
 func (ft *FloatingText) palOpen() bool { return ft.pal != nil && ft.pal.IsOpen() }
 
-// openPalette shows the color menu under toolbar button i.
 func (ft *FloatingText) openPalette(i int, kind string) {
 	ft.closeSuggestions()
 	if ft.palOpen() && ft.palKind == kind { // clicking the button again closes it
@@ -295,22 +267,16 @@ func (ft *FloatingText) openPalette(i int, kind string) {
 	ft.palMenu().OpenWithin(items, b[0], b[1]+b[3]+2, ft.viewport)
 }
 
-// SetTextColor colors the selected text (or the text typed next); ""
-// returns it to the default color.
 func (ft *FloatingText) SetTextColor(css string) bool {
 	return ft.ApplyFormat(func(f *Format) { f.Color = css })
 }
 
-// SetHighlight highlights the selected text (or the text typed next); ""
-// removes the highlight.
+// SetHighlight highlights the selection or next text; "" removes it.
 func (ft *FloatingText) SetHighlight(css string) bool {
 	return ft.ApplyFormat(func(f *Format) { f.Background = css })
 }
 
-// ToggleUnderline, ToggleStrike, ToggleSuperscript and ToggleSubscript
-// switch a decoration on the selection (or the text typed next): on
-// unless it is on everywhere already. Superscript and subscript exclude
-// each other.
+// Toggle methods switch decorations on the selection.
 func (ft *FloatingText) ToggleUnderline() bool {
 	return ft.toggleDecoration(func(s TextStyle) bool { return s.Underline }, func(f *Format, on bool) { f.Underline = on })
 }
@@ -345,8 +311,6 @@ func (ft *FloatingText) toggleDecoration(has func(TextStyle) bool, set func(*For
 	return ft.ApplyFormat(func(f *Format) { set(f, !all) })
 }
 
-// --- popups: mouse, keys, overlay ---------------------------------------
-
 func (ft *FloatingText) closePopups() {
 	ft.closeSuggestions()
 	if ft.pal != nil {
@@ -354,11 +318,9 @@ func (ft *FloatingText) closePopups() {
 	}
 }
 
-// popupsMouseDown lets the open palette or completion popup take a press
-// on one of its items; a press elsewhere closes them (and carries on).
 func (ft *FloatingText) popupsMouseDown(x, y float64) bool {
 	if ft.palOpen() {
-		// The button that opened the palette closes it again.
+		// the button that opened the palette closes it again
 		if w := ft.whatAt(x, y); (w == "button:6" && ft.palKind == "text") || (w == "button:7" && ft.palKind == "highlight") {
 			ft.pal.Close()
 			return true
@@ -373,10 +335,7 @@ func (ft *FloatingText) popupsMouseDown(x, y float64) bool {
 	return false
 }
 
-// HandleKey handles editing keys while editing, and drives the color
-// palette and the completion popup: while the palette is open it gets
-// every key; while completions are showing, Up/Down choose, Tab or Enter
-// accepts and Escape dismisses, and any other key edits as usual.
+// HandleKey handles editing keys, the palette and completion popup.
 func (ft *FloatingText) HandleKey(key string, shift bool) bool {
 	if ft.mode != ModeEdit {
 		return false
@@ -432,8 +391,6 @@ func (ft *FloatingText) DrawOverlay() {
 	}
 }
 
-// --- selection, formats, commands, clipboard -----------------------------
-
 // SetFormatClipboard implements FormatClipboardSetter.
 func (ft *FloatingText) SetFormatClipboard(c *FormatClipboard) { ft.formats = c }
 
@@ -452,9 +409,7 @@ func (ft *FloatingText) SelectedText() string {
 	return b.String()
 }
 
-// CommonFormat returns the formatting shared by the whole selection --
-// where it varies a field is left unset (the minimum common formatting);
-// with no selection it is the format at the caret.
+// CommonFormat returns formatting shared by the selection.
 func (ft *FloatingText) CommonFormat() Format {
 	from, to := ft.Selection()
 	if from == to {
@@ -467,8 +422,7 @@ func (ft *FloatingText) CommonFormat() Format {
 	return CommonFormat(fs...)
 }
 
-// PasteFormat gives the selected text exactly format f (replacing its
-// formatting); with no selection f applies to the text typed next.
+// PasteFormat gives the selection format f.
 func (ft *FloatingText) PasteFormat(f Format) {
 	from, to := ft.Selection()
 	if from == to {
@@ -481,8 +435,7 @@ func (ft *FloatingText) PasteFormat(f Format) {
 	ft.changed()
 }
 
-// HandleCommand implements Commander for the editing commands in the
-// Keymap.
+// HandleCommand runs editing commands from the Keymap.
 func (ft *FloatingText) HandleCommand(cmd Command) bool {
 	if ft.mode != ModeEdit || !ft.editing {
 		return false
@@ -565,15 +518,12 @@ var (
 	_ ViewportSetter        = (*FloatingText)(nil)
 )
 
-// PaletteMenu returns the color palette's menu (open while it is showing).
 func (ft *FloatingText) PaletteMenu() *Menu { return ft.palMenu() }
 
-// SuggestionMenu returns the completion popup's menu (open while
-// suggestions are showing).
+// SuggestionMenu returns the completion popup's menu.
 func (ft *FloatingText) SuggestionMenu() *Menu { return ft.suggestMenu() }
 
-// ToolbarButtonRect returns toolbar button i's rectangle (x, y, w, h):
-// 0 Move, 1 B, 2 I, 3 A-, 4 A+, 5 Wrap, 6 Color, 7 Mark.
+// ToolbarButtonRect returns button i's rectangle (x, y, w, h).
 func (ft *FloatingText) ToolbarButtonRect(i int) (x, y, w, h float64) {
 	ft.resolve()
 	r := ft.buttonRect(i)

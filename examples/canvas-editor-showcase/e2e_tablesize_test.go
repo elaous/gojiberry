@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Every table in the text has the grips of an editable table (column letters above, row numbers at the left); dragging
-// the edge of a column grip or of a row grip makes that column wider or that row taller, and the size is saved.
 func TestDraggingATableGripResizesAColumnAndARow(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -32,8 +30,6 @@ func TestDraggingATableGripResizesAColumnAndARow(t *testing.T) {
 	d.NoErrors()
 }
 
-// A press on a column grip, a row grip or the corner icon selects it and opens the Styles tab with what can be done to it
-// (insert, move, sort, duplicate, delete, reset the size); a double press on the edge of a grip gives the size back.
 func TestTableGripsSelectAndTheStylesTabActsOnThem(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

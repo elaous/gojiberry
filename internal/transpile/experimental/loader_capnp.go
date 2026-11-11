@@ -13,18 +13,6 @@ import (
 
 var capnpGoImportRe = regexp.MustCompile(`\$Go\.import\(\s*"([^"]+)"\s*\)`)
 
-// loadCapnProto generates Go bindings for a .capnp file by shelling
-// out to the real capnp/capnpc-go toolchain (xango does not reimplement
-// a Cap'n Proto compiler).
-//
-// Unlike protoc-gen-go, capnpc-go has no external flag to say where
-// generated code should live or what Go import path to give it -- it
-// takes both solely from a `$Go.import("...")`/`$Go.package("...")`
-// annotation the schema itself must declare (the real, documented
-// go-capnp convention: https://pkg.go.dev/capnproto.org/go/capnp/v3),
-// and writes the output next to the source file. So unlike HCL/proto,
-// xango can't choose the destination here -- it runs the compiler and
-// reports back whatever import path the schema declared for itself.
 func LoadCapnProto(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 	abs, err := transpile.ResolveResourcePath(in)
 	if err != nil {

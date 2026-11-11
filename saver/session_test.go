@@ -33,7 +33,6 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if p.Target != "sqlite" || p.Format != "json" || len(p.Targets) != 4 || len(p.Formats) != 4 {
 		t.Fatalf("%+v", p)
 	}
-	// Drive it the way the component does.
 	p.OnName("report")
 	s.Props().OnFormat("proto")
 	s.Props().OnSave()
@@ -48,7 +47,6 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if *changes == 0 {
 		t.Fatal("OnChange never called")
 	}
-	// Saving again replaces the same document; Save as new makes another with the same name.
 	s.Props().OnSave()
 	if p = s.Props(); len(p.Docs.Docs) != 1 {
 		t.Fatalf("saving twice made %d documents", len(p.Docs.Docs))
@@ -57,7 +55,6 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if p = s.Props(); len(p.Docs.Docs) != 2 || p.Docs.Docs[0].ID == p.Docs.Docs[1].ID || p.Docs.Docs[0].Name != p.Docs.Docs[1].Name {
 		t.Fatalf("save as new: %+v", p.Docs.Docs)
 	}
-	// Another target starts empty; coming back finds the documents.
 	s.Props().OnTarget("memory")
 	if p = s.Props(); len(p.Docs.Docs) != 0 || p.Target != "memory" || s.ID() != "" {
 		t.Fatalf("%+v", p)
@@ -66,7 +63,6 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if p = s.Props(); len(p.Docs.Docs) != 2 {
 		t.Fatalf("%+v", p)
 	}
-	// Opening hands over the document and adopts its id, name and format.
 	s.SetName("other")
 	s.SetFormat("json")
 	if err := p.Docs.Open(context.Background(), id); err != nil {
@@ -75,7 +71,6 @@ func TestSessionSaveOpenDeleteFlow(t *testing.T) {
 	if len(*opened) != 1 || (*opened)[0].Title != "report" || s.Name() != "report" || s.ID() != id || s.Props().Format != "proto" || s.Props().Status != "report opened" {
 		t.Fatalf("%+v %q %+v", *opened, s.Name(), s.Props())
 	}
-	// Detach: what is in the editor is not that document any more.
 	s.Detach()
 	if s.ID() != "" {
 		t.Fatal("Detach")
@@ -116,13 +111,11 @@ func TestSessionErrors(t *testing.T) {
 	if err := s.SaveVersion(ctx); err == nil || !strings.Contains(err.Error(), "save the document") {
 		t.Fatalf("a version of an unsaved document: %v", err)
 	}
-	// A failed operation shows on the component, and the next one clears it.
 	_ = s.SetTarget(ctx, "memory")
 	s.Props().Docs.Pending.Run(func(ctx context.Context) error { return s.Delete(ctx, docfile.NewID()) })
 	if p := s.Props(); !p.Failed || p.Status == "" {
 		t.Fatalf("%+v", p)
 	}
-	// Defaults: no OnChange, no OnOpen.
 	bare := NewSession(&Saver{}, func() docfile.Document { return docfile.Document{} }, nil)
 	bare.SetName("n")
 	if err := bare.Open(ctx, "x"); err == nil {
@@ -170,7 +163,6 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if err := s.Save(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// Versions of the saved document.
 	if err := s.Props().Versions.Save(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +177,6 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 		t.Error("version not deleted")
 	}
 
-	// Two documents with one name, tagged.
 	first := s.ID()
 	s.Props().OnSaveAsNew()
 	second := s.ID()
@@ -210,14 +201,13 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if got := s.Docs().TagFilter; got != "rpg" {
 		t.Errorf("filter %q", got)
 	}
-	if err := docs.Tag(ctx, first, nil); err != nil { // the last "rpg" goes: the filter must not strand the list
+	if err := docs.Tag(ctx, first, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.Docs().TagFilter; got != "" {
 		t.Errorf("after the last rpg tag went: %q", got)
 	}
 
-	// Duplicate, trash, restore, purge: the trash as a plug-in backend.
 	if err := docs.Duplicate(ctx, first); err != nil {
 		t.Fatal(err)
 	}
@@ -244,18 +234,16 @@ func TestSessionPlugsIntoTheDocumentComponents(t *testing.T) {
 	if p := s.Props(); len(p.Trash.Docs) != 0 || len(p.Docs.Docs) != 2 {
 		t.Fatalf("purge: %+v", p)
 	}
-	// The trash's selection.
 	_ = docs.Trash(ctx, []string{first})
 	trash := s.Trash()
 	trash.OnSelect([]string{first, "gone"})
 	if got := s.Trash().Selected; !reflect.DeepEqual(got, []string{first, "gone"}) {
 		t.Errorf("selected %v", got)
 	}
-	_ = s.Refresh(ctx) // a selection of something no longer in the trash is dropped
+	_ = s.Refresh(ctx)
 	if got := s.Trash().Selected; !reflect.DeepEqual(got, []string{first}) {
 		t.Errorf("after refresh %v", got)
 	}
-	// Trashing something that is not there fails and shows.
 	s.Pending.Run(func(ctx context.Context) error { return s.TrashDocs(ctx, []string{docfile.NewID()}) })
 	if p := s.Props(); !p.Failed {
 		t.Error("a failure must show")
@@ -275,7 +263,6 @@ func TestSessionFoldersAndBreadcrumb(t *testing.T) {
 	if len(docs.Docs) != 1 || len(docs.Path) != 0 || docs.OpenFolder == nil {
 		t.Fatalf("%+v", docs)
 	}
-	// Make Work, go in; a document saved there is in it, and the root list no longer shows it.
 	if err := docs.NewFolder(ctx, "Work"); err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +286,6 @@ func TestSessionFoldersAndBreadcrumb(t *testing.T) {
 	if got := s.Docs(); len(got.Folders) != 1 || got.Folders[0].Name != "2026" || len(got.AllFolders) != 2 {
 		t.Fatalf("%+v", got)
 	}
-	// Move the root document in; opening a document goes to its folder.
 	if err := s.Docs().Move(ctx, []string{rootDoc}, work.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +301,6 @@ func TestSessionFoldersAndBreadcrumb(t *testing.T) {
 	if got := s.Docs(); len(got.Path) != 1 || got.Path[0].ID != work.ID {
 		t.Errorf("opening a document should show its folder: %+v", got.Path)
 	}
-	// A folder with documents cannot be deleted; an empty one can, and the view moves up.
 	if err := s.Docs().DeleteFolder(ctx, work.ID); err == nil {
 		t.Error("deleted a folder with documents")
 	}
@@ -330,7 +315,6 @@ func TestSessionFoldersAndBreadcrumb(t *testing.T) {
 	if err := s.OpenFolder(ctx, docfile.NewID()); err == nil {
 		t.Error("opened a folder that is not there")
 	}
-	// Changing target starts at the top.
 	_ = s.SetTarget(ctx, "memory")
 	if got := s.Docs(); len(got.Path) != 0 || len(got.Folders) != 0 {
 		t.Errorf("%+v", got)
@@ -433,7 +417,6 @@ func TestSessionDownloadsAndLinks(t *testing.T) {
 	if s.Props().Status != "report downloaded" {
 		t.Errorf("status %q", s.Props().Status)
 	}
-	// With no format, the document as saved.
 	if err := s.Download(ctx, id, ""); err != nil || got[1].name != "report.json" || !strings.Contains(string(got[1].data), "report") {
 		t.Fatalf("%v %+v", err, got)
 	}
@@ -467,7 +450,6 @@ func TestSessionSaveState(t *testing.T) {
 	if s.SaveState() != SaveUnsaved {
 		t.Fatal(s.SaveState())
 	}
-	// Edited while a save runs: still unsaved afterwards.
 	s.Get = func() docfile.Document {
 		s.MarkEdited()
 		return docfile.FromFlow("", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "body"}}})
@@ -478,13 +460,11 @@ func TestSessionSaveState(t *testing.T) {
 	if !slices.Contains(during, SaveSaving) || s.SaveState() != SaveUnsaved {
 		t.Errorf("during %q after %q", during, s.SaveState())
 	}
-	// A failed save says so.
 	s.Props().OnName("")
 	s.Props().OnSave()
 	if s.SaveState() != SaveFailed {
 		t.Errorf("%q", s.SaveState())
 	}
-	// Opening a document leaves the editor holding what is saved.
 	id := s.Docs().Docs[0].ID
 	s.Pending.Run(func(ctx context.Context) error { return s.Open(ctx, id) })
 	if s.SaveState() != SaveSaved {
@@ -551,7 +531,6 @@ func TestOpenDownloadAsksWhetherToKeepTheHistory(t *testing.T) {
 	if len(files) != 1 || files[0] != "report.open" || int64(sizes[0]) != od.Current || s.Docs().OpenDownload != nil {
 		t.Fatalf("%v %v", files, sizes)
 	}
-	// Keeping the history makes the file bigger by what the dialog said.
 	_ = s.Download(ctx, id, "open")
 	s.Docs().OpenDownload.OnConfirm()
 	if int64(sizes[1]) != od.Current+od.History {
@@ -603,7 +582,6 @@ func TestSessionPackDownloadAndImport(t *testing.T) {
 	if err := other.ImportPackData(ctx, "bad.opendoc", data[:len(data)/2]); err == nil {
 		t.Error("a cut pack")
 	}
-	// The buttons: the list offers them only when the host can deliver and pick.
 	p := s.Docs()
 	if p.DownloadPack == nil || p.ImportPack != nil {
 		t.Error("download needs Deliver, import needs Pick")
@@ -659,14 +637,12 @@ func TestCompareVersionShowsWhatChangedSinceASnapshot(t *testing.T) {
 		t.Fatalf("before comparing: %+v", vs)
 	}
 	key := vs.Versions[0].Key
-	// the same text: a comparison with nothing changed
 	if err := s.CompareVersion(ctx, key); err != nil {
 		t.Fatal(err)
 	}
 	if v := s.Versions(); v.DiffKey != key || docdiff.Summarize(v.Diff).Changed() {
 		t.Fatalf("unchanged: %+v", v)
 	}
-	// edit, and compare again
 	text = "First paragraph\nA new second paragraph\nThird\n"
 	if err := s.CompareVersion(ctx, key); err != nil {
 		t.Fatal(err)
@@ -681,7 +657,6 @@ func TestCompareVersionShowsWhatChangedSinceASnapshot(t *testing.T) {
 	if err := s.CompareVersion(ctx, "../etc/passwd"); err == nil {
 		t.Error("a key that is not a version's is refused")
 	}
-	// deleting the snapshot that was compared clears the comparison
 	if err := s.DeleteVersion(ctx, key); err != nil {
 		t.Fatal(err)
 	}

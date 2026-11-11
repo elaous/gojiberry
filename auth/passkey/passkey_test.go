@@ -37,7 +37,6 @@ func newRig(t *testing.T, store Store) *rig {
 	return newRigWith(t, store, Config{})
 }
 
-// newRigWith is newRig with extra Config (Challenges, ChallengeTTL ...); RPID, RPName and Origins are set.
 func newRigWith(t *testing.T, store Store, cfg Config) *rig {
 	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: origin})
@@ -86,7 +85,6 @@ func asJSON(t *testing.T, v any) []byte {
 	return b
 }
 
-// register makes an account for email with the rig's authenticator and returns the session token.
 func (r *rig) register(email, signedIn string) string {
 	r.t.Helper()
 	code, begin := r.do("POST", "/auth/passkey/register/begin", signedIn, asJSON(r.t, map[string]string{"email": email, "name": "Ana"}))
@@ -127,7 +125,6 @@ func TestRegisterWithAPasskeyAndSignInLaterWithoutTyping(t *testing.T) {
 	if code, me := r.do("GET", "/auth/me", tok, nil); code != 200 || me["Email"] != "" || !strings.HasPrefix(me["ID"].(string), "passkey:") {
 		t.Fatalf("%d %v", code, me)
 	}
-	// Later: no user name, the authenticator offers the account.
 	code, out := r.login()
 	if code != 200 || out["auth_token"] == "" || out["user"].(map[string]any)["Email"] != "" {
 		t.Fatalf("%d %v", code, out)
@@ -135,7 +132,6 @@ func TestRegisterWithAPasskeyAndSignInLaterWithoutTyping(t *testing.T) {
 	if code, _ := r.do("GET", "/auth/me", out["auth_token"].(string), nil); code != 200 {
 		t.Errorf("the session is an ordinary one: %d", code)
 	}
-	// The counter was raised and the use recorded.
 	cs, _ := r.svc.Credentials(context.Background(), out["user"].(map[string]any)["ID"].(string))
 	if len(cs) != 1 || cs[0].Cred.Authenticator.SignCount != 1 || cs[0].LastUsed.IsZero() || cs[0].Label != "Laptop" {
 		t.Errorf("%+v", cs)
@@ -154,14 +150,12 @@ func TestAChallengeIsGoodForOneFinishAndExpires(t *testing.T) {
 	if code, _ := r.do("POST", path, "", answer); code != http.StatusGone {
 		t.Errorf("a replayed sign-in: %d", code)
 	}
-	// An answer to a challenge of another start is refused.
 	_, b1 := r.do("POST", "/auth/passkey/login/begin", "", nil)
 	_, b2 := r.do("POST", "/auth/passkey/login/begin", "", nil)
 	ans1, _ := r.user.Get(asJSON(t, map[string]any{"publicKey": b1["options"].(map[string]any)["publicKey"]}), origin)
 	if code, _ := r.do("POST", "/auth/passkey/login/finish?token="+b2["token"].(string), "", ans1); code != http.StatusUnauthorized {
 		t.Errorf("the wrong challenge: %d", code)
 	}
-	// Expiry.
 	r.svc.ttl = time.Millisecond
 	_, b3 := r.do("POST", "/auth/passkey/login/begin", "", nil)
 	time.Sleep(20 * time.Millisecond)
@@ -174,7 +168,6 @@ func TestAChallengeIsGoodForOneFinishAndExpires(t *testing.T) {
 func TestWrongOriginUnknownCredentialAndMissingUserVerificationAreRefused(t *testing.T) {
 	r := newRig(t, NewMemoryStore())
 	r.register("ana@opendocs.io", "")
-	// Another site's page answering a sign-in for this one.
 	_, begin := r.do("POST", "/auth/passkey/login/begin", "", nil)
 	ans, _ := r.user.Get(asJSON(t, map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]}), "https://evil.example")
 	code, out := r.do("POST", "/auth/passkey/login/finish?token="+begin["token"].(string), "", ans)
@@ -184,13 +177,11 @@ func TestWrongOriginUnknownCredentialAndMissingUserVerificationAreRefused(t *tes
 	if msg, _ := out["error"].(string); strings.Contains(msg, "origin") || strings.Contains(msg, "evil") {
 		t.Errorf("the reason is not given away: %q", msg)
 	}
-	// An authenticator the server has never seen.
 	stranger := webauthntest.New(rpID)
 	r.user = stranger
 	if code, _ := r.login(); code != http.StatusUnauthorized {
 		t.Errorf("unknown credential: %d", code)
 	}
-	// An authenticator that cannot verify the person is not accepted when verification is required.
 	r.user = webauthntest.New(rpID)
 	r.user.UserVerified = false
 	_, bg := r.do("POST", "/auth/passkey/register/begin", "", asJSON(t, map[string]string{"email": "bo@opendocs.io"}))
@@ -215,7 +206,6 @@ func TestAPasskeyAddedWhileSignedInIsLinkedToThatIdentity(t *testing.T) {
 	if code != 200 || out["user"].(map[string]any)["ID"] != "google:42" {
 		t.Fatalf("the passkey signs in as the same identity: %d %v", code, out)
 	}
-	// A second passkey (another authenticator) can be added and the list shows both.
 	r.user = webauthntest.New(rpID)
 	r.register("", oidc)
 	code, list := r.do("GET", "/auth/passkey/credentials", oidc, nil)
@@ -298,8 +288,6 @@ func TestConfigIsChecked(t *testing.T) {
 	}
 }
 
-// A caller-chosen e-mail is a label: it never becomes the session's identity, so an access list
-// that names an address does not match the account that typed it.
 func TestAnUnverifiedEmailIsNotTheSessionIdentity(t *testing.T) {
 	r := newRig(t, NewMemoryStore())
 	tok := r.register("victim@corp.com", "")
@@ -315,7 +303,6 @@ func TestAnUnverifiedEmailIsNotTheSessionIdentity(t *testing.T) {
 	if !ok || u.Email != "" || !strings.HasPrefix(u.ID, "passkey:") {
 		t.Fatalf("%+v", u)
 	}
-	// An ACL that names the victim's address: by e-mail it does not match, by ID it would.
 	acl := docstore.ACL{Owner: "victim@corp.com", Grants: map[string]docstore.Role{"victim@corp.com": docstore.RoleEditor}}
 	if role := acl.RoleOfPerson(u.Person("")); role != "" {
 		t.Errorf("the passkey session has the role %q on the victim's document", role)
@@ -323,7 +310,6 @@ func TestAnUnverifiedEmailIsNotTheSessionIdentity(t *testing.T) {
 	if role := (docstore.ACL{Owner: u.ID}).RoleOfPerson(u.Person("")); role != user.Owner {
 		t.Errorf("its own ID does match: %q", role)
 	}
-	// The label is kept for the account, and the sign-in response has no e-mail either.
 	_, out := r.login()
 	if out["user"].(map[string]any)["Email"] != "" {
 		t.Errorf("%v", out)
@@ -363,7 +349,6 @@ func TestACloneIsRefused(t *testing.T) {
 	if !strings.Contains(logs.String(), "clone warning") {
 		t.Errorf("logged: %q", logs.String())
 	}
-	// The credential stays flagged: even with a counter that is high again, it is refused.
 	r.user.Counter = 100
 	if code, _ := r.login(); code != http.StatusUnauthorized {
 		t.Errorf("a flagged credential: %d", code)
@@ -382,7 +367,6 @@ func TestARegistrationTokenBelongsToTheSessionThatBegan(t *testing.T) {
 		}
 		return b["token"].(string), ans
 	}
-	// Begun by Ana, finished by Bo (or with no session): refused, and the token is used up.
 	tok, ans := begin(ana)
 	if code, _ := r.do("POST", "/auth/passkey/register/finish?token="+tok, bo, ans); code != http.StatusForbidden {
 		t.Errorf("another session finishing: %d", code)
@@ -394,7 +378,6 @@ func TestARegistrationTokenBelongsToTheSessionThatBegan(t *testing.T) {
 	if code, _ := r.do("POST", "/auth/passkey/register/finish?token="+tok, "", ans); code != http.StatusForbidden {
 		t.Errorf("no session: %d", code)
 	}
-	// Begun with no session, finished inside Bo's: refused, no passkey for Bo.
 	tok, ans = begin("")
 	if code, _ := r.do("POST", "/auth/passkey/register/finish?token="+tok, bo, ans); code != http.StatusForbidden {
 		t.Errorf("a signed-out start finished in a session: %d", code)
@@ -402,7 +385,6 @@ func TestARegistrationTokenBelongsToTheSessionThatBegan(t *testing.T) {
 	if cs, _ := r.svc.Credentials(context.Background(), "google:2"); len(cs) != 0 {
 		t.Errorf("%+v", cs)
 	}
-	// Linking: the same session, no new session issued.
 	tok, ans = begin(ana)
 	code, out := r.do("POST", "/auth/passkey/register/finish?token="+tok, ana, ans)
 	if code != 200 || out["auth_token"] != nil {
@@ -430,12 +412,10 @@ func TestChallengesAreCappedAndSweptRarely(t *testing.T) {
 			mc.items[k] = v
 		}
 	}
-	// Expired ones make room (the sweep runs when the map is full).
 	expireAll()
 	if code, _ := r.do("POST", "/auth/passkey/login/begin", "", nil); code != 200 {
 		t.Errorf("expired challenges are swept when full: %d", code)
 	}
-	// Not on every start: with room left, an expired one stays until the interval is up.
 	mc.mu.Lock()
 	mc.max = 100
 	mc.lastSweep = time.Now()
@@ -483,7 +463,6 @@ func TestARemovalAndASignInDoNotLoseEachOther(t *testing.T) {
 	second := webauthntest.New(rpID)
 	r.user = second
 	r.register("", tok)
-	// Sign in with the second passkey while the first is removed, repeatedly.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -525,7 +504,6 @@ func TestHasOtherWayMatchesProviderNamesExactly(t *testing.T) {
 	}
 }
 
-// begun is a registration started and answered by its own authenticator, not yet finished.
 type begun struct {
 	token  string
 	answer []byte
@@ -545,13 +523,8 @@ func (r *rig) begunBy(signedIn, email string) begun {
 	return begun{token: b["token"].(string), answer: ans}
 }
 
-// noCreator hides a Store's Creator, so the Service falls back to its own lock.
 type noCreator struct{ Store }
 
-// barrierPut holds every Put until n callers are inside Put (or a short time passes), so any
-// code that checked Get "not found" without excluding the others has all of them past the check
-// before the first write lands. With the Service's lock only one caller is ever in Put at a time
-// (the rest are turned away at the Get), so the wait just times out.
 type barrierPut struct {
 	Store
 	n       int
@@ -578,10 +551,6 @@ func (b *barrierPut) Put(ctx context.Context, a *Account) error {
 	return b.Store.Put(ctx, a)
 }
 
-// Two tabs begin the first passkey of the same signed-in identity (an OpenID Connect user with no
-// passkey account yet) and both finish at once. Exactly one makes the account; the other gets
-// 409 account_exists (not the 410 of an expired or used challenge), writes nothing, and the
-// account keeps the winner's single credential and handle.
 func TestTwoConcurrentFirstPasskeysOfOneIdentityMakeOneAccount(t *testing.T) {
 	adapter := docstore.NewMemoryAdapter()
 	shared := docstore.NewMemoryAdapter()
@@ -642,11 +611,9 @@ func TestTwoConcurrentFirstPasskeysOfOneIdentityMakeOneAccount(t *testing.T) {
 			if err != nil || len(a.Credentials) != 1 {
 				t.Fatalf("account: %v %+v", err, a)
 			}
-			// The handle the winner's authenticator holds is the stored one: a sign-in finds the account.
 			if got, err := st.ByHandle(context.Background(), a.Handle); err != nil || got.ID != a.ID {
 				t.Errorf("handle: %v %v", got, err)
 			}
-			// A replay of a finished ceremony is still the 410 of a used challenge.
 			for i := range tabs {
 				if code, _ := r.do("POST", "/auth/passkey/register/finish?token="+tabs[i].token, oidc, tabs[i].answer); code != http.StatusGone {
 					t.Errorf("replay of tab %d = %d, want 410", i, code)
@@ -656,9 +623,6 @@ func TestTwoConcurrentFirstPasskeysOfOneIdentityMakeOneAccount(t *testing.T) {
 	}
 }
 
-// Signed out, every begin makes its own random account ID and handle, so two ceremonies for the
-// same e-mail never collide: two accounts, each with its own passkey, none overwritten. The e-mail
-// is an unverified label (see Service.Session), not a key.
 func TestTwoConcurrentSignedOutRegistrationsOfOneEmailMakeTwoAccounts(t *testing.T) {
 	st := NewMemoryStore()
 	r := newRig(t, st)
@@ -689,10 +653,6 @@ func TestTwoConcurrentSignedOutRegistrationsOfOneEmailMakeTwoAccounts(t *testing
 	}
 }
 
-// Roadmap item 41: an e-mail is a label. Two registrations that type one address are two accounts whose
-// sessions differ, whose identities carry no e-mail, and neither of which can act on what the other
-// owns, whether the account is looked up by the label, signed in again, or granted by the address. A later
-// feature that links or merges accounts on the bare label fails here.
 func TestOneEmailLabelNeverMergesTwoPasskeyAccounts(t *testing.T) {
 	st := NewMemoryStore()
 	r := newRig(t, st)
@@ -715,14 +675,12 @@ func TestOneEmailLabelNeverMergesTwoPasskeyAccounts(t *testing.T) {
 	if ids[0] == "" || ids[0] == ids[1] || toks[0] == toks[1] {
 		t.Fatalf("one label made one identity: %v %v", ids, toks)
 	}
-	// each account is its own record, with the same label
 	for _, id := range ids {
 		acct, _ := st.Get(context.Background(), id)
 		if acct == nil || acct.Email != "ana@opendocs.io" || len(acct.Credentials) != 1 {
 			t.Errorf("%s: %+v", id, acct)
 		}
 	}
-	// what one owns, the other has no role on, by ID or by the label
 	u0 := user.Person{ID: ids[0]}
 	acl := docstore.ACL{Owner: ids[0], Grants: map[string]docstore.Role{"ana@opendocs.io": docstore.RoleEditor}}
 	if role := acl.RoleOfPerson(u0); role != user.Owner {
@@ -736,7 +694,6 @@ func TestOneEmailLabelNeverMergesTwoPasskeyAccounts(t *testing.T) {
 	if role := acl.RoleOfPerson(other.Person("")); role != "" {
 		t.Errorf("the other account has the role %q on the first one's document through the label", role)
 	}
-	// registering a third time while signed in as the first adds a passkey to the first, not a new account
 	r.register("ana@opendocs.io", toks[0])
 	st.mu.Lock()
 	n := len(st.accounts)

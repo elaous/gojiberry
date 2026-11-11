@@ -12,11 +12,6 @@ type SwitchProps struct {
 	OnChange func(checked bool)
 }
 
-// Switch renders a toggle switch: a native checkbox (visually hidden
-// but still keyboard/screen-reader accessible) styled as a sliding
-// track and thumb via the CSS :checked sibling selector, the same
-// "real control, custom look" approach FileUploader's hidden file
-// input uses.
 func Switch(props SwitchProps) xango.Node {
 	attrs := []xango.Attr{
 		xango.A("type", "checkbox"),

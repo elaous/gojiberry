@@ -1,11 +1,3 @@
-// Package imagehint drafts a description of a picture on the device, from its pixels, for the author to correct:
-// the shape (wide, tall, square) and the main colours. It is a rough starting point, not a description of what the
-// picture shows, and it says so; a person must read and change it. Nothing leaves the device: the pixels are read in
-// the page and this package only counts them.
-//
-// A better describer (an on-device captioning model) plugs into the same place: a Describer takes the pixels and
-// answers a draft. The showcase offers a draft only when the person has turned the setting on, and puts it in
-// front of the author as a draft to accept, never into the document by itself.
 package imagehint
 
 import (
@@ -13,8 +5,6 @@ import (
 	"sort"
 )
 
-// Pixels is a picture as the page hands it over: a small RGBA copy (4 bytes a pixel, row by row) of W by H, and the
-// size the picture has on the page.
 type Pixels struct {
 	RGBA         []byte
 	W, H         int
@@ -26,17 +16,13 @@ type Pixels struct {
 // Hint is what could be told from the pixels.
 type Hint struct {
 	// Shape is "wide", "tall" or "square".
-	Shape string
-	// Colours are the one to three main colours, as names from Names, the most of the picture first.
+	Shape   string
 	Colours []string
-	// Tone is "dark", "light" or "" for a picture that is neither.
-	Tone string
+	Tone    string
 }
 
-// A Describer drafts a description from the pixels; ok is false when it has nothing to say.
 type Describer func(Pixels) (draft string, ok bool)
 
-// The colour names Describe uses, in the order of their entries in palette.
 const (
 	Black  = "black"
 	White  = "white"
@@ -55,7 +41,6 @@ const (
 // Names is every colour name Describe can answer.
 var Names = []string{Black, White, Grey, Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, Brown}
 
-// Describe tells the shape, tone and main colours of the picture.
 func Describe(p Pixels) (Hint, bool) {
 	if p.W <= 0 || p.H <= 0 || len(p.RGBA) < p.W*p.H*4 {
 		return Hint{}, false
@@ -117,8 +102,6 @@ func Describe(p Pixels) (Hint, bool) {
 	return h, true
 }
 
-// nameOf is the name of the palette colour a pixel is nearest to, with the grey, black and white of a pixel that has
-// little colour told apart by its lightness.
 func nameOf(r, g, b uint8) string {
 	c := color.RGBA{r, g, b, 255}
 	h, s, v := hsv(c)
@@ -155,7 +138,6 @@ func nameOf(r, g, b uint8) string {
 	return Pink
 }
 
-// hsv is the hue (0 to 360), saturation and value (0 to 1) of a colour.
 func hsv(c color.RGBA) (h, s, v float64) {
 	r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
 	mx, mn := max(r, g, b), min(r, g, b)

@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// awaitIDBRequest blocks until an IDBRequest fires "success" or
-// "error" -- the same channel-bridge idea as domrt.Await, but for
-// IndexedDB's event-based requests instead of a real Promise.
 func awaitIDBRequest(req js.Value) (js.Value, error) {
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
@@ -50,21 +47,13 @@ type Database struct {
 	Value js.Value
 }
 
-// OpenDatabase opens (creating if necessary) database name at the
-// given version, blocking until open completes. upgrade, if non-nil,
-// runs synchronously during the browser's "upgradeneeded" event --
-// the only time object stores can be created or removed -- which
-// fires on a brand new database or after bumping version.
+// OpenDatabase opens, creating if needed, the named database.
 func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Database, error) {
 	req := js.Global().Get("indexedDB").Call("open", name, version)
 
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
 
-	// The handlers stay alive until the request settles, even if we stop
-	// waiting: a blocked upgrade that goes ahead after the timeout must
-	// still create its stores, and a connection that opens late is closed
-	// rather than left blocking the next upgrade.
 	var onUpgrade, onSuccess, onError js.Func
 	abandoned := false
 	releaseAll := func() {
@@ -106,18 +95,15 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 	case err := <-fail:
 		return nil, err
 	case <-time.After(openTimeout):
-		// Neither success nor error: typically a "blocked" upgrade, with
-		// another tab still holding an older version of the database open.
+		// neither success nor error: a "blocked" upgrade by an older tab
 		abandoned = true
 		return nil, errors.New("indexeddb: open timed out (another tab may be holding an older version open)")
 	}
 }
 
-// openTimeout is how long OpenDatabase waits for the browser.
 const openTimeout = 30 * time.Second
 
-// CreateObjectStore creates a new object store keyed by keyPath. Only
-// valid inside OpenDatabase's upgrade callback.
+// CreateObjectStore creates a new object store keyed by key.
 func (d *Database) CreateObjectStore(name, keyPath string) js.Value {
 	return d.Value.Call("createObjectStore", name, map[string]any{"keyPath": keyPath})
 }
@@ -125,8 +111,7 @@ func (d *Database) CreateObjectStore(name, keyPath string) js.Value {
 // Close closes the database connection.
 func (d *Database) Close() { d.Value.Call("close") }
 
-// Transaction starts a transaction over storeNames in the given mode
-// ("readonly" or "readwrite").
+// Transaction starts a transaction over storeNames.
 func (d *Database) Transaction(storeNames []string, mode string) *Transaction {
 	names := make([]any, len(storeNames))
 	for i, n := range storeNames {
@@ -135,12 +120,12 @@ func (d *Database) Transaction(storeNames []string, mode string) *Transaction {
 	return &Transaction{Value: d.Value.Call("transaction", names, mode)}
 }
 
-// Transaction is an in-progress IndexedDB transaction over one or more object stores.
+// Transaction is an in-progress IndexedDB transaction.
 type Transaction struct {
 	Value js.Value
 }
 
-// ObjectStore returns the named object store within this transaction's scope.
+// ObjectStore returns the named object store within this transaction.
 func (t *Transaction) ObjectStore(name string) *ObjectStore {
 	return &ObjectStore{Value: t.Value.Call("objectStore", name)}
 }
@@ -156,9 +141,7 @@ func (s *ObjectStore) Put(value any) error {
 	return err
 }
 
-// Get retrieves the value stored under key, blocking until the
-// request completes. The result is JS `undefined` if key doesn't
-// exist -- check with .IsUndefined().
+// Get retrieves the value stored under key.
 func (s *ObjectStore) Get(key any) (js.Value, error) {
 	return awaitIDBRequest(s.Value.Call("get", key))
 }
@@ -175,10 +158,7 @@ func (s *ObjectStore) Clear() error {
 	return err
 }
 
-// GetAll returns every record currently in the store, as a JS array
-// of whatever values Put stored (each still carrying its own keyPath
-// field) -- for a caller that needs to list a whole store's contents
-// rather than look up one key at a time.
+// GetAll returns every record currently in the store.
 func (s *ObjectStore) GetAll() (js.Value, error) {
 	return awaitIDBRequest(s.Value.Call("getAll"))
 }

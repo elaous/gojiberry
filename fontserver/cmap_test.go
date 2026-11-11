@@ -11,10 +11,6 @@ import (
 	"testing"
 )
 
-// --- format-0/4/12 subtable builders -- mirror buildTestSFNT/
-// buildNameTable's own "construct exactly the bytes the parser reads,
-// nothing more" style. ---
-
 func buildCmapFormat0Subtable(present []int) []byte {
 	glyphIDs := make([]byte, 256)
 	for _, cp := range present {
@@ -28,19 +24,11 @@ func buildCmapFormat0Subtable(present []int) []byte {
 	return buf.Bytes()
 }
 
-// cmapFmt4Seg is one format-4 segment: either direct (glyphIDs == nil,
-// every codepoint in [start,end] covered, delta unused by our own
-// coverage-only parser) or indirect (glyphIDs supplied, one entry per
-// codepoint from start to end inclusive, 0 meaning "no glyph here").
 type cmapFmt4Seg struct {
 	start, end uint16
 	glyphIDs   []uint16
 }
 
-// buildCmapFormat4Subtable assembles a complete format-4 subtable from
-// segs, automatically appending the format's own required terminal
-// sentinel segment (startCode == endCode == 0xFFFF) -- callers supply
-// only the "real" segments.
 func buildCmapFormat4Subtable(segs []cmapFmt4Seg) []byte {
 	segs = append(append([]cmapFmt4Seg{}, segs...), cmapFmt4Seg{start: 0xFFFF, end: 0xFFFF})
 	segCount := len(segs)
@@ -56,10 +44,6 @@ func buildCmapFormat4Subtable(segs []cmapFmt4Seg) []byte {
 			idRangeOffsets[i] = 0
 			continue
 		}
-		// Byte offset from this segment's own idRangeOffset slot to
-		// where its glyph IDs start in glyphArray -- see
-		// parseCmapFormat4's own doc comment for the formula this
-		// mirrors.
 		idRangeOffsets[i] = uint16((segCount-i)*2 + len(glyphArray)*2)
 		glyphArray = append(glyphArray, s.glyphIDs...)
 	}
@@ -134,11 +118,6 @@ func buildCmapTable(specs []cmapSubtableSpec) []byte {
 	return buf.Bytes()
 }
 
-// buildTestSFNTWithCmap is buildTestSFNT's multi-table counterpart:
-// an sfnt file carrying both a 'name' table (for sfntNames/Repo.Scan)
-// and a 'cmap' table (for sfntCmapRanges), matching what a real font
-// -- and the /local/symbols endpoint's own end-to-end path -- actually
-// needs.
 func buildTestSFNTWithCmap(nameRecords []nameRecordSpec, cmapTable []byte) []byte {
 	nameTable := buildNameTable(nameRecords)
 	type entry struct {
@@ -172,8 +151,6 @@ func buildTestSFNTWithCmap(nameRecords []nameRecordSpec, cmapTable []byte) []byt
 	return buf.Bytes()
 }
 
-// --- parseCmapFormat0/4/12 ---
-
 func TestParseCmapFormat0(t *testing.T) {
 	sub := buildCmapFormat0Subtable([]int{65, 66, 67, 200})
 	got, err := parseCmapSubtable(sub)
@@ -202,9 +179,6 @@ func TestParseCmapFormat4DirectSegments(t *testing.T) {
 }
 
 func TestParseCmapFormat4IndirectSegmentWithHole(t *testing.T) {
-	// codepoints 0x100-0x104: glyphs at 0x100,0x101, a hole at 0x102,
-	// then glyphs again at 0x103,0x104 -- should split into two
-	// ranges around the hole, not one range covering the whole span.
 	sub := buildCmapFormat4Subtable([]cmapFmt4Seg{
 		{start: 0x100, end: 0x104, glyphIDs: []uint16{10, 11, 0, 12, 13}},
 	})
@@ -219,8 +193,6 @@ func TestParseCmapFormat4IndirectSegmentWithHole(t *testing.T) {
 }
 
 func TestParseCmapFormat4SkipsTerminalSentinel(t *testing.T) {
-	// No real segments at all -- only the auto-appended terminal
-	// sentinel -- should yield zero ranges, not one spurious {0xFFFF,0xFFFF}.
 	sub := buildCmapFormat4Subtable(nil)
 	got, err := parseCmapSubtable(sub)
 	if err != nil {
@@ -260,8 +232,6 @@ func TestParseCmapSubtableTooShort(t *testing.T) {
 	}
 }
 
-// --- mergeRuneRanges ---
-
 func TestMergeRuneRangesCoalescesAdjacentAndOverlapping(t *testing.T) {
 	in := []runeRange{{10, 20}, {21, 25}, {1, 5}, {23, 30}}
 	got := mergeRuneRanges(in)
@@ -276,8 +246,6 @@ func TestMergeRuneRangesEmptyInput(t *testing.T) {
 		t.Fatalf("mergeRuneRanges(nil) = %v, want nil", got)
 	}
 }
-
-// --- cmapPreferredSubtable ---
 
 func TestCmapPreferredSubtablePrefersFullUnicodeOverBMP(t *testing.T) {
 	bmp := buildCmapFormat4Subtable([]cmapFmt4Seg{{start: 0x41, end: 0x5A}})
@@ -310,9 +278,6 @@ func TestCmapPreferredSubtableSkipsUnsupportedFormat(t *testing.T) {
 	binary.BigEndian.PutUint16(unsupported, 6)
 	bmp := buildCmapFormat4Subtable([]cmapFmt4Seg{{start: 0x41, end: 0x5A}})
 	table := buildCmapTable([]cmapSubtableSpec{
-		// This would win on platform/encoding alone (it's the
-		// "best" score), but format 6 isn't decodable -- the BMP
-		// format-4 one should be picked instead.
 		{platformID: platformWindows, encodingID: encodingWindowsUCS4, subtable: unsupported},
 		{platformID: platformWindows, encodingID: encodingWindowsBMP, subtable: bmp},
 	})
@@ -334,8 +299,6 @@ func TestCmapPreferredSubtableSkipsUnsupportedFormat(t *testing.T) {
 		t.Fatalf("cmapPreferredSubtable picked encoding %d, want it to skip the undecodable format-6 record and fall back to BMP (%d)", best.encodingID, encodingWindowsBMP)
 	}
 }
-
-// --- sfntCmapRanges (end to end through a full sfnt file) ---
 
 func TestSfntCmapRangesEndToEnd(t *testing.T) {
 	cmapTable := buildCmapTable([]cmapSubtableSpec{
@@ -366,8 +329,6 @@ func TestSfntCmapRangesNoCmapTableIsError(t *testing.T) {
 		t.Fatal("sfntCmapRanges(no cmap table): expected an error")
 	}
 }
-
-// --- /local/symbols HTTP endpoint ---
 
 func writeTestFontWithCmap(t *testing.T, dir, relPath, family, subfamily string, cmapTable []byte) {
 	t.Helper()

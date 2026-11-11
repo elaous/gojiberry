@@ -1,28 +1,3 @@
-// Command xgdev is a generic front end for devwatch.Run: it lets an xango
-// project opt into the watch/rebuild/restart dev loop from the command
-// line, with no Go code of its own to write (examples/canvas-app's own
-// cmd/devwatch predates this and still uses devwatch.Run directly,
-// since it needs a temp-file build path devwatch's -build strings alone
-// don't cover; xgdev is for the common case that doesn't).
-//
-// Each -build step runs as a shell command (via `sh -c`), in the order
-// given; the first one to fail stops that rebuild attempt and leaves
-// the previously-running server alone. Everything after a literal "--"
-// is the server binary to run and restart -- run directly, not through
-// a shell, so signals reach it directly.
-//
-// Usage:
-//
-//	go run github.com/elaous/gojiberry/cmd/xgdev \
-//		-build "go generate ./..." \
-//		-build "GOOS=js GOARCH=wasm go build -o static/main.wasm ./client" \
-//		-build "go build -o /tmp/myserver ./cmd/server" \
-//		-- /tmp/myserver
-//
-// -ignore SUBSTR (repeatable) skips any changed path containing SUBSTR,
-// in addition to devwatch.DefaultIgnore's universal skips (.git,
-// generated *.xg.go files) -- e.g. -ignore /static/ for a directory a
-// -build step itself writes into, to avoid a rebuild feedback loop.
 package main
 
 import (

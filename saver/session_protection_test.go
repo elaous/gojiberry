@@ -11,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// The document list marks confidential documents, offers the switch and Reveal, and the session
-// forgets the real names when the keys are forgotten.
 func TestSessionListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	ctx := context.Background()
 	s, mem, id := confidentialSaver(t)
@@ -28,19 +26,16 @@ func TestSessionListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	if p.SetProtection == nil || p.SetFolderProtection == nil || p.Reveal == nil || p.RevealFolder == nil {
 		t.Fatal("the protection controls are not plugged in")
 	}
-	// Reveal shows the name, no longer hidden; the lock stays.
 	if err := ss.Docs().Reveal(ctx, id); err != nil {
 		t.Fatal(err)
 	}
 	if d := ss.Docs().Docs[0]; d.Name != secretName || !d.Confidential || d.NameHidden {
 		t.Fatalf("%+v", d)
 	}
-	// Forget (the store was locked): the placeholder is back, in the lists too.
 	ss.Forget()
 	if d := ss.Docs().Docs[0]; d.Name != ConfidentialName || !d.NameHidden || len(d.Tags) != 0 {
 		t.Fatalf("%+v", d)
 	}
-	// Locked: Open says what to do, and the error is still ErrLocked for code that asks.
 	mem.locked.Store(true)
 	err := ss.Open(ctx, id)
 	if !errors.Is(err, docstore.ErrLocked) || !strings.Contains(err.Error(), "Unlock the store") || strings.Contains(err.Error(), "fake:") {
@@ -48,7 +43,6 @@ func TestSessionListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 	}
 	mem.locked.Store(false)
 
-	// The switch and the folder switch come through the props.
 	if err := ss.Docs().SetProtection(ctx, id, false); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +65,6 @@ func TestSessionListMarksConfidentialDocumentsAndOffersTheSwitch(t *testing.T) {
 		t.Fatalf("%+v", fs)
 	}
 
-	// Not offered where the target cannot keep a document confidential.
 	ss.ProtectionAvailable = func(target string) bool { return target != "m" }
 	if p := ss.Docs(); p.SetProtection != nil || p.SetFolderProtection != nil {
 		t.Error("offered on a store that cannot keep secrets")
@@ -91,7 +84,6 @@ func TestSessionPackKeysSealAndOpen(t *testing.T) {
 	}
 	_ = ss.Refresh(ctx)
 
-	// Locked (no keys): the document and the folder name are left out, and it says how many.
 	if err := ss.DownloadPack(ctx, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +95,6 @@ func TestSessionPackKeysSealAndOpen(t *testing.T) {
 		t.Error("in the clear")
 	}
 
-	// Unlocked: sealed into the pack, and nothing is reported as left out.
 	ss.PackKeys = func() (func(context.Context, string, []byte) ([]byte, error), func(context.Context, string, []byte) ([]byte, error)) {
 		return fakeSeal, fakeOpen
 	}
@@ -118,7 +109,6 @@ func TestSessionPackKeysSealAndOpen(t *testing.T) {
 		t.Fatal("the pack shows the document")
 	}
 
-	// Import into an empty store: locked, the item needs the key and the line says so; with keys it comes in.
 	for _, c := range []struct {
 		name  string
 		keys  bool
@@ -151,8 +141,6 @@ func TestSessionPackKeysSealAndOpen(t *testing.T) {
 	}
 }
 
-// Clear drops the open document from the session with the keys: its ID and name, the tag filter,
-// the revealed names and the status, and the lists show the placeholders.
 func TestSessionClearForgetsTheOpenDocument(t *testing.T) {
 	ctx := context.Background()
 	s, _, id := confidentialSaver(t)

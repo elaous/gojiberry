@@ -15,7 +15,7 @@ func (s *Session) TrashDocs(ctx context.Context, ids []string) error {
 	}
 	s.set(func() {
 		if slices.Contains(ids, s.id) {
-			s.id = "" // the open document is in the trash: saving is a new document
+			s.id = ""
 			s.unsaved()
 		}
 	})
@@ -40,7 +40,6 @@ func (s *Session) Purge(ctx context.Context, ids ...string) error {
 	return s.after(ctx, msg("saver.purged", "%s deleted for good", name))
 }
 
-// Duplicate saves a copy of a document, as a new document with its own ID.
 func (s *Session) Duplicate(ctx context.Context, id string) error {
 	e, err := s.Saver.Duplicate(ctx, s.targetName(), id, "")
 	if err != nil {
@@ -65,9 +64,6 @@ func (s *Session) SetTags(ctx context.Context, id string, tags []string) error {
 	return s.after(ctx, msg("saver.tagged", "Tags of %s updated", name))
 }
 
-// SetProtection makes a saved document confidential (docfile.ProtectionE2EE: its name and
-// tags move into the document, the catalog lists a placeholder) or ProtectionServer again,
-// and shows its real name in the list while it is openable here.
 func (s *Session) SetProtection(ctx context.Context, id, to string) error {
 	s.op.Lock()
 	defer s.op.Unlock()
@@ -85,8 +81,6 @@ func (s *Session) SetProtection(ctx context.Context, id, to string) error {
 	return s.after(ctx, msg("saver.notConfidential", "%s is no longer confidential", name))
 }
 
-// Reveal shows the real name and tags of a confidential document in the list, if it can be
-// opened here; the document is not opened in the editor.
 func (s *Session) Reveal(ctx context.Context, id string) error {
 	name, tags, err := s.Saver.Reveal(ctx, s.targetName(), id)
 	if err != nil {
@@ -98,11 +92,6 @@ func (s *Session) Reveal(ctx context.Context, id string) error {
 	return s.after(ctx, msg("saver.revealed", "%s can be read: its name is shown", name))
 }
 
-// Clear forgets the document being edited and everything the session shows of it: the saved
-// document's ID and name, the tag filter, the selection, the revealed names and tags, the lists
-// and the status. The editor's own content is the host's to replace (Clear does not touch what Get
-// returns). Call it with Forget-like reasons: when the keys are forgotten and the document on
-// screen must go with them.
 func (s *Session) Clear() {
 	s.set(func() {
 		s.id, s.name, s.tagFilter, s.status, s.selected, s.folderDraft = "", "", "", "", nil, ""
@@ -112,10 +101,6 @@ func (s *Session) Clear() {
 	})
 }
 
-// Forget drops the real names and tags of the confidential documents and folders that were
-// revealed here, so the lists show the placeholders again: call it when the keys are forgotten
-// (the store is locked). The saver's own state is not touched; a later Reveal, Open or Save
-// shows them again.
 func (s *Session) Forget() {
 	s.set(func() {
 		s.revealed, s.revealedFolders = nil, nil
@@ -123,8 +108,7 @@ func (s *Session) Forget() {
 	})
 }
 
-// concealed puts the placeholder back in the confidential entries of a list (call with the lock
-// held).
+// caller holds the session lock
 func (s *Session) concealed(list []Entry) []Entry {
 	out := make([]Entry, len(list))
 	for i, e := range list {
@@ -136,11 +120,8 @@ func (s *Session) concealed(list []Entry) []Entry {
 	return out
 }
 
-// SetTagFilter narrows the list to the documents with the tag ("" for all).
 func (s *Session) SetTagFilter(tag string) { s.set(func() { s.tagFilter = tag }) }
 
-// docOf is an entry as the components list it; revealed says whether the real name of a
-// confidential one is known here (the list shows the placeholder, and offers Reveal, if not).
 func docOf(e Entry, revealed bool) components.Doc {
 	d := components.Doc{ID: e.ID, Name: e.Name, Size: e.Size, Updated: e.Updated, Trashed: e.Trashed, Tags: e.Tags}
 	if e.Format != nil {
@@ -152,15 +133,12 @@ func docOf(e Entry, revealed bool) components.Doc {
 	return d
 }
 
-// docEntry is docOf with what the session knows (call with the lock held).
+// caller holds the session lock
 func (s *Session) docEntry(e Entry) components.Doc {
 	_, ok := s.revealed[e.ID]
 	return docOf(e, ok)
 }
 
-// Docs returns the props for components.DocList: the saved documents with the
-// session's operations plugged in. Deleting for good happens at once; to ask first
-// set Confirm to Asker.Ask and draw Asker.Dialog() somewhere (Props does both).
 func (s *Session) Docs() components.DocListProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -179,8 +157,6 @@ func (s *Session) Docs() components.DocListProps {
 		p.SetProtection = func(ctx context.Context, id string, confidential bool) error {
 			return s.SetProtection(ctx, id, protectionLevel(confidential))
 		}
-		// A folder's level moves its own name only: what is inside keeps its protection, so each
-		// document is switched on its own row.
 		p.SetFolderProtection = func(ctx context.Context, id string, confidential bool) error {
 			return s.SetFolderProtection(ctx, id, protectionLevel(confidential), false)
 		}
@@ -237,8 +213,6 @@ func protectionLevel(confidential bool) string {
 	return ProtectionServer
 }
 
-// Trash returns the props for components.Trash: the documents in the trash, to
-// restore or delete for good (at once; see Docs for asking first).
 func (s *Session) Trash() components.TrashProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()

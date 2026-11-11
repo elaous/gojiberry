@@ -33,11 +33,10 @@ func TestSamplingSendsFromOneVisitInN(t *testing.T) {
 			out++
 		}
 	}
-	if in < 50 || in > 160 { // 100 expected; 8 standard deviations of slack would be silly, this is plenty
+	if in < 50 || in > 160 {
 		t.Errorf("%d of 1000 visits in a 1 in 10 sample", in)
 	}
 
-	// A visit that is not in the sample records nothing, shows nothing and sends nothing.
 	c := NewCollector(nil)
 	c.SetSampling(10, func(int) int { return 3 })
 	_ = c.SetConsent(true)
@@ -50,18 +49,15 @@ func TestSamplingSendsFromOneVisitInN(t *testing.T) {
 	if n != 0 || err != nil || calls != 0 {
 		t.Fatalf("flush outside the sample: %d %v, %d calls", n, err, calls)
 	}
-	// One inside sends as before.
 	c.SetSampling(10, func(int) int { return 0 })
 	_ = c.Record(Feature, "find")
 	if n, _ := c.Flush(context.Background(), okSend); n != 1 {
 		t.Errorf("inside the sample sent %d", n)
 	}
-	// One in one is every visit; a nonsense rate means every visit.
 	c.SetSampling(0, func(int) int { return 7 })
 	if !c.Sampled() || c.SampleOneIn() != 1 {
 		t.Error("rate 0 is not every visit")
 	}
-	// A new opt-in is a new draw.
 	draws := 0
 	c = NewCollector(nil)
 	c.SetSampling(4, func(int) int { draws++; return 0 })
@@ -95,7 +91,6 @@ func TestTheLocalLogIsOffByDefaultAndHoldsOnlyWhatWouldBeSent(t *testing.T) {
 	if log[0].Time != "2030-05-01T12:00Z" || log[0].Day != "2030-05-01" || len(log[0].Counts) != 2 {
 		t.Errorf("entry: %+v", log[0])
 	}
-	// Every entry is a batch the receiver would take: nothing else can be in the log.
 	for _, e := range log {
 		if err := (Batch{Day: e.Day, Counts: e.Counts}).Validate(noon); err != nil {
 			t.Errorf("an entry is not a valid batch: %v: %+v", err, e)
@@ -116,12 +111,10 @@ func TestTheLocalLogIsOffByDefaultAndHoldsOnlyWhatWouldBeSent(t *testing.T) {
 		}
 	}
 
-	// A copy: changing what Log returns changes nothing inside.
 	log[0].Counts[0].N = 99
 	if c.Log()[0].Counts[0].N == 99 {
 		t.Error("Log returned the collector's own slice")
 	}
-	// Turning the log off, or consent off, forgets it.
 	c.SetLog(false)
 	if len(c.Log()) != 0 {
 		t.Error("the log survived being turned off")
@@ -161,7 +154,6 @@ func TestOutsideTheSampleTheLogStillShowsWhatWouldHaveBeenSent(t *testing.T) {
 	if calls != 0 || len(log) != 1 || log[0].Outcome != OutcomeNotSampled || len(log[0].Counts) != 1 {
 		t.Fatalf("calls %d, log %+v", calls, log)
 	}
-	// Without the log, counts that wait for a server are kept by Withhold's absence of effect.
 	d := optedIn(t)
 	_ = d.Record(Feature, "find")
 	d.Withhold(OutcomeNoServer)
@@ -170,7 +162,6 @@ func TestOutsideTheSampleTheLogStillShowsWhatWouldHaveBeenSent(t *testing.T) {
 	}
 }
 
-// memStore is a Store in memory.
 type memStore struct {
 	mu    sync.Mutex
 	data  []byte
@@ -220,7 +211,6 @@ func TestTotalsSurviveARestartAndABurstIsOneWrite(t *testing.T) {
 		t.Errorf("a burst of 21 requests made %d writes", st.count())
 	}
 
-	// A new process with the same store has the totals.
 	c2 := NewCounters()
 	if err := c2.Persist(context.Background(), st, 30*time.Millisecond, func() time.Time { return noon }); err != nil {
 		t.Fatal(err)
@@ -231,7 +221,6 @@ func TestTotalsSurviveARestartAndABurstIsOneWrite(t *testing.T) {
 	if tt := c2.Totals(); tt.Accepted != 20 || tt.Refused != 1 {
 		t.Errorf("request totals after the restart: %+v", tt)
 	}
-	// And it keeps counting on top of them.
 	post(NewReceiver(c2).WithClock(func() time.Time { return noon }), `{"day":"2030-05-01","counts":[{"name":"feature","value":"find","n":2}]}`)
 	if got := total(c2, 1); got != 62 {
 		t.Errorf("total %d, want 62", got)
@@ -289,7 +278,6 @@ func TestRestoreRefusesWhatARequestCouldNotHaveCounted(t *testing.T) {
 	if err := c.Restore(make([]byte, MaxSnapshot+1), noon); err == nil {
 		t.Error("an oversized snapshot was accepted")
 	}
-	// A day past the retention is dropped, as it would have been.
 	old := `{"v":1,"accepted":0,"refused":0,"days":{"2020-01-01":[{"name":"feature","value":"find","n":3}]}}`
 	c2 := NewCounters()
 	if err := c2.Restore([]byte(old), noon); err != nil || total(c2, 1) != 0 {
@@ -348,7 +336,6 @@ func TestNoiseRoundsSmallCountsToTheStepAndIsStable(t *testing.T) {
 }
 
 func TestNoiseIsRightOnAverage(t *testing.T) {
-	// Over many independent events (seeds), the mean of the reported number is the true one.
 	const n, trials = 3, 4000
 	sum := 0
 	for i := 0; i < trials; i++ {

@@ -32,7 +32,6 @@ func TestWithAuditReadsItsSwitchAndKey(t *testing.T) {
 	if l, err := withAudit(srv, envMap("GOJIBERRY_DOCSTORE_AUDIT", "on", "GOJIBERRY_DOCSTORE_AUDIT_KEY", "0123456789abcdef0123"), os.ReadFile, &buf); l == nil || err != nil {
 		t.Errorf("on with a key: %v %v", l, err)
 	}
-	// The key may come from a file.
 	read := func(p string) ([]byte, error) {
 		if p == "/run/secrets/audit" {
 			return []byte("0123456789abcdef0123\n"), nil

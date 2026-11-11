@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestPrintLayoutReachesTheExports sets a header, a footer with page-number fields and a table of
-// contents in the Page tab, and finds them in the HTML export (print stylesheet and contents) and in the
-// Word export (header and footer parts with PAGE and NUMPAGES fields).
 func TestPrintLayoutReachesTheExports(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button[data-tab="page"]`)
@@ -34,8 +31,6 @@ func TestPrintLayoutReachesTheExports(t *testing.T) {
 	d.NoErrors()
 }
 
-// The sheets on the screen show the running header and footer the exports print, with the page number of each
-// sheet filled in.
 func TestSheetsShowTheRunningHeaderAndFooter(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.OK(d.Str(`JSON.parse(document.getElementById('state').textContent).headers[0]`) == "Gojiberry editor", "the sample's own header before a layout is set")
@@ -45,13 +40,10 @@ func TestSheetsShowTheRunningHeaderAndFooter(t *testing.T) {
 	d.Fill(".gj-print-footer", "Draft\t\tPage {page} of {pages}")
 	d.Dispatch(".gj-print-footer", "change")
 	d.WaitFor("the header of the first sheet", `JSON.parse(document.getElementById('state').textContent).headers[0] === "Report\t\tQuarterly report"`)
-	// (two parts are the left and the right one; {title} is the document's title)
 	d.WaitFor("the footers carry each sheet's number", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.pages >= 2 && s.footers[0] === "Draft\t\tPage 1 of " + s.pages && s.footers[1] === "Draft\t\tPage 2 of " + s.pages; })()`)
 	d.NoErrors()
 }
 
-// "Different first page" gives the first sheet a header and footer of its own (empty: none), on the screen and in
-// the exports.
 func TestFirstSheetCanHaveItsOwnHeaderAndFooter(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button[data-tab="page"]`)
@@ -70,7 +62,6 @@ func TestFirstSheetCanHaveItsOwnHeaderAndFooter(t *testing.T) {
 	d.NoErrors()
 }
 
-// "Different odd and even pages" gives the even sheets a header of their own, and the odd ones keep the running one.
 func TestEvenSheetsCanHaveTheirOwnHeader(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button[data-tab="page"]`)

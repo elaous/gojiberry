@@ -7,15 +7,14 @@ import (
 	"syscall/js"
 )
 
-// Position is one geolocation reading. Altitude, AltitudeAccuracy,
-// Heading, and Speed are nil when the device doesn't report them.
+// Position is one geolocation reading.
 type Position struct {
 	Latitude, Longitude, Accuracy float64
 	Altitude, AltitudeAccuracy    *float64
 	Heading, Speed                *float64
 }
 
-// Geolocation error codes, matching the real PositionError.code values.
+// Geolocation error codes, matching PositionError.
 const (
 	GeolocationPermissionDenied    = 1
 	GeolocationPositionUnavailable = 2
@@ -58,9 +57,7 @@ func geolocationErrorFromJS(v js.Value) *GeolocationError {
 	return &GeolocationError{Code: v.Get("code").Int(), Message: v.Get("message").String()}
 }
 
-// CurrentPosition wraps navigator.geolocation.getCurrentPosition,
-// blocking until the browser resolves it (prompting for permission
-// first if needed) or reports an error.
+// CurrentPosition wraps navigator.geolocation.getCurrentPosition.
 func CurrentPosition() (Position, error) {
 	result := make(chan Position, 1)
 	fail := make(chan error, 1)
@@ -86,8 +83,7 @@ func CurrentPosition() (Position, error) {
 	}
 }
 
-// WatchPosition calls fn with every position update (or error) until
-// the returned stop function is called.
+// WatchPosition calls fn with every position update.
 func WatchPosition(fn func(Position, error)) (stop func()) {
 	onSuccess := js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn(positionFromJS(args[0]), nil)

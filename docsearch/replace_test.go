@@ -60,7 +60,6 @@ func TestPlanThenApplyThenUndo(t *testing.T) {
 	if text(t, st, "a") != "Globex pays Globex. Globex again." || text(t, st, "c") != "Ask Globex about the plan" || text(t, st, "b") != "Nothing about it here" {
 		t.Fatalf("applied: %q %q", text(t, st, "a"), text(t, st, "c"))
 	}
-	// a title and the document's other fields stay
 	d, _ := st.Load(ctx, "a")
 	if doc, _, _ := decode(d.Data); doc.Title != "Budget" {
 		t.Fatalf("title %q", doc.Title)
@@ -130,8 +129,6 @@ func TestPlanRegexOptionsAndErrors(t *testing.T) {
 	_ = docfile.JSON
 }
 
-// A host that writes through its own layer gets the old and the new bytes of a changed document, and
-// nothing for one the plan leaves alone; changing the copies changes nothing in the plan.
 func TestPlanBytesGivesTheOldAndTheReplacement(t *testing.T) {
 	ctx := context.Background()
 	st := docstore.NewMemoryAdapter()

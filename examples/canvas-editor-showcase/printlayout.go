@@ -8,10 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// printPanel is the print layout part of the Page tab: the running header and footer (with the fields
-// {page}, {pages} and {title}, a tab between the left, centre and right parts) and whether a table of
-// contents starts the document. The settings are kept in the document (docfile.PageLayout), so the
-// PDF, Word, RTF and HTML exports carry them.
 func printPanel(u *ui, renderUI func()) xango.Node {
 	field := func(id, label string, value string, set func(string)) xango.Node {
 		return xango.El("label", []xango.Attr{xango.A("class", "gj-pagesetup-field")},
@@ -45,10 +41,7 @@ func printPanel(u *ui, renderUI func()) xango.Node {
 		}))
 }
 
-// firstFields are the header and footer of the first page, shown while "Different first page" is on
-// (empty means none there, as on a title page).
 func firstFields(u *ui, field func(id, label, value string, set func(string)) xango.Node, renderUI func()) xango.Node {
-	// Always one element, so the panel keeps its order when the fields come and go.
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-print-first")}, children...)
 	}
@@ -61,8 +54,6 @@ func firstFields(u *ui, field func(id, label, value string, set func(string)) xa
 	)
 }
 
-// evenFields are the header and footer of the even pages, shown while "Different odd and even pages" is on (the
-// header and footer above are then the odd pages').
 func evenFields(u *ui, field func(id, label, value string, set func(string)) xango.Node, renderUI func()) xango.Node {
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-print-even")}, children...)
@@ -76,7 +67,6 @@ func evenFields(u *ui, field func(id, label, value string, set func(string)) xan
 	)
 }
 
-// applyLayout stores the print layout and the sheet in a document that is being exported or saved.
 func (u *ui) applyLayout(d *docfile.Document, width, height float64, margins [4]float64) {
 	l := u.layout
 	l.Width, l.Height, l.Margins = width, height, margins

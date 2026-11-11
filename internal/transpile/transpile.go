@@ -1,20 +1,3 @@
-// Package transpile turns .xg source (Go, extended so that <tag> markup
-// is a valid expression anywhere a Go expression may start) into plain,
-// gofmt-clean Go source targeting the xango runtime package.
-//
-// Disambiguation rule: in Go, '<' is the less-than operator only
-// immediately after something that completes a value (identifier,
-// literal, or a closing ')' ']' '}'). Everywhere else a '<' can only
-// legally begin a new expression, so that's exactly where a tag is
-// allowed to start. This mirrors how JSX parsers disambiguate '<' from
-// less-than; Go's [T] generics syntax (rather than <T>) means there's no
-// further ambiguity with generic instantiation to resolve.
-//
-// {expr} holes (in attribute values or child position) are always a
-// single Go expression, never raw statements -- for loops/conditionals,
-// write an immediately-invoked closure (func() []xango.Node { ... }()),
-// which is itself an expression; any tags inside its body are expanded
-// by the same recursive scan.
 package transpile
 
 import (
@@ -27,31 +10,14 @@ import (
 
 // Options controls opt-in behavior not on by default.
 type Options struct {
-	// Experimental enables resource-import extensions and annotations
-	// that either reimplement a slice of a mature external tool (HCL/
-	// proto/capnp/sqlc, which shell out to that tool and generate a
-	// real Go subpackage) or carry real footgun risk (the JSON
-	// .(TypeName) annotation's sample-based struct inference, which can
-	// silently panic at runtime against differently-shaped data). Off
-	// by default: xango recognizes these extensions/annotations either
-	// way, but without this set it errors with an actionable message
-	// instead of running them.
-	Experimental bool
-	// ExperimentalLoaders supplies the loader implementations for
-	// experimentalExtensions (see loaders.go) when Experimental is set.
-	// Callers get these from internal/transpile/experimental so that
-	// package's code isn't reachable at all unless explicitly wired in.
+	Experimental        bool
 	ExperimentalLoaders map[string]LoaderFunc
 }
 
-// Transpile converts .xg source into Go source using only the stable,
-// on-by-default loaders. filename is used only for error messages.
 func Transpile(filename string, src []byte) ([]byte, error) {
 	return TranspileWithOptions(filename, src, Options{})
 }
 
-// TranspileWithOptions is Transpile with control over experimental
-// resource-import support (see Options).
 func TranspileWithOptions(filename string, src []byte, opts Options) ([]byte, error) {
 	withResources, err := processImports(filename, filepath.Dir(filename), string(src), opts)
 	if err != nil {
@@ -74,8 +40,7 @@ type parser struct {
 	src  []rune // the whole original file, used for line/col in error messages
 }
 
-// exprIntroducingWords are keywords after which Go grammar expects a new
-// expression, so a following '<' can only be a tag-open.
+// after these, '<' can only open a tag
 var exprIntroducingWords = map[string]bool{
 	"return": true, "go": true, "defer": true, "range": true,
 	"case": true, "if": true, "for": true, "switch": true, "else": true,
@@ -85,11 +50,6 @@ func isIdentPart(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
-// prevAllowsExprStart decides, looking backward from chunk[:pos], whether
-// a '<' at chunk[pos] can be a tag-open. It approximates Go's automatic
-// semicolon insertion: a token that normally completes a value (ident,
-// literal, closing bracket) only yields to a new expression if a newline
-// separates it from pos, since Go would insert a statement break there.
 func prevAllowsExprStart(chunk []rune, pos int) bool {
 	i := pos
 	sawNewline := false
@@ -146,10 +106,6 @@ func (p *parser) errorf(chunk []rune, pos int, format string, args ...any) error
 	return fmt.Errorf("%s:%d:%d: %s", p.file, line, col, msg)
 }
 
-// transpileChunk scans chunk from start to end, copying ordinary Go
-// source through unchanged, skipping over string/rune literals and
-// comments verbatim, and expanding any tag it finds at a tag-open
-// position into a call into the xango package.
 func (p *parser) transpileChunk(chunk []rune) (string, error) {
 	var out strings.Builder
 	pos := 0
@@ -188,8 +144,6 @@ func isTagNameStart(r rune) bool {
 	return unicode.IsLetter(r)
 }
 
-// skipStringLiteral returns the end offset of a string/rune literal
-// starting at pos, if chunk[pos] opens one.
 func skipStringLiteral(chunk []rune, pos int) (int, bool) {
 	q := chunk[pos]
 	if q != '"' && q != '\'' && q != '`' {
@@ -220,8 +174,6 @@ func skipStringLiteral(chunk []rune, pos int) (int, bool) {
 	return i, true
 }
 
-// skipComment returns the end offset of a // or /* */ comment starting
-// at pos, if any.
 func skipComment(chunk []rune, pos int) (int, bool) {
 	n := len(chunk)
 	if pos+1 >= n || chunk[pos] != '/' {
@@ -249,8 +201,6 @@ func skipComment(chunk []rune, pos int) (int, bool) {
 	return 0, false
 }
 
-// findMatchingBrace finds the index of the '}' matching the '{' at
-// chunk[openPos], skipping over nested braces, strings, and comments.
 func findMatchingBrace(chunk []rune, openPos int) (int, error) {
 	depth := 0
 	i := openPos
@@ -288,20 +238,16 @@ type attr struct {
 
 type childNode struct {
 	text   string // set for a literal text run
-	expr   string // set for a nested tag or a {expr} hole (already transpiled to a xango.Node expression)
+	expr   string
 	isText bool
 }
 
-// parseTag parses one full tag (element, component, or fragment) rooted
-// at chunk[pos] == '<', including its children and matching close tag,
-// and returns the generated Go expression plus the position just past it.
 func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 	n := len(chunk)
 	startPos := pos
 	pos++ // consume '<'
 
 	if pos < n && chunk[pos] == '>' {
-		// Fragment: <> ... </>
 		pos++ // consume '>'
 		children, newPos, err := p.parseChildren(chunk, pos, "")
 		if err != nil {
@@ -319,25 +265,12 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 	}
 	name := string(chunk[nameStart:pos])
 	if name == "Fragment" {
-		// <Fragment key="...">...</Fragment> (or key={expr}): the only
-		// way to give a fragment its own reconciliation Key from .xg
-		// syntax -- the bare <>...</> shorthand just above has no room
-		// for an attribute at all. Mirrors JSX's own split between
-		// <>...</> and the long-form <React.Fragment key={id}>...
-		// </React.Fragment> for exactly the same reason. "Fragment" is
-		// therefore a reserved pseudo-tag name, not an ordinary
-		// Component -- intercepted here, before the isComponentName/
-		// isKnownTag validation below, so a real Component named
-		// Fragment (unlikely, but possible) can never be written as a
-		// <Fragment> tag; it would need to be called as a plain Go
-		// expression instead.
 		return p.parseKeyedFragment(chunk, pos)
 	}
 	if !isComponentName(name) && !isKnownTag(name) {
 		return "", 0, p.errorf(chunk, nameStart, "unknown HTML tag <%s>: not a recognized HTML element, not a custom element (needs a hyphen, e.g. <my-widget>), and not a Component (needs a capital first letter); if this is a real tag xango doesn't know about yet, add it to validHTMLTags in internal/transpile/htmlvalidate.go", name)
 	}
 
-	// A generic Component's type arguments: <List[Item] items={xs} />.
 	typeArgs := ""
 	if pos < n && chunk[pos] == '[' && isComponentName(name) {
 		end, err := findMatchingBracket(chunk, pos)
@@ -353,7 +286,6 @@ func (p *parser) parseTag(chunk []rune, pos int) (string, int, error) {
 		return "", 0, err
 	}
 
-	// Self-closing?
 	for pos < n && isSpace(chunk[pos]) {
 		pos++
 	}
@@ -378,13 +310,6 @@ func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\
 
 func (p *parser) parseAttrs(chunk []rune, pos int, tagName string) ([]attr, int, error) {
 	n := len(chunk)
-	// Attribute-name validation only applies to a standard HTML element
-	// (tagName is empty for a fragment, which has no attrs anyway): a
-	// Component's attrs are its Props struct's own field names, which
-	// can be anything the component declares, and a custom element
-	// (a hyphenated tag name, e.g. <my-widget>) conventionally takes
-	// arbitrary custom attributes for the same reason a Component's
-	// props do -- that's the point of a custom element.
 	validateAttrs := tagName != "" && !isComponentName(tagName) && !strings.ContainsRune(tagName, '-')
 	var attrs []attr
 	for {
@@ -449,9 +374,6 @@ func (p *parser) parseAttrs(chunk []rune, pos int, tagName string) ([]attr, int,
 	}
 }
 
-// parseChildren parses tag body content up to (and consuming) the
-// matching close tag. tagName == "" means we're closing a fragment
-// (expects "</>").
 func (p *parser) parseChildren(chunk []rune, pos int, tagName string) ([]childNode, int, error) {
 	n := len(chunk)
 	var children []childNode
@@ -516,9 +438,6 @@ func labelFor(tagName string) string {
 	return tagName
 }
 
-// parseCloseTag parses "</Name>" or "</>"" starting at chunk[pos]=='<',
-// returning the position just past '>' and the closed name ("" for a
-// fragment close).
 func parseCloseTag(chunk []rune, pos int) (int, string, error) {
 	n := len(chunk)
 	i := pos + 2 // skip "</"
@@ -536,10 +455,6 @@ func parseCloseTag(chunk []rune, pos int) (int, string, error) {
 	return i + 1, name, nil
 }
 
-// cleanText mirrors JSX whitespace handling: a text run that is only
-// whitespace and spans a newline (i.e. pure template indentation) is
-// dropped; a run with real content has its surrounding
-// newline-and-indentation trimmed, but inline spaces are preserved.
 func cleanText(s string) (string, bool) {
 	if strings.TrimSpace(s) == "" {
 		if strings.Contains(s, "\n") {
@@ -578,27 +493,11 @@ func isEventAttr(name string) bool {
 	return unicode.IsUpper(rune(name[2]))
 }
 
-// eventNameFor derives the real DOM event name from an onX attribute,
-// e.g. onClick -> "click", onKeyDown -> "keydown". Real DOM event
-// names are always fully lowercase, including multi-word ones
-// (addEventListener("keyDown", ...) never fires -- only the exact
-// string "keydown" does) -- lowercasing only the first letter (an
-// earlier version of this function's bug) happened to work for
-// single-word names like onClick/onInput purely by coincidence, since
-// there's no second capital to get wrong.
+// DOM event names are always fully lowercase
 func eventNameFor(attrName string) string {
 	return strings.ToLower(attrName[2:])
 }
 
-// parseKeyedFragment parses <Fragment key="..."> ... </Fragment> (or
-// key={expr}) starting just past the already-consumed "<Fragment"
-// name -- see parseTag's own call site for why "Fragment" is
-// intercepted before the ordinary Component/tag path. Reuses
-// parseAttrs/parseChildren exactly as an ordinary element would
-// (validateAttrs is already false for any component-cased name, so
-// parseAttrs accepts "key" unvalidated); only the render step at the
-// end differs, emitting xango.Frag(children...).WithKey(...) instead of
-// a xango.El or component call.
 func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) {
 	n := len(chunk)
 	attrs, pos, err := p.parseAttrs(chunk, pos, "Fragment")
@@ -629,12 +528,6 @@ func (p *parser) parseKeyedFragment(chunk []rune, pos int) (string, int, error) 
 	return fmt.Sprintf("%s.WithKey(%s)", p.renderFragment(children), keyExpr), pos, nil
 }
 
-// keyAttrExprSource renders a Fragment's own key attribute's value --
-// a literal is quoted directly (WithKey takes a plain string, no
-// AttrVal adaptation needed), an {expr} hole goes through xango.AttrVal
-// the same way any other plain attribute's {expr} value does
-// (attrExprSource's own a.isExpr case), so a non-string key (an int
-// ID, a fmt.Stringer, ...) still compiles.
 func keyAttrExprSource(a attr) string {
 	if a.isExpr {
 		return fmt.Sprintf("xango.AttrVal(%s)", a.expr)
@@ -709,9 +602,6 @@ func attrExprSource(a attr) string {
 	}
 }
 
-// renderComponent renders <Name attr=... >children</Name> as
-// Name(NameProps{Field: value, ..., Children: []xango.Node{...}}); for a
-// generic component, <Name[T] ...> becomes Name[T](NameProps[T]{...}).
 func (p *parser) renderComponent(name, typeArgs string, attrs []attr, children []childNode) string {
 	callName := name
 	propsType := name + "Props"
@@ -743,8 +633,6 @@ func (p *parser) renderComponent(name, typeArgs string, attrs []attr, children [
 	return b.String()
 }
 
-// findMatchingBracket returns the index of the ']' matching the '[' at
-// chunk[open], skipping nested brackets (map[string]int, []T).
 func findMatchingBracket(chunk []rune, open int) (int, error) {
 	depth := 0
 	for i := open; i < len(chunk); i++ {

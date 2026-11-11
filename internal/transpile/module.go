@@ -15,10 +15,6 @@ import (
 
 var moduleLineRe = regexp.MustCompile(`(?m)^module\s+(\S+)\s*$`)
 
-// findModuleRoot walks up from startDir looking for a go.mod, returning
-// the directory that contains it and the module path it declares. Used
-// by loaders (HCL/proto/capnp) that generate a real Go subpackage and
-// need to know both where to write it and what import path to give it.
 func findModuleRoot(startDir string) (dir string, modulePath string, err error) {
 	dir = startDir
 	for {
@@ -38,10 +34,6 @@ func findModuleRoot(startDir string) (dir string, modulePath string, err error) 
 	}
 }
 
-// resolveInModules resolves a module-qualified resource path -- one that
-// starts with a module's path, as a Go import path does -- to a file in
-// the current module (the nearest go.mod above baseDir) or in a module it
-// requires.
 func resolveInModules(baseDir, path string) (string, bool) {
 	root, modPath, err := findModuleRoot(baseDir)
 	if err != nil {
@@ -54,7 +46,7 @@ func resolveInModules(baseDir, path string) (string, bool) {
 		}
 		return "", false
 	}
-	// A required module: the longest module path that prefixes path.
+	// the longest module path that prefixes path
 	var best, bestDir string
 	for _, m := range requiredModules(root) {
 		if m.Dir != "" && strings.HasPrefix(path, m.Path+"/") && len(m.Path) > len(best) {
@@ -78,9 +70,6 @@ var (
 	modulesCache = map[string][]goModule{}
 )
 
-// requiredModules lists the modules of the build rooted at root, with
-// their directories, by asking the go command (cached per root for the
-// life of the process, which is one xgc run).
 func requiredModules(root string) []goModule {
 	modulesMu.Lock()
 	defer modulesMu.Unlock()

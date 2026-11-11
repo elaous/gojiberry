@@ -46,7 +46,7 @@ func TestDirectoryPublishRefusesUsersWithoutAVerifiedProviderEmail(t *testing.T)
 	for name, u := range map[string]auth.User{
 		"no email":     {ID: "google:1"},
 		"blank email":  {ID: "google:1", Email: "  "},
-		"unverified":   {ID: "google:1", Email: "ana@x.io"},                         // VerifiedEmail not set: the provider never vouched
+		"unverified":   {ID: "google:1", Email: "ana@x.io"},
 		"passkey user": {ID: "passkey:abc", Email: "ana@x.io", VerifiedEmail: true}, // an address typed at registration is a label
 		"no id":        {Email: "ana@x.io", VerifiedEmail: true},
 		"no provider":  {ID: "1", Email: "ana@x.io", VerifiedEmail: true},
@@ -114,15 +114,10 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	if none, err := d.Lookup(ctx, " "); err != nil || none != nil {
 		t.Errorf("blank: %v %v", none, err)
 	}
-	// A directory with another key reads the same store and verifies nothing (and cannot even
-	// find the records: their names depend on the key).
 	if other, _ := (&AdapterDirectory{Store: store, Signer: testSigner(t, 2)}).Lookup(ctx, "ana@x.io"); len(other) != 0 {
 		t.Errorf("another key: %v", other)
 	}
 
-	// Records someone wrote by hand, who knows the record's name but not the key, do not get
-	// the mark: unsigned, signed with another key, tampered after signing, moved to another
-	// name, from a passkey user, or for another address.
 	put := func(email string, rec directoryRecord, r Recipient, sign DirectorySigner) {
 		t.Helper()
 		id := d.directoryID(email, r.Fingerprint)
@@ -155,7 +150,6 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	k6, r6 := mk()
 	r6.Email = "mallory@x.io"
 	put("ana@x.io", r6, k6, signer) // signed for another address
-	// A record signed for one name and stored under another (copied from mallory's records).
 	k7, r7 := mk()
 	r7.Email = "ana@x.io"
 	other := d.directoryID("mallory@x.io", k7.Fingerprint)
@@ -164,7 +158,6 @@ func TestDirectoryLookupMarksVerifiedOnlyForPublishedRecords(t *testing.T) {
 	if err := store.Save(ctx, d.directoryID("ana@x.io", k7.Fingerprint), b7); err != nil {
 		t.Fatal(err)
 	}
-	// A record whose key is not the one its ID names is dropped, not trusted.
 	k8, r8 := mk()
 	b8, _ := json.Marshal(r8)
 	if err := store.Save(ctx, d.directoryID("ana@x.io", "SHA256:other"), b8); err != nil {
@@ -201,8 +194,6 @@ func TestDirectoryRecordNamesDoNotRevealAddresses(t *testing.T) {
 	if want := directoryPrefix + d.emailHash("a@x.io") + "/SHA256-ab-_cd"; id != want {
 		t.Errorf("%q, want %q", id, want)
 	}
-	// Not the plain hash of the address, which anyone could compute from a guess; and another key
-	// names it differently.
 	plain := sha256.Sum256([]byte("a@x.io"))
 	if strings.Contains(id, hex.EncodeToString(plain[:])) {
 		t.Error("the name is a bare hash of the address")
@@ -225,13 +216,11 @@ func TestDirectoryKeepsAtMostMaxKeysPerAddress(t *testing.T) {
 	if err := d.Publish(ctx, u, newRecovery(t)); !errors.Is(err, ErrTooManyKeys) {
 		t.Errorf("%v", err)
 	}
-	// Another address has its own room.
 	if err := d.Publish(ctx, auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}, newRecovery(t)); err != nil {
 		t.Error(err)
 	}
 }
 
-// countingStore counts how it is listed.
 type countingStore struct {
 	docstore.Adapter
 	lists, prefixLists int
@@ -262,7 +251,6 @@ func TestDirectoryLookupDoesNotListTheWholeStore(t *testing.T) {
 	}
 }
 
-// slowListStore makes the list-then-save window wide enough for racing publishes to collide.
 type slowListStore struct{ docstore.Adapter }
 
 func (s slowListStore) List(ctx context.Context) ([]docstore.Meta, error) {

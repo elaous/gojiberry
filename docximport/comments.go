@@ -7,18 +7,8 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Comments. Word (and Google Docs, whose Word export carries them) keep a comment's text in
-// word/comments.xml and its place in the body as a range: <w:commentRangeStart w:id="n"/> before the
-// first run and <w:commentRangeEnd w:id="n"/> after the last. Import brings both: the comments become
-// Document.Comments (author, time, text, resolved) and the runs inside a range carry the comment's ID
-// in their format, as comments made in the editor do. A reply (word/commentsExtended.xml names the
-// comment a comment answers) becomes a reply of its parent. Where ranges overlap, a run belongs to the
-// innermost open one; a comment whose range holds no text is still listed.
-
-// commentPrefix keeps imported IDs apart from the ones the editor makes.
 const commentPrefix = "w"
 
-// loadComments reads the comments and who answers whom.
 func (r *reader) loadComments() {
 	cs := r.xml("word/comments.xml")
 	if cs == nil {
@@ -74,7 +64,6 @@ func (r *reader) loadComments() {
 			}
 		}
 	}
-	// Replies join their parent, in file order; the rest are the document's comments.
 	idx := map[*entry]int{} // the position of each top-level comment in r.doc.Comments
 	for _, e := range entries {
 		if !e.reply {
@@ -101,7 +90,6 @@ func (r *reader) loadComments() {
 	}
 }
 
-// openComment starts a range, closeComment ends it; the innermost open one marks the runs read next.
 func (r *reader) openComment(id string) {
 	if id != "" && r.comments[commentPrefix+id] {
 		r.openComments = append(r.openComments, commentPrefix+id)
@@ -118,7 +106,6 @@ func (r *reader) closeComment(id string) {
 	}
 }
 
-// currentComment is the comment the run being read belongs to ("" outside a range).
 func (r *reader) currentComment() string {
 	if n := len(r.openComments); n > 0 {
 		return r.openComments[n-1]

@@ -107,7 +107,6 @@ func TestCommentFeatureAddEditResolveDelete(t *testing.T) {
 			t.Fatalf("comment tags the selection only: %q", ids)
 		}
 	}
-	// The anchor follows the text through edits.
 	f.SetCursors([]Cursor{At(0)})
 	f.InsertText(">>")
 	if ids := charComments(f.ContentItems()); ids[8] != "c1" || ids[7] != "" {
@@ -201,7 +200,6 @@ func TestCommentHoverTipAndHighlight(t *testing.T) {
 	if f.HoveredComment() != "" {
 		t.Fatal("MouseLeave clears it")
 	}
-	// Resolved comments are not highlighted but still show a tip.
 	f.Comments.Update("k", func(c *Comment) { c.Resolved = true })
 	p.calls = nil
 	f.Draw()
@@ -214,7 +212,6 @@ func TestCommentHoverTipAndHighlight(t *testing.T) {
 	if !p.has(`fillText "1 reply · resolved`) {
 		t.Fatalf("resolved tip: %v", p.calls)
 	}
-	// An unknown ID (deleted comment) is just text.
 	f.Comments.Delete("k")
 	f.MouseMove(10+8*20, 40)
 	f.MouseMove(10+8*7, 40)
@@ -303,7 +300,6 @@ func TestSetRemoteContentAndSetReplaceAll(t *testing.T) {
 	if f.Cursors()[0].Caret > 1 {
 		t.Fatal("cursors clamped")
 	}
-	// The sets are replaced in place.
 	cs := NewCommentSet(Comment{ID: "a"})
 	same := cs
 	cs.ReplaceAll([]Comment{{ID: "b"}, {ID: "c"}})
@@ -315,7 +311,6 @@ func TestSetRemoteContentAndSetReplaceAll(t *testing.T) {
 	if fs.Len() != 0 {
 		t.Fatal("notes replaced")
 	}
-	// Commands that change side data touch the target.
 	g, st := commentFlow(t)
 	g.Comments = NewCommentSet(Comment{ID: "k", Text: "t"})
 	g.Items = []Item{Chars{Text: "ab", Format: Format{Comment: "k"}}}

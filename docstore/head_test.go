@@ -21,7 +21,6 @@ func TestCheckHeadReaderMemoryLocalFSSQLite(t *testing.T) {
 	CheckHeadReader(t, func() Adapter { ea, _ := newExpiring(NewMemoryAdapter()); return ea })
 }
 
-// loadOnly is an adapter with no HeadReader.
 type loadOnly struct{ Adapter }
 
 func TestExpiringLoadHeadFollowsLoad(t *testing.T) {
@@ -42,8 +41,6 @@ func TestExpiringLoadHeadFollowsLoad(t *testing.T) {
 				t.Errorf("a deadline record is read: %v", err)
 			}
 			clk.Add(2 * day)
-			// Past its deadline the document is gone, for the head as for Load, though the inner
-			// store still holds the bytes.
 			if _, err := ea.Load(ctx, "d"); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("Load of an expired document: %v", err)
 			}

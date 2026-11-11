@@ -13,13 +13,6 @@ import (
 	"time"
 )
 
-// Backup and Restore move a whole store as opaque blobs. Give them the adapter the operator runs
-// (the one under the encrypting adapter, so the bytes are the ciphertext the server holds): the
-// backup then holds no more than the store does, and a restore needs no key and reads no document.
-// The archive is a tar of one entry per document, named by the hex of its id, and a last entry,
-// "manifest.json", that lists every id with its size and SHA-256. Restore checks all of it before it
-// writes anything.
-
 const manifestName = "manifest.json"
 
 // BackupEntry is one document in a backup manifest.
@@ -36,9 +29,7 @@ type BackupManifest struct {
 	Entries []BackupEntry `json:"entries"`
 }
 
-// Backup writes every document of a to w and returns the manifest. A document deleted while the
-// backup runs is left out; the backup is as consistent as the listing and the reads allow, so
-// take it from a quiet store when the exact state matters.
+// Backup writes every document of a store to w.
 func Backup(ctx context.Context, a Adapter, w io.Writer) (BackupManifest, error) {
 	man := BackupManifest{Version: 1, Made: time.Now().UTC().Truncate(time.Second)}
 	metas, err := a.List(ctx)
@@ -82,19 +73,13 @@ func writeEntry(tw *tar.Writer, name string, data []byte, mod time.Time) error {
 	return err
 }
 
-// ErrBadBackup is returned by Restore for an archive that is damaged, incomplete or not a backup;
-// nothing has been written then.
+// ErrBadBackup is returned by Restore for an invalid archive.
 var ErrBadBackup = errors.New("docstore: the backup is damaged or incomplete")
 
-// maxBackupEntry bounds one entry read while checking, so a hostile archive cannot ask for memory
-// without limit.
+// bounded entry read: a hostile archive must not exhaust memory
 const maxBackupEntry = 1 << 30
 
-// Restore writes the documents of a backup into a. It first reads the whole archive and checks
-// every document against the manifest (nothing is written if anything is missing, extra or
-// changed), then writes each one with Save, replacing a document with the same id. It returns the
-// number written. r must be seekable because the archive is read twice (once to verify, once to
-// write), which keeps memory at one document.
+// Restore writes the documents of a backup into a store.
 func Restore(ctx context.Context, a Adapter, r io.ReadSeeker) (int, error) {
 	man, err := verifyBackup(r)
 	if err != nil {
@@ -135,7 +120,6 @@ func Restore(ctx context.Context, a Adapter, r io.ReadSeeker) (int, error) {
 	}
 }
 
-// verifyBackup reads the archive once and checks it against its manifest.
 func verifyBackup(r io.Reader) (BackupManifest, error) {
 	var man BackupManifest
 	tr := tar.NewReader(r)
@@ -184,7 +168,7 @@ func verifyBackup(r io.Reader) (BackupManifest, error) {
 	return man, nil
 }
 
-// limitedBuf collects the manifest, which is small; anything past 64 MiB is cut so the JSON fails to read.
+// anything past 64 MiB is cut so the JSON fails to read
 type limitedBuf struct{ b []byte }
 
 func (l *limitedBuf) Write(p []byte) (int, error) {

@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/telemetry"
 )
 
-// The local log (roadmap 57, step 5): off by default, only for a person who opted in, it holds what would be
-// or was sent, and the person can download it. It is never sent and it goes with the opt-in.
 func TestLocalLogShowsAndExportsWhatWasSent(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)
@@ -52,7 +50,6 @@ func TestLocalLogShowsAndExportsWhatWasSent(t *testing.T) {
 		t.Fatalf("the log itself made a request: %d requests", ts.count())
 	}
 
-	// Choosing to send nothing forgets the log; it does not come back after a reload.
 	d.Click("#telemetry-off")
 	d.WaitFor("the log gone", `JSON.parse(document.getElementById('state').textContent).usage.log === 0 && document.getElementById('telemetry-log').disabled`)
 	d.Reload()
@@ -61,8 +58,6 @@ func TestLocalLogShowsAndExportsWhatWasSent(t *testing.T) {
 	d.NoErrors()
 }
 
-// Sampling: a visit outside the sample says so, keeps no preview, and sends nothing even when asked; the
-// local log still shows what it would have sent. The rate is kept in this browser.
 func TestSamplingKeepsAVisitOutAndSaysSo(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)
@@ -75,7 +70,6 @@ func TestSamplingKeepsAVisitOutAndSaysSo(t *testing.T) {
 	d.OK(d.State().Bool("usage.sampled") && !d.Has("#privacy-notsampled"), "at one in one every visit is in")
 	d.Click("#telemetry-log")
 
-	// Each change of the rate draws again; at one in a hundred nearly every draw is outside.
 	for i := 0; i < 30 && d.State().Bool("usage.sampled"); i++ {
 		v := "100"
 		if i%2 == 1 {
@@ -99,7 +93,6 @@ func TestSamplingKeepsAVisitOutAndSaysSo(t *testing.T) {
 		t.Fatalf("a visit outside the sample sent %d request(s)", ts.count())
 	}
 
-	// Reloading keeps the rate; opting in again (a fresh draw at 1 in 1 after choosing every visit) sends.
 	d.Select("#telemetry-sample", "1")
 	d.WaitFor("every visit", `JSON.parse(document.getElementById('state').textContent).usage.oneIn === 1 && JSON.parse(document.getElementById('state').textContent).usage.sampled`)
 	d.Reload()
@@ -108,7 +101,6 @@ func TestSamplingKeepsAVisitOutAndSaysSo(t *testing.T) {
 	d.NoErrors()
 }
 
-// The Privacy settings are in the display preferences menu, as the other personal settings are.
 func TestPrivacySettingsAreInThePreferencesMenu(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)

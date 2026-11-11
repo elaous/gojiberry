@@ -8,30 +8,20 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// NoteEditor is the dialog a footnote is typed in: a text box and, under it, a read-only counter of how much of the
-// limit is used ("120 of 1000 characters"). The counter exists only while the dialog is open, that is only while a
-// note is being typed. The host puts Dialog in its tree once and gives the canvas Stage.EditNote = ed.Edit.
-//
-//	ed := components.NewNoteEditor(rerender)
-//	stage.EditNote = ed.Edit
-//	// and somewhere in the page: ed.Dialog()
 type NoteEditor struct {
-	mu       sync.Mutex
-	open     bool
-	title    string
-	draft    string
-	max      int
-	done     func(text string, ok bool)
-	onChange func()
-	// SaveLabel and CancelLabel are the buttons' words (translated defaults "Save" and "Cancel").
+	mu                     sync.Mutex
+	open                   bool
+	title                  string
+	draft                  string
+	max                    int
+	done                   func(text string, ok bool)
+	onChange               func()
 	SaveLabel, CancelLabel string
 }
 
-// NewNoteEditor makes a NoteEditor that calls onChange whenever it opens, closes or its text changes.
 func NewNoteEditor(onChange func()) *NoteEditor { return &NoteEditor{onChange: onChange} }
 
-// Edit opens the dialog on initial. done is called once, with the text and true when it is saved, or false when the
-// person cancels. A dialog already open is cancelled first. max is the limit of characters (0: none shown).
+// Edit opens the dialog on initial.
 func (n *NoteEditor) Edit(title, initial string, max int, done func(text string, ok bool)) {
 	n.mu.Lock()
 	prev := n.done
@@ -86,12 +76,10 @@ func (n *NoteEditor) finish(ok bool) {
 	n.notify()
 }
 
-// NoteCounter is the words of the counter: how many characters are used of the limit.
 func NoteCounter(used, max int) string {
 	return trf("note.counter", "%d of %d characters", used, max)
 }
 
-// Dialog is the editor for the open note, closed when there is none.
 func (n *NoteEditor) Dialog() xango.Node {
 	n.mu.Lock()
 	open, title, draft, max := n.open, n.title, n.draft, n.max
@@ -119,7 +107,6 @@ func (n *NoteEditor) Dialog() xango.Node {
 		if used >= max {
 			class += " gj-note-counter-full"
 		}
-		// Read-only text: a status the screen reader announces politely as the count changes.
 		body = append(body, xango.El("output", []xango.Attr{xango.A("id", "gj-note-counter"), xango.A("class", class), xango.A("role", "status"), xango.A("aria-live", "polite")},
 			xango.Text(NoteCounter(used, max))))
 	}

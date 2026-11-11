@@ -5,15 +5,10 @@ const (
 	SyncSynced     = "synced"     // connected, and everything typed has been sent
 	SyncSending    = "sending"    // connected, with changes still on their way
 	SyncConnecting = "connecting" // trying to reach the server
-	SyncOffline    = "offline"    // not connected: changes wait here and go when the connection returns
-	SyncProblem    = "problem"    // sharing is not working (the server refused something, the content cannot be shared)
+	SyncOffline    = "offline"
+	SyncProblem    = "problem"
 )
 
-// SyncStatus is the status bar item for a shared document: whether the person's work has reached the others,
-// in words, so that nobody has to guess whether it is saved. online and connecting are the connection's state
-// (neither: offline), pending the number of changes made here and not yet accepted by the server, problem why
-// sharing is not working ("" if it is). Only the states a person must hear about (offline, problem) are
-// announced to a screen reader as they happen; "sending" and "synced" come and go as one types.
 func SyncStatus(online, connecting bool, pending int, problem string) StatusItem {
 	switch {
 	case problem != "":

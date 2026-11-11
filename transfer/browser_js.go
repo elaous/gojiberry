@@ -7,7 +7,6 @@ import (
 	"syscall/js"
 )
 
-// Download hands data to the user as a file named filename.
 func Download(filename, mime string, data []byte) {
 	arr := js.Global().Get("Uint8Array").New(len(data))
 	js.CopyBytesToJS(arr, data)
@@ -17,8 +16,7 @@ func Download(filename, mime string, data []byte) {
 	a.Set("href", url)
 	a.Set("download", filename)
 	a.Call("click")
-	// Not at once: some browsers cancel a download whose URL is revoked
-	// before they have started it.
+	// not at once: a download may be cancelled if revoked early
 	var revoke js.Func
 	revoke = js.FuncOf(func(this js.Value, args []js.Value) any {
 		js.Global().Get("URL").Call("revokeObjectURL", url)
@@ -28,10 +26,6 @@ func Download(filename, mime string, data []byte) {
 	js.Global().Call("setTimeout", revoke, 10000)
 }
 
-// PickFile opens the browser's file chooser (call it from a click) for
-// files matching accept (see Registry.Accept) and calls done with the
-// chosen file's name and bytes, on the event loop. Nothing is called if
-// the user cancels.
 func PickFile(accept string, done func(name string, data []byte, err error)) {
 	in := js.Global().Get("document").Call("createElement", "input")
 	in.Set("type", "file")
@@ -45,7 +39,6 @@ func PickFile(accept string, done func(name string, data []byte, err error)) {
 			onFail.Release()
 		}
 	}
-	// A dismissed chooser fires "cancel" (current browsers), not "change".
 	onCancel = js.FuncOf(func(js.Value, []js.Value) any {
 		releaseAll()
 		return nil
@@ -84,9 +77,6 @@ type PickedFile struct {
 	Data []byte
 }
 
-// PickFiles is PickFile for several files: the chooser lets more than one be
-// picked, and done gets them all (in the order of the chooser) once they are
-// read. Nothing is called if the person cancels.
 func PickFiles(accept string, done func(files []PickedFile, err error)) {
 	in := js.Global().Get("document").Call("createElement", "input")
 	in.Set("type", "file")

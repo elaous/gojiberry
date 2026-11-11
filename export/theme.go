@@ -5,16 +5,11 @@ import (
 	"strings"
 )
 
-// docTheme is what the formats other than HTML take from a document's theme (Snapshot.Theme, the design-token
-// CSS of package tokens): the text, page and link colours as six hex digits and the body size in points. A
-// part that is missing or not a plain colour is left empty, and the format keeps its own.
 type docTheme struct {
 	text, background, link string  // "RRGGBB" or ""
 	bodyPt                 float64 // 0: the format's own
 }
 
-// themeOf reads the snapshot's theme; the zero value (nothing to apply) when there is none or it is not a
-// plain :root block of custom properties.
 func themeOf(snap Snapshot) docTheme {
 	css := snap.Theme
 	if css == "" || !safeThemeCSS(css) {
@@ -44,7 +39,6 @@ func themeOf(snap Snapshot) docTheme {
 	return t
 }
 
-// hexColour is "RRGGBB" for "#rgb", "#rrggbb" and "rgb(r, g, b)", "" for anything else.
 func hexColour(v string) string {
 	v = strings.ToLower(strings.TrimSpace(v))
 	switch {
@@ -77,7 +71,6 @@ func hexColour(v string) string {
 	return ""
 }
 
-// rgb is the three channels of "RRGGBB".
 func rgb(hex string) (r, g, b uint8) {
 	n, _ := strconv.ParseUint(hex, 16, 32)
 	return uint8(n >> 16), uint8(n >> 8), uint8(n)

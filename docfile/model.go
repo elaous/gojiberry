@@ -1,11 +1,3 @@
-// Package docfile is the saved form of a canvas document: a Document
-// model that converts to and from TextFlow content, and the encodings it
-// can be written in (JSON, protobuf text, protobuf binary).
-//
-// The model mirrors the canvas types (Format, ParaFormat, StyleDef, ...)
-// with explicit protobuf field numbers, so what is on disk stays readable
-// when the canvas types change; a test checks the mirrors cover every
-// field. The schema is available as .proto text (Schema).
 package docfile
 
 import (
@@ -31,50 +23,44 @@ type Document struct {
 	Meta      []MetaEntry `json:"meta,omitempty" pb:"6"`
 	Comments  []Comment   `json:"comments,omitempty" pb:"7"`
 	Footnotes []Footnote  `json:"footnotes,omitempty" pb:"8"`
-	// History holds the earlier versions of the document. It is only filled in a file
-	// made to move a document with its history (the .open format); saving such a
-	// document restores the versions in the store, and a stored document never has it.
+	// History holds the earlier versions of the document.
 	History []Revision `json:"history,omitempty" pb:"9"`
 }
 
-// Revision is one earlier version of a document: the document as it was, and when it was
-// saved (unix nanoseconds).
+// Revision is one earlier version of a document.
 type Revision struct {
 	Saved int64     `json:"saved" pb:"1"`
 	Doc   *Document `json:"doc,omitempty" pb:"2"`
 }
 
-// MetaEntry is a free-form key and value kept with the document.
 type MetaEntry struct {
 	Key   string `json:"key" pb:"1"`
 	Value string `json:"value,omitempty" pb:"2"`
 }
 
-// Item is one element of the content: exactly one of its fields is set.
 type Item struct {
 	Chars   *Chars   `json:"chars,omitempty" pb:"1"`
 	Columns *Columns `json:"columns,omitempty" pb:"2"`
 	Break   *Break   `json:"break,omitempty" pb:"3"`
 	Para    *Para    `json:"para,omitempty" pb:"4"`
-	// Footnote is a footnote mark; TOC and Index are the generated blocks.
+	// Footnote is a footnote mark.
 	Footnote *FootnoteMark `json:"footnote,omitempty" pb:"5"`
 	TOC      *Block        `json:"toc,omitempty" pb:"6"`
 	Index    *Block        `json:"index,omitempty" pb:"7"`
-	// Rule is a horizontal rule; Table a table shown in the text.
+	// Rule is a horizontal rule; Table a table.
 	Rule  *RuleItem  `json:"rule,omitempty" pb:"8"`
 	Table *TableItem `json:"table,omitempty" pb:"9"`
-	// Image is an inline image: where it came from and how it is shown.
+	// Image is an inline image.
 	Image *ImageItem `json:"image,omitempty" pb:"10"`
-	// Media is an embedded audio or video clip with its captions and transcript (roadmap 68). The editor
-	// has no player: it opens a clip as text (MediaText) and the exports write it so.
+	// Media is an embedded audio or video clip.
 	Media *MediaItem `json:"media,omitempty" pb:"11"`
-	// Equation is a formula with its text alternative (roadmap 78).
+	// Equation is a formula with its text alternative.
 	Equation *EquationItem `json:"equation,omitempty" pb:"12"`
-	// Form is a form field: its properties and what was written in it.
+	// Form is a form field.
 	Form *FormFieldItem `json:"form,omitempty" pb:"13"`
 }
 
-// Words is what the exports and the search write for the field: its label and what is in it.
+// Words is the text exports and search write.
 func (f FormFieldItem) Words() string {
 	label := strings.TrimSpace(f.Label)
 	if f.Kind == "checkbox" {
@@ -90,9 +76,7 @@ func (f FormFieldItem) Words() string {
 	return label + ": " + f.Value
 }
 
-// FormFieldItem mirrors canvas.FormFieldObject: a field of a form, what it takes (Kind: text, textarea, email, number,
-// phone, url, date, checkbox or select), how it is shown and checked, and the Value written in it. Locked keeps its
-// properties from being changed.
+// FormFieldItem mirrors canvas.FormFieldObject.
 type FormFieldItem struct {
 	Kind        string   `json:"kind" pb:"1"`
 	Name        string   `json:"name,omitempty" pb:"2"`
@@ -103,46 +87,41 @@ type FormFieldItem struct {
 	Options     []string `json:"options,omitempty" pb:"7"`
 	Value       string   `json:"value,omitempty" pb:"8"`
 	Locked      bool     `json:"locked,omitempty" pb:"9"`
-	// LockKey and LockSig are the seal of a lock (package formseal): the public key that locked the field and its
-	// signature over the properties, both base64; empty for a lock without a key.
+	// LockKey and LockSig are the seal of a lock.
 	LockKey string `json:"lockKey,omitempty" pb:"10"`
 	LockSig string `json:"lockSig,omitempty" pb:"11"`
 }
 
-// ImageItem is an inline image. URL is what to fetch it from (a data: URL
-// holds the bitmap itself); Width and Height are its displayed size.
+// ImageItem is an inline image.
 type ImageItem struct {
 	URL    string  `json:"url" pb:"1"`
 	Width  float64 `json:"width,omitempty" pb:"2"`
 	Height float64 `json:"height,omitempty" pb:"3"`
 	Alpha  float64 `json:"alpha,omitempty" pb:"4"`
-	// ClipLeft..ClipBottom are the pixels cropped from each side.
+	// ClipLeft to ClipBottom are the cropped pixels.
 	ClipLeft   float64 `json:"clipLeft,omitempty" pb:"5"`
 	ClipTop    float64 `json:"clipTop,omitempty" pb:"6"`
 	ClipRight  float64 `json:"clipRight,omitempty" pb:"7"`
 	ClipBottom float64 `json:"clipBottom,omitempty" pb:"8"`
-	// Alt describes the image; Decorative says it needs no description.
+	// Alt describes the image; Decorative marks it as decoration.
 	Alt        string `json:"alt,omitempty" pb:"9"`
 	Decorative bool   `json:"decorative,omitempty" pb:"10"`
-	// LongDesc is a longer description of a diagram or chart than Alt can hold (roadmap 78).
+	// LongDesc is a longer description of a diagram.
 	LongDesc string `json:"longDesc,omitempty" pb:"11"`
-	// Legend is the visible caption under the picture (canvas.Image.Legend).
+	// Legend is the visible caption under the picture.
 	Legend string `json:"legend,omitempty" pb:"12"`
-	// Credit and SourceURL are the author, licence and page of a picture found in an image repository (canvas.Image).
+	// Credit and SourceURL give the picture's source.
 	Credit    string `json:"credit,omitempty" pb:"13"`
 	SourceURL string `json:"sourceUrl,omitempty" pb:"14"`
-	// Diagram is the kind of a picture drawn by the diagram add-on from the description in LongDesc ("" for another picture).
+	// Diagram is the kind of a generated picture.
 	Diagram string `json:"diagram,omitempty" pb:"15"`
 }
 
-// EquationItem is a formula in the linear notation of package export (x^2, frac{a}{b}, sqrt{x}) and its text
-// alternative, what a person would read aloud. The alternative is required: a document with an equation
-// that has none is a finding of package a11ycheck, and every export writes the alternative as the text of
-// the equation (the HTML export also writes MathML).
+// EquationItem is a formula in linear notation.
 type EquationItem struct {
 	Formula string `json:"formula" pb:"1"`
 	Alt     string `json:"alt,omitempty" pb:"2"`
-	// Inline puts the formula in its line of text instead of on a line of its own.
+	// Inline puts the formula in its line of text.
 	Inline bool `json:"inline,omitempty" pb:"3"`
 }
 
@@ -152,29 +131,27 @@ type RuleItem struct {
 	Thickness float64 `json:"thickness,omitempty" pb:"2"`
 }
 
-// TableItem is the text of a table in the flow, row by row.
+// TableItem is a table in the flow.
 type TableItem struct {
 	Rows []TableRow `json:"rows,omitempty" pb:"1"`
-	// Merges are blocks of cells shown as one; Styles are per-cell formatting.
+	// Merges are blocks of cells shown as one.
 	Merges []TableMerge     `json:"merges,omitempty" pb:"2"`
 	Styles []TableCellStyle `json:"styles,omitempty" pb:"3"`
-	// Fields are the cells that are form fields (build tag exp_forms in the showcase); the cell's row text is the
-	// field's words, so a reader that does not know fields still sees them.
+	// Fields are the cells that are form fields.
 	Fields []TableCellField `json:"fields,omitempty" pb:"4"`
-	// ColWidths and RowHeights are the sizes set by dragging a grip (0: the table's own).
+	// ColWidths and RowHeights are sizes set by dragging.
 	ColWidths  []float64 `json:"colWidths,omitempty" pb:"5"`
 	RowHeights []float64 `json:"rowHeights,omitempty" pb:"6"`
 }
 
-// TableCellField is the form field in the cell at (Row, Col).
+// TableCellField is the form field in a cell.
 type TableCellField struct {
 	Row   int            `json:"row" pb:"1"`
 	Col   int            `json:"col" pb:"2"`
 	Field *FormFieldItem `json:"field,omitempty" pb:"3"`
 }
 
-// TableMerge is a block of cells shown as one: the cell at (Row, Col) spans
-// Rows x Cols cells (see canvas.Merge).
+// TableMerge is a block of cells shown as one.
 type TableMerge struct {
 	Row  int `json:"row" pb:"1"`
 	Col  int `json:"col" pb:"2"`
@@ -182,8 +159,7 @@ type TableMerge struct {
 	Cols int `json:"cols" pb:"4"`
 }
 
-// TableCellStyle is the formatting of the cell at (Row, Col) (see
-// canvas.CellStyle; Align is the canvas.Align number).
+// TableCellStyle is a cell's formatting.
 type TableCellStyle struct {
 	Row        int    `json:"row" pb:"1"`
 	Col        int    `json:"col" pb:"2"`
@@ -199,18 +175,13 @@ type TableRow struct {
 	Cells []string `json:"cells,omitempty" pb:"1"`
 }
 
-// FootnoteMark is a footnote mark in the text; its text is in
-// Document.Footnotes under ID.
+// FootnoteMark is a footnote mark in the text.
 type FootnoteMark struct {
 	ID string `json:"id" pb:"1"`
 }
 
-// Block is a generated block (table of contents or index); Title is its
-// heading, empty for the default.
 type Block struct {
 	Title string `json:"title,omitempty" pb:"1"`
-	// Style and Depth are the look of a table of contents (canvas.TOCObject): "" dotted, "plain"; the deepest
-	// heading level listed, 0 for all.
 	Style string `json:"style,omitempty" pb:"2"`
 	Depth int    `json:"depth,omitempty" pb:"3"`
 }
@@ -234,7 +205,7 @@ type Columns struct {
 	Gap    float64   `json:"gap,omitempty" pb:"3"`
 }
 
-// Break mirrors canvas.Break; Kind is the canvas.BreakKind number.
+// Break mirrors canvas.Break.
 type Break struct {
 	Kind int `json:"kind,omitempty" pb:"1"`
 }
@@ -285,7 +256,7 @@ type Para struct {
 	QuoteBar    string  `json:"quoteBar,omitempty" pb:"9"`
 	Style       string  `json:"style,omitempty" pb:"10"`
 	DropCap     int     `json:"dropCap,omitempty" pb:"11"`
-	// CodeLang is the language of a code block (a paragraph of the Code style), a short lower-case name.
+	// CodeLang is the language of a code block.
 	CodeLang string `json:"codeLang,omitempty" pb:"12"`
 }
 
@@ -297,7 +268,7 @@ type StyleDef struct {
 	Paragraph bool   `json:"paragraph,omitempty" pb:"4"`
 }
 
-// Comment mirrors canvas.Comment; Created is unix nanoseconds.
+// Comment mirrors canvas.Comment.
 type Comment struct {
 	ID       string  `json:"id" pb:"1"`
 	Author   string  `json:"author,omitempty" pb:"2"`
@@ -314,7 +285,7 @@ type Reply struct {
 	Created int64  `json:"created,omitempty" pb:"3"`
 }
 
-// FromComments converts a comment set (nil gives none).
+// FromComments converts a comment set to saved comments.
 func FromComments(set *canvas.CommentSet) []Comment {
 	var out []Comment
 	for _, c := range set.List() {
@@ -354,8 +325,7 @@ func ToComments(list []Comment) *canvas.CommentSet {
 	return set
 }
 
-// FontRef is a font the document uses (or was given from the font
-// selector) and where its files are, so another machine can fetch them.
+// FontRef is a font the document uses.
 type FontRef struct {
 	Family   string        `json:"family" pb:"1"`
 	Source   string        `json:"source,omitempty" pb:"2"`
@@ -363,8 +333,7 @@ type FontRef struct {
 	Variants []FontVariant `json:"variants,omitempty" pb:"4"`
 }
 
-// FontVariant is one cut of a FontRef. URL is where it came from; Key is
-// where the downloaded copy is in the font store ("" until downloaded).
+// FontVariant is one cut of a FontRef.
 type FontVariant struct {
 	Weight int    `json:"weight,omitempty" pb:"1"`
 	Italic bool   `json:"italic,omitempty" pb:"2"`
@@ -373,9 +342,6 @@ type FontVariant struct {
 	Key    string `json:"key,omitempty" pb:"5"`
 }
 
-// copyFields copies the fields of src that dst has by name, converting
-// between the canvas types and their plain mirrors (enums are ints here).
-// Fields dst lacks are ignored; use checkMirror to be sure none are.
 func copyFields(dst, src any) {
 	d, s := reflect.ValueOf(dst).Elem(), reflect.ValueOf(src)
 	if s.Kind() == reflect.Pointer {
@@ -397,8 +363,6 @@ func copyFields(dst, src any) {
 	}
 }
 
-// mirrorMissing lists the fields of the canvas struct src that the
-// mirror dst lacks (used by a test, so a new canvas field is noticed).
 func mirrorMissing(dst, src reflect.Type) []string {
 	var missing []string
 	for i := range src.NumField() {
@@ -471,7 +435,7 @@ func FromItems(items []canvas.Item) []Item {
 				for _, m := range o.View.Table.Merges {
 					t.Merges = append(t.Merges, TableMerge{Row: m.Row, Col: m.Col, Rows: m.Rows, Cols: m.Cols})
 				}
-				for pos, st := range o.View.Table.Styles { // in reading order, so the file is the same every time
+				for pos, st := range o.View.Table.Styles {
 					t.Styles = append(t.Styles, TableCellStyle{Row: pos.Row, Col: pos.Col, Background: st.Background, Color: st.Color,
 						Bold: st.Bold, Italic: st.Italic, Align: int(st.Align)})
 				}
@@ -546,14 +510,14 @@ func ToItems(items []Item) []canvas.Item {
 			if cols == 0 {
 				cells, cols = [][]string{{""}}, 1
 			}
-			for i, r := range cells { // a ragged or hand-edited table is made rectangular
+			for i, r := range cells {
 				for len(r) < cols {
 					r = append(r, "")
 				}
 				cells[i] = r
 			}
 			table := &canvas.Table{Cells: cells}
-			for _, m := range it.Table.Merges { // a merge that does not fit the grid is dropped
+			for _, m := range it.Table.Merges {
 				if m.Row >= 0 && m.Col >= 0 && m.Rows >= 1 && m.Cols >= 1 && m.Row+m.Rows <= len(cells) && m.Col+m.Cols <= cols && (m.Rows > 1 || m.Cols > 1) {
 					table.MergeRange(m.Row, m.Col, m.Row+m.Rows-1, m.Col+m.Cols-1)
 				}
@@ -561,13 +525,13 @@ func ToItems(items []Item) []canvas.Item {
 			for _, st := range it.Table.Styles {
 				table.SetCellStyle(st.Row, st.Col, canvas.CellStyle{Background: st.Background, Color: st.Color, Bold: st.Bold, Italic: st.Italic, Align: canvas.Align(st.Align)})
 			}
-			for c, w := range it.Table.ColWidths { // sizes set by hand; ones for columns or rows that are not there are dropped
+			for c, w := range it.Table.ColWidths {
 				table.SetColumnWidth(c, w)
 			}
 			for r, h := range it.Table.RowHeights {
 				table.SetRowHeight(r, h)
 			}
-			for _, cf := range it.Table.Fields { // a field whose cell is not in the grid is dropped
+			for _, cf := range it.Table.Fields {
 				if cf.Field != nil && table.InRange(cf.Row, cf.Col) && !table.Covered(cf.Row, cf.Col) && canvas.FormKind(cf.Field.Kind).Valid() {
 					table.SetField(cf.Row, cf.Col, formObject(*cf.Field))
 				}
@@ -580,8 +544,6 @@ func ToItems(items []Item) []canvas.Item {
 		case it.Equation != nil:
 			out = append(out, canvas.Inline{Object: &canvas.EquationObject{Formula: it.Equation.Formula, Alt: it.Equation.Alt, Inline: it.Equation.Inline}, Block: !it.Equation.Inline})
 		case it.Media != nil:
-			// the editor has no player: a clip is a card with its kind and title (canvas.MediaObject), and the
-			// text that stands for it is edited in the Pictures tab
 			m := it.Media
 			out = append(out, canvas.Inline{Object: &canvas.MediaObject{URL: m.URL, Kind: m.Kind, Title: m.Title, Captions: m.Captions,
 				CaptionsURL: m.CaptionsURL, Transcript: m.Transcript, Width: m.Width, Height: m.Height}, Block: true})
@@ -612,21 +574,17 @@ func ToStyles(defs []StyleDef) []canvas.StyleDef {
 	return out
 }
 
-// FromFlow captures a TextFlow's content and styles as a Document with
-// the given title.
+// FromFlow captures a TextFlow's content and styles.
 func FromFlow(title string, f *canvas.TextFlow) Document {
 	return Document{Title: title, Content: FromItems(f.ContentItems()), Styles: FromStyles(f.Styles), Comments: FromComments(f.Comments), Footnotes: FromFootnotes(f.Footnotes)}
 }
 
-// Apply puts the document's content and styles into f, replacing what
-// it had.
+// Apply puts the document's content and styles in a flow.
 func (d Document) Apply(f *canvas.TextFlow) {
-	f.ResetContent() // forget edits and history first: it also clears Items
+	f.ResetContent()
 	f.Source, f.Transform, f.Text = "", nil, ""
 	f.Items = ToItems(d.Content)
 	f.Styles = ToStyles(d.Styles)
-	// Keep the sets themselves when there are some (something may hold them,
-	// and a shared document gave them an ID prefix); fill them in place.
 	if f.Comments != nil {
 		f.Comments.ReplaceAll(ToComments(d.Comments).List())
 	} else {
@@ -665,8 +623,7 @@ func (d Document) String() string {
 	return fmt.Sprintf("document %q (%d items)", d.Title, len(d.Content))
 }
 
-// FromFonts converts a font library's fonts (fonts.Library.Added) to the
-// references a document keeps.
+// FromFonts converts a font library's fonts.
 func FromFonts(list []fontdata.Font) []FontRef {
 	var out []FontRef
 	for _, f := range list {
@@ -679,8 +636,7 @@ func FromFonts(list []fontdata.Font) []FontRef {
 	return out
 }
 
-// ToFonts converts saved font references back to fonts, to Add to a
-// fonts.Library when the document is opened.
+// ToFonts converts saved font references back to fonts.
 func ToFonts(refs []FontRef) []fontdata.Font {
 	var out []fontdata.Font
 	for _, r := range refs {
@@ -693,8 +649,7 @@ func ToFonts(refs []FontRef) []fontdata.Font {
 	return out
 }
 
-// FromFootnotes converts a footnote set (nil gives none); only notes
-// that something refers to are worth saving, so callers may prune first.
+// FromFootnotes converts a footnote set to saved footnotes.
 func FromFootnotes(set *canvas.FootnoteSet) []Footnote {
 	var out []Footnote
 	for _, n := range set.List() {
@@ -712,13 +667,9 @@ func ToFootnotes(list []Footnote) *canvas.FootnoteSet {
 	return set
 }
 
-// ImageLoader, when set, turns an image's URL into a bitmap source the moment
-// a document is opened. A browser app that has already decoded the image
-// (canvas.LoadImage is asynchronous) returns it from its cache; returning nil
-// means "not available yet" and the document gets an ImagePlaceholder.
+// ImageLoader, when set, turns an image's URL into an image.
 var ImageLoader func(url string) canvas.ImageSource
 
-// imageObject makes the inline object for a saved image.
 func imageObject(it ImageItem) canvas.InlineObject {
 	if ImageLoader != nil {
 		if src := ImageLoader(it.URL); src != nil {
@@ -739,9 +690,7 @@ func imageObject(it ImageItem) canvas.InlineObject {
 	return &ImagePlaceholder{Item: it}
 }
 
-// ImagePlaceholder stands in for a saved image whose bitmap is not loaded: a
-// grey box of the right size that saves back as the same image, so opening
-// and saving a document does not lose it.
+// ImagePlaceholder stands in for a saved image.
 type ImagePlaceholder struct{ Item ImageItem }
 
 // Measure implements canvas.InlineObject.
@@ -766,10 +715,9 @@ func (p *ImagePlaceholder) DrawAt(pt canvas.Painter, x, y float64) {
 	pt.FillRect(x, y, w, h)
 }
 
-// TagsKey is the Meta key a document's tags are kept under.
 const TagsKey = "tags"
 
-// Tags returns the document's tags, in the order they were set.
+// Tags returns the document's tags.
 func (d Document) Tags() []string {
 	v, _ := d.Get(TagsKey)
 	var out []string
@@ -781,8 +729,7 @@ func (d Document) Tags() []string {
 	return out
 }
 
-// SetTags replaces the document's tags: trimmed, without commas or empty ones,
-// and without repeats (compared ignoring case).
+// SetTags replaces the document's tags, trimmed.
 func (d *Document) SetTags(tags []string) {
 	seen := map[string]bool{}
 	var clean []string
@@ -800,7 +747,7 @@ func (d *Document) SetTags(tags []string) {
 	d.Set(TagsKey, strings.Join(clean, ","))
 }
 
-// HasTag reports whether the document has the tag (ignoring case).
+// HasTag reports whether the document has the tag.
 func (d Document) HasTag(tag string) bool {
 	for _, t := range d.Tags() {
 		if strings.EqualFold(t, strings.TrimSpace(tag)) {
@@ -810,24 +757,18 @@ func (d Document) HasTag(tag string) bool {
 	return false
 }
 
-// SourceFormatKey is the Meta key of a document that is a copy of a file in another format, to be read (a text format opened
-// as it is: "json", "csv", "yaml"...). The editor opens such a document for reading and says it is a copy; saving it
-// is saving the copy, and the key is not kept.
+// SourceFormatKey is the Meta key of the source format.
 const SourceFormatKey = "source.format"
 
-// SourceProblemKey is the Meta key of what is wrong with the file a reading copy was made from ("line 3: ..."): the text
-// is shown as it is, and the editor says it does not read as the format it came in.
+// SourceProblemKey is the Meta key of an import problem.
 const SourceProblemKey = "source.problem"
 
-// SourceProblem returns what is wrong with the file the document is a reading copy of, or "".
+// SourceProblem returns what is wrong with the file.
 func (d Document) SourceProblem() string { v, _ := d.Get(SourceProblemKey); return v }
 
-// SourceFormat returns the format the document is a reading copy of, or "".
+// SourceFormat returns the format the document came from.
 func (d Document) SourceFormat() string { v, _ := d.Get(SourceFormatKey); return v }
 
-// IDKey and NameKey are the Meta keys a document's identity is kept under: its
-// ID, a UUID that never changes (two documents may share a name, never an ID),
-// and its Name in a document list.
 const (
 	IDKey   = "id"
 	NameKey = "name"
@@ -844,7 +785,7 @@ func NewID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
-// ValidID reports whether s is a UUID as NewID writes it.
+// ValidID reports whether s is a UUID as NewID writes.
 func ValidID(s string) bool {
 	if len(s) != 36 {
 		return false
@@ -862,30 +803,25 @@ func ValidID(s string) bool {
 	return true
 }
 
-// ID returns the document's ID, "" for one that has none yet.
+// ID returns the document's ID, or "".
 func (d Document) ID() string { v, _ := d.Get(IDKey); return v }
 
 // SetID gives the document its ID.
 func (d *Document) SetID(id string) { d.Set(IDKey, id) }
 
-// Name returns the document's name in a list, "" if it has none.
 func (d Document) Name() string { v, _ := d.Get(NameKey); return v }
 
 // SetName names the document.
 func (d *Document) SetName(name string) { d.Set(NameKey, name) }
 
-// TrashedKey is the Meta key holding when the document was moved to the trash
-// (unix nanoseconds); a document that is not in the trash has none.
 const TrashedKey = "trashed"
 
-// Trashed returns when the document was trashed, 0 if it is not in the trash.
 func (d Document) Trashed() int64 {
 	v, _ := d.Get(TrashedKey)
 	n, _ := strconv.ParseInt(v, 10, 64)
 	return n
 }
 
-// SetTrashed records when the document was trashed; 0 takes it out of the trash.
 func (d *Document) SetTrashed(ns int64) {
 	if ns == 0 {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == TrashedKey })
@@ -894,17 +830,13 @@ func (d *Document) SetTrashed(ns int64) {
 	d.Set(TrashedKey, strconv.FormatInt(ns, 10))
 }
 
-// ProtectionKey is the Meta key holding a document's protection level, and ProtectionE2EE
-// the one level that is written: a confidential document, whose real name and tags live
-// here, inside the document, while a catalog lists a placeholder. A document with no such
-// key is protected by the server only.
+// ProtectionKey is the Meta key holding a document's protection.
 const (
 	ProtectionKey  = "protection"
 	ProtectionE2EE = "e2ee"
 )
 
-// Protection returns the document's protection level: ProtectionE2EE, or "" for the
-// default.
+// Protection returns the document's protection level.
 func (d Document) Protection() string {
 	if v, _ := d.Get(ProtectionKey); v == ProtectionE2EE {
 		return v
@@ -912,8 +844,7 @@ func (d Document) Protection() string {
 	return ""
 }
 
-// SetProtection records the protection level; anything but ProtectionE2EE takes the key
-// away.
+// SetProtection records the protection level.
 func (d *Document) SetProtection(level string) {
 	if level != ProtectionE2EE {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == ProtectionKey })
@@ -922,14 +853,11 @@ func (d *Document) SetProtection(level string) {
 	d.Set(ProtectionKey, level)
 }
 
-// FolderKey is the Meta key holding the ID of the folder a document is in; a
-// document at the top level has none.
+// FolderKey is the Meta key holding the folder ID.
 const FolderKey = "folder"
 
-// Folder returns the ID of the folder the document is in, "" at the top level.
 func (d Document) Folder() string { v, _ := d.Get(FolderKey); return v }
 
-// SetFolder puts the document in a folder; "" takes it to the top level.
 func (d *Document) SetFolder(id string) {
 	if id == "" {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == FolderKey })
@@ -938,10 +866,8 @@ func (d *Document) SetFolder(id string) {
 	d.Set(FolderKey, id)
 }
 
-// LangKey is the Meta key a document's language is kept under, as a BCP 47 tag ("fr", "pt-BR").
 const LangKey = "lang"
 
-// Language is the document's language, or "" when none is set (or what is set is not a language tag).
 func (d Document) Language() string {
 	if v, _ := d.Get(LangKey); v != "" && canvas.ValidLang(v) {
 		return v
@@ -949,18 +875,15 @@ func (d Document) Language() string {
 	return ""
 }
 
-// ThemeKey is the Meta key a document's theme is kept under: design-token CSS (package tokens), which the
-// HTML export writes into the page so the file looks like the editor's theme.
 const ThemeKey = "theme"
 
-// Theme is the document's theme as design-token CSS, "" when it has none.
+// Theme is the document's theme.
 func (d Document) Theme() string {
 	v, _ := d.Get(ThemeKey)
 	return v
 }
 
-// SetTheme sets the document's theme; "" removes it. The text is not checked here: the HTML export
-// refuses anything that is not a plain :root block of custom properties, and package tokens makes it.
+// SetTheme sets the document's theme.
 func (d *Document) SetTheme(css string) {
 	if css == "" {
 		d.Meta = slices.DeleteFunc(slices.Clone(d.Meta), func(m MetaEntry) bool { return m.Key == ThemeKey })
@@ -969,7 +892,7 @@ func (d *Document) SetTheme(css string) {
 	d.Set(ThemeKey, css)
 }
 
-// SetLanguage sets the document's language; "" removes it. A tag that is not valid is ignored.
+// SetLanguage sets the document's language; "" removes it.
 func (d *Document) SetLanguage(tag string) {
 	if !canvas.ValidLang(tag) {
 		return

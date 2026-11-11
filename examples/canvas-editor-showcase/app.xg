@@ -17,11 +17,6 @@ type Callbacks struct {
 	OnTable func(*cv.Table)
 }
 
-// Doc is the whole editor canvas as one tree: a scrolling viewport over
-// three pages, the editable text flow (Markdown to start with), a picture
-// the text wraps around, a floating note and a floating table. The
-// editing features are registered explicitly, to show where to add or
-// remove one.
 func Doc(state State, cb Callbacks) xango.Node {
 	return <canvas.Canvas width={920} height={640} mode={state.Mode} role={state.Role} features={state.Features()}>
 		{shared(state, <canvas.ScrollView x={10} y={10} width={900} height={620} lockH={!state.Spread} typewriter={state.Typewriter} typewriterX={state.TypewriterX}>
@@ -76,8 +71,6 @@ func Doc(state State, cb Callbacks) xango.Node {
 	</canvas.Canvas>
 }
 
-// watermark puts DRAFT across every sheet but the first: the later sheets
-// inherit the first one that sets it.
 func watermark(n int) xango.Node {
 	if n == 0 {
 		return <></>
@@ -99,8 +92,6 @@ func picture(state State) xango.Node {
 	/>
 }
 
-// shared makes the document multi-user when the page was opened on one: the
-// Collab element wraps what is shared and leaves the rest of the tree alone.
 func shared(state State, content xango.Node) xango.Node {
 	if state.Live == nil {
 		return content

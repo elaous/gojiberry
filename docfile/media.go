@@ -5,22 +5,16 @@ import (
 	"strings"
 )
 
-// MediaItem is an audio or video clip embedded in the document: where it comes from, a name, and the text that
-// stands for it for a reader who cannot hear or see it (roadmap 68). The editor has no player of its own, so
-// the model carries the media by reference and keeps the text beside it; a host that embeds media fills it, and
-// the checker (package a11ycheck) and the exports require and carry the text.
 type MediaItem struct {
-	// URL is where the clip is fetched from; Kind is MediaAudio or MediaVideo ("" is read as video).
+	// URL is where the clip is fetched from.
 	URL  string `json:"url" pb:"1"`
 	Kind string `json:"kind,omitempty" pb:"2"`
-	// Title names the clip for a reader who cannot see it ("Interview with the mayor").
+	// Title names the clip for readers who cannot see it.
 	Title string `json:"title,omitempty" pb:"3"`
-	// Captions is a caption track as WebVTT text, and CaptionsURL where one is fetched from. A video needs
-	// one of the two.
+	// Captions is a caption track as WebVTT text.
 	Captions    string `json:"captions,omitempty" pb:"4"`
 	CaptionsURL string `json:"captionsUrl,omitempty" pb:"5"`
-	// Transcript is everything said and described in the clip, as text. Audio needs it (or captions, whose
-	// words it is made of).
+	// Transcript is everything said and described in the clip.
 	Transcript string `json:"transcript,omitempty" pb:"6"`
 	// Width and Height are the displayed size of a video.
 	Width  float64 `json:"width,omitempty" pb:"7"`
@@ -33,7 +27,7 @@ const (
 	MediaVideo = "video"
 )
 
-// IsAudio says the clip is sound only; anything else is read as video.
+// IsAudio says the clip is sound only.
 func (m MediaItem) IsAudio() bool { return strings.EqualFold(strings.TrimSpace(m.Kind), MediaAudio) }
 
 // KindName is "audio" or "video".
@@ -44,13 +38,12 @@ func (m MediaItem) KindName() string {
 	return MediaVideo
 }
 
-// HasCaptions says the clip has a caption track: text in it, or an address to fetch one from.
+// HasCaptions says the clip has a caption track.
 func (m MediaItem) HasCaptions() bool {
 	return strings.TrimSpace(CueText(m.Captions)) != "" || strings.TrimSpace(m.CaptionsURL) != ""
 }
 
-// Words is the text that stands for the clip: its transcript, else the words of its captions (the cues
-// without their timing). "" when there is none.
+// Words is the text that stands for the clip.
 func (m MediaItem) Words() string {
 	if t := strings.TrimSpace(m.Transcript); t != "" {
 		return t
@@ -58,9 +51,7 @@ func (m MediaItem) Words() string {
 	return CueText(m.Captions)
 }
 
-// CueText is the words of a WebVTT caption file: the cues' text, one cue per line, without the header, the
-// notes, the cue numbers and timings, or the markup inside a cue (<v Ann>, <i>). A text with no cue timing is
-// read as the words themselves. It never fails: what it cannot read it leaves out.
+// CueText is the words of a WebVTT caption file.
 func CueText(vtt string) string {
 	vtt = strings.ReplaceAll(strings.ReplaceAll(vtt, "\r\n", "\n"), "\r", "\n")
 	vtt = strings.TrimPrefix(vtt, "\xef\xbb\xbf") // a byte order mark
@@ -93,7 +84,6 @@ func CueText(vtt string) string {
 	return strings.Join(out, "\n")
 }
 
-// stripCueTags removes the <...> markup of a cue.
 func stripCueTags(s string) string {
 	var sb strings.Builder
 	in := false
@@ -110,9 +100,7 @@ func stripCueTags(s string) string {
 	return sb.String()
 }
 
-// MediaText is the document items that stand for a clip as text, for what cannot play it (the editor, the
-// plain formats): a line naming it, as a link to it, and its transcript as paragraphs under "Transcript". A
-// clip with no words writes the line alone.
+// MediaText is the document items that stand for clips.
 func MediaText(m MediaItem) []Item { return mediaText(m, mediaWords["en"]) }
 
 func mediaText(m MediaItem, l mediaLabels) []Item {
@@ -144,7 +132,7 @@ func mediaText(m MediaItem, l mediaLabels) []Item {
 	return items
 }
 
-// MediaAsText is d with each embedded clip replaced by the text that stands for it (MediaText).
+// MediaAsText is d with each clip replaced by its words.
 func (d Document) MediaAsText() Document {
 	has := false
 	for _, it := range d.Content {
@@ -161,7 +149,6 @@ func (d Document) MediaAsText() Document {
 	for _, it := range d.Content {
 		if it.Media != nil {
 			if n := len(out.Content); n > 0 {
-				// the clip's line starts a paragraph of its own
 				if last := out.Content[n-1].Chars; last != nil && last.Text != "" && !strings.HasSuffix(last.Text, "\n") {
 					out.Content = append(out.Content, Item{Chars: &Chars{Text: "\n"}})
 				}
@@ -174,24 +161,21 @@ func (d Document) MediaAsText() Document {
 	return out
 }
 
-// A Cue is one caption of a WebVTT track: the seconds it starts and ends, and its text (the lines of the cue
-// joined by a newline, markup left in).
+// A Cue is one caption of a WebVTT track.
 type Cue struct {
 	Start, End float64
 	Text       string
 }
 
-// A CueProblem is something wrong with a caption track that a person editing it should hear about.
+// A CueProblem is something wrong with a caption.
 type CueProblem struct {
-	// Cue is the 1-based number of the cue, 0 for the track as a whole.
+	// Cue is the 1-based cue number.
 	Cue int
-	// Kind is one of "no-header", "no-text", "backwards" (the cue ends before it starts), "overlap" (it starts
-	// before the cue before it ends), "no-cues".
+	// Kind names the problem.
 	Kind string
 }
 
-// ParseCues reads the cues of a WebVTT text, with the problems it finds. A timestamp is [hh:]mm:ss.mmm; a block with
-// a timing line it cannot read is left out and reported as no-text. It never fails.
+// ParseCues reads the cues of a WebVTT text.
 func ParseCues(vtt string) ([]Cue, []CueProblem) {
 	vtt = strings.ReplaceAll(strings.ReplaceAll(vtt, "\r\n", "\n"), "\r", "\n")
 	vtt = strings.TrimPrefix(vtt, "\xef\xbb\xbf")
@@ -241,7 +225,6 @@ func ParseCues(vtt string) ([]Cue, []CueProblem) {
 	return cues, problems
 }
 
-// cueTime reads a WebVTT timestamp ([hh:]mm:ss.mmm) as seconds.
 func cueTime(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	parts := strings.Split(s, ":")
@@ -283,7 +266,7 @@ func cueTime(s string) (float64, bool) {
 	return total, true
 }
 
-// FormatCueTime writes seconds as a WebVTT timestamp, hh:mm:ss.mmm.
+// FormatCueTime writes seconds as a WebVTT timestamp.
 func FormatCueTime(sec float64) string {
 	if sec < 0 {
 		sec = 0
@@ -304,7 +287,6 @@ func BuildCues(cues []Cue) string {
 	return sb.String()
 }
 
-// mediaLabels are the words a clip is written with in the plain formats ("Video: name", "Transcript").
 type mediaLabels struct{ video, audio, transcript string }
 
 var mediaWords = map[string]mediaLabels{
@@ -317,8 +299,7 @@ var mediaWords = map[string]mediaLabels{
 	"ar": {"فيديو: ", "صوت: ", "نص مكتوب"},
 }
 
-// MediaTextIn is MediaText with the words "Video", "Audio" and "Transcript" in a language (de, fr, es, pt, he, ar;
-// anything else is English).
+// MediaTextIn is MediaText with the given labels.
 func MediaTextIn(m MediaItem, lang string) []Item {
 	l, ok := mediaWords[strings.ToLower(strings.SplitN(lang, "-", 2)[0])]
 	if !ok {

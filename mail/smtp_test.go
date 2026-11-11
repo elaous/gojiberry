@@ -18,8 +18,6 @@ import (
 	"time"
 )
 
-// fakeServer is a small SMTP server: it can offer STARTTLS and AUTH, upgrades with a generated
-// certificate, and records what the client sent.
 type fakeServer struct {
 	ln       net.Listener
 	cert     tls.Certificate
@@ -197,7 +195,6 @@ func TestSMTPImplicitTLSAndPlainText(t *testing.T) {
 }
 
 func TestSMTPRefusesToDowngradeOrSendSecretsInTheClear(t *testing.T) {
-	// the server does not offer STARTTLS: nothing is sent, no credentials
 	s := newFakeServer(t, func(f *fakeServer) { f.auth, f.user, f.pass = true, "u", "p" })
 	c := s.sender(StartTLS)
 	c.Username, c.Password = "u", "p"
@@ -208,21 +205,18 @@ func TestSMTPRefusesToDowngradeOrSendSecretsInTheClear(t *testing.T) {
 	if _, _, authOK, _ := s.got(); authOK {
 		t.Fatal("credentials reached a server without TLS")
 	}
-	// a certificate the client does not trust
 	s2 := newFakeServer(t, func(f *fakeServer) { f.startTLS = true })
 	c2 := s2.sender(StartTLS)
 	c2.TLSConfig = &tls.Config{} // system roots only
 	if err := c2.Send(context.Background(), msg); err == nil || !strings.Contains(err.Error(), "STARTTLS failed") {
 		t.Fatalf("%v", err)
 	}
-	// the sign-in is refused
 	s3 := newFakeServer(t, func(f *fakeServer) { f.startTLS, f.auth, f.user, f.pass = true, true, "u", "right" })
 	c3 := s3.sender(StartTLS)
 	c3.Username, c3.Password = "u", "wrong-secret-password"
 	if err := c3.Send(context.Background(), msg); err == nil || strings.Contains(err.Error(), "wrong-secret-password") || !strings.Contains(err.Error(), "sign-in failed") {
 		t.Fatalf("%v", err)
 	}
-	// a server with no AUTH when sign-in is configured
 	s4 := newFakeServer(t, func(f *fakeServer) { f.startTLS = true })
 	c4 := s4.sender(StartTLS)
 	c4.Username, c4.Password = "u", "p"
@@ -286,7 +280,6 @@ func TestSMTPUnreachableAndCancelled(t *testing.T) {
 	if err := c.Send(cctx, msg); err == nil {
 		t.Fatal("cancelled")
 	}
-	// a server that accepts and says nothing: the timeout ends it
 	silent, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer func() { _ = silent.Close() }()
 	go func() {

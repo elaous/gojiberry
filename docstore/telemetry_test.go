@@ -44,7 +44,6 @@ func TestTelemetryRouteCountsAndWritesNoRecordPerRequest(t *testing.T) {
 	if got := c.Report(1); len(got) != 1 || got[0].N != 7 {
 		t.Fatalf("totals: %v", got)
 	}
-	// An event outside the allowlist, or with an extra field, is refused and counts nothing.
 	for _, bad := range []string{
 		`{"day":"` + today() + `","counts":[{"name":"feature","value":"ana@example.com","n":1}]}`,
 		`{"day":"` + today() + `","user":"ana","counts":[{"name":"feature","value":"find","n":1}]}`,

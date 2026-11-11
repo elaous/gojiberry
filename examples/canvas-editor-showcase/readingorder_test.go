@@ -29,15 +29,12 @@ func TestFloatingObjectsAreReadWhereTheyAre(t *testing.T) {
 	if g := read(); g != "A | B | C | D" {
 		t.Errorf("no objects: %s", g)
 	}
-	// between B and C; at the very top; below everything
 	if g := read(note("mid", 0, 90), note("top", 0, 0), note("end", 0, 400)); g != "Note: top | A | B | Note: mid | C | D | Note: end" {
 		t.Errorf("placed: %s", g)
 	}
-	// the same height: left to right
 	if g := read(note("right", 300, 90), note("left", 20, 90)); g != "A | B | Note: left | Note: right | C | D" {
 		t.Errorf("same height: %s", g)
 	}
-	// a block with no place of its own stays with the one before it
 	ys2 := []float64{10, -1, 110, 160}
 	got = got[:0]
 	for _, b := range orderByPosition(blocks, ys2, []placedBlock{note("n", 0, 60)}) {

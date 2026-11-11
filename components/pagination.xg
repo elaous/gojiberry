@@ -13,10 +13,6 @@ type PaginationProps struct {
 	OnChange   func(page int)
 }
 
-// Pagination renders Prev/Next buttons plus page-number buttons, with
-// an ellipsis collapsing the middle of a long run so it stays a
-// constant width regardless of TotalPages. Renders nothing when
-// TotalPages < 1.
 func Pagination(props PaginationProps) xango.Node {
 	if props.TotalPages < 1 {
 		return xango.Frag()
@@ -52,10 +48,6 @@ func Pagination(props PaginationProps) xango.Node {
 	return xango.El("nav", []xango.Attr{xango.A("class", "gj-pagination"), xango.A("aria-label", "Pagination")}, children...)
 }
 
-// paginationWindow returns the page numbers to render around page,
-// always including the first and last page, using 0 as an ellipsis
-// marker for a collapsed gap. Short page counts (<=7) are returned in
-// full, with no ellipsis at all.
 func paginationWindow(page, total int) []int {
 	if total <= 7 {
 		out := make([]int, total)

@@ -14,11 +14,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// Config is the postgres backend's own config, decoded from
-// Config.BackendConfig when Config.Backend == "postgres".
+// Config is the postgres backend's configuration.
 type Config struct {
-	// DSN is a standard Postgres connection string, e.g.
-	// "postgres://user:pass@host:5432/dbname".
+	// DSN is a standard Postgres connection string.
 	DSN string `json:"dsn"`
 }
 
@@ -37,25 +35,13 @@ func init() {
 	})
 }
 
-// Adapter stores documents in a single table:
-//
-//	CREATE TABLE IF NOT EXISTS documents (
-//	    id         TEXT PRIMARY KEY,
-//	    data       BYTEA NOT NULL,
-//	    updated_at TIMESTAMPTZ NOT NULL
-//	)
-//
-// New creates this table itself if it does not already
-// exist, so an operator only needs a reachable database, not a
-// separate migration step.
+// Adapter stores documents in a single table.
 type Adapter struct {
 	db    *sql.DB
 	table string
 }
 
-// New opens dsn (a standard Postgres connection
-// string) via pgx's database/sql driver and ensures the documents
-// table exists.
+// New opens dsn, a standard Postgres connection string.
 func New(ctx context.Context, dsn string) (*Adapter, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -69,8 +55,6 @@ func New(ctx context.Context, dsn string) (*Adapter, error) {
 	return a, nil
 }
 
-// newFromDB wraps an already-open *sql.DB (e.g. one
-// wired to sqlmock) without touching the schema, for native testing.
 func newFromDB(db *sql.DB) *Adapter {
 	return &Adapter{db: db, table: "documents"}
 }
@@ -94,10 +78,7 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return err
 }
 
-// SaveIf implements docstore.ConditionalAdapter in one transaction: the row is read FOR
-// UPDATE, compared with prevDigest (its SHA-256, "" when it must not exist) and written; a
-// row inserted by someone else in the meantime makes the insert affect nothing, which is a
-// conflict.
+// SaveIf implements docstore.ConditionalAdapter.
 func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -133,8 +114,7 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return tx.Commit()
 }
 
-// DeleteIf implements docstore.ConditionalDeleter in one transaction: the row is locked, compared
-// with prevDigest and deleted.
+// DeleteIf implements docstore.ConditionalDeleter.
 func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -170,8 +150,7 @@ func (a *Adapter) Load(ctx context.Context, id string) (docstore.Document, error
 	return doc, nil
 }
 
-// LoadHead implements docstore.HeadReader: substr(data, 1, n) is cut in the database, so only
-// the head crosses the wire.
+// LoadHead implements docstore.HeadReader.
 func (a *Adapter) LoadHead(ctx context.Context, id string, n int) ([]byte, error) {
 	var head []byte
 	err := a.db.QueryRowContext(ctx, `SELECT substr(data, 1, $2) FROM documents WHERE id = $1`, id, max(n, 0)).Scan(&head)
@@ -188,11 +167,10 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
 }
 
-// likeEscaper escapes what LIKE treats as a pattern (backslash is the escape character).
+// backslash is the LIKE escape character
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// ListPrefix implements docstore.PrefixLister: the database filters, with a LIKE whose
-// pattern is the prefix with its wildcards escaped.
+// ListPrefix implements docstore.PrefixLister.
 func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Meta, error) {
 	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents WHERE id LIKE $1 ESCAPE '\'`, likeEscaper.Replace(prefix)+"%")
 }

@@ -7,24 +7,12 @@ import (
 
 // StylePickerProps configures StylePicker.
 type StylePickerProps struct {
-	// Styles are the named styles to list (canvas.DefaultStyles, or the
-	// flow's own).
-	Styles []canvas.StyleDef
-	// Base is the text style the previews are drawn over (default 16px
-	// sans-serif).
-	Base canvas.TextStyle
-	// Current is the style at the caret, highlighted ("" for none).
+	Styles  []canvas.StyleDef
+	Base    canvas.TextStyle
 	Current string
-	// OnPick is called with the chosen style and whether it is a
-	// paragraph style.
-	OnPick func(name string, paragraph bool)
+	OnPick  func(name string, paragraph bool)
 }
 
-// StylePicker renders a gallery of named styles, each previewed in its
-// own formatting -- paragraph styles first, then character styles -- the
-// way a word processor's style list does. It is controlled: the caller
-// applies the pick (see canvas.Styles for the commands, or
-// TextFlow.ApplyParagraph / ApplyFormat with a Style).
 func StylePicker(props StylePickerProps) xango.Node {
 	base := props.Base
 	if base.FontSize <= 0 {
@@ -33,8 +21,6 @@ func StylePicker(props StylePickerProps) xango.Node {
 	if base.FontFamily == "" {
 		base.FontFamily = "sans-serif"
 	}
-	// the way in (the one choice Tab reaches) is the current style, or the first one shown: the paragraph
-	// styles come first
 	entry := ""
 	for _, s := range props.Styles {
 		if s.Name == props.Current {

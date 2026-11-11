@@ -6,16 +6,6 @@ import (
 	"strings"
 )
 
-// processImports runs before tag expansion: it finds every
-// `import ( ... )` block, and for each spec whose path ends in a
-// recognized resource extension invokes that extension's loader
-// instead of treating it as a Go package import. A loader either
-// splices supporting Go declarations in after the import block (JSON/
-// CSS/SCSS) or generates a real Go package and rewrites the spec into
-// an ordinary import of it (the experimental loaders: HCL/proto/
-// capnp/sqlc). Ordinary Go import specs pass through unchanged. Only
-// the parenthesized `import ( ... )` form is recognized; a lone
-// `import "path"` is always treated as a normal Go import.
 func processImports(filename, baseDir string, src string, opts Options) (string, error) {
 	runes := []rune(src)
 	var out []rune
@@ -58,8 +48,6 @@ func processImports(filename, baseDir string, src string, opts Options) (string,
 	return string(out), nil
 }
 
-// atWord reports whether src[pos:] begins with word as a standalone
-// token (not part of a longer identifier on either side).
 func atWord(src []rune, pos int, word string) bool {
 	wr := []rune(word)
 	if pos+len(wr) > len(src) {
@@ -80,11 +68,6 @@ func atWord(src []rune, pos int, word string) bool {
 	return true
 }
 
-// rewriteImportBlock parses specs from just after the block's '(' up
-// to and including its matching ')', returning the rewritten block
-// body (without parens), any extra declarations resource-import
-// loaders produced (to be appended after the block), and the position
-// just past ')'.
 func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Options) (block string, decls string, newPos int, err error) {
 	var blockOut, declsOut strings.Builder
 	extraGoImports := map[string]bool{}
@@ -126,13 +109,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 			i = k
 		}
 
-		// Optional resource-import-only type annotation, reusing Go's
-		// type-assertion syntax as a new meaning that's never valid in a
-		// real import spec: `alias.(TypeName) "path.json"` tells the
-		// loader to decode into TypeName instead of the untyped
-		// default. TypeName must already be declared by the caller (in
-		// this package or an import) -- xango does not generate it or
-		// infer its shape from the file's data.
+		// never valid in a real import spec
 		var typeName string
 		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
 			i += 2
@@ -162,10 +139,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 
 			loader, ok := loaders[ext]
 			if !ok {
-				// Recognized only via experimentalExtensions: xango knows
-				// the extension but its loader lives in
-				// internal/transpile/experimental and isn't wired in
-				// unless the caller opted in.
+				// recognized only via experimentalExtensions: its loader is not wired by default
 				if !opts.Experimental {
 					return "", "", 0, fmt.Errorf("%s: %s imports are experimental; enable with `xgc -experimental` (or transpile.Options{Experimental: true}) -- see internal/transpile/experimental", filename, ext)
 				}
@@ -195,9 +169,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 				extraGoImports[gi] = true
 			}
 		} else {
-			// No trailing "\n" here: the next loop iteration's leading
-			// whitespace copy already carries forward this spec's real
-			// trailing newline/blank-line from the original source.
+			// no newline: next iteration copies original whitespace
 			existingPaths[path] = true
 			blockOut.WriteString(string(runes[specStart:i]))
 		}

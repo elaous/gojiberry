@@ -25,7 +25,6 @@ func TestBurstWatchIsSharedByReplicasThroughTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Different documents named through different replicas count together.
 	if over, _, err := a.burst.note(ctx, h, "doc1", e.clk.Now(), 2); err != nil || over {
 		t.Fatalf("%v %v", over, err)
 	}
@@ -36,29 +35,24 @@ func TestBurstWatchIsSharedByReplicasThroughTheStore(t *testing.T) {
 	if err != nil || !over || !first {
 		t.Fatalf("the third document is over and flags it: %v %v %v", over, first, err)
 	}
-	// The same network again, on the other replica: still over, flagged already this hour.
 	over, first, _ = b.burst.note(ctx, h, "doc4", e.clk.Now(), 2)
 	if !over || first {
 		t.Errorf("over %v first %v: the alarm is once an hour for all replicas", over, first)
 	}
-	// A document named again is not another document.
 	if _, _, err := a.burst.note(ctx, "someone-else", "docA", e.clk.Now(), 2); err != nil {
 		t.Fatal(err)
 	}
 	if over, _, _ := a.burst.note(ctx, "someone-else", "docA", e.clk.Now(), 2); over {
 		t.Error("the same document twice is one")
 	}
-	// Health reads the same answer on either replica.
 	if a.Health().PriorityBursts != 1 || b.Health().PriorityBursts != 1 {
 		t.Errorf("bursts: %d and %d", a.Health().PriorityBursts, b.Health().PriorityBursts)
 	}
-	// The records name no address.
 	for _, k := range e.keys(BurstKeyPrefix) {
 		if strings.Contains(k, "203.0.113") {
 			t.Errorf("a burst record names the network: %s", k)
 		}
 	}
-	// An hour later the burst is over; a sweep removes the records after the flag has aged out too.
 	e.clk.Add(2 * hour)
 	if a.Health().PriorityBursts != 0 {
 		t.Errorf("an old burst still counts: %d", a.Health().PriorityBursts)
@@ -71,7 +65,6 @@ func TestBurstWatchIsSharedByReplicasThroughTheStore(t *testing.T) {
 	}
 }
 
-// Through the routes, with the watch in the store: the same behaviour as the per-process one.
 func TestSharedBurstWatchFlagsOneNetworkOnceThroughTheRoutes(t *testing.T) {
 	logs := captureLog(t)
 	e := newEnv(t, func(o *Options) { behindProxy(o); o.Config.PriorityBurstDocs = 3; o.SharedBurstWatch = true })
@@ -107,8 +100,6 @@ func TestSharedBurstWatchNeedsAConditionalStore(t *testing.T) {
 	}
 }
 
-// The total number and size of the stored reports (the global cap) is not a per-process count: every
-// replica recounts it from the store at each sweep, so a replica sees the reports another one took.
 func TestGlobalReportCountIsRecountedFromTheStoreByEveryReplica(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, nil)

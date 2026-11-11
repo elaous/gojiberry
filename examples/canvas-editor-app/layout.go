@@ -9,7 +9,6 @@ const (
 	leftMargin = 12.0
 )
 
-// fontFor returns the CSS font string Context2D.SetFont expects for f.
 func fontFor(f charFormat) string {
 	weight := ""
 	if f.Bold {
@@ -22,9 +21,6 @@ func fontFor(f charFormat) string {
 	return style + weight + "16px sans-serif"
 }
 
-// layoutDocument measures d against ctx (so it uses the exact same
-// font metrics rendering will) and returns where every character (and
-// the position just past the last one) ends up.
 func layoutDocument(ctx *html.Context2D, d *document, maxWidth float64) *layout {
 	n := d.Len()
 	lay := &layout{Chars: make([]charLayout, n+1)}

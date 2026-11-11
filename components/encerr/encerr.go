@@ -1,8 +1,3 @@
-// Package encerr teaches components.ExplainError the errors of the encrypting adapter
-// (docstore/encrypt): a person reads what happened and what to do, not the Go text. It is a package of
-// its own because docstore/encrypt cannot be imported by components (the adapter's tests import the saver,
-// which imports the components). A host that shows encrypt errors calls Install once, before the first
-// render.
 package encerr
 
 import (
@@ -16,11 +11,9 @@ import (
 
 var once sync.Once
 
-// Install registers the groups. The most specific come first: ErrUnsignedAfterFlip wraps ErrForgedFrame,
-// ErrForgedFrame is an ErrDowngrade, and ErrNoKey is an ErrLocked.
+// Install registers the groups.
 func Install() { once.Do(func() { components.RegisterErrorGroups(Groups()...) }) }
 
-// Groups are the error groups, in the order they are tried.
 func Groups() []components.ErrorGroup {
 	return []components.ErrorGroup{
 		{Kind: components.ErrKindUnsigned, ID: "err.unsigned", Default: "A file in this document was saved by something that is not signed in as an owner, so it was not opened. If it is yours, ask the owner of the document to accept it; if you do not know where it came from, do not trust it.",

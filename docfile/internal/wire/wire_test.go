@@ -27,12 +27,11 @@ func TestVarintVectors(t *testing.T) {
 		if !bytes.Equal(got, c.want) {
 			t.Errorf("AppendVarint(%d) = % x, want % x", c.v, got, c.want)
 		}
-		v, n := ConsumeVarint(append(got, 0xaa)) // trailing byte is left alone
+		v, n := ConsumeVarint(append(got, 0xaa))
 		if v != c.v || n != len(c.want) {
 			t.Errorf("ConsumeVarint(% x) = %d, %d", got, v, n)
 		}
 	}
-	// -2 as int64 is a 10-byte varint too.
 	if got := AppendVarint(nil, uint64(neg-1)); len(got) != 10 || got[0] != 0xfe {
 		t.Errorf("negative int64: % x", got)
 	}
@@ -56,7 +55,6 @@ func TestVarintErrors(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", c.name, ParseError(n), c.want)
 		}
 	}
-	// Redundant padding up to ten bytes is accepted, as protowire does.
 	if v, n := ConsumeVarint(append(bytes.Repeat([]byte{0x80}, 9), 0x00)); v != 0 || n != 10 {
 		t.Errorf("padded zero = %d, %d", v, n)
 	}
@@ -82,7 +80,6 @@ func TestFixedAndBytes(t *testing.T) {
 	if _, n := ConsumeFixed64(make([]byte, 7)); ParseError(n) != io.ErrUnexpectedEOF {
 		t.Error("short fixed64")
 	}
-	// The protobuf guide's example: field 2 holding "testing".
 	b := AppendString(AppendTag(nil, 2, BytesType), "testing")
 	if !bytes.Equal(b, []byte{0x12, 0x07, 't', 'e', 's', 't', 'i', 'n', 'g'}) {
 		t.Errorf("string field % x", b)
@@ -95,11 +92,9 @@ func TestFixedAndBytes(t *testing.T) {
 	if s != "testing" || m != 8 {
 		t.Errorf("string %q %d", s, m)
 	}
-	// And field 1 holding varint 150 is 08 96 01.
 	if b := AppendVarint(AppendTag(nil, 1, VarintType), 150); !bytes.Equal(b, []byte{0x08, 0x96, 0x01}) {
 		t.Errorf("varint field % x", b)
 	}
-	// A length past the end.
 	if _, n := ConsumeBytes([]byte{5, 1, 2}); ParseError(n) != io.ErrUnexpectedEOF {
 		t.Error("length past end")
 	}
@@ -135,7 +130,6 @@ func TestConsumeFieldValue(t *testing.T) {
 		}
 		return AppendTag(b, num, EndGroupType)
 	}
-	// ConsumeFieldValue is called after the start-group tag was read.
 	body := func(g []byte) []byte { _, _, n := ConsumeTag(g); return g[n:] }
 	nested := group(1, AppendVarint(AppendTag(nil, 2, VarintType), 7), group(3, AppendString(AppendTag(nil, 4, BytesType), "x")))
 	if n := ConsumeFieldValue(1, StartGroupType, body(nested)); n != len(body(nested)) {
@@ -163,7 +157,6 @@ func TestConsumeFieldValue(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", c.name, ParseError(n), c.want)
 		}
 	}
-	// Groups nested past MaxDepth fail instead of exhausting the stack.
 	deep := bytes.Repeat(AppendTag(nil, 1, StartGroupType), MaxDepth+10)
 	if n := ConsumeFieldValue(1, StartGroupType, deep); n >= 0 {
 		t.Error("deep nesting accepted")
@@ -184,8 +177,6 @@ func TestParseError(t *testing.T) {
 	}
 }
 
-// FuzzConsume feeds arbitrary bytes to every Consume function: none may panic, and a
-// positive length never exceeds the input.
 func FuzzConsume(f *testing.F) {
 	f.Add([]byte{0x08, 0x96, 0x01})
 	f.Add([]byte{0x12, 0x07, 't', 'e', 's', 't', 'i', 'n', 'g'})
@@ -223,7 +214,6 @@ func FuzzConsume(f *testing.F) {
 	})
 }
 
-// FuzzRoundTrip checks that what Append writes Consume reads back.
 func FuzzRoundTrip(f *testing.F) {
 	f.Add(uint64(300), []byte("abc"))
 	f.Fuzz(func(t *testing.T, x uint64, p []byte) {

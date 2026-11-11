@@ -20,7 +20,6 @@ func TestPageSetupSizeLabelAndLimits(t *testing.T) {
 	if (PageSetup{Paper: "nope"}).Normalized().Paper != "a4" {
 		t.Error("an unknown paper is A4")
 	}
-	// Margins that would leave no room for text are shrunk, negative ones are 0.
 	n := PageSetup{Paper: "a4", Margins: [4]float64{-5, 500, 600, 500}}.Normalized()
 	if n.Margins[0] != 0 || n.Margins[1]+n.Margins[3] > 595*3/4 || n.Margins[0]+n.Margins[2] > 842*3/4 {
 		t.Errorf("%v", n.Margins)
@@ -88,7 +87,6 @@ func TestPageSetupOfFindsThePaperOfASavedSheet(t *testing.T) {
 	if p, ok := PageSetupOf(842, 595, m); !ok || p.Paper != "a4" || !p.Landscape {
 		t.Errorf("A4 turned: %+v %v", p, ok)
 	}
-	// A sheet that is none of the papers is a custom paper of that size, in either orientation.
 	if p, ok := PageSetupOf(500, 300, m); !ok || p.Paper != CustomPaper || !p.Landscape {
 		t.Errorf("custom, wide: %+v %v", p, ok)
 	} else if w, h := p.Size(); w != 500 || h != 300 {

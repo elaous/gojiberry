@@ -21,7 +21,6 @@ func (e *dirEnv) post(path, tok string, v any) *httptest.ResponseRecorder {
 	return e.do("POST", path, tok, string(b))
 }
 
-// prove asks for a challenge for key and answers it.
 func (e *dirEnv) prove(tok string, key Recipient, id age.Identity) docstore.DirectoryProof {
 	e.t.Helper()
 	rec := e.post("/directory/challenge", tok, map[string]string{"key": key.Text})
@@ -56,12 +55,10 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 	if !pub.Verified || !pub.Held || !pub.Attested || pub.Attestation == nil || pub.Seq != 1 || pub.Kid == "" {
 		t.Errorf("%+v", pub)
 	}
-	// Anyone signed in sees the flags on lookup.
 	code, keys := e.lookup(boTok, "ana@x.io")
 	if code != 200 || len(keys) != 1 || !keys[0].Attested || !keys[0].Held || !VerifyAttestation(keys[0].Key, "ana@x.io", *keys[0].Attestation) {
 		t.Fatalf("%d %+v", code, keys)
 	}
-	// The same proof cannot publish again (replay), another user's cannot publish at all.
 	if rec := e.post("/directory/publish", anaTok, docstore.DirectoryPublish{Key: key.Text, Proof: &proof}); rec.Code != 403 {
 		t.Errorf("replayed proof = %d", rec.Code)
 	}
@@ -76,7 +73,6 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 		t.Errorf("bad attestation = %d", rec.Code)
 	}
 
-	// The log, for a provider session (a passkey one is refused, see TestDirectoryLogRoutesNeedAProviderSession).
 	rec = e.do("GET", "/directory/log?since=0", anaTok, "")
 	var lg docstore.DirectoryLog
 	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &lg) != nil || len(lg.Entries) != 1 || lg.Entries[0].Address != e.dir.LogAddressFor("ana@x.io") || len(lg.Keys) != 1 || !lg.Filtered {
@@ -95,7 +91,6 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 		t.Errorf("%d", rec.Code)
 	}
 
-	// Revoke: only the owner of the address; the key leaves lookup at once.
 	path := "/directory/keys/" + url.PathEscape(key.Fingerprint)
 	if rec := e.do("DELETE", path, "", ""); rec.Code != 401 {
 		t.Errorf("signed out = %d", rec.Code)
@@ -129,17 +124,14 @@ func TestDirectoryRoutesChallengePublishRevokeLogAndLookup(t *testing.T) {
 	if rec := e.do("DELETE", path, anaTok, ""); rec.Code != 404 {
 		t.Errorf("twice = %d", rec.Code)
 	}
-	// A replayed publish request (no proof asked for) cannot bring it back within the window.
 	if rec := e.post("/directory/publish", anaTok, map[string]string{"key": key.Text}); rec.Code != 409 {
 		t.Errorf("replayed publish = %d", rec.Code)
 	}
-	// The path form of a fingerprint revokes as well (no "/" to be cleaned out of a URL).
 	other := newRecovery(t)
 	e.publish(anaTok, map[string]string{"key": other.Text})
 	if rec := e.do("DELETE", "/directory/keys/"+docstore.DirectoryFingerprintSegment(other.Fingerprint), anaTok, ""); rec.Code != 200 {
 		t.Errorf("path form = %d %s", rec.Code, rec.Body)
 	}
-	// The log is filtered to the caller's own address (a stranger sees none of ana's entries).
 	if rec := e.do("GET", "/directory/log", boTok, ""); !strings.Contains(rec.Body.String(), `"entries":[]`) {
 		t.Errorf("another address's entries in the log: %s", rec.Body)
 	}
@@ -185,7 +177,6 @@ func TestDirectoryRoutesChallengeRefusals(t *testing.T) {
 	if rec := e.post("/directory/publish", anaTok, docstore.DirectoryPublish{Key: key.Text, Proof: &proof}); rec.Code != 200 {
 		t.Errorf("%d %s", rec.Code, rec.Body)
 	}
-	// The challenge route is limited per user, and the limit is not the publish one.
 	var last int
 	for range 21 {
 		last = e.post("/directory/challenge", anaTok, map[string]string{"key": key.Text}).Code
@@ -217,8 +208,6 @@ func TestDirectoryRoutesShareLimitsThroughTheStore(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	// Ten publishes a minute for the user, spread over two replicas: the 11th is refused
-	// wherever it lands (a per-process budget would have allowed 20).
 	for i := range 10 {
 		h := a
 		if i%2 == 1 {
@@ -234,7 +223,6 @@ func TestDirectoryRoutesShareLimitsThroughTheStore(t *testing.T) {
 	if code := publish(b); code != 429 {
 		t.Errorf("11th via b = %d", code)
 	}
-	// The budget records live in the reserved keyspace and not in the document API.
 	metas, _ := docstore.ListPrefix(context.Background(), store, docstore.RateLimitPrefix)
 	if len(metas) == 0 {
 		t.Fatal("no budget records")
@@ -274,7 +262,7 @@ func TestDirectoryLookupHasAGlobalBudget(t *testing.T) {
 		})
 	})
 	var codes []int
-	for _, u := range usersInShardOf(ana, 5, "x.io") { // five different users of one shard, one lookup each: its budget is 3
+	for _, u := range usersInShardOf(ana, 5, "x.io") {
 		code, _ := e.lookup(e.token(u), "bo@x.io")
 		codes = append(codes, code)
 	}
@@ -285,7 +273,6 @@ func TestDirectoryLookupHasAGlobalBudget(t *testing.T) {
 	if rec.Header().Get("Retry-After") == "" || rec.Code != 429 {
 		t.Errorf("%d %v", rec.Code, rec.Header())
 	}
-	// The log reads have budgets of their own (dir-log-ip, dir-log-all-N): lookups do not use them up.
 	if rec := e.do("GET", "/directory/log", e.token(ana), ""); rec.Code != 200 {
 		t.Errorf("log = %d, want 200: it does not draw on the lookups' budget", rec.Code)
 	}
@@ -308,18 +295,15 @@ func TestDirectoryLookupPolicy(t *testing.T) {
 	if code, _ := e.lookup(e.token(bo), "carol@y.org"); code != 403 {
 		t.Errorf("another domain = %d", code)
 	}
-	// The refusal does not depend on whether the address has keys.
 	if code, _ := e.lookup(e.token(bo), "nobody@y.org"); code != 403 {
 		t.Errorf("another domain, no keys = %d", code)
 	}
 	if code, keys := e.lookup(e.token(bo), "nobody@x.io"); code != 200 || len(keys) != 0 {
 		t.Errorf("same domain, no keys: %d %v", code, keys)
 	}
-	// An unverified address belongs to no domain.
 	if code, _ := e.lookup(e.token(auth.User{ID: "google:9", Email: "z@x.io"}), "ana@x.io"); code != 403 {
 		t.Errorf("unverified = %d", code)
 	}
-	// The log is not narrowed by it (it holds hashes of addresses and fingerprints).
 	if rec := e.do("GET", "/directory/log", e.token(bo), ""); rec.Code != 200 {
 		t.Errorf("log = %d", rec.Code)
 	}

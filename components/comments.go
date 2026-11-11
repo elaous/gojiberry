@@ -9,14 +9,12 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// --- Markdown text with mentions -----------------------------------------
-
 type inlinePattern struct {
 	re   *regexp.Regexp
 	make func(m []string) xango.Node
 }
 
-// inlinePatterns is set in init: the makers call inlineNodes, which reads it.
+// set in init: the makers call inlineNodes, which reads it
 var inlinePatterns []inlinePattern
 
 func init() {
@@ -40,10 +38,6 @@ func safeURL(u string) bool {
 	return strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") || strings.HasPrefix(l, "mailto:")
 }
 
-// inlineNodes renders inline Markdown: code, links, bold, strike,
-// italics, and -- in the plain text between them -- @mentions and e-mail
-// addresses, which become highlighted spans (e-mail addresses mailto
-// links).
 func inlineNodes(s string) []xango.Node {
 	best, bestIdx := -1, []int(nil)
 	for i, p := range inlinePatterns {
@@ -91,10 +85,6 @@ var (
 	reHeading = regexp.MustCompile(`^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$`)
 )
 
-// MarkdownText renders Markdown for a comment: paragraphs, bullet and
-// numbered lists, quotes, headings (as bold lines), and the inline forms
-// of inlineNodes, with @username and e-mail mentions highlighted. Raw HTML
-// is shown as text, and only http, https and mailto links are live.
 func MarkdownText(text string) xango.Node {
 	var blocks []xango.Node
 	var para []string
@@ -149,23 +139,17 @@ func MarkdownText(text string) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-markdown")}, blocks...)
 }
 
-// --- CommentCard and CommentList -------------------------------------------
-
 // CommentCardProps configures CommentCard.
 type CommentCardProps struct {
 	Comment canvas.Comment
 	// Excerpt is the commented text, shown as a quote.
 	Excerpt  string
 	Selected bool
-	// CanEdit lets the viewer resolve and delete the comment; CanReply lets
-	// them reply (a viewer role may reply but not resolve or delete).
-	CanEdit bool
-	// CanReply shows the reply box; it is also shown when CanEdit is set.
+	CanEdit  bool
 	CanReply bool
 	// ReplyDraft is the text in the reply box.
 	ReplyDraft string
-	// ReplyNote is a line under the reply box, for what is wrong with the draft (a mention that cannot be saved).
-	ReplyNote string
+	ReplyNote  string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
@@ -181,9 +165,6 @@ func timeLabel(t time.Time) string {
 	return FormatTime(t, false)
 }
 
-// CommentCard renders one comment: author and time, the commented text,
-// the Markdown body with mentions highlighted, its replies and, for an
-// editor, Resolve/Reopen, Delete and a reply box.
 func CommentCard(props CommentCardProps) xango.Node {
 	c := props.Comment
 	class := "gj-comment"
@@ -275,15 +256,13 @@ const (
 // CommentListProps configures CommentList.
 type CommentListProps struct {
 	Comments []canvas.Comment
-	// Excerpts maps a comment ID to the text it is on.
 	Excerpts map[string]string
 	// Filter is CommentsOpen (the default when empty), CommentsResolved or CommentsAll.
-	Filter   string
-	Selected string
-	CanEdit  bool
-	CanReply bool
-	Drafts   map[string]string
-	// ReplyNotes maps a comment ID to the line shown under its reply box.
+	Filter     string
+	Selected   string
+	CanEdit    bool
+	CanReply   bool
+	Drafts     map[string]string
 	ReplyNotes map[string]string
 
 	OnSelect     func(id string)
@@ -291,12 +270,9 @@ type CommentListProps struct {
 	OnDelete     func(id string)
 	OnReplyDraft func(id, text string)
 	OnReply      func(id, text string)
-	// OnFilter is called with the filter the person picked; nil hides the choice.
-	OnFilter func(filter string)
+	OnFilter     func(filter string)
 }
 
-// CommentList renders the comments as cards, filtered by status (open,
-// resolved or all) with a count on each choice.
 func CommentList(props CommentListProps) xango.Node {
 	var open, done []canvas.Comment
 	for _, c := range props.Comments {
