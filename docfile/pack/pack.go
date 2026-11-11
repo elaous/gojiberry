@@ -1,7 +1,4 @@
-// Package pack reads and writes the .opendoc pack format (docs/opendoc-format.md): many
-// documents and their folders in one file, each with a SHA-256, listed by an index at the
-// end so a pack opens without being read through, appended to in place, checked, and
-// recovered when it is cut. It depends on docfile and the standard library only.
+// Package pack reads and writes the .opendoc container format.
 package pack
 
 import (
@@ -14,20 +11,17 @@ import (
 	"unicode/utf8"
 )
 
-// Limits, always checked against the file size before anything is allocated.
+// Limits, checked against the file size.
 const (
 	MaxRecord  = 256 << 20
 	MaxEntries = 1_000_000
-	// MaxIndex is 128 bytes per entry at the entry cap (a typical entry is ~150 bytes with
-	// a short name, so a pack near MaxEntries needs short names). The index is parsed as a
-	// stream: memory is the index bytes plus the entries kept, never one slot per field.
+	// MaxIndex is 128 bytes per index entry, at most.
 	MaxIndex = MaxEntries * 128
 	MaxName  = 256
 	// MaxAttachments bounds the attachments of a pack.
 	MaxAttachments = 100_000
 	MaxDepth       = 16
-	// MaxTags is the most tags one entry may have, and maxEntryBytes the size of one
-	// entry or folder message in the index.
+	// MaxTags is the most tags one entry may have.
 	MaxTags       = 64
 	maxEntryBytes = 32 << 10
 	maxMeta       = 1 << 20
@@ -37,9 +31,7 @@ const (
 	magic       = "OPENDOC\x00"
 	footerMagic = "OPENDEND"
 	version     = 1
-	// version2 is a pack that may hold attachments (kindAttachment records, listed in field 3 of the index). Only a
-	// pack written with them has it, so a pack without any stays version 1 and readable by every reader; a version 1
-	// reader refuses a version 2 pack rather than show documents without their pictures.
+	// version2 is a pack that may hold attachments.
 	version2    = 2
 	headerFixed = 24
 	frameHead   = 16
@@ -48,28 +40,23 @@ const (
 	kindDocument  = 1
 	kindIndex     = 2
 	kindSignature = 3
-	// kindAttachment is a record of bytes a document refers to by the hash (an image shared by several documents,
-	// stored once); only in a version 2 pack.
+	// kindAttachment is a record of bytes a document refers to.
 	kindAttachment = 4
 
-	// flagEncrypted is bit 0 of the record's flags byte (the first of the three bytes
-	// after the kind, which older writers leave zero): the data is an opaque envelope.
+	// flagEncrypted is bit 0 of the record's flags.
 	flagEncrypted = 1
 )
 
 var (
-	// ErrFormat is wrapped in the error for a file that is not a pack, or is damaged.
+	// ErrFormat is wrapped in errors for a malformed file.
 	ErrFormat = errors.New("pack: not a valid .opendoc pack")
-	// ErrChecksum is wrapped in the error for a record whose bytes are not the ones
-	// that were written.
+	// ErrChecksum is wrapped in errors for a corrupt record.
 	ErrChecksum = errors.New("pack: checksum mismatch")
-	// ErrNotFound is returned for a document the index does not list.
+	// ErrNotFound is returned for a document not in the pack.
 	ErrNotFound = errors.New("pack: no such document")
-	// ErrEncrypted is returned by Read for a document whose record is an envelope: open it
-	// with ReadWith and a function that decrypts.
+	// ErrEncrypted is returned by Read for an encrypted document.
 	ErrEncrypted = errors.New("pack: the document is encrypted")
-	// ErrNeedKey is returned when appending to a signed pack without the key to sign it
-	// again with.
+	// ErrNeedKey is returned when appending needs a key.
 	ErrNeedKey = errors.New("pack: the pack is signed; give the key to sign it again, or drop the signature")
 )
 
@@ -99,20 +86,16 @@ type Entry struct {
 	Length  uint64 // of the record's data
 	SHA256  [32]byte
 	Trashed bool
-	// Encrypted marks a record whose data is an envelope the pack cannot read (opaque
-	// bytes, hashed and signed as stored). Name and Tags are then whatever the writer
-	// chose to leave readable, typically a placeholder.
+	// Encrypted marks a record whose data is sealed.
 	Encrypted bool
 }
 
-// Folder is a folder of the index. Folders are virtual: a document names its folder and
-// a folder names its parent.
+// Folder is a folder of the index.
 type Folder struct {
 	ID, Name, Parent string
 }
 
-// Attachment is bytes kept once in a version 2 pack and referred to by the documents through the hash (the SHA-256 of the
-// bytes), such as an image that is large or used by several documents or versions.
+// Attachment is bytes kept once in a version 2 pack.
 type Attachment struct {
 	SHA256 [32]byte
 	Offset uint64 // of the record, from the start of the file
@@ -132,13 +115,11 @@ type Signature struct {
 	Alg       string // "ed25519"
 	PublicKey []byte
 	Sig       []byte
-	// More are the signatures of further signers over the same digest (field 4 of the record: a reader that does not
-	// know it sees the first signer only, whose signature is the same as ever).
+	// More are the signatures of further signers.
 	More []Signature
 }
 
-// Signer is one signature of a pack and whether it is valid for the pack: the key it carries made it. Whether to trust
-// the key is the caller's to decide.
+// Signer is one signature of a pack.
 type Signer struct {
 	PublicKey []byte
 	Valid     bool
@@ -152,8 +133,7 @@ func (s Signature) all() []Signature {
 // MaxSigners bounds the signatures of one pack.
 const MaxSigners = 16
 
-// signedDigest is what a signature covers: the header, and through the index's hash, every
-// document.
+// signedDigest is what a signature covers.
 func signedDigest(headerBytes []byte, indexSum [32]byte) []byte {
 	h := sha256.New()
 	h.Write([]byte("opendoc-v1"))
@@ -172,8 +152,6 @@ func (s Signature) valid(headerBytes []byte, indexSum [32]byte) bool {
 	return s.Alg == "ed25519" && len(s.PublicKey) == ed25519.PublicKeySize &&
 		ed25519.Verify(ed25519.PublicKey(s.PublicKey), signedDigest(headerBytes, indexSum), s.Sig)
 }
-
-// ---- protobuf wire format, just what the pack's messages need ----
 
 func appendVarint(b []byte, v uint64) []byte {
 	for v >= 0x80 {
@@ -219,9 +197,7 @@ type field struct {
 	bytes  []byte
 }
 
-// walk reads the fields of a message one at a time, calling fn for each (unknown ones
-// included: fn picks what it knows). Nothing is accumulated, so the memory used does not
-// depend on how many fields the message has.
+// walk reads the fields of a message one at a time.
 func walk(b []byte, fn func(field) error) error {
 	for len(b) > 0 {
 		tag, n := binary.Uvarint(b)
@@ -269,8 +245,6 @@ func utf8String(f field) (string, error) {
 	}
 	return string(f.bytes), nil
 }
-
-// ---- messages ----
 
 func (m Meta) marshal() []byte {
 	var b []byte
@@ -458,8 +432,7 @@ func (x Index) marshal() []byte {
 	return b
 }
 
-// unmarshalIndex parses the index as a stream, counting entries and folders as they are
-// read, so a hostile index is refused at MaxEntries without being held in memory.
+// unmarshalIndex parses the index as a stream of fields.
 func unmarshalIndex(b []byte) (x Index, err error) {
 	err = walk(b, func(f field) error {
 		if f.wire != 2 || f.num < 1 || f.num > 3 {
@@ -546,9 +519,7 @@ func unmarshalSignature(b []byte) (s Signature, err error) {
 	return s, err
 }
 
-// ---- layout ----
-
-// headerBytes is the file's header: the fixed part, the meta message, padding.
+// headerBytes is the file's fixed header.
 func headerBytes(m Meta) []byte { return headerBytesV(m, version) }
 
 func headerBytesV(m Meta, ver uint32) []byte {
@@ -575,7 +546,7 @@ func frameFlags(kind, flags byte, data []byte) []byte {
 	return append(b, make([]byte, pad8(int64(len(b))))...)
 }
 
-// recordSize is the size of a record whose data is n bytes.
+// recordSize is the size of a record of n data bytes.
 func recordSize(n uint64) uint64 {
 	t := uint64(frameHead) + n + 4
 	return t + uint64(pad8(int64(t)))

@@ -78,7 +78,6 @@ func TestAttachmentsAreSignedAndChecked(t *testing.T) {
 	if rep := open(t, data).Verify(); !rep.OK() || !rep.Signed {
 		t.Fatalf("report %+v", rep)
 	}
-	// Every bit of the attachment's record, flipped, is found.
 	a := open(t, data).Index().Attachments[0]
 	for i := int(a.Offset); i < int(a.Offset+recordSize(a.Length)); i += 97 {
 		if rep := open(t, flip(data, i)).Verify(); rep.OK() {
@@ -114,7 +113,6 @@ func TestAppendAttachmentsInPlace(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	// A version 1 pack takes none by appending.
 	g := &memFile{b: build(t, nil)}
 	ap1, err := OpenAppend(g, int64(len(g.b)), nil)
 	if err != nil {
@@ -135,7 +133,6 @@ func TestCompactAndRecoverKeepAttachments(t *testing.T) {
 	if got, _, err := r.Attachment(sum); err != nil || !bytes.Equal(got, pic) || r.Version() != 2 {
 		t.Fatalf("compacted: %v", err)
 	}
-	// Cut before the index: the attachment is found by walking.
 	cut := int(open(t, data).foot.indexOffset)
 	rec, err := Recover(bytes.NewReader(data[:cut]), int64(cut))
 	if err != nil {
@@ -155,7 +152,7 @@ func TestCompactAndRecoverKeepAttachments(t *testing.T) {
 
 func TestAttachmentsInAVersionOnePackAreRefused(t *testing.T) {
 	data, _, _ := buildV2(t, nil)
-	data[8] = 1 // the header says version 1 but the index lists attachments
+	data[8] = 1
 	if _, err := Open(bytes.NewReader(data), int64(len(data))); err == nil {
 		t.Error("accepted")
 	}
