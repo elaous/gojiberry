@@ -6,8 +6,7 @@ import (
 	"strings"
 )
 
-// Align is horizontal text alignment within a header, footer or page
-// number box.
+// Align is horizontal alignment of header, footer or number text.
 type Align int
 
 const (
@@ -27,28 +26,22 @@ const (
 	NumUpperAlpha                        // A, B, C
 )
 
-// HeaderFooter is the text in a page's header or footer; '\n' starts a
-// new line.
+// HeaderFooter is the text of a header or footer; '
+// ' starts a new line.
 type HeaderFooter struct {
 	Text  string
 	Style TextStyle // zero value: DefaultTextStyle at 12px
 	Align Align
-	// Offset is the distance from the page edge to the text; zero
-	// centres the text in the margin.
+	// Offset is the distance from the page edge to the text.
 	Offset float64
-	// Parts, when any is set, are the left, centre and right parts of a single line, drawn across
-	// the width of the text area (a running header or footer such as "Report <tab> Draft <tab>
-	// Page 3"); Text and Align are then not used.
+	// Parts are left, centre and right text of one line, when set.
 	Parts [3]string
 }
 
 // HasParts says the header or footer is made of Parts.
 func (h *HeaderFooter) HasParts() bool { return h.Parts != [3]string{} }
 
-// PageNumberConfig turns on and formats page numbers, drawn in the
-// footer area. A Page that sets one starts (or restarts) numbering with
-// Start on that page; later pages that don't set their own continue
-// from it, counting up by one.
+// PageNumberConfig turns on and formats page numbers.
 type PageNumberConfig struct {
 	Show   bool
 	Format string // "{n}" is the number, "{total}" the page count; empty means "{n}"
@@ -59,28 +52,19 @@ type PageNumberConfig struct {
 	TextStyle TextStyle
 }
 
-// Page is one sheet: its size and margins, and its header, footer and
-// page-number settings.
-//
-// Header, Footer and PageNumber are per page with inheritance: nil
-// means "same as the previous page" (the first page's nil means none).
-// To drop an inherited header or footer, set a HeaderFooter with empty
-// Text; to stop numbering, set a PageNumberConfig with Show false.
+// Page is one sheet: size, margins, header, footer and page number.
 type Page struct {
 	Width, Height float64
 	Margin        Insets
 	Header        *HeaderFooter
 	Footer        *HeaderFooter
 	PageNumber    *PageNumberConfig
-	// Watermark and Background inherit like the header: nil means the
-	// previous page's, and an empty Watermark{} / Background{} means none
-	// (from this page on).
+	// Watermark and Background inherit like the header; nil means inherit.
 	Watermark  *Watermark
 	Background *Background
 }
 
-// PageStyle is how a PageSet draws its sheets, Google Docs-style: white
-// sheets with a border and a soft shadow on a grey desk.
+// PageStyle is how a PageSet draws its sheets, Google Docs-style.
 type PageStyle struct {
 	Desk        string // fills the whole container; empty to leave transparent
 	Sheet       string
@@ -89,8 +73,7 @@ type PageStyle struct {
 	GuideColor  string  // margin guides, edit mode only
 	TextColor   string  // header/footer text
 	ShadowDelta float64 // shadow offset
-	// GutterShade is how dark (0 to 1, the opacity of black) the inner edge of each sheet of a facing pair is at the
-	// fold, fading to nothing across GutterShadeWidth; 0 draws none. Only in a spread.
+	// GutterShade is the darkness (0-1) of the inner edge shadow.
 	GutterShade      float64
 	GutterShadeWidth float64
 	Pad              float64 // space around the sheets inside the container
@@ -104,38 +87,24 @@ func DefaultPageStyle() PageStyle {
 	}
 }
 
-// PageSet is a container that lays Pages out as sheets stacked
-// vertically (with Gap between them) the way a word processor shows a
-// document, and draws them with their headers, footers and page
-// numbers. It hands the TextFlow each page's content rectangle. In edit
-// mode it also draws the margin guides.
-//
-// Coordinates are those of the container: sheets are centered within
-// Width (or left-aligned at X+Pad if Width is zero), starting at Y+Pad.
+// PageSet lays Pages out as sheets stacked vertically.
 type PageSet struct {
 	Pages []Page
 	X, Y  float64
 	Width float64
 	Gap   float64 // vertical space between sheets (NewPageSet sets 24)
 
-	// Spread lays the sheets out two to a row, as facing pages: sheets
-	// 0 and 1, 2 and 3... With SpreadBook the first sheet stands alone on
-	// the right, as the first page of a book does, and the facing pairs
-	// are 1 and 2, 3 and 4.... Gutter is the space between facing sheets
-	// (none by default); an image anchored near the inner edge of a sheet
-	// can run across the gutter onto its neighbour.
+	// Spread lays sheets two per row, as facing pages.
 	Spread, SpreadBook bool
 	Gutter             float64
-	// OnTurn, when set, makes a spread draw a folded corner on each outer bottom corner; pressing it calls
-	// OnTurn with the first sheet of the pair it leads to (the host scrolls there).
+	// OnTurn, when set, draws a folded corner on each outer sheet edge.
 	OnTurn func(page int)
 
 	Style   PageStyle
 	Painter Painter
 	mode    Mode
 
-	// OnChange is called when a header, footer or page-number setting is
-	// changed by editing in edit mode.
+	// OnChange runs when a header, footer or page-number setting changes.
 	OnChange func(*PageSet)
 
 	viewport [4]float64 // visible part, from SetViewport
@@ -152,13 +121,11 @@ func NewPageSet(pages ...Page) *PageSet {
 	return &PageSet{Pages: pages, Gap: 24, Style: DefaultPageStyle()}
 }
 
-// SetPainter implements PainterSetter.
 func (ps *PageSet) SetPainter(p ImagePainter) { ps.Painter = p }
 
-// SetViewport implements ViewportSetter: popups stay inside the visible part.
+// SetViewport keeps popups inside the visible part.
 func (ps *PageSet) SetViewport(x, y, w, h float64) { ps.viewport = [4]float64{x, y, w, h} }
 
-// Mode returns the current mode.
 func (ps *PageSet) Mode() Mode { return ps.mode }
 
 // SetMode switches mode; it reports whether a redraw is needed.
@@ -176,9 +143,7 @@ func (ps *PageSet) SetMode(m Mode) bool {
 	return true
 }
 
-// rows groups the sheets into the rows they are laid out in: one sheet
-// each, or two facing sheets in a spread. A -1 is the empty left slot of
-// a book's first page.
+// rows groups sheets into the rows they are laid out in.
 func (ps *PageSet) rows() [][]int {
 	var rows [][]int
 	n := len(ps.Pages)
@@ -210,8 +175,7 @@ func (ps *PageSet) rows() [][]int {
 	return rows
 }
 
-// rowSize returns the width and height of a row: the sheets side by side
-// (an empty slot as wide as its neighbour), the tallest one's height.
+// rowSize returns a row's width and height.
 func (ps *PageSet) rowSize(row []int) (w, h float64) {
 	for k, i := range row {
 		if i < 0 {
@@ -268,8 +232,7 @@ func (ps *PageSet) PageRect(i int) (x, y, w, h float64) {
 	return x, y, pg.Width, pg.Height
 }
 
-// PageAt returns the index of the first sheet of the row containing y, or
-// -1 (y in a gap or outside the pages).
+// PageAt returns the first sheet of the row containing y, or -1.
 func (ps *PageSet) PageAt(y float64) int {
 	for _, row := range ps.rows() {
 		first := row[len(row)-1]
@@ -285,8 +248,7 @@ func (ps *PageSet) PageAt(y float64) int {
 	return -1
 }
 
-// ResolvedHeader returns page i's effective header (its own, else the
-// nearest earlier page's), or nil if there is none or it is empty.
+// ResolvedHeader returns page i's effective header.
 func (ps *PageSet) ResolvedHeader(i int) *HeaderFooter {
 	for j := i; j >= 0; j-- {
 		if h := ps.Pages[j].Header; h != nil {
@@ -312,9 +274,7 @@ func (ps *PageSet) ResolvedFooter(i int) *HeaderFooter {
 	return nil
 }
 
-// ResolvedPageNumber returns page i's effective page-number config and
-// the number to print on it; cfg is nil if numbering was never
-// configured or is switched off.
+// ResolvedPageNumber returns page i's effective page-number config.
 func (ps *PageSet) ResolvedPageNumber(i int) (cfg *PageNumberConfig, n int) {
 	for j := i; j >= 0; j-- {
 		if c := ps.Pages[j].PageNumber; c != nil {
@@ -327,8 +287,7 @@ func (ps *PageSet) ResolvedPageNumber(i int) (cfg *PageNumberConfig, n int) {
 	return nil, 0
 }
 
-// PageNumberText returns the text of page i's number ("Page 3", "iv",
-// ...), or "" if it has none.
+// PageNumberText returns page i's number text.
 func (ps *PageSet) PageNumberText(i int) string {
 	cfg, n := ps.ResolvedPageNumber(i)
 	if cfg == nil {
@@ -356,8 +315,7 @@ func formatPageNumber(n int, style PageNumberStyle) string {
 	return strconv.Itoa(n)
 }
 
-// roman writes n (>= 1) in upper-case Roman numerals; other values fall
-// back to Arabic.
+// roman writes n in upper-case Roman numerals; other values fall back.
 func roman(n int) string {
 	if n < 1 || n >= 4000 {
 		return strconv.Itoa(n)
@@ -375,8 +333,7 @@ func roman(n int) string {
 	return b.String()
 }
 
-// alpha writes n (>= 1) as a, b, ... z, aa, ab, ...; other values fall
-// back to Arabic.
+// alpha writes n as a, b, ... z, aa, ab; other values fall back.
 func alpha(n int, base rune) string {
 	if n < 1 {
 		return strconv.Itoa(n)
@@ -390,8 +347,7 @@ func alpha(n int, base rune) string {
 	return string(out)
 }
 
-// footerStyle is the font used for text drawn in headers/footers/page
-// numbers when the style is unset.
+// footerStyle is the font for header, footer and number text.
 func footerStyle(s TextStyle) TextStyle {
 	if s == (TextStyle{}) {
 		s = DefaultTextStyle()
@@ -400,12 +356,10 @@ func footerStyle(s TextStyle) TextStyle {
 	return s
 }
 
-// textBlockHeight returns the height of text with n lines in style s.
+// textBlockHeight returns the height of n lines in style s.
 func textBlockHeight(s TextStyle, n int) float64 { return float64(n) * footerStyle(s).Leading() }
 
-// ContentRect returns the rectangle of page i that body text flows
-// into: the sheet minus its margins, shrunk further if the header or
-// footer (or page number) is too tall to fit in its margin.
+// ContentRect returns the rectangle of page i where body text flows.
 func (ps *PageSet) ContentRect(i int) (x, y, w, h float64) {
 	px, py, pw, ph := ps.PageRect(i)
 	pg := ps.Pages[i]
@@ -437,8 +391,7 @@ func (ps *PageSet) headerOffset(h *HeaderFooter, topMargin float64) float64 {
 	return max((topMargin-textBlockHeight(h.Style, strings.Count(h.Text, "\n")+1))/2, 4)
 }
 
-// footerOffset is the distance from the bottom edge to the bottom of
-// the footer text block of height footH.
+// footerOffset is the distance from the bottom edge to the footer.
 func (ps *PageSet) footerOffset(footH, bottomMargin float64, f *HeaderFooter) float64 {
 	if f != nil && f.Offset > 0 {
 		return f.Offset
@@ -446,8 +399,7 @@ func (ps *PageSet) footerOffset(footH, bottomMargin float64, f *HeaderFooter) fl
 	return max((bottomMargin-footH)/2, 4)
 }
 
-// Draw paints the desk, then each sheet with its header, footer and
-// page number; in edit mode also each sheet's margin guides.
+// Draw paints the desk, then each sheet with its header and footer.
 func (ps *PageSet) Draw() {
 	p, s := ps.Painter, ps.Style
 	w, h := ps.Size()
@@ -487,16 +439,13 @@ func (ps *PageSet) drawHeaderFooter(i int) {
 
 var _ Component = (*PageSet)(nil)
 
-// Anchor pins a floating object to a page: (X, Y) is the position of
-// the object's top-left corner relative to the top-left of Page's sheet,
-// so the object moves with the page.
+// Anchor pins a floating object to a page; (X, Y) are relative to it.
 type Anchor struct {
 	Page int
 	X, Y float64
 }
 
-// Resolve converts a to absolute coordinates (those of the PageSet's
-// container). A Page out of range is clamped.
+// Resolve converts a page-relative anchor to absolute coordinates.
 func (ps *PageSet) Resolve(a Anchor) (x, y float64) {
 	if len(ps.Pages) == 0 {
 		return a.X, a.Y
@@ -505,8 +454,7 @@ func (ps *PageSet) Resolve(a Anchor) (x, y float64) {
 	return px + a.X, py + a.Y
 }
 
-// AnchorAt anchors the point (x, y) (absolute) to the page it is on, or
-// -- if it is in a gap or off the pages -- the nearest one.
+// AnchorAt anchors the absolute point (x, y) to the page it is on.
 func (ps *PageSet) AnchorAt(x, y float64) Anchor {
 	if len(ps.Pages) == 0 {
 		return Anchor{X: x, Y: y}

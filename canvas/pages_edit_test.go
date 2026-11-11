@@ -5,9 +5,7 @@ import (
 	"testing"
 )
 
-// Three 200x120 pages with margins L20 T40 R20 B40, Pad 24, Gap 24:
-// page k is at x=24, y=24+144k. Header zone: y 24..64 (+144k); footer
-// zone y 104..144 (+144k). Text is 12px/16px, 8px per rune.
+// Test: three 200x120 pages with margins and padding.
 
 func docPages() *PageSet {
 	pg := func() Page {
@@ -253,8 +251,6 @@ func TestFooterBadgeAddsAndHidesThePageNumber(t *testing.T) {
 		t.Fatal("hidden from page 1 on")
 	}
 }
-
-// --- page number selection and its menu ---
 
 func numbered() *PageSet {
 	ps := docPages()
@@ -528,8 +524,6 @@ func TestEditedTextIsDrawnLive(t *testing.T) {
 		t.Fatalf("calls: %v", p.calls)
 	}
 }
-
-// --- stage plumbing ---
 
 func TestStageDrawsOverlaysAfterEveryComponentAndRoutesDoubleClicks(t *testing.T) {
 	var log []string

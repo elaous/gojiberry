@@ -443,7 +443,7 @@ func TestFootnoteCommandsUseTheNoteEditorWhenThereIsOne(t *testing.T) {
 	}
 }
 
-// A click on a row of the index goes to the first mark of the term; the title goes nowhere.
+// An index row goes to the term's first mark.
 func TestClickOnAnIndexRowGoesToTheFirstMark(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "alpha beta alpha gamma\n"})
 	f.SetCursors([]Cursor{{Anchor: 11, Caret: 16}}) // the second "alpha"
@@ -485,7 +485,7 @@ func TestClickOnAnIndexRowGoesToTheFirstMark(t *testing.T) {
 	}
 }
 
-// Pressing the text of a note on the page asks the host to edit it.
+// Pressing a note's text asks the host to edit it.
 func TestPressingANoteOnThePageEditsIt(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "text with a note"})
 	f.SetCursors([]Cursor{At(6)})
