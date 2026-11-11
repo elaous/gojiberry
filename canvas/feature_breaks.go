@@ -3,17 +3,14 @@ package canvas
 // Breaks inserts page breaks, column breaks and horizontal rules.
 type Breaks struct{}
 
-// Command names.
 const (
 	CmdPageBreak   Command = "break.page"
 	CmdColumnBreak Command = "break.column"
 	CmdRule        Command = "break.rule"
 )
 
-// Name implements Feature.
 func (Breaks) Name() string { return "breaks" }
 
-// Install implements Feature.
 func (Breaks) Install(r *Registry) {
 	r.AddCommand(CmdPageBreak, "Insert page break", "Mod+Enter", func(c *CommandContext) bool { return insertBreak(c.Target, BreakPage) })
 	r.AddCommand(CmdColumnBreak, "Insert column break", "Mod+Shift+Enter", func(c *CommandContext) bool { return insertBreak(c.Target, BreakColumn) })

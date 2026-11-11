@@ -1,12 +1,6 @@
 package canvas
 
-// Review adds the commands of suggestion mode (see TextFlow.Suggesting and Proposals):
-//
-//   - Ctrl/Cmd+Alt+S turns suggestion mode on or off (the same key both ways);
-//   - Ctrl/Cmd+Alt+Y accepts the suggestion at the caret, or the next one after it;
-//   - Ctrl/Cmd+Alt+D declines (rejects) it.
-//
-// They need a TextFlow as the target.
+// Review adds the suggestion-mode commands.
 type Review struct {
 	// OnMode, when set, is told when suggestion mode is turned on or off (to announce it).
 	OnMode func(on bool)
@@ -14,17 +8,14 @@ type Review struct {
 	OnSettle func(accepted bool, p Proposal)
 }
 
-// Command names.
 const (
 	CmdReviewSuggest Command = "review.suggest"
 	CmdReviewAccept  Command = "review.accept"
 	CmdReviewReject  Command = "review.reject"
 )
 
-// Name implements Feature.
 func (Review) Name() string { return "review" }
 
-// Install implements Feature.
 func (rv Review) Install(r *Registry) {
 	r.AddCommand(CmdReviewSuggest, "Suggest changes (on/off)", "Mod+Alt+S", func(c *CommandContext) bool {
 		f, ok := c.Target.(*TextFlow)
@@ -62,8 +53,7 @@ func (rv Review) Install(r *Registry) {
 	r.AddCommand(CmdReviewReject, "Reject suggestion", "Mod+Alt+D", settle(false))
 }
 
-// ProposalNear is the suggestion that contains offset o (or ends at it), else the first one that
-// starts after it, else the first one in the text.
+// ProposalNear returns the suggestion containing offset o, or the next one.
 func (f *TextFlow) ProposalNear(o int) (Proposal, bool) {
 	ps := f.Proposals()
 	for _, p := range ps {

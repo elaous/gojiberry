@@ -3,7 +3,6 @@ package canvas
 // Columns sets the column count from the caret's paragraph on.
 type Columns struct{}
 
-// Command names.
 const (
 	CmdColumns1    Command = "columns.1"
 	CmdColumns2    Command = "columns.2"
@@ -27,13 +26,11 @@ type ColumnsHost interface {
 // DefaultColumnGap is the space between columns the commands start with.
 const DefaultColumnGap = 24
 
-// Name implements Feature.
 func (Columns) Name() string { return "columns" }
 
 // proportion is a column width ratio; widths scale to fit the page.
 const proportion = 1000
 
-// Install implements Feature.
 func (Columns) Install(r *Registry) {
 	set := func(cfg func(old ColumnConfig) ColumnConfig) CommandFunc {
 		return func(c *CommandContext) bool {

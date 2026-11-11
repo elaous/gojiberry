@@ -3,17 +3,14 @@ package canvas
 // Bookmarks names text ranges; Ctrl/Cmd+Alt+B names the selection or character.
 type Bookmarks struct{}
 
-// Command names.
 const (
 	CmdBookmarkAdd    Command = "bookmark.add"
 	CmdBookmarkRemove Command = "bookmark.remove"
 	CmdBookmarkGoto   Command = "bookmark.goto"
 )
 
-// Name implements Feature.
 func (Bookmarks) Name() string { return "bookmarks" }
 
-// Install implements Feature.
 func (Bookmarks) Install(r *Registry) {
 	r.AddCommand(CmdBookmarkAdd, "Add bookmark", "Mod+Alt+B", func(c *CommandContext) bool {
 		if _, ok := c.Target.(BookmarkHost); !ok || c.Prompt == nil {

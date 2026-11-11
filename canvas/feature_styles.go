@@ -8,24 +8,9 @@ type StyleHost interface {
 
 var _ StyleHost = (*TextFlow)(nil)
 
-// Styles applies named styles (see StyleDef) and clears formatting:
-//
-//   - Ctrl/Cmd+Alt+0 is Normal, +1, +2, +3 are Heading 1-3; style.title,
-//     style.subtitle, style.quote and style.code are the other paragraph
-//     styles, and style.emphasis and style.strong the character styles
-//     (applying a style again takes it off);
-//   - Ctrl/Cmd+\ clears the formatting of the selection and its
-//     paragraphs (styles, direct formatting, indents; lists and links
-//     stay);
-//   - style.define-paragraph and style.define-character ask for a name
-//     and make a style from the formatting at the caret, so selected text
-//     can be restyled by redefining it.
-//
-// A style that is not yet defined in the flow is added from
-// DefaultStyles when first applied.
+// Styles applies named styles and clears formatting.
 type Styles struct{}
 
-// Command names.
 const (
 	CmdStyleNormal     Command = "style.normal"
 	CmdStyleHeading1   Command = "style.heading-1"
@@ -45,11 +30,9 @@ const (
 	CmdDefineCharStyle Command = "style.define-character"
 )
 
-// Name implements Feature.
 func (Styles) Name() string { return "styles" }
 
-// ensureStyle makes sure the host has a style called name, from the
-// defaults if need be.
+// ensureStyle makes sure the host has a style called name.
 func ensureStyle(h StyleHost, name string) bool {
 	if _, ok := h.StyleByName(name); ok {
 		return true
@@ -63,7 +46,6 @@ func ensureStyle(h StyleHost, name string) bool {
 	return false
 }
 
-// Install implements Feature.
 func (Styles) Install(r *Registry) {
 	para := func(cmd Command, title, chord, name string) {
 		r.AddCommand(cmd, title, chord, func(c *CommandContext) bool {

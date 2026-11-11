@@ -15,11 +15,9 @@ type CommentHost interface {
 
 var _ CommentHost = (*TextFlow)(nil)
 
-// BeginEdit makes the content editable and starts its undo history, before a
-// change that is made in two steps (a comment record, then its tag).
+// BeginEdit makes the content editable and starts its undo history.
 func (f *TextFlow) BeginEdit() { f.materialize() }
 
-// CommentSet implements CommentHost.
 func (f *TextFlow) CommentSet() *CommentSet {
 	if f.Comments == nil {
 		f.Comments = NewCommentSet()
@@ -27,21 +25,11 @@ func (f *TextFlow) CommentSet() *CommentSet {
 	return f.Comments
 }
 
-// CommentAuthor implements CommentHost.
 func (f *TextFlow) CommentAuthor() string { return f.Author }
 
-// Comments adds notes to text (see Comment):
-//
-//   - Ctrl/Cmd+Alt+N comments the selection, asking for the text
-//     (Markdown; @username and e-mail addresses mention people);
-//   - comment.edit changes the comment at the caret, comment.resolve
-//     toggles it resolved, comment.delete removes it and un-marks its text.
-//
-// They need a Prompt (the Stage's host provides one) and a target with
-// comments (a TextFlow); a viewer cannot run them, as a viewer cannot edit.
+// Comments adds notes to text; Ctrl/Cmd+Alt+N comments the selection.
 type Comments struct{}
 
-// Command names.
 const (
 	CmdCommentAdd     Command = "comment.add"
 	CmdCommentEdit    Command = "comment.edit"
@@ -49,14 +37,11 @@ const (
 	CmdCommentDelete  Command = "comment.delete"
 )
 
-// Name implements Feature.
 func (Comments) Name() string { return "comments" }
 
 const commentPrompt = "Comment (Markdown; @name or an e-mail address mentions someone)"
 
-// askComment asks for a comment's text. When the set has a Roster, an e-mail address of a person with access is
-// kept as their handle, and one of a person without access sends the author back to the question with the reason
-// (a few times; then the comment is not made).
+// askComment asks the person for a comment's text.
 func askComment(c *CommandContext, set *CommentSet, initial string) (string, bool) {
 	prompt := commentPrompt
 	for range 5 {
@@ -74,7 +59,6 @@ func askComment(c *CommandContext, set *CommentSet, initial string) (string, boo
 	return "", false
 }
 
-// Install implements Feature.
 func (Comments) Install(r *Registry) {
 	r.AddCommand(CmdCommentAdd, "Add comment", "Mod+Alt+N", func(c *CommandContext) bool {
 		h, ok := c.Target.(CommentHost)
@@ -87,15 +71,12 @@ func (Comments) Install(r *Registry) {
 			return false
 		}
 		from, to := cur.Range()
-		// Start the target's history before the record is added, so that undo
-		// takes the record away together with its tag.
+		// Start history before the record is added, so undo removes it.
 		if b, ok := c.Target.(interface{ BeginEdit() }); ok {
 			b.BeginEdit()
 		}
 		cm := h.CommentSet().Add(Comment{Author: h.CommentAuthor(), Text: text, Created: time.Now()})
 		tagComment(c.Target, from, to, cm.ID)
-		// If nothing took the tag (only an object was selected, or the target
-		// refused the edit) the comment would be anchored to nothing.
 		if !slices.ContainsFunc(charComments(c.Target.Slice(0, len([]rune(c.Target.EditText())))), func(v string) bool { return commentHas(v, cm.ID) }) {
 			h.CommentSet().Delete(cm.ID)
 			return false
@@ -136,8 +117,7 @@ func (Comments) Install(r *Registry) {
 	})
 }
 
-// charComments lists the Format.Comment value (the comment IDs, comma-
-// separated) of every character of items.
+// charComments lists the comment IDs on each character.
 func charComments(items []Item) []string {
 	var out []string
 	for _, it := range items {
@@ -153,9 +133,7 @@ func charComments(items []Item) []string {
 	return out
 }
 
-// commentAtCursor returns the target as a CommentHost and the ID of the
-// comment at the primary cursor (the first selected character's, or the
-// one at or before the caret); h is nil if there is none.
+// commentAtCursor returns the target and comment ID at the primary cursor.
 func commentAtCursor(t EditTarget) (CommentHost, string) {
 	h, ok := t.(CommentHost)
 	if !ok {
@@ -200,8 +178,7 @@ func tagComment(t EditTarget, from, to int, id string) {
 	retag(t, from, to, func(old string) string { return commentAdd(old, id) })
 }
 
-// untagComment takes comment id off all the text that has it (other
-// comments on the same text stay).
+// untagComment removes comment id from the text, keeping other comments.
 func untagComment(t EditTarget, id string) {
 	ids := charComments(t.Slice(0, len([]rune(t.EditText()))))
 	for i := 0; i < len(ids); {

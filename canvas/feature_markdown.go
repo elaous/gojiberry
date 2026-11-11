@@ -5,33 +5,19 @@ import (
 	"strings"
 )
 
-// MarkdownClipboard copies the selection as Markdown and pastes
-// Markdown as formatted text:
-//
-//   - Ctrl/Cmd+Shift+C puts the selection (every cursor's, joined by
-//     newlines) on the system clipboard as Markdown: **bold**,
-//     *italic*, ~~strike~~, ++underline++, ==highlight==, ^super^,
-//     ~sub~, `code` and #-headings -- the syntax Markdown understands;
-//   - Ctrl/Cmd+Shift+V reads the clipboard as Markdown and inserts it
-//     as text elements: the marks become formatting, not characters.
-//
-// Plain Ctrl+C and Ctrl+V are unchanged.
+// MarkdownClipboard copies selections as Markdown and pastes Markdown as formatting.
 type MarkdownClipboard struct {
-	// Markdown is the converter used to paste; the zero value is the
-	// default one.
+	// Markdown is the converter used to paste; zero value means default.
 	Markdown Markdown
 }
 
-// Command names.
 const (
 	CmdCopyMarkdown  Command = "clipboard.copy-markdown"
 	CmdPasteMarkdown Command = "clipboard.paste-markdown"
 )
 
-// Name implements Feature.
 func (MarkdownClipboard) Name() string { return "markdown-clipboard" }
 
-// Install implements Feature.
 func (m MarkdownClipboard) Install(r *Registry) {
 	r.AddCommand(CmdCopyMarkdown, "Copy as Markdown", "Mod+Shift+C", func(c *CommandContext) bool {
 		if c.Clipboard == nil || c.Clipboard.Write == nil {
@@ -64,9 +50,7 @@ func (m MarkdownClipboard) Install(r *Registry) {
 	})
 }
 
-// PasteMarkdown inserts Markdown text at every cursor of t, replacing
-// the selections, as formatted text. When the text has as many lines as
-// there are cursors, each cursor gets one line.
+// PasteMarkdown inserts Markdown at every cursor, replacing selections.
 func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 	text = strings.TrimRight(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	if text == "" {
@@ -100,11 +84,7 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 	return true
 }
 
-// flattenItems prepares converted Markdown for insertion. With keep (the
-// target holds objects) tables, images, breaks, column configs and
-// paragraph formats are kept; otherwise only the text is: Chars as they
-// are, breaks as newlines, list items and quotes as text prefixes ("• ",
-// "1. ", "▌ "). Trailing newlines are trimmed.
+// flattenItems prepares converted Markdown for insertion.
 func flattenItems(items []Item, keep bool) []Item {
 	var out []Item
 	var pending ParaFormat
@@ -166,8 +146,7 @@ func flattenItems(items []Item, keep bool) []Item {
 
 var headingScales = [5]float64{2, 1.6, 1.35, 1.2, 1.05}
 
-// MarkdownFromItems writes items as Markdown (the inverse of the
-// Markdown transform for text and character formatting).
+// MarkdownFromItems writes items as Markdown, the inverse of conversion.
 func MarkdownFromItems(items []Item) string {
 	type mdLine struct {
 		runs []Chars
@@ -265,12 +244,10 @@ func MarkdownFromItems(items []Item) string {
 	return strings.Join(out, "\n")
 }
 
-// rawRun marks a run of MarkdownFromItems that is already Markdown (an image) and must not be marked again.
+// rawRun marks Markdown that must not be marked again.
 const rawRun = "\x00"
 
-// inlineMarkdown writes an inline object the Markdown has a form for: a rule (---), a table (a pipe table, the
-// first row as the header) or a picture that knows its address (![alt](url)). block says it takes lines of
-// its own. Other objects have no Markdown form and are left out.
+// inlineMarkdown writes inline objects that have a Markdown form.
 func inlineMarkdown(in Inline) (md string, block bool) {
 	switch o := in.Object.(type) {
 	case *Rule:
@@ -279,7 +256,7 @@ func inlineMarkdown(in Inline) (md string, block bool) {
 		if o.View == nil || o.View.Table == nil || len(o.View.Table.Cells) == 0 {
 			return "", false
 		}
-		cells := o.View.Table.Cells // the source: a formula is written as typed and works again where Markdown is read back
+		cells := o.View.Table.Cells // A formula is written as typed so it reads back.
 		row := func(r []string) string {
 			parts := make([]string, len(r))
 			for i, c := range r {
@@ -317,8 +294,7 @@ func inlineMarkdown(in Inline) (md string, block bool) {
 	return "", false
 }
 
-// headingLevel returns 1-5 if every run of the line has the Scale of
-// that heading level, else 0.
+// headingLevel returns the heading level of a line, or 0.
 func headingLevel(runs []Chars) int {
 	if len(runs) == 0 {
 		return 0
@@ -338,8 +314,7 @@ func headingLevel(runs []Chars) int {
 	return 0
 }
 
-// styleHeadingLevel is the level (1 to 6) of a paragraph style named "Title" or "Heading N", else 0: the
-// editor's heading commands set the style, not a size on every run.
+// styleHeadingLevel returns 1-6 for Title or Heading N styles, else 0.
 func styleHeadingLevel(style string) int {
 	if strings.EqualFold(style, "title") {
 		return 1
@@ -361,8 +336,7 @@ func escapeLineStart(line string) string {
 	return line
 }
 
-// markRun writes one run with its formatting as marks around the text,
-// keeping surrounding spaces outside the marks.
+// markRun writes one run's formatting as marks around its text.
 func markRun(r Chars) string {
 	body := strings.TrimSpace(r.Text)
 	if body == "" {
@@ -394,8 +368,7 @@ func markRun(r Chars) string {
 	return lead + s + trail
 }
 
-// escapeInline backslash-escapes the characters Markdown would read as
-// marks.
+// escapeInline backslash-escapes Markdown marks.
 func escapeInline(s string) string {
 	rs := []rune(s)
 	var b strings.Builder
@@ -419,7 +392,7 @@ func escapeInline(s string) string {
 
 func itoa(n int) string { return strconv.Itoa(max(n, 1)) }
 
-// escapeMarkdownLegend keeps a legend's own asterisks and underscores from ending the italics around it.
+// escapeMarkdownLegend escapes asterisks and underscores in legends.
 func escapeMarkdownLegend(s string) string {
 	return strings.NewReplacer("*", `\*`, "_", `\_`).Replace(s)
 }

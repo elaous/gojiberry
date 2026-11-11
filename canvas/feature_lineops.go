@@ -2,20 +2,9 @@ package canvas
 
 import "slices"
 
-// LineOps are the line editing commands of VS Code, on logical lines
-// (separated by '\n') and on every cursor at once:
-//
-//   - Alt+Up / Alt+Down move the line (or every line the selection
-//     touches) up or down;
-//   - Alt+Shift+Up / Alt+Shift+Down copy it above or below (the
-//     cursors go with the copy for "down" and stay on the upper copy
-//     for "up");
-//   - Ctrl/Cmd+Shift+K deletes it.
-//
-// Formatting travels with the text.
+// LineOps are VS Code-style line commands on logical lines.
 type LineOps struct{}
 
-// Command names.
 const (
 	CmdMoveLineUp        Command = "line.move-up"
 	CmdMoveLineDown      Command = "line.move-down"
@@ -24,10 +13,8 @@ const (
 	CmdDeleteLine        Command = "line.delete"
 )
 
-// Name implements Feature.
 func (LineOps) Name() string { return "line-ops" }
 
-// Install implements Feature.
 func (LineOps) Install(r *Registry) {
 	r.AddCommand(CmdMoveLineUp, "Move line up", "Alt+ArrowUp", func(c *CommandContext) bool { return moveLines(c.Target, -1) })
 	r.AddCommand(CmdMoveLineDown, "Move line down", "Alt+ArrowDown", func(c *CommandContext) bool { return moveLines(c.Target, 1) })
@@ -36,15 +23,12 @@ func (LineOps) Install(r *Registry) {
 	r.AddCommand(CmdDeleteLine, "Delete line", "Mod+Shift+K", func(c *CommandContext) bool { return deleteLines(c.Target) })
 }
 
-// lineBlock is a run of whole lines: a is the start of the first, b the
-// end (before its '\n') of the last.
+// lineBlock is a run of whole lines, from a to b.
 type lineBlock struct{ a, b int }
 
 func (l lineBlock) has(o int) bool { return o >= l.a && o <= l.b }
 
-// blocksOf returns the lines the cursors touch, merged where they
-// overlap or touch. A selection that ends at the very start of a line
-// does not include that line.
+// blocksOf returns the lines the cursors touch, merged.
 func blocksOf(rs []rune, cs []Cursor) []lineBlock {
 	var bs []lineBlock
 	for _, c := range cs {

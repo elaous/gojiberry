@@ -277,8 +277,6 @@ func TestMultiCursorArrowsHomeEnd(t *testing.T) {
 	st.HandleKey("F5", false) // unhandled keys fall through
 }
 
-// --- line operations ----------------------------------------------------
-
 func boldLine(ft *FloatingText, from, to int) {
 	for i := from; i < to; i++ {
 		ft.runes[i].f.FontWeight = 700
