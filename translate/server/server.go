@@ -1,19 +1,3 @@
-// Package server is a small standalone translation proxy: it
-// holds a DeepL API key server-side (a client-side WASM binary can't
-// keep a secret safe -- anyone could extract it from the downloaded
-// binary) and exposes one HTTP endpoint a browser can call with plain
-// text and a target language, returning the translated result. Same
-// environment-configured, CORS-open, single-binary shape as
-// gojiberry/syncserver and gojiberry/fontserver -- see
-// cmd/translateserver for the entry point.
-//
-// DeepL only for now (a small client of its HTTP API in deepl.go), matching
-// OnDesign's own roadmap recommendation for task #106; a second
-// provider (Google Translate, say) would slot in behind the same
-// translator interface this package already isolates the DeepL client
-// behind, the same way fontserver's own fetchGoogleFonts field keeps
-// its network call swappable for tests without needing a second
-// provider yet either.
 package server
 
 import (
@@ -28,22 +12,12 @@ import (
 	"github.com/elaous/gojiberry/guard"
 )
 
-// Config is loaded entirely from the environment, the same posture
-// syncserver.Config/fontserver.Config take: turning real translation
-// on is always an environment variable, never a code change.
 type Config struct {
-	// Guard decides who may call the server: guard.Origins(...) for pages from
-	// listed origins, guard.Token(...) for callers holding a token, both with
-	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
-	// ConfigFromEnv reads GOJIBERRY_TRANSLATESERVER_ALLOW_ORIGINS and GOJIBERRY_TRANSLATESERVER_TOKEN.
 	Guard       guard.Guard
 	Addr        string // listen address, e.g. ":8083"
 	DeepLAPIKey string // DeepL API authentication key; empty disables translation
 }
 
-// ConfigFromEnv reads GOJIBERRY_TRANSLATESERVER_ADDR (default ":8083")
-// and GOJIBERRY_TRANSLATESERVER_DEEPL_KEY (default "", meaning
-// /translate always reports 503 -- see handleTranslate).
 func ConfigFromEnv() Config {
 	return Config{
 		Guard:       guard.FromEnv("GOJIBERRY_TRANSLATESERVER", "/health"),
@@ -59,26 +33,16 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// translator is the one call this package makes to DeepL, so tests can
-// inject a fake instead of hitting the real API (the same "swappable
-// network call" reasoning fontserver's own fetchGoogleFonts field
-// documents). sourceLang may be "".
 type translator interface {
 	Translate(ctx context.Context, text []string, targetLang, sourceLang string) ([]Translation, error)
 }
 
-// Server proxies translation requests to DeepL, never exposing the
-// API key to the browser.
 type Server struct {
 	cfg        Config
 	translator translator // nil if cfg.DeepLAPIKey is empty
 }
 
-// NewServer creates a translate server for the given config. With no
-// API key configured, translator stays nil and every /translate
-// request reports 503 -- the same "still runs, just reports the
-// feature is off" posture fontserver's own handleGoogleFonts takes
-// with no Google API key, rather than refusing to start at all.
+// NewServer creates a translate server for the given config.
 func NewServer(cfg Config) (*Server, error) {
 	s := &Server{cfg: cfg}
 	if cfg.DeepLAPIKey != "" {
@@ -91,14 +55,6 @@ func NewServer(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// Handler returns the HTTP routes:
-//
-//	GET  /health     -- confirms the server is up
-//	POST /translate   -- {"text","targetLang","sourceLang"} -> {"translatedText","detectedSourceLanguage"}
-//
-// Every response carries permissive CORS headers, the same reasoning
-// as syncserver.Handler/fontserver.Handler: this server's whole point
-// is being reachable from a page served from a different origin.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
@@ -121,10 +77,6 @@ type translateResponse struct {
 	DetectedSourceLanguage string `json:"detectedSourceLanguage"`
 }
 
-// maxTranslateBody caps the request body DeepL itself would reject
-// past 128KiB (DeepL's documented limit) -- read that much
-// plus a little slack rather than trusting a client-supplied
-// Content-Length.
 const maxTranslateBody = 200 * 1024
 
 func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {

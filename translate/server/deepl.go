@@ -18,8 +18,6 @@ type Translation struct {
 	DetectedSourceLanguage string
 }
 
-// deeplClient is the one DeepL call this server makes (POST /v2/translate), written against
-// the documented HTTP API instead of a client library: the call is a JSON body and a header.
 type deeplClient struct {
 	key  string
 	base string
@@ -29,12 +27,9 @@ type deeplClient struct {
 const (
 	deeplFreeBase = "https://api-free.deepl.com"
 	deeplProBase  = "https://api.deepl.com"
-	// maxDeeplReply bounds what is read back (a request is at most 128 KiB of text).
 	maxDeeplReply = 1 << 20
 )
 
-// newDeeplClient makes a client for an API key. Free-plan keys end in ":fx" and use the free
-// endpoint; every other key uses the pro one.
 func newDeeplClient(key string) (*deeplClient, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
@@ -47,7 +42,7 @@ func newDeeplClient(key string) (*deeplClient, error) {
 	return &deeplClient{key: key, base: base, http: &http.Client{Timeout: 30 * time.Second}}, nil
 }
 
-// Translate translates texts into target (e.g. "FR"); source may be "" to let DeepL detect it.
+// Translate translates texts into target (e.g.
 func (c *deeplClient) Translate(ctx context.Context, texts []string, target, source string) ([]Translation, error) {
 	body := struct {
 		Text       []string `json:"text"`
