@@ -70,7 +70,6 @@ func TestMongoPrefixFilterQuotesThePrefix(t *testing.T) {
 	}
 }
 
-// ListPrefix against a real MongoDB (see above).
 func TestMongoAdapterListPrefix(t *testing.T) {
 	uri := mongoURI(t)
 	ctx := context.Background()
@@ -84,7 +83,6 @@ func TestMongoAdapterListPrefix(t *testing.T) {
 	})
 }
 
-// The conditional delete needs a real MongoDB too (see above).
 func TestMongoAdapterDeleteIf(t *testing.T) {
 	uri := mongoURI(t)
 	ctx := context.Background()

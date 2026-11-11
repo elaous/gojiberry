@@ -37,7 +37,6 @@ func init() {
 	})
 }
 
-// mongoDoc is a document's record in the collection.
 type mongoDoc struct {
 	ID        string    `bson:"_id"`
 	Data      []byte    `bson:"data"`
@@ -137,7 +136,6 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, bson.M{})
 }
 
-// prefixFilter matches documents whose ID starts with prefix.
 func prefixFilter(prefix string) bson.M {
 	return bson.M{"_id": bson.M{"$regex": "^" + regexp.QuoteMeta(prefix)}}
 }
