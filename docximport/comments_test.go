@@ -9,7 +9,6 @@ import (
 
 const w14NS = `xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"`
 
-// commented returns the text of the runs that carry comment id.
 func commented(doc docfile.Document, id string) string {
 	var sb strings.Builder
 	for _, it := range doc.Content {
@@ -20,7 +19,6 @@ func commented(doc docfile.Document, id string) string {
 	return sb.String()
 }
 
-// Word's (and Google Docs') comments come in with their author, time, text and the words they are on.
 func TestCommentsAreImportedWithTheirRange(t *testing.T) {
 	data := docxParts(t, map[string]string{
 		"word/document.xml": `<w:document ` + wNS + `><w:body>` +
@@ -57,11 +55,9 @@ func TestCommentsAreImportedWithTheirRange(t *testing.T) {
 	if got := commented(doc, "w1"); !strings.Contains(got, "spans ") || !strings.Contains(got, "two paragraphs") {
 		t.Errorf("a range across paragraphs: %q", got)
 	}
-	// Comments are not counted as lost any more.
 	if s, _ := Inspect(data); s.Total() != 0 {
 		t.Errorf("Inspect: %+v", s)
 	}
-	// And they reach the editor's comment set with the text marked.
 	set := docfile.ToComments(doc.Comments)
 	if set.Len() != 2 {
 		t.Errorf("%d comments in the set", set.Len())
@@ -85,7 +81,6 @@ func TestOverlappingCommentsAndOnesWithoutTextAreKept(t *testing.T) {
 	if commented(doc, "w1") != "inner" || commented(doc, "w0") != "outer  tail" || commented(doc, "w2") != "" {
 		t.Errorf("w0 %q w1 %q w2 %q", commented(doc, "w0"), commented(doc, "w1"), commented(doc, "w2"))
 	}
-	// A range that names a comment the file does not have marks nothing.
 	data = docxParts(t, map[string]string{
 		"word/document.xml": `<w:document ` + wNS + `><w:body><w:p><w:commentRangeStart w:id="7"/><w:r><w:t>x</w:t></w:r><w:commentRangeEnd w:id="7"/></w:p></w:body></w:document>`,
 	})
