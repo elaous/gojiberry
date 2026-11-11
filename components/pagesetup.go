@@ -23,24 +23,18 @@ var Papers = []Paper{
 	{"legal", "Legal", 612, 1008},
 }
 
-// PageSetup is how the sheets of a document are laid out: the paper, its
-// orientation and the margins in points, in CSS order (top, right, bottom, left).
 type PageSetup struct {
-	Paper     string // a Papers name, or "custom" (CustomWidth by CustomHeight); "" or unknown is A4
-	Landscape bool
-	Margins   [4]float64
-	// CustomWidth and CustomHeight are the sheet of the "custom" paper in points, portrait; sizes outside 100 to
-	// 5000 points make it A4.
+	Paper                     string
+	Landscape                 bool
+	Margins                   [4]float64
 	CustomWidth, CustomHeight float64
 }
 
-// CustomPaper is the name of the paper whose size the person gives.
 const CustomPaper = "custom"
 
 // DefaultPageSetup is A4, portrait, with one inch all round.
 func DefaultPageSetup() PageSetup { return PageSetup{Paper: "a4", Margins: [4]float64{72, 72, 72, 72}} }
 
-// Margin presets: a name, its label and the margins.
 var marginPresets = []struct {
 	Name, Label string
 	Margins     [4]float64
@@ -50,7 +44,6 @@ var marginPresets = []struct {
 	{"wide", "Wide", [4]float64{72, 144, 72, 144}},
 }
 
-// paper finds the paper of the setup, A4 when unknown.
 func (p PageSetup) paper() Paper {
 	if p.Paper == CustomPaper {
 		ok := func(v float64) bool { return !math.IsNaN(v) && v >= 100 && v <= 5000 }
@@ -66,7 +59,6 @@ func (p PageSetup) paper() Paper {
 	return Papers[0]
 }
 
-// Size is the sheet's width and height in points, turned by the orientation.
 func (p PageSetup) Size() (w, h float64) {
 	pp := p.paper()
 	if p.Landscape {
@@ -75,9 +67,6 @@ func (p PageSetup) Size() (w, h float64) {
 	return pp.Width, pp.Height
 }
 
-// PageSetupOf is the setup whose sheet is w by h points (in either orientation, to within two points) with
-// the given margins, as a saved document records them. A sheet that is none of the Papers is a custom paper,
-// unless it is outside 100 to 5000 points, which a PageSetup cannot describe (false).
 func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
 	near := func(a, b float64) bool { return math.Abs(a-b) <= 2 }
 	for _, pp := range Papers {
@@ -95,8 +84,6 @@ func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool) {
 	return PageSetup{}, false
 }
 
-// Normalized fixes what cannot be laid out: the paper is a known one, a margin
-// is not negative, and the margins leave at least a quarter of each side for text.
 func (p PageSetup) Normalized() PageSetup {
 	p.Paper = p.paper().Name
 	if p.Paper != CustomPaper {
@@ -122,10 +109,8 @@ func (p PageSetup) Normalized() PageSetup {
 	return p
 }
 
-// MarginList is the margins as a TextFlow's Margins prop wants them.
 func (p PageSetup) MarginList() []float64 { return p.Margins[:] }
 
-// Label is the setup in a few words for a status bar: "A4 / portrait".
 func (p PageSetup) Label() string {
 	o := tr("page.portrait", "portrait")
 	if p.Landscape {
@@ -136,13 +121,10 @@ func (p PageSetup) Label() string {
 
 // PageSetupProps configures PageSetupPanel.
 type PageSetupProps struct {
-	Setup PageSetup
-	// OnChange receives the new setup (already Normalized) when something is changed.
+	Setup    PageSetup
 	OnChange func(PageSetup)
 }
 
-// PageSetupPanel edits a PageSetup: paper, orientation, margin presets and each
-// margin. It is controlled: it shows Setup and reports changes through OnChange.
 func PageSetupPanel(props PageSetupProps) xango.Node {
 	set := props.Setup.Normalized()
 	change := func(f func(*PageSetup)) {
@@ -183,7 +165,6 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 		sel("gj-pagesetup-paper", tr("page.paper", "Paper"), papers, func(v string) {
 			change(func(p *PageSetup) {
 				if v == CustomPaper && p.Paper != CustomPaper {
-					// start from the sheet that was there
 					p.CustomWidth, p.CustomHeight = p.paper().Width, p.paper().Height
 				}
 				p.Paper = v
@@ -216,12 +197,9 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-pagesetup")}, kids...)
 }
 
-// mm is a size in points as millimetres.
 func mm(pt float64) string { return strconv.Itoa(int(math.Round(pt * 25.4 / 72))) }
 
-// customSize is the width and height of a custom paper, in millimetres; nothing for the other papers.
 func customSize(set PageSetup, change func(func(*PageSetup))) xango.Node {
-	// One element always, so the panel keeps its order as the fields come and go.
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-pagesetup-custom")}, children...)
 	}

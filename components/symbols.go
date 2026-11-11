@@ -14,8 +14,6 @@ type Symbol struct {
 	Category string
 }
 
-// DefaultSymbols returns the built-in symbols: punctuation, math, Greek,
-// arrows, currency, shapes and accented Latin letters.
 func DefaultSymbols() []Symbol { return append([]Symbol(nil), defaultSymbols...) }
 
 // SymbolCategories lists the categories of symbols, in first-seen order.
@@ -31,8 +29,6 @@ func SymbolCategories(symbols []Symbol) []string {
 	return out
 }
 
-// FilterSymbols returns the symbols in category (all if empty) whose
-// name, category or character contains every word of query.
 func FilterSymbols(symbols []Symbol, query, category string) []Symbol {
 	words := strings.Fields(strings.ToLower(query))
 	var out []Symbol
@@ -61,9 +57,7 @@ type SymbolPickerProps struct {
 	Symbols []Symbol
 	// Query and Category filter the grid; the caller owns them.
 	Query, Category string
-	// Recent are characters picked lately, shown first while there is no
-	// query.
-	Recent []string
+	Recent          []string
 	// Columns is the grid width in characters (default 10).
 	Columns int
 	// OnPick is called with the chosen character.
@@ -72,11 +66,6 @@ type SymbolPickerProps struct {
 	OnCategory func(category string) // "" for all
 }
 
-// SymbolPicker renders a searchable grid of symbols to insert -- a search
-// box, category chips, the recently used ones and the matching symbols,
-// each a button titled with its name. It is controlled (Query, Category);
-// the caller inserts the picked character where it belongs (for a canvas
-// editor, FloatingText.InsertText or TextFlow.InsertText).
 func SymbolPicker(props SymbolPickerProps) xango.Node {
 	symbols := props.Symbols
 	if symbols == nil {
@@ -90,7 +79,7 @@ func SymbolPicker(props SymbolPickerProps) xango.Node {
 	btn := func(s Symbol) xango.Node {
 		attrs := []xango.Attr{
 			xango.A("class", "gj-symbol"), xango.A("type", "button"), xango.A("title", s.Name), xango.A("data-char", s.Char),
-			rovingTab(nsym, 0), // the first symbol is the way in; the arrow keys move among the rest (gridkeys.go)
+			rovingTab(nsym, 0),
 		}
 		nsym++
 		if props.OnPick != nil {

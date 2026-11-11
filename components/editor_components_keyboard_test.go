@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// A menu is operable from the keyboard: Escape closes the open menu, Enter and Space choose the
-// focused entry, and other keys do nothing.
 func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
 	var opened []int
 	var picked []string
@@ -41,7 +39,6 @@ func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
 	if len(opened) != 3 { // Escape, then each choice closes
 		t.Errorf("closing: %v", opened)
 	}
-	// With nothing open, Escape is not taken from the page.
 	closedBar := MenuBar(MenuBarProps{Entries: entries, Open: -1, OnOpen: func(i int) { opened = append(opened, i) }})
 	before := len(opened)
 	press(findHandlers(closedBar, "keydown")[0], xango.KeyData{Key: "Escape"})
@@ -50,13 +47,11 @@ func TestMenuKeyboardEscapeEnterAndSpace(t *testing.T) {
 	}
 }
 
-// focusCall is a MoveFocus the widget asked for.
 type focusCall struct {
 	root, items string
 	step        xango.FocusStep
 }
 
-// keyEvent is a key press that records the focus moves it asks for and whether it was prevented.
 func keyEvent(key string, calls *[]focusCall, prevented *bool) xango.Event {
 	return xango.NewEvent("keydown", xango.KeyData{Key: key}, false, func() { *prevented = true }, nil).
 		WithFocus(func(root, items string, step xango.FocusStep) bool {
@@ -65,7 +60,6 @@ func keyEvent(key string, calls *[]focusCall, prevented *bool) xango.Event {
 		})
 }
 
-// The arrow keys move the focus through a menu, into and out of a submenu, and along the menu bar.
 func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 	var opened []int
 	entries := []MenuBarEntry{
@@ -84,21 +78,18 @@ func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 		h(keyEvent(key, &calls, &prevented))
 		return calls, prevented
 	}
-	// in a menu: Down, Up, Home and End among its entries
 	for key, want := range map[string]xango.FocusStep{"ArrowDown": xango.FocusNext, "ArrowUp": xango.FocusPrev, "Home": xango.FocusFirst, "End": xango.FocusLast} {
 		calls, prevented := press(keys[2], key)
 		if len(calls) != 1 || calls[0].step != want || calls[0].root != ".gj-menu" || !strings.Contains(calls[0].items, "li.gj-menu-item") || !prevented {
 			t.Errorf("%s in a menu: %+v prevented %v", key, calls, prevented)
 		}
 	}
-	// Right on an entry with a submenu goes in; Left from inside goes back out
 	if calls, _ := press(keys[3], "ArrowRight"); len(calls) != 1 || calls[0].root != ".gj-menu-item-sub" || calls[0].step != xango.FocusFirst || !strings.Contains(calls[0].items, "> .gj-menu >") {
 		t.Errorf("Right into the submenu: %+v", calls)
 	}
 	if calls, _ := press(keys[4], "ArrowLeft"); len(calls) != 1 || calls[0].root != ".gj-menu-item-sub" || calls[0].items != ":scope" {
 		t.Errorf("Left out of the submenu: %+v", calls)
 	}
-	// on the bar: Right and Left move along it and, with a menu open, take the menu along
 	if calls, _ := press(keys[1], "ArrowRight"); len(calls) != 1 || calls[0].step != xango.FocusNext || len(opened) != 1 || opened[0] != 1 {
 		t.Errorf("Right from File with its menu open: %+v %v", calls, opened)
 	}
@@ -106,7 +97,6 @@ func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 	if calls, _ := press(keys[1], "ArrowLeft"); len(calls) != 1 || calls[0].step != xango.FocusPrev || len(opened) != 1 || opened[0] != 2 {
 		t.Errorf("Left from File wraps to View: %+v %v", calls, opened)
 	}
-	// Down on the open File button goes into its menu at the first entry, Up at the last
 	opened = nil
 	if calls, _ := press(keys[1], "ArrowDown"); len(calls) != 1 || calls[0].step != xango.FocusFirst || len(opened) != 0 {
 		t.Errorf("Down on the open button: %+v %v", calls, opened)
@@ -114,16 +104,13 @@ func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 	if calls, _ := press(keys[1], "ArrowUp"); len(calls) != 1 || calls[0].step != xango.FocusLast {
 		t.Errorf("Up on the open button: %+v", calls)
 	}
-	// Down on a closed entry's button opens it first
 	if calls, _ := press(keys[5], "ArrowDown"); len(opened) != 1 || opened[0] != 1 || len(calls) != 1 {
 		t.Errorf("Down on a closed button: %+v %v", calls, opened)
 	}
-	// Escape returns the focus to the button of the menu that closes
 	opened = nil
 	if calls, _ := press(keys[0], "Escape"); len(calls) != 1 || !strings.Contains(calls[0].items, "gj-menubar-entry-open") || len(opened) != 1 || opened[0] != -1 {
 		t.Errorf("Escape: %+v %v", calls, opened)
 	}
-	// a chord is not a menu key, and with no browser behind the event nothing happens
 	var calls []focusCall
 	prevented := false
 	keys[2](xango.NewEvent("keydown", xango.KeyData{Key: "ArrowDown", Ctrl: true}, false, func() { prevented = true }, nil).
@@ -137,8 +124,6 @@ func TestMenuArrowKeysMoveTheFocus(t *testing.T) {
 	keys[2](xango.NewEvent("keydown", xango.KeyData{Key: "ArrowDown"}, false, nil, nil)) // no focus hook: must not panic
 }
 
-// Tabs follow the tabs pattern: only the selected tab is in the Tab order, and the arrow keys, Home
-// and End move the focus along the row and select the tab that gets it.
 func TestTabsKeyboard(t *testing.T) {
 	var picked []int
 	tabs := Tabs(TabsProps{Tabs: []Tab{{Label: "A"}, {Label: "B"}, {Label: "C"}}, Active: 1, OnSelect: func(i int) { picked = append(picked, i) }})
@@ -189,7 +174,6 @@ func TestTabsKeyboard(t *testing.T) {
 	}
 }
 
-// A modal takes the focus, keeps it inside (Tab and Shift+Tab go round) and closes on Escape.
 func TestModalKeyboard(t *testing.T) {
 	closed := 0
 	m := Modal(ModalProps{Open: true, Label: "Sure?", Content: []xango.Node{xango.Text("x")}, OnClose: func() { closed++ }})
@@ -225,7 +209,6 @@ func TestModalKeyboard(t *testing.T) {
 		t.Errorf("Ctrl+Tab belongs to the browser: %v %v", steps, prevented)
 	}
 	press(xango.KeyData{Key: "a"})
-	// a modal with nothing to call on Escape leaves the key alone
 	none := findHandlers(Modal(ModalProps{Open: true, Content: []xango.Node{xango.Text("x")}}), "keydown")
 	prevented := false
 	none[0](xango.NewEvent("keydown", xango.KeyData{Key: "Escape"}, false, func() { prevented = true }, nil))
@@ -290,7 +273,6 @@ func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
 		}
 	}
 	clicks := findHandlers(CheckPanel(props), "click")
-	// order: Check, three gates, override, then per finding: Go (none: OnGo nil), fix button of the first
 	if len(clicks) != 6 {
 		t.Fatalf("click handlers: %d", len(clicks))
 	}
@@ -306,8 +288,6 @@ func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
 	}
 }
 
-// An operator's minimum gate: the choices below it are disabled and cannot be pressed, a note says who
-// set it, and under "block" the override is not offered at all.
 func TestCheckPanelGateFloorCannotBeLowered(t *testing.T) {
 	var gate []string
 	overrides := 0
@@ -324,7 +304,6 @@ func TestCheckPanelGateFloorCannotBeLowered(t *testing.T) {
 	if strings.Contains(html, `data-gate="block" aria-pressed="true" disabled`) || strings.Contains(html, "gj-check-override") {
 		t.Errorf("the strictest gate is pressable and has no override:\n%s", html)
 	}
-	// only the "block" button and Check respond
 	clicks := findHandlers(CheckPanel(props("block", "block")), "click")
 	if len(clicks) != 2 {
 		t.Fatalf("click handlers: %d", len(clicks))
@@ -334,13 +313,11 @@ func TestCheckPanelGateFloorCannotBeLowered(t *testing.T) {
 	if len(gate) != 1 || gate[0] != "block" || overrides != 0 {
 		t.Errorf("gate %v overrides %d", gate, overrides)
 	}
-	// a warn floor: "none" is disabled, warn and block are not, and the override stays under block
 	html = render(t, CheckPanel(props("block", "warn")))
 	if !strings.Contains(html, `data-gate="" aria-pressed="false" disabled="disabled"`) || strings.Contains(html, `data-gate="warn" aria-pressed="false" disabled`) ||
 		!strings.Contains(html, "gj-check-override") || !strings.Contains(html, "cannot be lowered here") {
 		t.Errorf("warn floor:\n%s", html)
 	}
-	// no floor: nothing is disabled and there is no note
 	if html = render(t, CheckPanel(props("", ""))); strings.Contains(html, "disabled") || strings.Contains(html, "gj-check-floor") {
 		t.Errorf("no floor:\n%s", html)
 	}

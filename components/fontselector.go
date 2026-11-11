@@ -9,28 +9,18 @@ import (
 
 // FontSelectorProps configures FontSelector.
 type FontSelectorProps struct {
-	// Fonts is the catalog to choose from (see the fonts package:
-	// fonts.Multi of web-safe, local and online repositories).
 	Fonts []fonts.Font
 	// Selected is the chosen family ("" for none).
 	Selected string
-	// Query is the text in the search box; the list shows the fonts
-	// whose family matches it (best matches first).
-	Query string
+	Query    string
 	// Source, if set, limits the list to one repository's fonts.
-	Source string
-	// Recent are families used lately, listed first while Query is empty.
-	Recent []string
-	// PreviewText is the sample shown in each font ("The quick brown fox"
-	// by default).
+	Source      string
+	Recent      []string
 	PreviewText string
 	Placeholder string
-	// Limit caps how many fonts are rendered at once (default 100): a
-	// catalog of thousands would bury the page. A note says how many more
-	// there are.
-	Limit    int
-	Open     bool
-	Disabled bool
+	Limit       int
+	Open        bool
+	Disabled    bool
 
 	OnToggleOpen func(open bool)
 	OnQuery      func(query string)
@@ -38,15 +28,6 @@ type FontSelectorProps struct {
 	OnSelect     func(font fonts.Font)
 }
 
-// FontSelector renders a closed control showing the chosen family in its
-// own typeface and, when Open, a panel with a search box, source filter
-// chips and a list of fonts each previewed in itself. It is controlled:
-// the caller owns Open, Query and Source (see the root README's
-// controlled-component notes) and loads the fonts it lists (for fonts
-// with URLs, add fonts.FontFaceCSS to the page).
-//
-// Like Dropdown it implements the ARIA listbox pattern's attributes
-// only; it has no keyboard navigation of its own.
 func FontSelector(props FontSelectorProps) xango.Node {
 	label := props.Placeholder
 	if label == "" {
@@ -86,7 +67,6 @@ func FontSelector(props FontSelectorProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-fontselector")}, children...)
 }
 
-// fontListbox: the focus goes first to the search field, and Down from there to the options.
 var fontListbox = listbox{root: ".gj-fontselector", control: ":scope > .gj-fontselector-control", options: ":scope .gj-fontselector-option", first: ":scope .gj-fontselector-search"}
 
 func fontSelectorPanel(props FontSelectorProps) xango.Node {
@@ -112,7 +92,6 @@ func fontSelectorPanel(props FontSelectorProps) xango.Node {
 	}
 	panel := []xango.Node{xango.El("input", searchAttrs)}
 
-	// Source filter chips, when there is more than one source.
 	if sources := fonts.Sources(props.Fonts); len(sources) > 1 {
 		chip := func(label, value string) xango.Node {
 			attrs := []xango.Attr{

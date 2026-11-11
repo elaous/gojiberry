@@ -6,31 +6,21 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// FindReplaceProps configures FindReplace. It is controlled: the caller owns
-// the query and the results and feeds them back (canvas.TextFlow.Find and
-// ReplaceAll do the work).
+// FindReplaceProps configures FindReplace.
 type FindReplaceProps struct {
 	Query, Replacement          string
 	MatchCase, WholeWord, Regex bool
-	// Count is how many matches there are, and Current which one is selected
-	// (from 1, 0 for none).
-	Count, Current int
-	// Error is shown instead of the count, for a query that cannot be used (a
-	// regular expression that does not compile).
-	Error string
+	Count, Current              int
+	Error                       string
 	// ReadOnly hides the replace row, for a viewer.
 	ReadOnly bool
 
-	OnQuery       func(string)
-	OnReplacement func(string)
-	// OnOptions is called with the three toggles when any is clicked.
+	OnQuery                                          func(string)
+	OnReplacement                                    func(string)
 	OnOptions                                        func(matchCase, wholeWord, regex bool)
 	OnNext, OnPrev, OnReplace, OnReplaceAll, OnClose func()
 }
 
-// FindReplace is the find and replace bar: a query box with the match count
-// and previous and next buttons, toggles for case, whole word and regular
-// expression, and a replacement box with Replace and Replace all.
 func FindReplace(p FindReplaceProps) xango.Node {
 	call := func(f func()) func(xango.Event) {
 		return func(xango.Event) {

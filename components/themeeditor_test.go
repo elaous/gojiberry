@@ -22,7 +22,6 @@ func TestThemeEditorSaysWhatIsWrongAsItIsTyped(t *testing.T) {
 	bad.TypeScale = []float64{12, 14}
 	out := render(t, ThemeEditor(ThemeEditorProps{Set: bad, OnReset: func() {}}))
 	mustContain(t, out, `aria-invalid="true"`, `aria-describedby="gj-theme-problems"`, "2 things to fix", "contrast of", "body size", "Back to the default theme")
-	// a colour field cannot write more CSS than a colour
 	bad.Colors[tokens.Link] = "red;background:url(x)"
 	if strings.Contains(render(t, ThemeEditor(ThemeEditorProps{Set: bad})), "color:red;background:url(x)") {
 		t.Error("a colour field wrote CSS into the sample")

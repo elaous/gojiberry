@@ -6,27 +6,19 @@ import (
 
 // Folder states, for FolderPickerProps.State.
 const (
-	FolderNone      = "none"      // no folder chosen
-	FolderReady     = "ready"     // chosen, and the browser lets the page write it
-	FolderReconnect = "reconnect" // chosen earlier, the browser wants a click to allow it again
+	FolderNone      = "none"  // no folder chosen
+	FolderReady     = "ready" // chosen, and the browser lets the page write it
+	FolderReconnect = "reconnect"
 )
 
 // FolderPickerProps configures FolderPicker.
 type FolderPickerProps struct {
-	// Supported says the browser can let the person choose a folder (the File System Access
-	// API: Chrome, Edge, Opera). Without it only the private storage is offered.
-	Supported bool
-	// State is FolderNone, FolderReady or FolderReconnect; Name is the folder's name.
-	State, Name string
-	// OnChoose opens the browser's folder picker; OnReconnect asks for the permission back;
-	// OnForget stops using the folder (its files stay). Each is left out when nil.
+	Supported                       bool
+	State, Name                     string
 	OnChoose, OnReconnect, OnForget func()
 	Disabled                        bool
 }
 
-// FolderPicker is the control for saving to a folder on the person's computer: Choose
-// folder, and once one is chosen its name with Forget, or, when the browser has withdrawn
-// permission after a restart, "Reconnect folder" (the saves to it wait until then).
 func FolderPicker(p FolderPickerProps) xango.Node {
 	btn := func(class, label string, on func()) xango.Node {
 		attrs := []xango.Attr{xango.A("type", "button"), xango.A("class", class)}

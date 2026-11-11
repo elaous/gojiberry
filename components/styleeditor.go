@@ -11,36 +11,20 @@ import (
 
 // StyleEditorProps configures StyleEditor.
 type StyleEditorProps struct {
-	// Format is the formatting being edited: the overrides applied over
-	// Base (zero fields inherit from it).
 	Format canvas.Format
-	// Base is the style the format is applied over; it gives the values
-	// shown for fields the format leaves unset.
-	Base canvas.TextStyle
+	Base   canvas.TextStyle
 	// OnChange receives the edited format after every change.
 	OnChange func(canvas.Format)
 
-	// FontPicker, if set, adds a FontSelector for the family. The editor
-	// supplies Selected (from Format) and wraps OnSelect so a choice also
-	// updates the format; everything else -- Fonts, Open, Query, Source,
-	// the callbacks that keep them -- is yours, as it is for a plain
-	// FontSelector.
+	// FontPicker, if set, adds a FontSelector for the family.
 	FontPicker *FontSelectorProps
 
-	// PreviewText is the sample shown in the resulting style
-	// ("The quick brown fox jumps over the lazy dog" by default).
 	PreviewText string
 	Disabled    bool
 }
 
 var styleWeights = []int{100, 200, 300, 400, 500, 600, 700, 800, 900}
 
-// StyleEditor renders controls for a canvas.Format -- font, size,
-// weight, bold, italic, underline, strikethrough, superscript, subscript,
-// text and highlight colors -- and a live preview of the result. It is
-// controlled: it shows props.Format and reports edits through OnChange.
-// Superscript and subscript exclude each other; "clear" buttons (and an
-// empty size) put a field back to inheriting from Base.
 func StyleEditor(props StyleEditorProps) xango.Node {
 	resolved := props.Format.Resolve(props.Base)
 	if resolved.FontSize <= 0 {
@@ -88,7 +72,6 @@ func StyleEditor(props StyleEditorProps) xango.Node {
 
 	var rows []xango.Node
 
-	// Row 1: font family, size, weight.
 	var fontRow []xango.Node
 	if props.FontPicker != nil {
 		picker := *props.FontPicker
@@ -137,7 +120,6 @@ func StyleEditor(props StyleEditorProps) xango.Node {
 	}), weightOpts...))
 	rows = append(rows, xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor-row")}, fontRow...))
 
-	// Row 2: toggles.
 	rows = append(rows, xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor-row gj-styleeditor-toggles"), xango.A("role", "group")},
 		toggle("bold", "B", "Bold", resolved.FontWeight >= 600, func(f *canvas.Format) {
 			if resolved.FontWeight >= 600 {
@@ -163,7 +145,6 @@ func StyleEditor(props StyleEditorProps) xango.Node {
 		}),
 	))
 
-	// Row 3: colors.
 	colorField := func(field, label, value string, set func(*canvas.Format, string)) xango.Node {
 		hex := value
 		if !isHexColor(hex) {
@@ -187,7 +168,6 @@ func StyleEditor(props StyleEditorProps) xango.Node {
 		colorField("background", "Highlight", props.Format.Background, func(f *canvas.Format, v string) { f.Background = v }),
 	))
 
-	// Preview.
 	text := props.PreviewText
 	if text == "" {
 		text = "The quick brown fox jumps over the lazy dog"
@@ -199,8 +179,6 @@ func StyleEditor(props StyleEditorProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-styleeditor")}, rows...)
 }
 
-// primaryFamily extracts the first family from a CSS font-family list
-// (`"Open Sans", sans-serif` -> `Open Sans`).
 func primaryFamily(css string) string {
 	first, _, _ := strings.Cut(css, ",")
 	first = strings.TrimSpace(first)

@@ -9,21 +9,15 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// CaptionDraft is the caption being typed in the form under the track.
 type CaptionDraft struct {
-	// Start and End are the times as typed (seconds, mm:ss or hh:mm:ss, with a fraction if wanted).
 	Start, End, Text string
 }
 
 // CaptionEditorProps configures CaptionEditor.
 type CaptionEditorProps struct {
-	// ID is a prefix for the ids of the fields ("cap-0" gives cap-0-track, cap-0-start ...), so a page can have
-	// several editors and a test can find the fields.
-	ID string
-	// Track is the caption track as WebVTT text; OnTrack is called with the new text when it is edited.
+	ID      string
 	Track   string
 	OnTrack func(string)
-	// Draft is the caption being typed in the form; OnDraft keeps it; OnAdd adds it to the track when it is valid.
 	Draft   CaptionDraft
 	OnDraft func(CaptionDraft)
 	OnAdd   func()
@@ -32,7 +26,6 @@ type CaptionEditorProps struct {
 	Disabled bool
 }
 
-// captionProblem says a problem of a track in words.
 func captionProblem(p docfile.CueProblem) string {
 	switch p.Kind {
 	case "no-header":
@@ -47,8 +40,6 @@ func captionProblem(p docfile.CueProblem) string {
 	return trf("cap.p.noText", "Caption %d has no text or no readable times.", p.Cue)
 }
 
-// ParseCaptionTime reads a time typed in the caption form: seconds ("12.5"), "mm:ss" or "hh:mm:ss", with a
-// fraction on the last part.
 func ParseCaptionTime(s string) (float64, bool) {
 	s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
 	if s == "" {
@@ -65,9 +56,6 @@ func ParseCaptionTime(s string) (float64, bool) {
 	return cues[0].Start, true
 }
 
-// CaptionEditor edits a caption track: the track's text (WebVTT), the captions it holds as a list with their times,
-// what is wrong with it in words, and a form to add a caption. The list is for reading and checking; the text
-// is what is edited.
 func CaptionEditor(p CaptionEditorProps) xango.Node {
 	cues, problems := docfile.ParseCues(p.Track)
 	if strings.TrimSpace(p.Track) == "" {
@@ -121,7 +109,7 @@ func CaptionEditor(p CaptionEditorProps) xango.Node {
 				xango.El("th", []xango.Attr{xango.A("scope", "col")}, xango.Text(tr("cap.text", "Caption"))))),
 			xango.El("tbody", nil, rows...)))
 	}
-	cur := p.Draft // the three fields share it, so typing in one keeps what was typed in the others
+	cur := p.Draft
 	set := func(f func(*CaptionDraft, string)) func(string) {
 		return func(v string) {
 			f(&cur, v)
@@ -147,8 +135,6 @@ func CaptionEditor(p CaptionEditorProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-captions"), xango.A("id", p.ID)}, nodes...)
 }
 
-// AddCaption adds the drafted caption to a track and returns the new track, or the track unchanged and what is
-// wrong in words (the times unreadable, the end not after the start, the text empty).
 func AddCaption(track string, d CaptionDraft) (string, string) {
 	start, ok1 := ParseCaptionTime(d.Start)
 	end, ok2 := ParseCaptionTime(d.End)

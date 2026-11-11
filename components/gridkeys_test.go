@@ -7,7 +7,6 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 )
 
-// Only one choice of a symbol grid is in the tab order (the first), and one chip (the chosen category).
 func TestSymbolPickerHasOneTabStop(t *testing.T) {
 	html := render(t, SymbolPicker(SymbolPickerProps{Category: "Math"}))
 	if n := strings.Count(html, `class="gj-symbol" type="button"`); n < 20 {

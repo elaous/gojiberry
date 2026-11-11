@@ -11,23 +11,15 @@ import (
 // LinkPreviewProps configures LinkPreview.
 type LinkPreviewProps struct {
 	// URL is the link's address.
-	URL string
-	// Title, Description, Image and SiteName are what the page at URL
-	// says about itself (Open Graph tags, say). A browser cannot read
-	// them from another site, so the app fetches them on a server and
-	// passes them in; anything left empty is simply not shown.
+	URL                                 string
 	Title, Description, Image, SiteName string
 	// Loading shows a placeholder while they are being fetched.
 	Loading bool
-	// OnOpen is called when the card is clicked (otherwise it is an
-	// ordinary link that opens in a new tab).
-	OnOpen func()
+	OnOpen  func()
 	// OnClose, if set, adds a close button.
 	OnClose func()
 }
 
-// LinkHost returns the host part of a URL for display ("example.com"),
-// or the URL itself if it does not parse.
 func LinkHost(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -36,9 +28,6 @@ func LinkHost(raw string) string {
 	return strings.TrimPrefix(u.Host, "www.")
 }
 
-// LinkPreview renders a small card for a link: its image, title,
-// description and site. With only a URL it shows the host; renders nothing
-// without one. The card is itself a link to the URL.
 func LinkPreview(props LinkPreviewProps) xango.Node {
 	if props.URL == "" {
 		return xango.Frag()

@@ -63,7 +63,6 @@ func TestAlert(t *testing.T) {
 	if len(handlers) == 0 {
 		t.Fatal("expected at least one click handler (OK button)")
 	}
-	// The OK button's handler is the last one registered (after the backdrop's, if any).
 	handlers[len(handlers)-1](xango.Event{})
 	if !closed {
 		t.Error("clicking OK did not invoke OnClose")
@@ -88,7 +87,6 @@ func TestConfirm(t *testing.T) {
 	mustContain(t, html, `role="alertdialog"`, "Delete?", "This cannot be undone", ">Cancel<", ">OK<")
 
 	handlers := findHandlers(n, "click")
-	// backdrop (OnClose=OnCancel), Cancel button, Confirm button -- in that order.
 	if len(handlers) != 3 {
 		t.Fatalf("expected 3 click handlers, got %d", len(handlers))
 	}
@@ -205,7 +203,6 @@ func TestContextMenu(t *testing.T) {
 			OnClose: func() { closed = true },
 		})
 		handlers := findHandlers(n, "click")
-		// backdrop + the one enabled item.
 		if len(handlers) != 2 {
 			t.Fatalf("expected 2 click handlers, got %d", len(handlers))
 		}

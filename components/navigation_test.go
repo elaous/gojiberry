@@ -21,7 +21,6 @@ func TestBreadcrumbs(t *testing.T) {
 	t.Run("the last item is plain text with aria-current", func(t *testing.T) {
 		html := render(t, Breadcrumbs(BreadcrumbsProps{Items: items}))
 		mustContain(t, html, `aria-current="page"`, ">Current<")
-		// The last item must not render as a link even though it's just text.
 		mustNotContain(t, html, `href`+`="/Current"`)
 	})
 
@@ -84,11 +83,9 @@ func TestPagination(t *testing.T) {
 		var got int
 		n := Pagination(PaginationProps{Page: 1, TotalPages: 5, OnChange: func(p int) { got = p }})
 		handlers := findHandlers(n, "click")
-		// Prev(disabled, no handler), 1..5, Next -- 5 enabled buttons get handlers.
 		if len(handlers) == 0 {
 			t.Fatal("expected at least one click handler")
 		}
-		// Clicking "2" (the second enabled handler, since Prev is disabled on page 1).
 		handlers[1](xango.Event{})
 		if got != 2 {
 			t.Errorf("OnChange got %d, want 2", got)
@@ -193,7 +190,6 @@ func TestWizard(t *testing.T) {
 			OnStep: func(i int) { stepped = i },
 		})
 		clickHandlers := findHandlers(n, "click")
-		// 3 step headers + Back + Next = 5 handlers, since Active=1 means Back is enabled.
 		if len(clickHandlers) != 5 {
 			t.Fatalf("expected 5 click handlers, got %d", len(clickHandlers))
 		}

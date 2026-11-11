@@ -34,10 +34,8 @@ func TestMyPasskeyIsHiddenUnsupportedOrReady(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("AddMyPasskey called %d times", calls)
 	}
-	// After it worked the host shows the fingerprint that was added.
 	p.MyPasskeyAdded = &RecipientRow{Type: "passkey-prf", Fingerprint: "SHA256:mine"}
 	mustContain(t, render(t, Recipients(p)), "Your passkey was added", "SHA256:mine")
-	// A document that is not confidential never asks for a second key.
 	p.Owner = []RecipientRow{{Type: "passkey-prf", Fingerprint: "SHA256:p1"}}
 	mustNotContain(t, render(t, Recipients(p)), "gj-recip-need-second")
 }
@@ -62,20 +60,16 @@ func TestMyPasskeyNeedsASecondKeyOnAConfidentialDocument(t *testing.T) {
 	if !strings.Contains(html, `class="gj-recip-add-mine" disabled="disabled"`) {
 		t.Errorf("the passkey button is off: %s", html)
 	}
-	clickAll(n) // the disabled button has no handler: only Create a recovery key acts
+	clickAll(n)
 	if created != 1 || shown != "AGE-SECRET-KEY-1TEST" {
 		t.Fatalf("created %d, shown %q", created, shown)
 	}
-	// The secret never appears until the host passes it back.
 	mustNotContain(t, html, "AGE-SECRET-KEY")
 
-	// A key that is not a passkey among the owner's keys lifts the rule.
 	p.Owner = append(p.Owner, RecipientRow{Type: "age-x25519", Fingerprint: "SHA256:rec"})
 	mustNotContain(t, render(t, Recipients(p)), "gj-recip-need-second")
-	// So do no owner keys at all? No: nothing is not a recovery key.
 	p.Owner = nil
 	mustContain(t, render(t, Recipients(p)), "gj-recip-need-second")
-	// An empty message falls back to the default wording.
 	p.SecondKeyMessage = ""
 	mustContain(t, render(t, Recipients(p)), "A passkey cannot be the only key")
 }
@@ -101,10 +95,8 @@ func TestRecoveryKeyIsShownOnceWithAKeepOfflineWarning(t *testing.T) {
 	if copied != "AGE-SECRET-KEY-1ABC" || downloaded != "recovery-key.txt:AGE-SECRET-KEY-1ABC\n" || done != 1 {
 		t.Errorf("copied %q downloaded %q done %d", copied, downloaded, done)
 	}
-	// Once the host drops it, the secret is gone from the page.
 	p.RecoverySecret = ""
 	mustNotContain(t, render(t, Recipients(p)), "AGE-SECRET-KEY", "gj-recip-secret")
-	// Without Copy and Download those buttons are left out.
 	p.RecoverySecret, p.Copy, p.Download = "AGE-SECRET-KEY-1ABC", nil, nil
 	mustNotContain(t, render(t, Recipients(p)), "gj-recip-copy", "gj-recip-download")
 }
@@ -134,12 +126,10 @@ func TestVerifiedMarkAndDirectoryPicker(t *testing.T) {
 		OnPick:       func(r DirRow) { picked = r },
 	}
 	html := render(t, Recipients(p))
-	// The list marks verified keys; label-only keys carry no mark there (already confirmed).
 	if strings.Count(html, "verified e-mail") != 1 {
 		t.Errorf("one verified mark in the list: %s", html)
 	}
 	mustContain(t, html, "gj-recip-dir-email", "Find keys")
-	// Find is off until an address is typed.
 	mustContain(t, html, `class="gj-recip-dir-find" disabled="disabled"`)
 	p.DirEmail = " bo@x.io "
 	clickAll(Recipients(p))
@@ -156,10 +146,8 @@ func TestVerifiedMarkAndDirectoryPicker(t *testing.T) {
 	if picked.Fingerprint != "SHA256:l" {
 		t.Errorf("picked %+v", picked)
 	}
-	// Nothing found.
 	p.DirResults = nil
 	mustContain(t, render(t, Recipients(p)), "No keys are published for that address", "label only")
-	// Without Directory there is no picker.
 	p.Directory = nil
 	mustNotContain(t, render(t, Recipients(p)), "gj-recip-dir")
 }
@@ -185,13 +173,11 @@ func TestVerifiedKeySkipsTypingOnlyWhenTheHostTrustsIt(t *testing.T) {
 		Parsed: &RecipientRow{Label: "bo@x.io", Type: "age-x25519", Fingerprint: "SHA256:v", Verified: true},
 		Add:    func(_ context.Context, k, c string) error { added = append(added, k+"|"+c); return nil },
 	}
-	// Default: verified or not, the fingerprint is typed.
 	html := render(t, Recipients(p))
 	mustContain(t, html, "verified e-mail", "gj-recip-confirm", "Check this fingerprint")
 	if !disabledAdd(t, p) {
 		t.Error("typing is still required without TrustVerified")
 	}
-	// TrustVerified: the fingerprint is shown, nothing is typed, and Add confirms with it.
 	p.TrustVerified = true
 	html = render(t, Recipients(p))
 	mustContain(t, html, "SHA256:v", "verified e-mail")
@@ -203,7 +189,6 @@ func TestVerifiedKeySkipsTypingOnlyWhenTheHostTrustsIt(t *testing.T) {
 	if len(added) != 1 || added[0] != "age1v|SHA256:v" {
 		t.Errorf("added %v", added)
 	}
-	// A label-only key still needs the typed fingerprint, trusted or not.
 	p.Parsed = &RecipientRow{Label: "cy", Type: "age-x25519", Fingerprint: "SHA256:l"}
 	html = render(t, Recipients(p))
 	mustContain(t, html, "label only: confirm the fingerprint", "gj-recip-confirm")
@@ -230,8 +215,6 @@ func TestRecoveryKeyButtonNeedsAHostThatCanShowTheSecret(t *testing.T) {
 	mustContain(t, render(t, Recipients(p)), "Create a recovery key")
 }
 
-// A recovery key whose secret is shown before the store commits it: the key is not added until the
-// person says they saved the secret and confirms; cancelling adds nothing.
 func TestRecoveryKeyIsCommittedOnlyAfterTheSecretIsAcknowledged(t *testing.T) {
 	var committed, cancelled, acked int
 	p := RecipientsProps{
@@ -301,7 +284,6 @@ func TestOwnerKeysCanBeRemovedOrReplacedAfterAsking(t *testing.T) {
 	}
 	all := strings.Join(asked, "\n")
 	mustContain(t, all, "encrypted again without it", "keeps what they already read", "encrypted again for it", "stays in your authenticator")
-	// Without the operations no control is drawn.
 	p.RemoveOwner, p.ReplaceOwner = nil, nil
 	mustNotContain(t, render(t, Recipients(p)), "gj-recip-remove-owner", "gj-recip-replace")
 }
@@ -341,8 +323,6 @@ func TestRecoveryKeyIsOfferedBesidesAnSSHKeyToo(t *testing.T) {
 	}
 }
 
-// A verified mark is the directory's word: when the host names the directory, the mark says which
-// ("verified by host"), in the list, in the parsed key and in the picker.
 func TestVerifiedMarkNamesTheDirectory(t *testing.T) {
 	p := RecipientsProps{
 		Owner:   []RecipientRow{{Label: "me", Type: "age-x25519", Fingerprint: "SHA256:me"}},
@@ -363,15 +343,12 @@ func TestVerifiedMarkNamesTheDirectory(t *testing.T) {
 	if strings.Contains(html, "verified e-mail<") {
 		t.Errorf("the plain mark is still shown: %s", html)
 	}
-	// Without the host, the plain mark.
 	p.Shared[0].VerifiedBy, p.Parsed.VerifiedBy, p.DirResults[0].VerifiedBy = "", "", ""
 	if html := render(t, Recipients(p)); strings.Contains(html, "verified by") || !strings.Contains(html, "verified e-mail") {
 		t.Errorf("%s", html)
 	}
 }
 
-// A key whose own signature binds it to the address shows a stronger mark than a verified one;
-// a key that is only verified keeps the plain mark, and neither claims the key is safe.
 func TestAttestedKeysShowAStrongerMark(t *testing.T) {
 	p := RecipientsProps{
 		Shared:  []RecipientRow{{Label: "bo@x.io", Type: "ssh-ed25519", Fingerprint: "SHA256:bo", Verified: true, Attested: true}, {Label: "cy", Type: "age-x25519", Fingerprint: "SHA256:cy", Verified: true}},
@@ -392,14 +369,10 @@ func TestAttestedKeysShowAStrongerMark(t *testing.T) {
 		t.Errorf("attested marks: %d in %s", strings.Count(html, "gj-recip-attested"), html)
 	}
 	mustContain(t, html, "verified e-mail, signed by the key", "does not prove the key is safe", "label only: confirm the fingerprint")
-	// A draft that parsed to an attested key shows it.
 	p.Parsed = &RecipientRow{Type: "ssh-ed25519", Fingerprint: "SHA256:a", Verified: true, Attested: true}
 	mustContain(t, render(t, Recipients(p)), "gj-recip-parsed-fingerprint")
 }
 
-// The owner's own signature is the strongest mark, above the key's attestation and the verified
-// e-mail; a verified key of an address that has an owner key but was not signed by it says so; and
-// nothing shows an owner mark on a key that is not verified.
 func TestOwnerSignedKeysShowTheStrongestMark(t *testing.T) {
 	p := RecipientsProps{
 		Shared: []RecipientRow{

@@ -8,12 +8,9 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// PasskeyRow is a passkey of the signed-in person, as the list shows it.
 type PasskeyRow struct {
 	ID, Label, Created, LastUsed string
-	// Synced says the passkey is backed up by a password manager or the platform (it can be used on
-	// the person's other devices, and is not lost with this one).
-	Synced bool
+	Synced                       bool
 }
 
 // PasskeyProps configures Passkey.
@@ -21,28 +18,18 @@ type PasskeyProps struct {
 	// Supported says the browser can make and use passkeys here.
 	Supported bool
 	// SignedIn says someone is signed in; Rows are their passkeys.
-	SignedIn bool
-	Rows     []PasskeyRow
-	// Email and Label are what is typed: the address for a new account, the name of a passkey
-	// being added. OnDraft reports changes to either.
+	SignedIn     bool
+	Rows         []PasskeyRow
 	Email, Label string
 	OnDraft      func(email, label string)
-	// SignIn signs in with a passkey; Create makes an account with one (needs an e-mail address);
-	// Add adds a passkey to the signed-in account; Remove deletes one. A nil operation leaves its
-	// control out.
-	SignIn  func(ctx context.Context) error
-	Create  func(ctx context.Context, email, label string) error
-	Add     func(ctx context.Context, label string) error
-	Remove  func(ctx context.Context, id string) error
-	Pending *Pending
-	// Ask, if set, is asked before a passkey is removed (see Asker.Ask).
-	Ask func(message string, do func())
+	SignIn       func(ctx context.Context) error
+	Create       func(ctx context.Context, email, label string) error
+	Add          func(ctx context.Context, label string) error
+	Remove       func(ctx context.Context, id string) error
+	Pending      *Pending
+	Ask          func(message string, do func())
 }
 
-// Passkey is the sign-in and passkey-management control: "Sign in with a passkey" and "Create an
-// account with a passkey" when nobody is signed in, and the person's passkeys with Add and Remove
-// when someone is. A passkey is two factors in itself (the device, and the fingerprint, face or
-// PIN that unlocks it), so there is no separate code to type; the control says so.
 func Passkey(p PasskeyProps) xango.Node {
 	busy := p.Pending.Busy()
 	if !p.Supported {
@@ -115,9 +102,6 @@ func Passkey(p PasskeyProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-passkey")}, children...)
 }
 
-// passkeyError is pendingError, except that the answer "another tab or device already made this
-// account's first passkey" (an error with PasskeyCode "account_exists", see auth/passkey/client)
-// is shown in the interface's language.
 func passkeyError(p *Pending) []xango.Node {
 	var coded interface{ PasskeyCode() string }
 	if err := p.Err(); err != nil && errors.As(err, &coded) && coded.PasskeyCode() == "account_exists" {

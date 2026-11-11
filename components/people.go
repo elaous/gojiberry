@@ -11,29 +11,19 @@ import (
 
 // PeopleProps configures People.
 type PeopleProps struct {
-	People []user.Person
-	// Roles are the roles that can be given, in the order offered ("editor",
-	// "viewer" if empty).
-	Roles []string
-	// Invite gives someone a role; SetRole changes one; Remove takes access away.
-	// A nil operation leaves its control out. The owner's row has none.
-	Invite  func(ctx context.Context, id, role string) error
-	SetRole func(ctx context.Context, id, role string) error
-	Remove  DocAction
-	// Draft is the address being typed to invite, and DraftRole the role chosen
-	// for them (the first of Roles if empty); OnDraft reports changes to either.
+	People           []user.Person
+	Roles            []string
+	Invite           func(ctx context.Context, id, role string) error
+	SetRole          func(ctx context.Context, id, role string) error
+	Remove           DocAction
 	Draft, DraftRole string
 	OnDraft          func(id, role string)
 	// Self is the signed-in user, who cannot remove themselves here.
 	Self    string
 	Pending *Pending
-	// Confirm, if set, is asked before access is removed (see Asker.Ask).
 	Confirm func(message string, do func())
 }
 
-// People lists who can open a document, each with a role to change and a Remove,
-// and a form to invite someone. Like the other document components it knows
-// nothing about where access is kept: a docstore ACL, an HTTP API, a test double.
 func People(p PeopleProps) xango.Node {
 	roles := p.Roles
 	if len(roles) == 0 {

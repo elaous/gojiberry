@@ -7,9 +7,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Dropdown's keyboard model: Down on the button opens the list and goes to the first option, the
-// arrows move among the options, Enter chooses (the focus goes back to the button first), Escape closes
-// and gives the focus back, and every option can take the focus.
 func TestDropdownKeyboard(t *testing.T) {
 	var opened []bool
 	var chosen []string
@@ -61,7 +58,6 @@ func TestDropdownKeyboard(t *testing.T) {
 	if calls, prevented := press(keys[1], "Tab"); !slices.Equal(opened, []bool{false}) || len(calls) != 0 || prevented {
 		t.Errorf("Tab closes the list and lets the focus leave: %v %+v %v", opened, calls, prevented)
 	}
-	// the options can take the focus without being in the Tab order
 	options, focusable := 0, 0
 	var walk func(xango.Node)
 	walk = func(n xango.Node) {

@@ -37,8 +37,6 @@ func TestCollabAnnouncerSaysMergedAndRejectedChanges(t *testing.T) {
 	if a.Pending() {
 		t.Fatal("all said")
 	}
-	// Said with the connection coming back, and at the connection-only level too (work was kept or lost,
-	// whoever is there); not at all when announcements are off.
 	b := CollabAnnouncer{Every: time.Second, Level: CollabImportant}
 	b.Update(t0, true, nil, "")
 	b.Update(t0.Add(2*time.Second), false, nil, "")
@@ -77,7 +75,6 @@ func TestWhereSentenceSaysThePlaceOnlyWhenAsked(t *testing.T) {
 			t.Errorf("anchor %d caret %d: got %q want %q", c.anchor, c.caret, got, c.want)
 		}
 	}
-	// An object in the text (U+FFFC) is not read out as a character.
 	if got := WhereSentence("Bo", "see \uFFFC", 5, 5, true); got != `Bo is in paragraph 1 of 1, after "see".` {
 		t.Errorf("object: %q", got)
 	}

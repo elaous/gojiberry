@@ -108,8 +108,6 @@ func TestAccessibleTextCarriesTheMappingToTheEditor(t *testing.T) {
 	}
 }
 
-// A block with a right-to-left letter in it says dir=auto, so the copy is read and selected in the direction
-// the canvas lays it out in; a block without one is left as it was.
 func TestAccessibleTextMarksRightToLeftBlocks(t *testing.T) {
 	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
 		{Kind: A11yParagraph, Text: "Plain"},

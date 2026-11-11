@@ -10,19 +10,14 @@ import (
 // ProposalPanelProps configures ProposalPanel.
 type ProposalPanelProps struct {
 	// ID is the list's id; "proposals" when empty.
-	ID        string
-	Proposals []canvas.Proposal
-	// Suggesting says whether suggestion mode is on; OnMode turns it on or off.
-	Suggesting bool
-	OnMode     func(on bool)
-	// OnAccept and OnReject settle one suggestion; OnAcceptAll and OnRejectAll settle all of them.
+	ID                       string
+	Proposals                []canvas.Proposal
+	Suggesting               bool
+	OnMode                   func(on bool)
 	OnAccept, OnReject       func(id string)
 	OnAcceptAll, OnRejectAll func()
 }
 
-// ProposalPanel lists the suggested changes of a document with buttons to accept or reject each (and
-// all), and a switch for suggestion mode. Each suggestion is a sentence ("Ana replaced 'brown' with
-// 'red'"), so the list reads well without colors, and each button names the suggestion it is for.
 func ProposalPanel(p ProposalPanelProps) xango.Node {
 	id := p.ID
 	if id == "" {
@@ -71,8 +66,6 @@ func ProposalPanel(p ProposalPanelProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-proposals"), xango.A("id", id)}, children...)
 }
 
-// ProposalSentence says a suggested change in a sentence: "Ana replaced 'brown' with 'red'", "Ana added
-// 'X'" or "Ana removed 'brown'". Long text is cut short.
 func ProposalSentence(p canvas.Proposal) string {
 	who := p.Author
 	if who == "" {
@@ -87,7 +80,6 @@ func ProposalSentence(p canvas.Proposal) string {
 	return trf("proposals.added", "%s added '%s'", who, shorten(p.Inserted))
 }
 
-// shorten cuts text to 50 characters with an ellipsis, and makes line breaks visible as a space.
 func shorten(s string) string {
 	out := make([]rune, 0, 51)
 	for _, r := range s {
