@@ -15,12 +15,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Config is the mongo backend's own config, decoded from
-// Config.BackendConfig when Config.Backend == "mongo".
+// Config is the mongo backend's configuration.
 type Config struct {
 	URI string `json:"uri"`
-	// DB is the database name backing the documents collection.
-	// Defaults to "docstore" if empty.
+	// DB is the database name holding the documents.
 	DB string `json:"db"`
 }
 
@@ -39,23 +37,19 @@ func init() {
 	})
 }
 
-// mongoDoc is documents collection's on-disk shape. _id holds the
-// document ID directly (never an ObjectID) so lookups are a plain
-// equality match on the caller-supplied string.
+// mongoDoc is a document's record in the collection.
 type mongoDoc struct {
 	ID        string    `bson:"_id"`
 	Data      []byte    `bson:"data"`
 	UpdatedAt time.Time `bson:"updated_at"`
 }
 
-// Adapter stores each document as one document in a single
-// MongoDB collection.
+// Adapter stores each document as one document in MongoDB.
 type Adapter struct {
 	coll *mongo.Collection
 }
 
-// New connects to uri and uses db.documents as the
-// backing collection.
+// New connects to uri and uses the documents collection.
 func New(ctx context.Context, uri, db string) (*Adapter, error) {
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
@@ -73,10 +67,7 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return err
 }
 
-// SaveIf implements docstore.ConditionalAdapter: a new document is inserted (a duplicate
-// key is a conflict), and a changed one is replaced with a filter on the bytes that were
-// read and found to be what prevDigest says, so nothing replaced it in between: a filter
-// that matches nothing is a conflict.
+// SaveIf implements docstore.ConditionalAdapter.
 func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
 	doc := mongoDoc{ID: id, Data: data, UpdatedAt: time.Now()}
 	if prevDigest == "" {
@@ -107,8 +98,7 @@ func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest
 	return nil
 }
 
-// DeleteIf implements docstore.ConditionalDeleter: the delete filters on the bytes that were
-// read and found to be what prevDigest says, so nothing replaced them in between.
+// DeleteIf implements docstore.ConditionalDeleter.
 func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
 	var cur mongoDoc
 	err := a.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&cur)
@@ -147,9 +137,7 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, bson.M{})
 }
 
-// prefixFilter matches the documents whose _id starts with prefix: a regular expression
-// anchored at the start with the prefix quoted, which MongoDB answers from the _id index as a
-// range scan (case-sensitive and anchored, so no full scan).
+// prefixFilter matches documents whose ID starts with prefix.
 func prefixFilter(prefix string) bson.M {
 	return bson.M{"_id": bson.M{"$regex": "^" + regexp.QuoteMeta(prefix)}}
 }
