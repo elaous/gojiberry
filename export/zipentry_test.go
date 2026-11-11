@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// LibreOffice refuses an ODT whose first entry has a data descriptor, and some readers a date with month 0:
-// the packages start with a stored mimetype whose size is in its header, and every entry has a real date.
 func TestPackagesStartWithAPlainMimetypeAndHaveDates(t *testing.T) {
 	snap := Snapshot{Title: "T", Blocks: []Block{{Kind: Paragraph, Segments: []Segment{{Text: "x"}}}}}
 	for name, ex := range map[string]Exporter{"odt": ODT{}, "epub": EPUB{}, "docx": DOCX{}} {

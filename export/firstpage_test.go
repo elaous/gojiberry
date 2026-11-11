@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/pdftext"
 )
 
-// A document may give its first page a header and footer of its own (a title page is bare): the model keeps
-// it in Meta, only while the switch is on, and drops it when it is off.
 func TestFirstPageLayoutRoundTripsThroughMeta(t *testing.T) {
 	var d docfile.Document
 	d.SetPageLayout(docfile.PageLayout{Header: "H", Footer: "F", FirstDiffers: true, FirstHeader: "FH"})

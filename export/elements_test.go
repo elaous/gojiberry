@@ -134,11 +134,9 @@ func TestFootnotesLinkBothWaysInHTML(t *testing.T) {
 			wellFormed(t, page)
 		}
 		for _, n := range []string{"1", "2"} {
-			// The mark links to its note ...
 			if !regexp.MustCompile(`<sup id="fnref-` + n + `"><a href="#fn-` + n + `" aria-label="Footnote ` + n + `">` + n + `</a></sup>`).MatchString(page) {
 				t.Errorf("%s: the mark of note %s is not a link to it: %s", name, n, page)
 			}
-			// ... the note has the id the mark points at, and a link back to the mark.
 			if !regexp.MustCompile(`<li id="fn-` + n + `">[^<]*<a href="#fnref-` + n + `" aria-label="Back to the text of footnote ` + n + `">`).MatchString(page) {
 				t.Errorf("%s: note %s does not link back: %s", name, n, page)
 			}
@@ -147,7 +145,6 @@ func TestFootnotesLinkBothWaysInHTML(t *testing.T) {
 			t.Errorf("%s: every id is there once", name)
 		}
 	}
-	// The other formats keep the plain numbered notes.
 	text, _ := PlainText{}.Export(snap)
 	if !strings.Contains(string(text), "Source of the second.") {
 		t.Error("the note text is in the plain text")
@@ -173,7 +170,6 @@ func TestCodeBlockLanguage(t *testing.T) {
 	}
 }
 
-// The editor's typesetter (canvas.MathSymbols) and the MathML export read the notation the same way.
 func TestTypesetterAndMathMLReadTheSameSymbols(t *testing.T) {
 	re := regexp.MustCompile(`<(mi|mn|mo)>(.*?)</(?:mi|mn|mo)>`)
 	for _, f := range []string{
@@ -192,8 +188,6 @@ func TestTypesetterAndMathMLReadTheSameSymbols(t *testing.T) {
 	}
 }
 
-// A matrix is an <mtable> between brackets, aligned equations an <mtable> with columns aligned right and left, and
-// Office Math gets m:m (in a delimiter) and m:eqArr.
 func TestMatrixAndAlignedEquationsInMathMLAndOfficeMath(t *testing.T) {
 	ml := MathML(`matrix{a & b \\ c & d}`, "alt")
 	for _, want := range []string{"<mo>(</mo><mtable><mtr><mtd><mrow><mi>a</mi></mrow></mtd><mtd><mrow><mi>b</mi></mrow></mtd></mtr>", "</mtable><mo>)</mo>"} {
@@ -216,8 +210,6 @@ func TestMatrixAndAlignedEquationsInMathMLAndOfficeMath(t *testing.T) {
 	}
 }
 
-// The Office Math the export writes for a matrix and for aligned equations reads back as the same notation (the
-// brackets of a matrix are the matrix's own, not extra parentheses).
 func TestOfficeMathMatricesAndAlignedEquationsReadBack(t *testing.T) {
 	for _, formula := range []string{`matrix{a & b \\ c & d}`, `aligned{x &= 1 \\ y &= 2}`, `matrix{1 & 0 \\ 0 & 1}`} {
 		doc := docfile.Document{Content: []docfile.Item{{Equation: &docfile.EquationItem{Formula: formula, Alt: "alt"}}}}

@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/pdfua"
 )
 
-// Headings of level 4 to 6 keep their level in every format that has headings.
 func TestDeepHeadingsKeepTheirLevel(t *testing.T) {
 	doc := docfile.Document{Title: "Deep", Content: []docfile.Item{
 		{Para: &docfile.Para{Style: "Heading 1"}}, {Chars: &docfile.Chars{Text: "One\n"}},

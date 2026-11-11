@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// suggested is "the [brown]{red} fox": ana's replacement of "brown" by "red", and bo's removal of " runs".
 func suggested() docfile.Document {
 	at := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	del := canvas.ProposalMark{Kind: canvas.ProposalDelete, ID: "p1", Author: "ana@example.com", Time: at}.String()
@@ -42,7 +41,6 @@ func TestAcceptedViewHidesStruckText(t *testing.T) {
 	if got.String() != "the red fox" {
 		t.Errorf("accepted view: %q", got.String())
 	}
-	// formats that cannot show a suggestion write the accepted text, and never the struck text
 	for _, e := range []Exporter{PlainText{}, Markdown{}, RTF{}} {
 		out, err := e.Export(snap)
 		if err != nil {
@@ -100,7 +98,6 @@ func TestHTMLAndDOCXKeepSuggestionsAsTrackedChanges(t *testing.T) {
 			t.Errorf("docx missing %q in\n%s", want, doc)
 		}
 	}
-	// a document with no suggestions is written as before
 	plain := docfile.Document{Content: []docfile.Item{{Chars: &docfile.Chars{Text: "just text\n"}}}}
 	out, _ := HTML{}.Export(FromDocumentTracked(plain))
 	if strings.Contains(string(out), "<ins") || strings.Contains(string(out), "<del") {

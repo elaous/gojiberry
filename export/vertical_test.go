@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// Vertical text is written where the format has it: the writing mode of the HTML page, the text direction of the
-// Word section, the writing mode of the OpenDocument page.
 func TestVerticalTextIsWrittenWhereTheFormatHasIt(t *testing.T) {
 	snap := Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, Blocks: []Block{{Kind: Paragraph, Segments: []Segment{{Text: "日本語"}}}}}
 	h, err := HTML{}.Export(snap)

@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A block says where it starts in the editor's text stream, so the accessible copy can map the caret
-// to its text: whatever sits between (pictures, rules, tables and footnote marks are one rune each),
-// the runes of the stream from Start are the block's own text.
 func TestBlocksSayWhereTheyStartInTheTextStream(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Para: &docfile.Para{Style: "Heading 1"}},
@@ -42,7 +39,6 @@ func TestBlocksSayWhereTheyStartInTheTextStream(t *testing.T) {
 				t.Errorf("block of kind %v starts at %d, not at an object (%q)", b.Kind, b.Start, string(stream[b.Start]))
 			}
 		case strings.HasPrefix(text, "──"):
-			// a rule is drawn as a line of dashes
 		default:
 			if got := string(stream[b.Start : b.Start+len([]rune(text))]); got != text {
 				t.Errorf("block %q starts at %d, where the stream has %q", text, b.Start, got)

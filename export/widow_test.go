@@ -11,8 +11,6 @@ import (
 
 var lineBreaks = regexp.MustCompile(`(\d)(w\d)`)
 
-// widowSnapshot is paragraphs of two to six lines each, every word carrying its paragraph's number, so a
-// page's text says how many lines of each paragraph it holds.
 func widowSnapshot() Snapshot {
 	var blocks []Block
 	for i := 0; i < 40; i++ {
@@ -22,8 +20,6 @@ func widowSnapshot() Snapshot {
 	return Snapshot{Title: "T", Lang: "en", Blocks: blocks, PageWidth: 600, PageHeight: 700, MarginLeft: 60, MarginTop: 70, MarginRight: 60, MarginBottom: 70}
 }
 
-// TestPDFNeverLeavesAWidowOrAnOrphanLine checks every page: of each paragraph that is split over two
-// pages, both pages hold at least two of its lines.
 func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	data, err := PDF{}.Export(widowSnapshot())
 	if err != nil {
@@ -69,9 +65,6 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 }
 
-// TestPDFTableNeverLeavesALoneRowAtAPageEdge slides a table down the page, a line at a time, and checks every
-// page that holds part of it holds at least two of its rows (the header counts as one): the header is not
-// alone at the foot of a page and the last row is not alone at the head of one.
 func TestPDFTableNeverLeavesALoneRowAtAPageEdge(t *testing.T) {
 	const rows = 9
 	rowRe := regexp.MustCompile(`hdr|row\d\d`)

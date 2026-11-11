@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A column and a row a person sized keep their sizes in the formats that can say so.
 func sizedTableDoc() docfile.Document {
 	return docfile.Document{Title: "T", Content: []docfile.Item{
 		{Table: &docfile.TableItem{

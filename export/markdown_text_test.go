@@ -7,7 +7,6 @@ import (
 
 func seg(text string) []Segment { return []Segment{{Text: text}} }
 
-// cell is one cell of a table whose shape is rows by cols.
 func cell(r, c, rows, cols int, text string) Block {
 	return Block{Kind: TableCell, TableRow: r, TableCol: c, TableRows: rows, TableCols: cols, Segments: seg(text)}
 }
@@ -75,7 +74,6 @@ func TestMarkdownImageAndTable(t *testing.T) {
 	if strings.Contains(got, "hidden") {
 		t.Error("a covered cell repeats nothing")
 	}
-	// a table whose cells are not all there is marked, not guessed
 	cut, _ := Markdown{}.Export(Snapshot{Blocks: []Block{cell(0, 0, 2, 2, "x")}})
 	if !strings.Contains(string(cut), "[Table]") {
 		t.Errorf("a cut-off table: %q", cut)

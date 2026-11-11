@@ -78,8 +78,6 @@ func TestODTIsAnOpenDocumentPackage(t *testing.T) {
 	}
 }
 
-// With the ODF 1.2 schema (ODF_SCHEMA=path to OpenDocument-v1.2-os-schema.rng) and xmllint installed, the parts are
-// validated against it. It is how the writer was checked, since no office suite runs where it was written.
 func TestODTValidatesAgainstTheOpenDocumentSchema(t *testing.T) {
 	schema := os.Getenv("ODF_SCHEMA")
 	lint, err := exec.LookPath("xmllint")
@@ -171,8 +169,6 @@ func TestODTWeWriteIsReadBack(t *testing.T) {
 	}
 }
 
-// A table of contents is a real ODF index: a title, an entry for each heading linked to a bookmark on it, and
-// a page break after it.
 func TestODTHasATableOfContentsOfItsHeadings(t *testing.T) {
 	snap := odtSnapshot(t)
 	data, err := ODT{}.Export(snap)
@@ -196,7 +192,6 @@ func TestODTHasATableOfContentsOfItsHeadings(t *testing.T) {
 	if !strings.Contains(content, `text:style-name="Contents_20_1"`) || !strings.Contains(string(unzipAll(t, data)["styles.xml"]), `style:name="Contents_20_1"`) {
 		t.Errorf("the entry style is used but not defined")
 	}
-	// the index comes first, before the first heading
 	if strings.Index(content, "<text:table-of-content ") > strings.Index(content, "<text:h ") {
 		t.Errorf("the contents are not at the start")
 	}
@@ -207,8 +202,6 @@ func TestODTHasATableOfContentsOfItsHeadings(t *testing.T) {
 	}
 }
 
-// The contents index is made from the headings, so reading the file back does not turn its entries into text:
-// every heading is in the document once.
 func TestODTContentsAreNotReadBackAsText(t *testing.T) {
 	snap := odtSnapshot(t)
 	data, err := ODT{}.Export(snap)

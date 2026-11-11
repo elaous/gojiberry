@@ -7,8 +7,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A saved equation, code block and diagram reach the exports (roadmap 78).
-
 func elementsDoc() docfile.Document {
 	return docOf(
 		plain("Before\n"),
@@ -39,7 +37,6 @@ func TestSavedEquationIsMathMLInHTMLAndWordsEverywhereElse(t *testing.T) {
 			t.Errorf("%s: the text alternative of the equation is not in the file", format)
 		}
 	}
-	// an equation saved without a text alternative still shows its formula, never nothing
 	bare := docOf(plain("a\n"), docfile.Item{Equation: &docfile.EquationItem{Formula: "x^2"}}, plain("b\n"))
 	for _, format := range []string{"docx", "markdown", "text", "html"} {
 		if !strings.Contains(strings.ReplaceAll(string(exportOne(t, r, format, bare)), `\`, ""), "x^2") { // Markdown escapes the caret
@@ -88,7 +85,6 @@ func TestCodeParagraphsAreOneBlockWithTheirLanguage(t *testing.T) {
 	if !strings.Contains(string(md), "```go\nx := 1\ny := 2\n```") {
 		t.Errorf("Markdown fence:\n%s", md)
 	}
-	// a language that cannot be a class name is not written
 	d := docOf(paraItem(docfile.Para{Style: "Code", CodeLang: `"><script>`}), plain("x\n"))
 	out, _ = HTML{}.Export(FromDocument(d))
 	if strings.Contains(string(out), "script") || !strings.Contains(string(out), "<pre><code>x</code></pre>") {
@@ -116,7 +112,6 @@ func TestDiagramLongDescriptionFollowsThePictureAndIsLinkedInHTML(t *testing.T) 
 			t.Errorf("%s: the long description is not in the file", format)
 		}
 	}
-	// without one, the picture is what it was
 	d.Content[len(d.Content)-2].Image.LongDesc = ""
 	if out := string(exportOne(t, r, "html", d)); strings.Contains(out, "describedby") || strings.Contains(out, "longdesc") {
 		t.Errorf("a picture with no long description points to one:\n%s", out)
@@ -141,7 +136,6 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 			t.Errorf("Word: %s is missing", want)
 		}
 	}
-	// every anchor names a bookmark that exists, and the bookmark ids are unique
 	ids := map[string]bool{}
 	for _, part := range strings.Split(word, "<w:bookmarkStart ")[1:] {
 		id := part[strings.Index(part, `w:id="`)+6:]
@@ -172,7 +166,6 @@ func TestFootnotesLinkBothWaysInRTF(t *testing.T) {
 			t.Errorf("RTF: %s is missing:\n%s", want, rtf)
 		}
 	}
-	// every link names a bookmark that exists
 	for _, part := range strings.Split(rtf, `HYPERLINK \\l `)[1:] {
 		name := part[:strings.Index(part, "}")]
 		if !strings.Contains(rtf, `{\*\bkmkstart `+name+`}`) {

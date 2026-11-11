@@ -88,7 +88,6 @@ func TestDecodeDataURLImage(t *testing.T) {
 	if err != nil || img.Bounds().Dx() != 3 || img.Bounds().Dy() != 2 {
 		t.Fatalf("%v %v", img, err)
 	}
-	// without the "data:...," head the payload alone is accepted
 	raw := strings.TrimPrefix(pngDataURL(t, 2, 2), "data:image/png;base64,")
 	if _, err := decodeDataURLImage(raw); err != nil {
 		t.Errorf("bare base64: %v", err)
@@ -102,7 +101,6 @@ func TestDecodeDataURLImage(t *testing.T) {
 }
 
 func TestOwnerOfAndHeadingLevelAndRawCode(t *testing.T) {
-	// a 2x2 table whose first cell spans both columns: (0,1) belongs to (0,0)
 	cells := []Block{
 		{TableColSpan: 2, TableRowSpan: 1}, {TableCovered: true},
 		{TableColSpan: 1, TableRowSpan: 1}, {TableColSpan: 1, TableRowSpan: 1},
@@ -124,7 +122,6 @@ func TestOwnerOfAndHeadingLevelAndRawCode(t *testing.T) {
 	}
 }
 
-// A picture's legend is written under the picture in every format, as a paragraph in italics.
 func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
 	d := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Before\n"}},
@@ -152,7 +149,6 @@ func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
 			t.Errorf("%s does not carry the legend:\n%.300s", format, out)
 		}
 	}
-	// Word and OpenDocument keep their text in a zip: read the part that holds it.
 	for format, part := range map[string]string{"docx": "word/document.xml", "odt": "content.xml"} {
 		raw := rawOne(t, registry(), format, d)
 		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
@@ -196,7 +192,6 @@ func TestTableFormulasAreWrittenAsTheirValues(t *testing.T) {
 	}
 }
 
-// A picture found in an image repository keeps its credit in the picture's properties: Word's title, ODT's description.
 func TestImageCreditTravelsInWordAndODTProperties(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{{Image: &docfile.ImageItem{
 		URL: tinyPNG, Alt: "A dot", Credit: "Dot by Ann, CC BY 4.0, via Openverse", SourceURL: "https://example.org/dot"}}}}

@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/pdftext"
 )
 
-// Every export carries the text that stands for a clip, so a reader who cannot play it still has the words: its
-// name as a link, and its transcript (or the words of its captions) under "Transcript".
 func TestEveryExportCarriesTheTranscriptOfAClip(t *testing.T) {
 	r := registry()
 	vtt := "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\n<v Ann>Good morning to you.</v>\n"
@@ -37,7 +35,6 @@ func TestEveryExportCarriesTheTranscriptOfAClip(t *testing.T) {
 			}
 		}
 	}
-	// The name is a link to the clip where the format has links; a clip with no words writes its line alone.
 	d := docOf(docfile.Item{Media: &docfile.MediaItem{URL: "https://example.com/talk.mp4", Title: "The talk"}})
 	if out := string(exportOne(t, r, "html", d)); !strings.Contains(out, `<video controls src="https://example.com/talk.mp4"`) || !strings.Contains(out, "<figcaption>The talk</figcaption>") || strings.Contains(out, "Transcript") {
 		t.Errorf("html of a clip with no words: %s", out)
