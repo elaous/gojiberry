@@ -1,4 +1,3 @@
-// Package pow is the client half of proof-of-work challenges.
 package pow
 
 import (
@@ -19,7 +18,6 @@ const (
 // MaxDifficulty is the hardest challenge a client will solve.
 const MaxDifficulty = 26
 
-// Solves reports whether SHA-256(challenge ":" nonce) starts with difficulty zero bits.
 func Solves(challenge, nonce string, difficulty int) bool {
 	h := sha256.Sum256([]byte(challenge + ":" + nonce))
 	n := 0
@@ -39,7 +37,6 @@ func Solve(challenge string, difficulty int, limit uint64) (string, bool) {
 	if limit == 0 {
 		limit = 1 << 28
 	}
-	// A random start makes each answer differ.
 	var r [4]byte
 	_, _ = rand.Read(r[:])
 	prefix := hex.EncodeToString(r[:]) + "-"
