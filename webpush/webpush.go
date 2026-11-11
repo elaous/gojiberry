@@ -1,13 +1,3 @@
-// Package webpush sends Web Push messages (RFC 8030) with the message encryption of RFC 8291 (aes128gcm) and the
-// server identification of RFC 8292 (VAPID), with the standard library only. A browser gives a page a *subscription*
-// (an address at its push service and two keys); the server sends a message to that address, encrypted so that the
-// push service (Google's, Mozilla's, Apple's) cannot read it, and the browser wakes the page's service worker, which
-// shows a notification.
-//
-// What this package is careful about: the address of a subscription comes from a stranger, so a message is only sent
-// to an https address that does not resolve to a private or local network (checked again when the connection is made,
-// against a name that changes its answer); a body is limited; a push service that says the subscription is gone (404
-// or 410) is reported as ErrGone so the caller drops it.
 package webpush
 
 import (
@@ -48,7 +38,7 @@ type Subscription struct {
 
 // Limits.
 const (
-	// MaxPayload is the largest message sent. The standard allows 3993 bytes; a notification needs a few hundred.
+	// MaxPayload is the largest message sent.
 	MaxPayload = 2048
 	// MaxEndpoint is the longest subscription address accepted.
 	MaxEndpoint = 1024
@@ -57,7 +47,6 @@ const (
 
 // Errors.
 var (
-	// ErrGone: the push service says the subscription no longer exists; forget it.
 	ErrGone = errors.New("webpush: the subscription is gone")
 	// ErrBadSubscription: the address or the keys are not usable.
 	ErrBadSubscription = errors.New("webpush: the subscription is not valid")
@@ -67,10 +56,8 @@ var (
 
 var b64 = base64.RawURLEncoding
 
-// decodeB64 reads base64url with or without padding.
 func decodeB64(s string) ([]byte, error) { return b64.DecodeString(strings.TrimRight(s, "=")) }
 
-// Validate checks the shape of a subscription: an https address (not an IP literal on a private range) and the two keys.
 func (s Subscription) Validate() error {
 	if len(s.Endpoint) == 0 || len(s.Endpoint) > MaxEndpoint {
 		return ErrBadSubscription
@@ -85,7 +72,6 @@ func (s Subscription) Validate() error {
 	return s.validKeys()
 }
 
-// validKeys checks the two keys.
 func (s Subscription) validKeys() error {
 	pub, err := decodeB64(s.Keys.P256dh)
 	if err != nil || len(pub) != 65 {
@@ -108,7 +94,6 @@ func publicIP(ip net.IP) bool {
 	return v4 == nil || v4[0] != 100 || v4[1]&0xc0 != 64 // 100.64.0.0/10 is carrier-grade NAT
 }
 
-// Encrypt makes the body of a Web Push request for the subscription (RFC 8291, one record). It returns the body.
 func Encrypt(sub Subscription, payload []byte) ([]byte, error) {
 	if len(payload) > MaxPayload {
 		return nil, ErrTooLarge
@@ -133,7 +118,6 @@ func Encrypt(sub Subscription, payload []byte) ([]byte, error) {
 	return encrypt(payload, uaKey, auth, asPriv, salt)
 }
 
-// encrypt is Encrypt with the sender's key and the salt given (so that a test can use a known vector).
 func encrypt(payload []byte, uaKey *ecdh.PublicKey, auth []byte, asPriv *ecdh.PrivateKey, salt []byte) ([]byte, error) {
 	shared, err := asPriv.ECDH(uaKey)
 	if err != nil {
@@ -183,8 +167,6 @@ func encrypt(payload []byte, uaKey *ecdh.PublicKey, auth []byte, asPriv *ecdh.Pr
 	return out.Bytes(), nil
 }
 
-// Decrypt reads a body made by Encrypt with the receiver's private key and auth secret: what the browser does. It is
-// here for tests and for a server that wants to check its own messages.
 func Decrypt(body []byte, uaPriv *ecdh.PrivateKey, auth []byte) ([]byte, error) {
 	if len(body) < 16+4+1 {
 		return nil, errors.New("webpush: the body is too short")
@@ -232,8 +214,6 @@ func Decrypt(body []byte, uaPriv *ecdh.PrivateKey, auth []byte) ([]byte, error) 
 	return plain[:i-1], nil
 }
 
-// VAPID is the server's identity towards the push services: an ECDSA P-256 key. Its public half, base64url, is what a
-// page gives to PushManager.subscribe as applicationServerKey.
 type VAPID struct {
 	key *ecdsa.PrivateKey
 }
@@ -247,7 +227,6 @@ func GenerateVAPID() (*VAPID, error) {
 	return &VAPID{key: k}, nil
 }
 
-// LoadVAPID reads the private key as base64url of its 32 bytes (what Private returns).
 func LoadVAPID(private string) (*VAPID, error) {
 	raw, err := decodeB64(private)
 	if err != nil || len(raw) != 32 {
@@ -263,19 +242,16 @@ func LoadVAPID(private string) (*VAPID, error) {
 	return &VAPID{key: k}, nil
 }
 
-// Private is the key to keep (base64url of 32 bytes): keep it like a password.
 func (v *VAPID) Private() string {
 	b := v.key.D.FillBytes(make([]byte, 32))
 	return b64.EncodeToString(b)
 }
 
-// Public is the applicationServerKey for the page: the uncompressed point, base64url.
 func (v *VAPID) Public() string {
 	e, _ := v.key.PublicKey.ECDH()
 	return b64.EncodeToString(e.Bytes())
 }
 
-// authorization is the Authorization header for a request to the push service at endpoint (RFC 8292).
 func (v *VAPID) authorization(endpoint, subject string, now time.Time) (string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -295,19 +271,16 @@ func (v *VAPID) authorization(endpoint, subject string, now time.Time) (string, 
 
 // Sender sends messages.
 type Sender struct {
-	VAPID *VAPID
-	// Subject identifies the sender to the push service: a mailto: or https: address the operator can be reached at.
+	VAPID   *VAPID
 	Subject string
-	// Client sends the request; nil makes one that refuses private addresses and times out.
-	Client *http.Client
-	// TTL is how long a push service keeps a message for a device that is off (default 24 hours).
-	TTL time.Duration
+	Client  *http.Client
+	TTL     time.Duration
 
 	allowLocal bool // tests: the push service is on loopback and http
 	now        func() time.Time
 }
 
-// Send sends the payload to the subscription. It returns ErrGone when the push service says the subscription is gone.
+// Send sends the payload to the subscription.
 func (s *Sender) Send(ctx context.Context, sub Subscription, payload []byte) error {
 	if s.VAPID == nil {
 		return errors.New("webpush: no VAPID key")
@@ -365,7 +338,6 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, payload []byte) err
 	return nil
 }
 
-// defaultClient refuses to connect to a private or local address, checked on the address actually used.
 func defaultClient(allowLocal bool) *http.Client {
 	d := &net.Dialer{Timeout: 10 * time.Second}
 	if !allowLocal {
