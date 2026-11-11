@@ -10,29 +10,11 @@ import (
 	"strings"
 )
 
-// DefaultShell is what the service worker keeps from the first visit: the page, the Go runtime script and the
-// program. DefaultLazy is what it keeps once it has been used (a second program in a web worker, for the formats
-// of files): kept when first fetched, not fetched ahead, so a visitor who never needs it never downloads it.
 var (
 	DefaultShell = []string{"index.html", "wasm_exec.js", "main.wasm"}
 	DefaultLazy  = []string{"files-worker.js", "files.wasm"}
 )
 
-// ServiceWorker returns the script of a service worker that keeps the app shell (the files of
-// shell, or DefaultShell when it is empty, that exist in fsys) in a cache named for the version of
-// their contents, so a repeat visit, and a visit without a connection, starts at once with no request
-// for the 30 MB program. The version is a hash of the files: a new build is a new script, the browser
-// installs it, its cache fills, and the old cache is deleted when it takes over.
-//
-// What it caches is only that shell, by name. It never touches a request to the API (documents, sign-in,
-// directory, telemetry): those are not in the list and go to the network. A page for an app path such as
-// /d/report is fetched from the network, and answered with the cached index.html only when there is no
-// connection.
-//
-// Serve the script as sw.js in the directory of index.html, with "Cache-Control: no-cache" (Handler does,
-// with Options.ServiceWorker; cmd/wasmdist writes the file), and register it from the page:
-//
-//	navigator.serviceWorker.register("sw.js")
 func ServiceWorker(fsys fs.FS, shell []string, lazy ...string) ([]byte, error) {
 	if len(shell) == 0 {
 		shell = DefaultShell
@@ -65,7 +47,6 @@ func ServiceWorker(fsys fs.FS, shell []string, lazy ...string) ([]byte, error) {
 	return []byte(strings.NewReplacer("__VERSION__", version, "__FILES__", string(list), "__LAZY__", string(lazyList)).Replace(swTemplate)), nil
 }
 
-// ServeServiceWorker answers a request for sw.js with the script for fsys.
 func ServeServiceWorker(w http.ResponseWriter, r *http.Request, fsys fs.FS, shell []string, lazy ...string) {
 	script, err := ServiceWorker(fsys, shell, lazy...)
 	if err != nil {
