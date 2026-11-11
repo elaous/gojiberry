@@ -1,4 +1,3 @@
-// Command brailleserver runs the braille transcription server.
 package main
 
 import (
