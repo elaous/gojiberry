@@ -133,7 +133,6 @@ func TestBrokenMarkupAndLimits(t *testing.T) {
 		t.Errorf("a page over the limit: %v", err)
 	}
 	deep := strings.Repeat("<div>", 5000) + "deep" + strings.Repeat("</div>", 5000)
-	// The parser refuses nesting past 512 elements: an error, not a hang or a crash.
 	if _, err := Import([]byte(deep)); err == nil {
 		t.Log("deep nesting was read")
 	}
@@ -159,7 +158,6 @@ func TestVerticalWritingModeIsRead(t *testing.T) {
 	}
 }
 
-// A control in a table cell is the cell's form field, with the label that wraps it; the cell's text is the field's words.
 func TestControlsInTableCellsAreCellFields(t *testing.T) {
 	d, err := Import([]byte(`<table>
 <tr><th>Item</th><th>Qty</th><th>Ok</th></tr>
