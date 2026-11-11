@@ -297,8 +297,7 @@ func (r *reportStats) add(n int, bytes int64, reporter string) {
 			delete(r.reporters, reporter)
 		}
 	}
-	if n > 0 {
-		// only growth is remembered: a missed listing must not lose it
+	if n > 0 { // only growth is remembered: a missed listing must not lose it
 		for _, w := range r.windows {
 			w.n += n
 			w.bytes += bytes

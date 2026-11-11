@@ -493,8 +493,7 @@ func (s *Store) run(ctx context.Context, c change) (err error) {
 	}
 	view := newRecorder(bare{s.Raw})
 	fail := func(cause error) error {
-		ctx := context.WithoutCancel(ctx)
-		// restoring ignores the stop that asked for it
+		ctx := context.WithoutCancel(ctx) // restoring ignores the stop that asked for it
 		if rerr := view.restore(ctx); rerr != nil {
 			_ = s.install(jr)
 			return errors.Join(ErrRollbackFailed, cause, rerr)

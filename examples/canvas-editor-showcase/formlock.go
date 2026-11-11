@@ -73,8 +73,7 @@ func keepFormKey(k dirclient.OwnerKey, made bool) {
 }
 
 func (u *ui) createFormKey(renderUI func()) {
-	go func() {
-		// the browser's key comes from promises: not waitable on the event thread
+	go func() { // the browser's key comes from promises: not waitable on the event thread
 		k, err := dirclient.GenerateOwnerKey()
 		if err != nil {
 			u.forms.msg = err.Error()
