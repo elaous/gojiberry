@@ -1,24 +1,3 @@
-// Package script is the host side of scripting over the command registry: a script a person wrote or pasted runs in a
-// sandbox that has nothing of the page (no document, no network, no storage), and can only send requests to the host,
-// which answers them here. A request is one JSON message; the host answers the ones the person allowed for this script
-// and refuses the rest, so a script reaches the editor through the same commands the menus and key chords do and
-// through nothing else. A command added to the registry is therefore reachable at once, without a list kept by hand.
-//
-// What the requests are:
-//
-//	{"id":1,"op":"commands"}              the registry: name and title of each command (always allowed)
-//	{"id":2,"op":"run","name":"bold"}     run a command on the document (needs Run)
-//	{"id":3,"op":"text"}                  the text of the document (needs Read)
-//	{"id":6,"op":"insert","text":"..."}   put text at the caret, replacing the selection (needs Insert)
-//	{"id":4,"op":"log","message":"..."}   a line for the person to read (always allowed)
-//
-// A host that is also a Document answers the get/set requests too (getset.go): markdown, selection, format, styles,
-// images and meta need Read, and their setters need Write.
-//
-//	{"id":5,"op":"done"}                  the script has finished (always allowed)
-//
-// The sandbox itself (an iframe with an opaque origin and a policy that allows no connection) belongs to the page; this
-// package is what the page asks. See docs/scripting.md.
 package script
 
 import (
@@ -32,26 +11,19 @@ import (
 type Permission string
 
 const (
-	// Read lets the script see the text of the document. It is the one that can show the document to whoever wrote
-	// the script, so the page asks for it separately and says so.
+	// Read lets the script see the text of the document.
 	Read Permission = "read"
 	// Run lets the script run the editor's commands.
-	Run Permission = "run"
-	// Insert lets the script write text into the document, at the caret.
+	Run    Permission = "run"
 	Insert Permission = "insert"
-	// Write lets the script change the document in the other ways of the get/set requests: replace the document with
-	// Markdown, change the formatting, the style, a picture's description or the document's title and language. It
-	// is the broadest, so the page asks for it separately and says so.
-	Write Permission = "write"
+	Write  Permission = "write"
 )
 
-// Command is a command of the registry as a script sees it.
 type Command struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`
 }
 
-// Host is the editor, as far as a script may reach it.
 type Host interface {
 	// Commands lists the registry.
 	Commands() []Command
@@ -59,7 +31,6 @@ type Host interface {
 	Run(name string) bool
 	// Text is the text of the document.
 	Text() string
-	// Insert puts text at the caret (replacing the selection), reporting whether there was somewhere to put it.
 	Insert(text string) bool
 }
 
@@ -83,14 +54,13 @@ var (
 
 // Request is one message from the sandbox.
 type Request struct {
-	ID      int    `json:"id"`
-	Op      string `json:"op"`
-	Name    string `json:"name,omitempty"`
-	Message string `json:"message,omitempty"`
-	Text    string `json:"text,omitempty"`
-	// Index and Data are the arguments of the get/set requests (see getset.go).
-	Index *int            `json:"index,omitempty"`
-	Data  json.RawMessage `json:"data,omitempty"`
+	ID      int             `json:"id"`
+	Op      string          `json:"op"`
+	Name    string          `json:"name,omitempty"`
+	Message string          `json:"message,omitempty"`
+	Text    string          `json:"text,omitempty"`
+	Index   *int            `json:"index,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 // Response is the answer to one.
@@ -98,15 +68,14 @@ type Response struct {
 	ID    int    `json:"id"`
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
-	// Value is the answer: the commands, a flag for run, the text.
-	Value any `json:"value,omitempty"`
+	Value any    `json:"value,omitempty"`
 }
 
 // Session is one run of one script.
 type Session struct {
 	Host  Host
 	Allow map[Permission]bool
-	// Log receives the script's log lines (the page shows them). Done is called when the script says it has finished.
+	// Log receives the script's log lines (the page shows them).
 	Log  func(line string)
 	Done func()
 
@@ -114,10 +83,8 @@ type Session struct {
 	stopped   bool
 }
 
-// Stopped says the script went over a limit and its requests are no longer answered.
 func (s *Session) Stopped() bool { return s.stopped }
 
-// Handle answers one request (raw JSON) with the JSON of a Response.
 func (s *Session) Handle(raw []byte) []byte {
 	var req Request
 	switch {
