@@ -10,9 +10,7 @@ import (
 	"time"
 )
 
-// CookieOptions configures Cookies.Set. Every field is optional; the
-// zero value omits that attribute, matching the browser's own default
-// for it.
+// CookieOptions configures Cookies.Set.
 type CookieOptions struct {
 	Path     string    // "" defaults to the current path
 	Domain   string    // "" defaults to the current domain
@@ -22,14 +20,12 @@ type CookieOptions struct {
 	SameSite string // "Strict", "Lax", or "None"; "" leaves the browser's own default
 }
 
-// Cookies wraps document.cookie. Values are percent-encoded on Set and
-// decoded on Get/All, so arbitrary strings (not just cookie-safe ones)
-// round-trip correctly.
+// Cookies wraps document.cookie.
 var Cookies cookieJar
 
 type cookieJar struct{}
 
-// All returns every cookie visible to this document as a name->value map.
+// All returns every cookie visible to this document.
 func (cookieJar) All() map[string]string {
 	raw := js.Global().Get("document").Get("cookie").String()
 	out := map[string]string{}
@@ -41,8 +37,6 @@ func (cookieJar) All() map[string]string {
 		if !found {
 			continue
 		}
-		// PathUnescape, not QueryUnescape: a raw '+' in a cookie someone else
-		// set (base64, say) is a plus, not a space.
 		if decoded, err := url.PathUnescape(value); err == nil {
 			value = decoded
 		}
@@ -57,13 +51,7 @@ func (j cookieJar) Get(name string) (string, bool) {
 	return v, ok
 }
 
-// Set sets a cookie. Each call sets exactly one cookie (assigning to
-// document.cookie only ever adds/updates the one named in the
-// assignment string -- it doesn't replace the whole jar).
-//
-// A name, Path, Domain or SameSite containing a ';' or a control
-// character would let the caller (or whatever data it came from) add
-// cookie attributes of its own, so such a cookie is not set at all.
+// Set sets one cookie.
 func (cookieJar) Set(name, value string, opts CookieOptions) {
 	if !cookieTokenOK(name) || strings.ContainsAny(name, "= \t,") || !cookieTokenOK(opts.Path) || !cookieTokenOK(opts.Domain) || !cookieTokenOK(opts.SameSite) {
 		return
@@ -93,15 +81,12 @@ func (cookieJar) Set(name, value string, opts CookieOptions) {
 	js.Global().Get("document").Set("cookie", b.String())
 }
 
-// Delete removes a cookie by setting it already-expired. path/domain
-// must match how it was Set, the same requirement the browser itself
-// imposes.
+// Delete removes a cookie by setting it already expired.
 func (j cookieJar) Delete(name string, path, domain string) {
 	j.Set(name, "", CookieOptions{Path: path, Domain: domain, MaxAge: -1})
 }
 
-// cookieTokenOK reports whether s can be written into a cookie string as it
-// is: no ';' and no control characters.
+// cookieTokenOK reports whether s can be written into a cookie.
 func cookieTokenOK(s string) bool {
 	for _, r := range s {
 		if r == ';' || r < 0x20 || r == 0x7f {

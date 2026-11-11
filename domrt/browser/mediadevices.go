@@ -8,16 +8,13 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// MediaStreamConstraints selects which media getUserMedia should
-// request. Leave a field false to not request that kind of track.
+// MediaStreamConstraints selects which media getUserMedia returns.
 type MediaStreamConstraints struct {
 	Audio bool
 	Video bool
 }
 
-// GetUserMedia prompts for (or silently grants, depending on prior
-// permission) camera/microphone access and returns the resulting
-// MediaStream, blocking until the browser responds.
+// GetUserMedia prompts for, or silently grants, camera and microphone access.
 func GetUserMedia(constraints MediaStreamConstraints) (js.Value, error) {
 	jsConstraints := map[string]any{
 		"audio": constraints.Audio,
@@ -27,17 +24,14 @@ func GetUserMedia(constraints MediaStreamConstraints) (js.Value, error) {
 	return domrt.Await(promise)
 }
 
-// MediaDeviceInfo describes one camera/microphone/speaker as reported
-// by EnumerateDevices.
+// MediaDeviceInfo describes one camera, microphone or speaker.
 type MediaDeviceInfo struct {
 	DeviceID string
 	Kind     string
 	Label    string
 }
 
-// EnumerateDevices lists the available media input/output devices.
-// Label is only populated for devices the page already has permission
-// to use (e.g. after a successful GetUserMedia call).
+// EnumerateDevices lists the available media devices.
 func EnumerateDevices() ([]MediaDeviceInfo, error) {
 	promise := js.Global().Get("navigator").Get("mediaDevices").Call("enumerateDevices")
 	v, err := domrt.Await(promise)
@@ -56,14 +50,12 @@ func EnumerateDevices() ([]MediaDeviceInfo, error) {
 	return out, nil
 }
 
-// SetVideoSource assigns stream (from GetUserMedia) as a <video>
-// element's source, the srcObject-based replacement for the old
-// createObjectURL(stream) pattern.
+// SetVideoSource assigns stream as the source of a video element.
 func SetVideoSource(videoElement js.Value, stream js.Value) {
 	videoElement.Set("srcObject", stream)
 }
 
-// StopStream stops every track in stream (camera/mic LED off, etc.).
+// StopStream stops every track in stream.
 func StopStream(stream js.Value) {
 	tracks := stream.Call("getTracks")
 	for i := 0; i < tracks.Length(); i++ {
