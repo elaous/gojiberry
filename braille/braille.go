@@ -1,6 +1,3 @@
-// Package braille writes Braille Ready Format (.brf, ASCII braille). Transcription needs liblouis, a C library
-// with no Go binding in this stack, so the exporter sends the text to a running braille server (braille/server,
-// cmd/brailleserver) and the BRF type holds what it answered. The server is in braille/server.
 package braille
 
 import (
@@ -18,10 +15,7 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// Braille writes Braille Ready Format (.brf, ASCII braille). Transcription
-// needs liblouis, so the text is sent to a running cmd/brailleserver at
-// Backend; Table overrides the server's own table (for example "en-us-g1.ctb"
-// for uncontracted braille). Client may be nil.
+// Braille writes Braille Ready Format (.brf, ASCII braille).
 type Braille struct {
 	Backend string
 	Table   string
