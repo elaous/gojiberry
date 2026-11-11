@@ -30,14 +30,12 @@ func TestUsagePointHoldsOnlyNumbersAndATime(t *testing.T) {
 func TestUsageSeriesIsBoundedAndKeepsTheLastSampleOfAPeriod(t *testing.T) {
 	var u usageSeries
 	start := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
-	// Two samples in one hour: the later one stands for the hour.
 	u.record(start, UsagePoint{Documents: 1})
 	u.record(start.Add(10*time.Minute), UsagePoint{Documents: 2})
 	h := u.snapshot()
 	if len(h.Hourly) != 1 || h.Hourly[0].Documents != 2 || !h.Hourly[0].Time.Equal(start.Truncate(time.Hour)) {
 		t.Fatalf("%+v", h.Hourly)
 	}
-	// 200 days of hourly samples: the series never exceeds its limits, and keeps the newest.
 	n := 200 * 24
 	for i := 1; i <= n; i++ {
 		u.record(start.Add(time.Duration(i)*time.Hour), UsagePoint{Documents: i})
@@ -60,14 +58,12 @@ func TestUsageSeriesIsBoundedAndKeepsTheLastSampleOfAPeriod(t *testing.T) {
 	if h.Retention.Hours != 48 || h.Retention.Days != 90 {
 		t.Fatalf("%+v", h.Retention)
 	}
-	// A clock that goes back never rewrites or reorders the past.
 	before := u.snapshot()
 	u.record(start, UsagePoint{Documents: -1})
 	after := u.snapshot()
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("an earlier time changed the series")
 	}
-	// A snapshot is a copy.
 	h.Hourly[0].Documents = 12345
 	if u.snapshot().Hourly[0].Documents == 12345 {
 		t.Fatal("the snapshot shares the series' memory")
@@ -170,7 +166,6 @@ func TestUsagePageIsAccessibleHTMLWithoutScript(t *testing.T) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	// Newest first.
 	if strings.Index(body, "09:00 UTC") > strings.Index(body, "08:00 UTC") {
 		t.Error("the hours are not listed newest first")
 	}

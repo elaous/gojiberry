@@ -13,40 +13,21 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// SourceChoice is a platform a Session can migrate from. New makes the Source
-// from the access token the person typed (or the host got through OAuth).
+// SourceChoice is a platform a Session can migrate from.
 type SourceChoice struct {
 	Name, Label string
 	New         func(token string) Source
 }
 
-// Session is the state behind components.Migrate: the platform chosen and its
-// token, where in its folders the person is, what is ticked, how a run is going
-// and how the last one ended. Operations run in the background through Pending;
-// OnChange is called after any change so the page can render again.
 type Session struct {
 	Sources []SourceChoice
-	// Sink says where documents go, read when a migration starts (the folder open
-	// in the document list, say), and stores them in the codec chosen.
-	Sink func(docfile.Codec) Sink
-	// Formats are the formats a migrated document can be converted to; Format is the
-	// chosen one (SetFormat), .open by default.
+	Sink    func(docfile.Codec) Sink
 	Formats []docfile.Codec
-	// Deliver hands a file to the person (in a browser: transfer.Download). With it the
-	// format menu has "One .opendoc pack": the documents are gathered into a pack and
-	// handed over, and not saved in the store.
 	Deliver func(file, mime string, data []byte)
-	// OnChange is called after any state change, possibly from another goroutine.
-	OnChange func()
-	// OnDone is called after a migration with its report (refresh the document
-	// list there).
-	OnDone func(Report)
-	// Known says what earlier runs brought (NewSaverLedger over the target documents go to), read when a
-	// run starts; with it a file that is there and has not changed at the source is left alone, unless the
-	// person asked to bring everything again (SetAgain). nil: everything is brought.
-	Known func(ctx context.Context) (Ledger, error)
-	// HistoryMax is how many earlier versions of a document are brought when the person chose to
-	// (SetHistory), for a source that has them (Versioned); 20 if not positive.
+	// possibly from another goroutine
+	OnChange   func()
+	OnDone     func(Report)
+	Known      func(ctx context.Context) (Ledger, error)
 	HistoryMax int
 	// Import converts a Word file; nil is DefaultImport.
 	Import  func([]byte) (docfile.Document, error)
@@ -67,7 +48,7 @@ type Session struct {
 	report   *Report
 	again    bool // bring again what an earlier run brought
 	history  bool // bring the version history too
-	partial  bool // a pack run failed or was cancelled, and the pack was not delivered
+	partial  bool
 }
 
 // NewSession makes a Session over the platforms.
@@ -90,7 +71,6 @@ func (s *Session) set(f func()) {
 	s.changed()
 }
 
-// SetSource chooses the platform; what was listed from another one is dropped.
 func (s *Session) SetSource(name string) {
 	s.set(func() {
 		s.choice, s.src, s.path, s.items, s.selected, s.report = nil, nil, nil, nil, map[string]bool{}, nil
@@ -116,10 +96,8 @@ func (s *Session) codec() docfile.Codec {
 	return docfile.JSON
 }
 
-// SetAgain says whether to bring again what an earlier run already brought.
 func (s *Session) SetAgain(on bool) { s.set(func() { s.again = on }) }
 
-// SetHistory says whether to bring the version history of each document along, where the platform has one.
 func (s *Session) SetHistory(on bool) { s.set(func() { s.history = on }) }
 
 func (s *Session) historyMax() int {
@@ -132,7 +110,6 @@ func (s *Session) historyMax() int {
 // SetToken keeps the access token typed.
 func (s *Session) SetToken(token string) { s.set(func() { s.token = token }) }
 
-// Connect makes the platform's Source with the token and lists its top.
 func (s *Session) Connect(ctx context.Context) error {
 	s.mu.Lock()
 	choice, token := s.choice, strings.TrimSpace(s.token)
@@ -159,8 +136,6 @@ func (s *Session) Connect(ctx context.Context) error {
 	return nil
 }
 
-// OpenFolder lists a folder of the platform: one of the folders listed, or one
-// in the path above (going back up), or "" for the top.
 func (s *Session) OpenFolder(ctx context.Context, id string) error {
 	s.mu.Lock()
 	src := s.src
@@ -193,7 +168,7 @@ func (s *Session) OpenFolder(ctx context.Context, id string) error {
 		return err
 	}
 	s.set(func() {
-		if s.src != src { // reconnected or changed platform meanwhile: this listing is not of it
+		if s.src != src {
 			return
 		}
 		s.path, s.items, s.selected = path, items, map[string]bool{}
@@ -221,7 +196,6 @@ func (s *Session) SelectAll() {
 	})
 }
 
-// Start migrates what is selected, or everything listed when nothing is.
 func (s *Session) Start(ctx context.Context) error {
 	s.mu.Lock()
 	src, choice := s.src, s.choice
@@ -275,16 +249,13 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}
 	if s.Known != nil && finish == nil {
-		// Only a run that saves to the store has anything to compare with; a pack is saved nowhere.
+		// only a run that saves to the store has anything to compare
 		if opt.Ledger, err = s.Known(ctx); err != nil {
 			return err
 		}
 	}
 	rep, err := Run(ctx, src, items, sink, opt)
 	if finish != nil {
-		// A run that failed or was cancelled is not delivered: a partial pack handed over
-		// as if it were the whole migration is worse than none. The report still says how
-		// far it got.
 		if err != nil {
 			s.set(func() { s.partial = true })
 		} else if ferr := finish(); ferr != nil {
@@ -298,8 +269,6 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 	return err
 }
 
-// sinkFor makes the Sink of a run: the store's, or a pack to hand over when the format
-// chosen is PackFormat (then finish delivers it).
 func (s *Session) sinkFor() (Sink, func() error, error) {
 	s.mu.Lock()
 	pick := s.format
@@ -324,7 +293,6 @@ func (s *Session) sinkFor() (Sink, func() error, error) {
 	}, nil
 }
 
-// Props returns the props for components.Migrate with the operations plugged in.
 func (s *Session) Props(pickFiles func()) components.MigrateProps {
 	s.mu.Lock()
 	defer s.mu.Unlock()

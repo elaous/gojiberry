@@ -19,18 +19,13 @@ import (
 	"time"
 )
 
-// encPeopleOrNone is encPeople, or nothing while encryption is off.
 func (u *ui) encPeopleOrNone() xango.Node {
 	if !u.enc.store.Enabled() {
-		// Without encryption there are no keys to show, but the server is still set here: it is also
-		// where documents can be saved to (Save tab, "Save to").
 		return xango.Frag(u.enc.dir.settingsPanel(u.enc)...)
 	}
 	return u.encPeople()
 }
 
-// ownerList says a list of owner keys in words, with the fingerprint of each: what a journal would
-// make the store's keys, shown so the person can tell their own keys from someone else's.
 func ownerList(list []encstore.Owner) string {
 	var parts []string
 	for _, o := range list {
@@ -38,8 +33,6 @@ func ownerList(list []encstore.Owner) string {
 	}
 	return strings.Join(parts, "; ")
 }
-
-// --- the People tab ---
 
 func recipientRows(rs []encrypt.Recipient) []components.RecipientRow {
 	var out []components.RecipientRow
@@ -56,7 +49,6 @@ func parseRecipient(text string) (encrypt.Recipient, error) {
 	return encrypt.ParseSSHRecipient(text)
 }
 
-// ownerRows are the store's keys with whether each can be removed and why not.
 func (e *encUI) ownerRows() []components.RecipientRow {
 	rows := recipientRows(e.store.Recipients())
 	used := lastUsedHere()
@@ -66,7 +58,6 @@ func (e *encUI) ownerRows() []components.RecipientRow {
 	}
 	for i := range rows {
 		if u, ok := e.deviceUses[rows[i].Fingerprint]; ok && encTarget == "server" {
-			// A record in the store says it for every device that shares it.
 			device := u.Device
 			if device == "" {
 				device = T("enc.anotherDevice", "a device without a name")
@@ -86,8 +77,6 @@ func (e *encUI) ownerRows() []components.RecipientRow {
 	return rows
 }
 
-// refreshDeviceUses reads the records of when each key last unlocked the store, from every device
-// that shares it, and draws the list again.
 func (e *encUI) refreshDeviceUses(ctx context.Context) {
 	uses, err := e.store.DeviceUses(ctx)
 	if err != nil {
@@ -101,8 +90,6 @@ func (e *encUI) refreshDeviceUses(ctx context.Context) {
 	e.render()
 }
 
-// deviceLabelNodes is the field that names this device in the records other devices read (only for a
-// store on a server, where there are other devices).
 func (e *encUI) deviceLabelNodes() []xango.Node {
 	if encTarget != "server" {
 		return nil
@@ -114,8 +101,6 @@ func (e *encUI) deviceLabelNodes() []xango.Node {
 			xango.On("input", func(ev xango.Event) { lsSet(deviceLabelKey, xango.EventValue[string](ev)) })}))}
 }
 
-// refreshShared reads the current document's list of keys (and whether it is confidential) in the
-// background when something it depends on changed.
 func (u *ui) refreshShared() {
 	e := u.enc
 	id := u.saver.ID()
@@ -152,10 +137,6 @@ func (u *ui) refreshShared() {
 	}()
 }
 
-// encPeople is the keys control of the People tab: the store's owner keys, with "Add my passkey",
-// "Create a recovery key", removing and replacing keys (the same host code as
-// examples/people-keys-demo, over the encrypted store), and, for a confidential document, who it is
-// shared with.
 func (u *ui) encPeople() xango.Node {
 	e := u.enc
 	u.refreshShared()
@@ -273,7 +254,7 @@ func (e *encUI) addMyPasskey(ctx context.Context) error {
 		return err
 	}
 	if err := e.store.AddOwner(ctx, k); err != nil {
-		return err // the passkey stays pending: pressing the button again does not make another
+		return err
 	}
 	e.pendingCred = ""
 	row := components.RecipientRow{Label: k.Label, Type: k.Recipient.Type, Fingerprint: k.Recipient.Fingerprint}
@@ -281,8 +262,6 @@ func (e *encUI) addMyPasskey(ctx context.Context) error {
 	return nil
 }
 
-// replacePasskey swaps the passkey for a new one in one transaction. The slot that remembers which
-// passkey to ask is put back if the swap fails, so the next unlock still asks the one that works.
 func (e *encUI) replacePasskey(ctx context.Context, u *ui, fp string) error {
 	prev := client.LocalCredential(encSlot)
 	id, err := client.CreateLocal(ctx, encSlot, T("enc.passkeyRP", "Gojiberry showcase"), T("enc.passkeyUser", "Showcase owner"))
@@ -323,8 +302,6 @@ func (e *encUI) removeOwner(ctx context.Context, u *ui, fp string) error {
 	return u.saver.Refresh(ctx)
 }
 
-// prepareRecoveryKey makes a recovery key and returns its secret to be shown. Nothing is added to
-// the store: commitRecoveryKey does that once the person confirmed they saved the secret.
 func (e *encUI) prepareRecoveryKey() (string, error) {
 	k, secret, err := encstore.NewRecoveryKey(T("enc.recoveryLabel", "Recovery key"))
 	if err != nil {
@@ -340,7 +317,7 @@ func (e *encUI) commitRecoveryKey(ctx context.Context) error {
 		return nil
 	}
 	k := p.key
-	k.SecretSaved, k.Forget = p.acked, true // another key is unlocked; this one is for the day it is lost
+	k.SecretSaved, k.Forget = p.acked, true
 	if err := e.store.AddOwner(ctx, k); err != nil {
 		return err // the secret stays on screen: it can be tried again
 	}
@@ -348,12 +325,6 @@ func (e *encUI) commitRecoveryKey(ctx context.Context) error {
 	e.sharedFor = ""
 	return nil
 }
-
-// trustedListsKey is where the digests of the key lists the person confirmed (or that a passkey or a
-// recovery key opened) are kept in this browser: a known-hosts file for stores.
-
-// keysUsedKey is where the time each key last unlocked the store in this browser is kept: a map from a
-// key's fingerprint to an RFC 3339 time. It says what this browser saw, not what happened elsewhere.
 
 func lastUsedHere() map[string]time.Time {
 	out := map[string]time.Time{}
@@ -369,8 +340,6 @@ func lastUsedHere() map[string]time.Time {
 	return out
 }
 
-// hookStore connects the store's hooks to the page: a key that unlocks is noted as used here, and a
-// change that re-encrypts the store reports its progress.
 func (e *encUI) hookStore() {
 	e.store.ConfirmFirstUse = true
 	var known []string
@@ -398,8 +367,6 @@ func (e *encUI) hookStore() {
 		b, _ := json.Marshal(raw)
 		lsSet(keysUsedKey, string(b))
 		if encTarget == "server" {
-			// The store is on a server that other devices use too: leave a record of this use in it (encrypted
-			// to the store's keys), so each device can say when the others last used each key.
 			go func() {
 				ctx := context.Background()
 				if err := e.store.RecordUse(ctx, o, lsGet(deviceLabelKey), time.Now()); err == nil {
@@ -417,8 +384,6 @@ func (e *encUI) hookStore() {
 	}
 }
 
-// rekeyProgress is the status line while the store is being encrypted again: "Encrypting again: 3 of 12
-// documents".
 func (e *encUI) rekeyProgress() []xango.Node {
 	if e.rekeyTotal == 0 {
 		return nil
@@ -426,13 +391,10 @@ func (e *encUI) rekeyProgress() []xango.Node {
 	return []xango.Node{
 		xango.El("p", []xango.Attr{xango.A("id", "enc-progress"), xango.A("role", "status")},
 			xango.Text(T("enc.progress", "Encrypting again: %d of %d documents", e.rekeyDone, e.rekeyTotal))),
-		// Stop puts everything back and leaves the keys as they were; it is on while the change runs.
 		btn("enc-stop", T("enc.stop", "Stop and put everything back"), func() { e.store.Stop() }, false),
 	}
 }
 
-// forgetStoreMemory drops what this browser remembers about a store that is gone: the key lists the
-// person confirmed, when each key was used and when the recovery key was checked.
 func forgetStoreMemory() {
 	for _, k := range []string{trustedListsKey, keysUsedKey, recoveryCheckedKey, recoverySnoozeKey} {
 		lsSet(k, "")

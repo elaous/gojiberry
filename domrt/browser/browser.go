@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Package browser exposes browser/JS APIs to Go/WASM code: a generic
-// Global() escape hatch for any named global object, plus typed,
-// idiomatic-Go wrappers for the APIs almost every app needs (fetch,
-// localStorage/sessionStorage, WebSocket) so application code doesn't
-// have to hand-roll syscall/js calls for them.
 package browser
 
 import (
@@ -17,9 +12,7 @@ import (
 	"github.com/elaous/gojiberry/domrt/html"
 )
 
-// Global returns the named global browser API object (e.g.
-// Global("WebAssembly"), Global("Notification"), Global("crypto")) for
-// APIs this package doesn't have a typed wrapper for yet.
+// Global returns the named global browser API object.
 func Global(name string) js.Value {
 	return js.Global().Get(name)
 }
@@ -30,17 +23,13 @@ type Response struct {
 	OK     bool
 	body   js.Value
 
-	// done releases a timeout's timer and callback; the timeout covers the
-	// body as well as the headers, so it lives until the body is read or
-	// Close is called. timedOut says it fired.
 	done     func()
 	timedOut *bool
 	timeout  time.Duration
 	url      string
 }
 
-// Close releases what a bounded fetch holds. Text, JSON and Bytes do it
-// themselves; call Close when the body is not read.
+// Close releases what a bounded fetch holds.
 func (r *Response) Close() {
 	if r.done != nil {
 		r.done()
@@ -48,7 +37,6 @@ func (r *Response) Close() {
 	}
 }
 
-// bodyErr names a timeout that cut the body short.
 func (r *Response) bodyErr(err error) error {
 	if err != nil && r.timedOut != nil && *r.timedOut {
 		return fmt.Errorf("fetch %s: timed out after %s", r.url, r.timeout)
@@ -56,34 +44,12 @@ func (r *Response) bodyErr(err error) error {
 	return err
 }
 
-// Fetch wraps window.fetch(url) with a plain GET, blocking until the
-// response headers arrive (not the body -- call Text or JSON to read
-// it), with no timeout of its own -- the same unbounded wait this
-// function has always done. For anything else (POST/PUT with a body,
-// custom headers, or a bounded wait), use FetchOpts.
+// Fetch wraps window.fetch with a plain GET.
 func Fetch(url string) (*Response, error) {
 	return doFetch(url, map[string]any{}, 0)
 }
 
-// FetchOptions configures a FetchOpts call. Method defaults to "GET"
-// if empty. Body, if non-empty, is sent as the request body. BodyValue
-// takes precedence over Body when set -- pass a FormData.Value here
-// for a multipart upload (including files); the browser sets
-// Content-Type with the right boundary automatically, so don't set it
-// yourself in Headers.
-//
-// Timeout, if non-zero, aborts the request (via a real
-// window.AbortController, not just abandoning the wait on this end)
-// once it elapses, returning an error instead of blocking forever --
-// zero (the default) preserves this package's original behavior, an
-// unbounded wait, so every caller written before Timeout existed is
-// unaffected. Worth setting on any call to a backend this app doesn't
-// control and isn't prepared to wait on indefinitely: without it, a
-// backend that hangs rather than erroring (no response, connection
-// never drops) leaves the calling goroutine blocked in domrt.Await
-// forever, and with it any application-level "request in flight"
-// guard (e.g. this repo's own tryBeginAsync/endAsync convention) that
-// goroutine was supposed to eventually clear.
+// FetchOptions configures FetchOpts.
 type FetchOptions struct {
 	Method    string
 	Body      string
@@ -92,16 +58,7 @@ type FetchOptions struct {
 	Timeout   time.Duration
 }
 
-// FetchOpts wraps window.fetch(url, init) for requests Fetch's plain
-// GET can't express: POST/PUT/PATCH/DELETE with a body, custom
-// headers, or a bounded wait (FetchOptions.Timeout). A common use is
-// PUT-ing a JSON body:
-//
-//	resp, err := browser.FetchOpts(url, browser.FetchOptions{
-//		Method:  "PUT",
-//		Body:    string(jsonBytes),
-//		Headers: map[string]string{"Content-Type": "application/json"},
-//	})
+// FetchOpts wraps window.fetch with options.
 func FetchOpts(url string, opts FetchOptions) (*Response, error) {
 	init := map[string]any{}
 	if opts.Method != "" {
@@ -122,21 +79,11 @@ func FetchOpts(url string, opts FetchOptions) (*Response, error) {
 	return doFetch(url, init, opts.Timeout)
 }
 
-// FetchTimeout is Fetch's own bounded-wait counterpart: a plain GET
-// that aborts once timeout elapses, for a caller that wants Fetch's
-// simplicity but not its unbounded wait -- equivalent to
-// FetchOpts(url, FetchOptions{Timeout: timeout}).
+// FetchTimeout is Fetch with a bounded wait.
 func FetchTimeout(url string, timeout time.Duration) (*Response, error) {
 	return doFetch(url, map[string]any{}, timeout)
 }
 
-// doFetch issues window.fetch(url, init), optionally bounded by
-// timeout (<= 0 means unbounded, init is used exactly as given). A
-// bounded call wires init["signal"] to a real AbortController so the
-// browser itself cancels the in-flight request when the deadline
-// passes, rather than this side merely giving up on waiting for a
-// response that keeps consuming real network/server resources
-// unaware anyone stopped caring about it.
 func doFetch(url string, init map[string]any, timeout time.Duration) (*Response, error) {
 	if timeout <= 0 {
 		return awaitFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
@@ -165,8 +112,7 @@ func doFetch(url string, init map[string]any, timeout time.Duration) (*Response,
 		}
 		return nil, err
 	}
-	// Keep the timer running: a server that sends the headers and then
-	// stalls the body must not hang Text, JSON or Bytes forever.
+	// keep the timer: a stalled body must not hang readers
 	resp.done, resp.timedOut, resp.timeout, resp.url = release, timedOut, timeout, url
 	return resp, nil
 }
@@ -189,7 +135,6 @@ func (r *Response) Text() (string, error) {
 	return v.String(), nil
 }
 
-// JSON reads the full response body and decodes it as JSON into v.
 func (r *Response) JSON(v any) error {
 	text, err := r.Text()
 	if err != nil {
@@ -198,14 +143,7 @@ func (r *Response) JSON(v any) error {
 	return json.Unmarshal([]byte(text), v)
 }
 
-// Bytes reads the full response body as raw bytes -- the binary
-// counterpart to Text/JSON, for a body that isn't valid UTF-8 text
-// (a gzip-compressed file, an image, ...): decoding it as text first,
-// the way Text() does, would corrupt it (invalid byte sequences get
-// replaced with U+FFFD on the JS side before Go ever sees them). Same
-// arrayBuffer()-then-Uint8Array-then-CopyBytesToGo shape
-// File.ReadAsArrayBuffer (fileapi.go) already uses for the same
-// binary-safety reason.
+// Bytes reads the full response body as raw bytes.
 func (r *Response) Bytes() ([]byte, error) {
 	defer r.Close()
 	v, err := domrt.Await(r.body.Call("arrayBuffer"))
@@ -218,7 +156,6 @@ func (r *Response) Bytes() ([]byte, error) {
 	return out, nil
 }
 
-// storageArea wraps window.localStorage / window.sessionStorage.
 type storageArea struct{ name string }
 
 // LocalStorage wraps window.localStorage.
@@ -227,7 +164,6 @@ var LocalStorage = storageArea{"localStorage"}
 // SessionStorage wraps window.sessionStorage.
 var SessionStorage = storageArea{"sessionStorage"}
 
-// Get returns the stored value for key and whether it was present.
 func (s storageArea) Get(key string) (value string, ok bool) {
 	defer func() {
 		if recover() != nil { // storage blocked: nothing is stored
@@ -241,9 +177,6 @@ func (s storageArea) Get(key string) (value string, ok bool) {
 	return v.String(), true
 }
 
-// Set stores value under key. It returns an error when the browser refuses
-// (storage full, or blocked by the browser's settings or private mode)
-// instead of letting the JS exception crash the program.
 func (s storageArea) Set(key, value string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -264,10 +197,7 @@ func (s storageArea) Clear() {
 	js.Global().Get(s.name).Call("clear")
 }
 
-// Keys returns every key currently in this storage area, in
-// storage-defined order -- for a caller that needs to enumerate a
-// whole storage area rather than look up one key at a time (e.g. a
-// storage adapter listing every document under its own key prefix).
+// Keys returns every key currently in this storage area.
 func (s storageArea) Keys() []string {
 	area := js.Global().Get(s.name)
 	n := area.Get("length").Int()
@@ -296,8 +226,7 @@ func (s *Socket) Send(data string) {
 	s.v.Call("send", data)
 }
 
-// OnMessage registers the handler called for each incoming text frame.
-// Calling it again replaces the previous handler.
+// OnMessage registers the handler for incoming messages.
 func (s *Socket) OnMessage(fn func(data string)) {
 	s.replace(&s.onMessage, "onmessage", func(args []js.Value) {
 		fn(args[0].Get("data").String())
@@ -325,11 +254,10 @@ func (s *Socket) replace(slot *js.Func, prop string, fn func(args []js.Value)) {
 	s.v.Set(prop, *slot)
 }
 
-// Close closes the connection and releases its registered callbacks.
+// Close closes the connection and releases its handlers.
 func (s *Socket) Close() {
 	s.v.Call("close")
-	// close() is asynchronous: take the handlers off before releasing them,
-	// or the browser would call a released function when "close" fires.
+	// close() is asynchronous: remove handlers before releasing them
 	for _, ev := range []string{"onmessage", "onclose", "onerror"} {
 		s.v.Set(ev, js.Null())
 	}

@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// The heavy file formats (Word, OpenDocument, PDF, RTF, EPUB and HTML in and out, and the fidelity reports) are
-// done by a second wasm, files.wasm, in a web worker that is started the first time one is needed (see
-// ./files). That keeps their code out of the program every visitor downloads. A request blocks until the
-// worker answers, so callFiles must be called from a goroutine of its own, never from a handler that
-// JavaScript invoked.
-
 var filesWorker struct {
 	mu      sync.Mutex
 	w       js.Value
@@ -32,7 +26,6 @@ type filesReply struct {
 
 var errFilesTimeout = errors.New("the file worker did not answer")
 
-// startFilesWorker starts the worker once.
 func startFilesWorker() {
 	filesWorker.mu.Lock()
 	defer filesWorker.mu.Unlock()
@@ -64,7 +57,6 @@ func startFilesWorker() {
 		return nil
 	})
 	filesWorker.onErr = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		// The worker could not start or died: every request waiting fails, and the next one starts it again.
 		filesWorker.mu.Lock()
 		pending := filesWorker.pending
 		filesWorker.pending, filesWorker.started = map[int]chan filesReply{}, false
@@ -79,7 +71,6 @@ func startFilesWorker() {
 	filesWorker.w.Set("onerror", filesWorker.onErr)
 }
 
-// callFiles sends one request to the worker and waits for its answer (see package export/remote).
 func callFiles(op, format string, in []byte) ([]byte, error) {
 	startFilesWorker()
 	filesWorker.mu.Lock()

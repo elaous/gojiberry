@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// A single-page flow at (10, 30) of 160x200: 8px runes (20 per line), 22px lines.
 func selFlow(items ...Item) (*TextFlow, *fakePainter) {
 	p := &fakePainter{}
 	f := NewTextFlow("", 10, 30, 160, 200)
@@ -31,7 +30,6 @@ func TestDragSelectsText(t *testing.T) {
 	if !f.WantsFocus() {
 		t.Fatal("a selection needs the keyboard so Copy reaches it")
 	}
-	// Drag on across lines, and backwards.
 	f.MouseMove(10+8*3, 62)
 	if f.SelectedText() != "llo world\nsec" {
 		t.Fatalf("across lines: %q", f.SelectedText())
@@ -89,7 +87,6 @@ func TestPressesOnObjectsAboveTheTextDontSelectIt(t *testing.T) {
 	if f.HasSelection() {
 		t.Fatal("a press on a floating box must not start selecting the text under it")
 	}
-	// A wrapping image excludes its area too.
 	img := NewImage(fakeImage{40, 20}, 100, 30)
 	img.SetPainter(p)
 	img.SetFlow(f)
@@ -99,13 +96,11 @@ func TestPressesOnObjectsAboveTheTextDontSelectIt(t *testing.T) {
 	if f.HasSelection() {
 		t.Fatal("nor on an image")
 	}
-	// Away from both it works.
 	f.MouseDown(10, 100)
 	f.MouseMove(10+8*3, 100)
 	if !f.HasSelection() {
 		t.Fatal("selecting elsewhere still works")
 	}
-	// A press on a table (Hitter) is kept away too.
 	tbl := NewTableView(NewTable(1, 1), p)
 	tbl.X, tbl.Y = 10, 150
 	tbl.SetFlow(f)
@@ -119,7 +114,6 @@ func TestPressesOnObjectsAboveTheTextDontSelectIt(t *testing.T) {
 
 func TestOffsetAtPicksTheColumn(t *testing.T) {
 	f := pagedFlow(ColumnConfig{Widths: []float64{80, 80}, Gap: 20}, Chars{Text: "left one\nleft two\nleft three\nright one\nright two"})
-	// Page 0's text area: x 34..214, y 34..114 (three 22px lines per column).
 	lay := f.Layout()
 	if lay.Lines[3].Col != 1 || lay.Lines[3].ColX != 134 {
 		t.Fatalf("lines = %+v", lay.Lines)
@@ -130,7 +124,6 @@ func TestOffsetAtPicksTheColumn(t *testing.T) {
 	if o := f.OffsetAt(34, 40); o != 0 {
 		t.Fatalf("top of column 0: %d", o)
 	}
-	// Selecting from column 0 into column 1 runs in reading order.
 	f.MouseDown(34, 90)
 	f.MouseMove(134+8*5+1, 40)
 	if got := f.SelectedText(); got != "left three\nright" {
@@ -186,7 +179,6 @@ func TestSelectAllCopyAndCommands(t *testing.T) {
 	if !f.HandleCommand(CmdCopyFormat) {
 		t.Fatal("copy format")
 	}
-	// "alpha " is plain and "beta" bold: nothing in common.
 	if got, _ := f.formats.Get(); !got.IsZero() {
 		t.Fatalf("copied %+v", got)
 	}
@@ -243,7 +235,6 @@ func TestStageDrivesFlowSelectionAndFormatCopyToFloatingText(t *testing.T) {
 	box := NewFloatingText("target text", 10, 10, 160, 60)
 	st := NewStage(p, 400, 300, flow, box)
 	st.SetMode(ModeEdit)
-	// Select "fancy" in the flow and copy its format.
 	st.MouseDown(10+8*6, 140)
 	st.MouseMove(10+8*11, 140)
 	st.MouseUp(10+8*11, 140)
@@ -256,7 +247,6 @@ func TestStageDrivesFlowSelectionAndFormatCopyToFloatingText(t *testing.T) {
 	if text, ok := st.Copy(); !ok || text != "fancy" {
 		t.Fatalf("copy = %q", text)
 	}
-	// Select "target" in the floating text and paste the format onto it.
 	st.MouseDown(box.X+box.Padding, box.Y+box.Padding+5)
 	st.MouseUp(0, 0)
 	box.HandleKey("End", true)

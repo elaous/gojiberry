@@ -23,8 +23,6 @@ func runCheck(d *e2etest.Tab) {
 	d.WaitFor("a result", `!document.getElementById('gj-check-summary').textContent.includes('Not checked yet')`)
 }
 
-// The Check tab finds a table whose header row is empty and paragraphs that only look like a list, says
-// what is wrong and how to fix it, and goes to each.
 func TestCheckTabFindsTableHeadersAndTypedLists(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	importMarkdown(d, "Intro words here.\n\n| Name | |\n|---|---|\n| Ana | 31 |\n\n• milk\n\n• eggs\n\nEnd words.", "End words")
@@ -40,21 +38,17 @@ func TestCheckTabFindsTableHeadersAndTypedLists(t *testing.T) {
 	d.Click(".gj-check-list-fake .gj-check-go")
 	d.WaitFor("the caret at the first typed bullet", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.cursors && s.cursors[0].Caret === s.text.indexOf('• milk') })()`)
 
-	// The fix makes the paragraphs a list and takes the typed bullets away.
 	d.Click(".gj-check-list-fake .gj-check-fix-button")
 	d.WaitFor("the typed bullets are gone", `(() => { const s = JSON.parse(document.getElementById('state').textContent); return s.text.includes('milk') && !s.text.includes('•') })()`)
 	d.WaitFor("only the header finding is left", `document.querySelectorAll('.gj-check-item').length === 1 && document.querySelectorAll('.gj-check-list-fake').length === 0`)
 	d.OK(strings.Contains(d.Str(`document.getElementById('a11y-text').innerHTML`), "<li"), "and they are a list for a screen reader")
 
-	// Naming the empty column clears its finding.
 	importMarkdown(d, "Intro words here.\n\n| Name | Age |\n|---|---|\n| Ana | 31 |\n\n• milk\n\nEnd words.", "End words")
 	runCheck(d)
 	d.WaitFor("nothing found", `document.getElementById('gj-check-summary').textContent.includes('Nothing found')`)
 	d.NoErrors()
 }
 
-// An empty heading is an error with a one-click fix that turns it into a plain paragraph; the check runs
-// again after it.
 func TestCheckTabFixesAnEmptyHeading(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	importMarkdown(d, "Intro words here.\n\nBody words.", "Body words")
@@ -77,9 +71,6 @@ func TestCheckTabFixesAnEmptyHeading(t *testing.T) {
 	d.NoErrors()
 }
 
-// The operator's minimum gate is part of the page the host serves (a <meta> in index.html): the person
-// can raise the gate but not lower it, and under "block" cannot allow an export with errors anyway. A link
-// cannot set it.
 func TestOperatorMinimumExportGate(t *testing.T) {
 	index, err := os.ReadFile("index.html")
 	if err != nil {
@@ -95,7 +86,6 @@ func TestOperatorMinimumExportGate(t *testing.T) {
 			_, _ = w.Write([]byte(page))
 		}))
 	}
-	// withPictureNoAlt leaves a picture with no description in the document: one error.
 	withPictureNoAlt := func(d *e2etest.Tab) {
 		d.ToggleMode()
 		d.CanvasClick(240, 164)
@@ -125,7 +115,6 @@ func TestOperatorMinimumExportGate(t *testing.T) {
 		for _, v := range d.Axe(".gj-check", axeDisabled...) {
 			t.Errorf("the Check tab with an operator gate: %s", v)
 		}
-		// describing the picture satisfies it
 		d.Click(`button[data-tab="images"]`)
 		d.Fill("#img-alt-0", "A bar chart")
 		name, _ := d.Download(func() { export(d) })
@@ -142,7 +131,6 @@ func TestOperatorMinimumExportGate(t *testing.T) {
 		d.OK(d.Attr(`.gj-check-gate[data-gate="warn"]`, "aria-pressed") == "true" && d.Disabled(`.gj-check-gate[data-gate=""]`) && !d.Disabled(`.gj-check-gate[data-gate="block"]`), "warn is in force, none is out, block can be chosen")
 		name, _ := d.Download(func() { export(d) })
 		d.OK(strings.HasSuffix(name, ".html") && d.Text(".gj-announcer") == "Exported with 1 accessibility errors", "warn exports and says so: "+name+" "+d.Text(".gj-announcer"))
-		// the person raises it: their own block can be allowed for one export
 		d.Click(`button[data-tab="check"]`)
 		d.Click(`.gj-check-gate[data-gate="block"]`)
 		d.OK(d.Has("#gj-check-override"), "the person's own block keeps its override")

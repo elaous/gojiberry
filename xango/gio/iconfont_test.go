@@ -14,20 +14,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// TestIconFontTranslatesRecognizedSpanTextToASingleGlyph drives
-// Renderer.IconFont through a real headless-GPU render, the same
-// byte-diff/dimension-diff rigor this file's own
-// TestClassStyleAppliesBackgroundAndPadding already applies to a
-// different Renderer field: a span carrying IconFont's own Class and a
-// name Translate recognizes lays out narrower than the same span
-// without IconFont set (one substituted glyph vs. an 11-character
-// literal string, "format_bold") and paints genuinely different pixels
-// -- not just "something about the width changed by coincidence."
-// Translate maps to Typeface "" (Renderer's own default, the same face
-// th.Shaper already resolves everything else through) rather than a
-// real vendored icon font, since this proves xango/gio's own substitution
-// mechanism in isolation; OnDesign's own native module is responsible
-// for verifying its real Material Symbols asset separately.
 func TestIconFontTranslatesRecognizedSpanTextToASingleGlyph(t *testing.T) {
 	w, err := headless.NewWindow(200, 40)
 	if err != nil {
@@ -80,9 +66,6 @@ func TestIconFontTranslatesRecognizedSpanTextToASingleGlyph(t *testing.T) {
 		t.Fatalf("translated single-glyph width %d >= literal 11-character width %d -- translation doesn't look like it actually replaced the text", iconDims.Size.X, plainDims.Size.X)
 	}
 
-	// A name Translate doesn't recognize must fall back to plain text,
-	// exactly as if IconFont were nil -- the same graceful degradation
-	// IconFont's own doc comment promises for an unrecognized name.
 	unrecognized := &IconFont{
 		Class: "material-symbols-outlined",
 		Translate: func(name string) (rune, bool) {
@@ -97,8 +80,6 @@ func TestIconFontTranslatesRecognizedSpanTextToASingleGlyph(t *testing.T) {
 		t.Fatalf("unrecognized icon name fallback width %d != plain width %d", fallbackDims.Size.X, plainDims.Size.X)
 	}
 
-	// A span outside IconFont's own Class must be untouched even when
-	// Translate would otherwise recognize its text.
 	otherClass := xango.El("span", []xango.Attr{xango.A("class", "something-else")}, xango.Text("format_bold"))
 	renderer := New()
 	renderer.IconFont = translated

@@ -7,5 +7,4 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Without the exp_forms_submit tag nothing offers to send answers anywhere.
 func submitNodes(*ui, *canvas.TextFlow, func()) []xango.Node { return nil }

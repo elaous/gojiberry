@@ -14,9 +14,6 @@ import (
 	"time"
 )
 
-// TestMain lets the test binary stand in for the brotli tool: Precompress runs it as
-// `<tool> -q 11 -f -o <out> <in>`, and with WASMSERVE_FAKE_BROTLI set the binary writes "BR!" plus the
-// input to <out> (or fails) instead of running tests.
 func TestMain(m *testing.M) {
 	if mode := os.Getenv("WASMSERVE_FAKE_BROTLI"); mode != "" {
 		args := os.Args[1:]
@@ -37,7 +34,6 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			os.Exit(2)
 		}
-		// Smaller than the input, like a real encoder's output for text.
 		if err := os.WriteFile(out, append([]byte("BR!"), b[:len(b)/10]...), 0o644); err != nil {
 			os.Exit(2)
 		}
@@ -113,7 +109,6 @@ func TestPrecompressWritesSiblingsThatHandlerSends(t *testing.T) {
 		}
 	}
 
-	// The handler sends the sibling itself, byte for byte, not a copy it compressed.
 	h := Handler(os.DirFS(dir), Options{})
 	rec := get(h, "GET", "/main.wasm", map[string]string{"Accept-Encoding": "gzip"})
 	onDisk, _ := os.ReadFile(filepath.Join(dir, "main.wasm.gz"))
@@ -136,7 +131,6 @@ func TestPrecompressKeepsRefreshesAndRemoves(t *testing.T) {
 		t.Fatalf("an up-to-date sibling should be kept: %+v", got)
 	}
 
-	// The file is rebuilt: the sibling is made again, from the new content.
 	fresh := []byte(strings.Repeat("let y = 2;\n", 500))
 	if err := os.WriteFile(src, fresh, 0o644); err != nil {
 		t.Fatal(err)
@@ -153,7 +147,6 @@ func TestPrecompressKeepsRefreshesAndRemoves(t *testing.T) {
 		t.Fatalf("a rebuilt file needs a new sibling: %+v", got)
 	}
 
-	// The file shrinks under the minimum: its sibling would only outlive it, so it is removed.
 	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +157,6 @@ func TestPrecompressKeepsRefreshesAndRemoves(t *testing.T) {
 	if c := byName(got, "app.js", "gzip"); c == nil || c.Action != "removed" || exists(src+".gz") {
 		t.Fatalf("a stale sibling must go: %+v", got)
 	}
-	// An existing .gz is never compressed again.
 	writeFile(t, dir, "keep.js.gz", bytes.Repeat([]byte("z"), 5000))
 	got, _ = Precompress(dir, PrecompressOptions{})
 	if exists(filepath.Join(dir, "keep.js.gz.gz")) || byName(got, "keep.js.gz", "gzip") != nil {
@@ -219,7 +211,6 @@ func TestPrecompressBrotliThroughTheTool(t *testing.T) {
 	if exists(filepath.Join(dir, "main.wasm.br.tmp")) {
 		t.Error("the temporary file was left behind")
 	}
-	// A browser that takes both gets brotli, one that takes only gzip gets gzip.
 	h := Handler(os.DirFS(dir), Options{})
 	if rec := get(h, "GET", "/main.wasm", map[string]string{"Accept-Encoding": "gzip, br"}); rec.Header().Get("Content-Encoding") != "br" || !bytes.Equal(rec.Body.Bytes(), br) {
 		t.Errorf("br expected: %v", rec.Header())

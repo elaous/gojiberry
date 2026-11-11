@@ -18,7 +18,6 @@ func openWithPrefs(t *testing.T, prefs string) *e2etest.Tab {
 	return d
 }
 
-// Dwell click: resting the pointer on a tab clicks it after the pause, and only once.
 func TestDwellClickActivatesAControlTheRestingPointerIsOn(t *testing.T) {
 	d := openWithPrefs(t, `{dwell:'fast'}`)
 	d.OK(d.Str(`document.querySelector('button[data-tab="find"]').getAttribute('aria-selected')`) != "true", "the Find tab is not open to begin with")
@@ -28,7 +27,6 @@ func TestDwellClickActivatesAControlTheRestingPointerIsOn(t *testing.T) {
 	d.NoErrors()
 }
 
-// Without the setting nothing is clicked by resting.
 func TestDwellClickIsOffUnlessAsked(t *testing.T) {
 	d := openWithPrefs(t, `{}`)
 	d.Hover(`button[data-tab="find"]`)
@@ -37,7 +35,6 @@ func TestDwellClickIsOffUnlessAsked(t *testing.T) {
 	d.NoErrors()
 }
 
-// Moving away before the pause cancels the click.
 func TestDwellClickIsCancelledByMovingAway(t *testing.T) {
 	d := openWithPrefs(t, `{dwell:'slow'}`)
 	d.Hover(`button[data-tab="find"]`)
@@ -50,7 +47,6 @@ func TestDwellClickIsCancelledByMovingAway(t *testing.T) {
 	d.NoErrors()
 }
 
-// Switch scanning: the page's controls are lit one by one and Space chooses the lit one.
 func TestSwitchScanningLightsControlsAndSpaceChoosesOne(t *testing.T) {
 	d := openWithPrefs(t, `{scan:'fast'}`)
 	d.WaitFor("something is lit", `document.documentElement.getAttribute('data-gj-scan')`)
@@ -61,11 +57,8 @@ func TestSwitchScanningLightsControlsAndSpaceChoosesOne(t *testing.T) {
 	d.NoErrors()
 }
 
-// The last stop is the document: choosing it hands the keyboard to the editor, and Escape gives it back.
 func TestSwitchScanningHandsTheKeyboardToTheDocumentAndBack(t *testing.T) {
 	d := openWithPrefs(t, `{scan:'fast'}`)
-	// The document is the last stop of the scan, so it is lit after one step per control on the page (a second
-	// each at "fast"; the number of controls is whatever the page has drawn when the scan starts).
 	d.WaitForTimeout("the document is lit", `document.documentElement.getAttribute('data-gj-scan') === 'document'`, 90*time.Second)
 	d.Press(" ")
 	d.WaitFor("scanning waits", `document.documentElement.hasAttribute('data-gj-scan-paused')`)

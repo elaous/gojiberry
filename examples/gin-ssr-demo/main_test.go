@@ -9,11 +9,6 @@ import (
 	"testing"
 )
 
-// TestPageAndSecurityMiddleware drives the exact router main.go serves
-// (newRouter, in router.go) through a real net/http client against a
-// real httptest.Server -- no mocked request/response, no direct calls
-// into handler functions -- and checks all three middlewares actually
-// do something, not just that they're registered.
 func TestPageAndSecurityMiddleware(t *testing.T) {
 	srv := httptest.NewServer(newRouter())
 	defer srv.Close()
@@ -75,9 +70,6 @@ func TestPageAndSecurityMiddleware(t *testing.T) {
 	})
 
 	t.Run("rate limiter genuinely rejects a client that exceeds it", func(t *testing.T) {
-		// A fresh server/client pair so the burst-of-3 limiter (see
-		// router.go's perClientRateLimit(2, 3)) starts full, unaffected
-		// by the requests the earlier subtests already made.
 		limSrv := httptest.NewServer(newRouter())
 		defer limSrv.Close()
 

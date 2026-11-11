@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// A name from the query string is data, not markup: it comes out escaped.
 func TestEscapesTheNameParam(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler(rec, httptest.NewRequest("GET", "/?name="+url.QueryEscape(`<script>alert("x")</script>`), nil))
@@ -29,7 +28,6 @@ func TestEscapesTheNameParam(t *testing.T) {
 
 var errClientGone = errors.New("client went away")
 
-// failingWriter is a ResponseWriter whose body cannot be written, like a client that went away.
 type failingWriter struct {
 	header http.Header
 	code   int
@@ -48,8 +46,6 @@ func (f *failingWriter) WriteHeader(code int) {
 	}
 }
 
-// When rendering fails the handler reports it through http.Error rather than ignoring it: http.Error
-// replaces the type with plain text and sets nosniff, which the HTML response does not have.
 func TestRenderFailureGoesThroughHTTPError(t *testing.T) {
 	w := &failingWriter{header: http.Header{}}
 	handler(w, httptest.NewRequest("GET", "/?name=x", nil))

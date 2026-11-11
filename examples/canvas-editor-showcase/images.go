@@ -17,17 +17,11 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Images tab: insert a picture from a file, and describe each picture in the document for a
-// person who cannot see it, or say it is decorative. A picture without either is a finding of the Check
-// tab, and the reading copy names it as lacking a description.
-
-// imageRef is a picture in the text: where it is (a caret position) and the object to describe.
 type imageRef struct {
 	offset int
 	img    *canvas.Image
 }
 
-// documentImages lists the inline pictures of the flow in order.
 func documentImages(fl *canvas.TextFlow) []imageRef {
 	if fl == nil {
 		return nil
@@ -48,7 +42,6 @@ func documentImages(fl *canvas.TextFlow) []imageRef {
 	return out
 }
 
-// imageMime is the type of a picture file by its name, or "" if it is not one the page takes.
 func imageMime(name string) string {
 	switch strings.ToLower(path.Ext(name)) {
 	case ".png":
@@ -67,10 +60,8 @@ func imageMime(name string) string {
 	return ""
 }
 
-// maxInsertedSide is the longest side, in pixels, a picture is shown at when it is inserted.
 const maxInsertedSide = 280
 
-// insertImage picks a picture file and puts it at the caret as an inline picture with no description yet.
 func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
 	transfer.PickFile(".png,.jpg,.jpeg,.gif,.webp,.avif,.svg", func(name string, data []byte, err error) {
 		f := fl()
@@ -84,9 +75,6 @@ func (u *ui) insertImage(fl func() *canvas.TextFlow, redraw, renderUI func()) {
 	})
 }
 
-// insertBytes puts a picture's bytes at the caret. WebP, AVIF and SVG are stored as PNG: Word, OpenDocument and PDF
-// cannot carry them, so the exports then keep the picture. An SVG is drawn by the browser as a picture only (its scripts
-// never run) and is made at least 1024 pixels on its long side so that it stays sharp. after, when given, adjusts the new picture before it goes in.
 func (u *ui) insertBytes(f *canvas.TextFlow, mime string, data []byte, redraw, renderUI func(), after ...func(*canvas.Image)) {
 	url := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 	if mime == "image/webp" || mime == "image/avif" || mime == "image/svg+xml" {
@@ -106,8 +94,6 @@ func (u *ui) insertBytes(f *canvas.TextFlow, mime string, data []byte, redraw, r
 	u.placeImage(f, url, redraw, renderUI, after...)
 }
 
-// convertToPNG draws a picture the browser can show onto a canvas and reads it back as a PNG data URL; ok is false when
-// the browser cannot (the picture is then kept as it is).
 func convertToPNG(dataURL string, minSide int, done func(png string, ok bool)) {
 	doc := js.Global().Get("document")
 	img := doc.Call("createElement", "img")
@@ -117,7 +103,7 @@ func convertToPNG(dataURL string, minSide int, done func(png string, ok bool)) {
 		defer release()
 		w, h := img.Get("naturalWidth").Int(), img.Get("naturalHeight").Int()
 		if w <= 0 || h <= 0 {
-			if minSide <= 0 { // an SVG with no size of its own is drawn square
+			if minSide <= 0 {
 				done("", false)
 				return nil
 			}
@@ -149,7 +135,6 @@ func convertToPNG(dataURL string, minSide int, done func(png string, ok bool)) {
 	img.Set("src", dataURL)
 }
 
-// placeImage puts a picture, given as a data URL, at the caret as an inline picture with no description yet.
 func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func(), after ...func(*canvas.Image)) {
 	canvas.LoadImage(url, func(src *canvas.HTMLImage) {
 		im := canvas.NewImage(src, 0, 0)
@@ -184,7 +169,6 @@ func (u *ui) placeImage(f *canvas.TextFlow, url string, redraw, renderUI func(),
 	})
 }
 
-// imagesPanel is the Images tab.
 func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) xango.Node {
 	fl := flow()
 	canEdit := state.Role.CanEdit() && state.Mode == canvas.ModeEdit
@@ -247,7 +231,6 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 			kids = append(kids, para(fmt.Sprintf("img-missing-%d", i), T("img.missing", "No description yet."), true))
 		}
 		if !r.img.Decorative {
-			// a diagram or chart needs more than a sentence: the long description is written as text after it
 			kids = append(kids, textarea(fmt.Sprintf("img-long-%d", i), T("img.longLabel", "Long description of picture %d (for a diagram or chart)", i+1), r.img.LongDesc,
 				T("img.longHint", "Everything a person who cannot see it needs to follow the text around it"), "4", func(v string) {
 					r.img.LongDesc = v
@@ -264,14 +247,10 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 		u.imageFocus = false // nothing needed the focus in all that time
 	}
 	if u.imageFocus {
-		// the first picture without a description takes the focus, once the panel is drawn; the wish stays until there is
-		// such a picture in the panel (a render that comes before the picture is in the list must not use it up)
 		for i, r := range imgs {
 			if r.img.Alt == "" && !r.img.Decorative {
 				u.imageFocus = false
 				id := fmt.Sprintf("img-alt-%d", i)
-				// The field may not be in the page yet when the timer fires (a slow machine, a render still
-				// going): look again every 50 ms for up to fifteen seconds, until it has the focus.
 				var try js.Func
 				tries := 0
 				try = js.FuncOf(func(js.Value, []js.Value) any {
@@ -303,8 +282,6 @@ func imagesPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller fun
 	return xango.El("div", []xango.Attr{xango.A("id", "img-panel")}, nodes...)
 }
 
-// hintControls is the offer of a draft description under the field, when the person has turned it on: a button
-// that makes the draft, and the draft with a button to use it. Nothing goes into the document until it is used.
 func hintControls(u *ui, i int, im *canvas.Image, canEdit bool, fl *canvas.TextFlow, renderUI func()) xango.Node {
 	if !hintOn() || !canEdit || im.Decorative {
 		return xango.Frag()

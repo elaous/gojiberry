@@ -11,19 +11,13 @@ import (
 	"strings"
 )
 
-// Recogniser is a speech recogniser reached over HTTP with the shape of cmd/voiceserver: a multipart POST
-// with the WAV in the field "audio" (and optionally "prompt" and "language"), answered with {"text"}.
-// That fits the project's own voiceserver (local whisper.cpp) and any recogniser the person or the
-// operator puts behind the same contract, such as a personalised model trained elsewhere. The audio
-// goes only to the address given, and only when the person asks for a transcription.
 type Recogniser struct {
 	URL   string // the /transcribe address
 	Token string // optional bearer token the person supplies
 	Doer  Doer   // nil: http.DefaultClient
 }
 
-// Transcriber turns a take into text. The Recogniser (a server at an address the person typed) is one; the page has
-// another over the whisper add-on, which runs on the device.
+// Transcriber turns a take into text.
 type Transcriber interface {
 	Transcribe(ctx context.Context, pcm []int16, prompt, lang string) (string, error)
 }
@@ -33,8 +27,7 @@ var _ Transcriber = (*Recogniser)(nil)
 // MaxReply limits what is read back.
 const MaxReply = 1 << 20
 
-// Transcribe sends the take and returns the recognised text. prompt is the vocabulary prompt (may be
-// ""), lang a language code (may be "").
+// Transcribe sends the take and returns the recognised text.
 func (r *Recogniser) Transcribe(ctx context.Context, pcm []int16, prompt, lang string) (string, error) {
 	if strings.TrimSpace(r.URL) == "" {
 		return "", ErrNoEndpoint

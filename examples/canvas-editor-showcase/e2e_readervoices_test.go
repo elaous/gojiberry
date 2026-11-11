@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// piperStub stands in for the network, the Piper runtime and Web Audio: a catalogue with one English voice, a model of
-// five bytes, a runtime that "synthesizes" a tenth of a second of silence, and an audio context whose sources end when
-// the test says.
 const piperStub = `(() => {
 	const files = {
 		'reader-voices.json': '{"catalogue":"https://voices.test/voices.json","base":"https://voices.test/"}',
@@ -43,8 +40,6 @@ const piperStub = `(() => {
 	};
 })()`
 
-// Downloaded voices: the catalogue is asked for only when the person says so, a voice is downloaded with its size and
-// licence shown, kept, used to read the document (the bar says a downloaded voice speaks) and removed.
 func TestDownloadAReaderVoiceAndReadWithIt(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -87,8 +82,6 @@ func TestDownloadAReaderVoiceAndReadWithIt(t *testing.T) {
 	d.NoErrors()
 }
 
-// hostedStub stands in for a voice server named in reader-voices.json (https://tts.test: /voices and /speak, answering
-// with a tenth of a second of silence as a WAV) and for Web Audio.
 const hostedStub = `(() => {
 	const wav = () => {
 		const n = 800, b = new DataView(new ArrayBuffer(44 + n * 2));
@@ -116,8 +109,6 @@ const hostedStub = `(() => {
 	};
 })()`
 
-// Voices on a server: nothing is asked of the server before the person chooses them, they are used only when voices
-// that use the internet are allowed, and the text goes to the server while it reads (the bar says so).
 func TestReadWithVoicesOnAServer(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -145,9 +136,6 @@ func TestReadWithVoicesOnAServer(t *testing.T) {
 	d.NoErrors()
 }
 
-// The sources of voices: the hub shows four voices with their terms and pins their files (a download that does not match
-// is refused), a repository the person adds is asked for only when they say so and its voices wait for the person to say
-// they read the terms, and a voice from the person's own files is kept as it is.
 func TestVoiceSourcesHubRepositoryAndOwnFiles(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -171,7 +159,6 @@ func TestVoiceSourcesHubRepositoryAndOwnFiles(t *testing.T) {
 	})()`, nil)
 	d.Click(`button[data-tab="voices"]`)
 
-	// the hub: four voices, their terms shown, nothing asked yet
 	d.WaitSelector("#voices-item-3")
 	hub := d.Text("#voices-list")
 	d.OK(strings.Contains(hub, "CC0") && strings.Contains(hub, "Public domain") && strings.Contains(hub, "CC BY-SA 4.0"), "the hub shows the terms of its voices: "+hub)
@@ -182,7 +169,6 @@ func TestVoiceSourcesHubRepositoryAndOwnFiles(t *testing.T) {
 	d.WaitFor("a file that does not match what the hub pinned is refused", `(document.getElementById('voices-message')||{textContent: ''}).textContent.includes('could not be downloaded')`)
 	d.OK(!d.Has("#voices-has-0"), "and nothing is kept")
 
-	// a repository the person adds
 	d.Click("#vsrc-add button")
 	d.Fill("#vsrc-add-name", "Demo pack")
 	d.Fill("#vsrc-add-address", "http://repo.test/pack/voices.json")
@@ -202,7 +188,6 @@ func TestVoiceSourcesHubRepositoryAndOwnFiles(t *testing.T) {
 	d.OK(d.Int(`window.__asked.filter(u => u === 'https://repo.test/pack/fr/demo/medium/fr_FR-demo-medium.onnx').length`) == 1, "the files came from the repository's own address")
 	d.Eval(`location.reload()`, nil)
 
-	// the repository is remembered in this browser; the person's own files
 	d.WaitSelector("canvas")
 	d.Eval(speechStub, nil)
 	d.Eval(piperStub, nil)

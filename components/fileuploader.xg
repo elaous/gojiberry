@@ -7,34 +7,21 @@ import (
 )
 
 // FileUploaderProps configures FileUploader.
-//
-// xango.Event carries no file data (see xango.Event's doc comment: Value
-// is only ever a string/bool/similar simple payload), so reading the
-// actual selected/dropped files is the caller's job, done through
-// domrt/html directly on the client: look the input up by InputID and
-// call its AsInput().Files(), or attach domrt/html's own
-// Element.OnDrop to the dropzone by DropzoneID for real drag-and-drop
-// file access (html.DragEvent.DataTransfer.Files()). FileUploader
-// itself only renders the widget and prevents the browser's default
-// drag-over/drop navigation.
 type FileUploaderProps struct {
 	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
-	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+	InputID    string // hidden file input id, to read .Files()
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
 	Multiple bool
 	Disabled bool
 
-	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	ShowProgress  bool    // the variant without progress leaves this false
 	Progress      float64 // 0-100, ignored when Indeterminate
 	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
 
 	OnFilesSelected xango.EventHandler // fired on the input's change event
 }
 
-// FileUploader renders a dropzone that's also a native file-input
-// label (clicking anywhere on it opens the file browser, no JS
-// needed for that part) plus an optional progress bar.
 func FileUploader(props FileUploaderProps) xango.Node {
 	inputAttrs := []xango.Attr{xango.A("type", "file"), xango.A("class", "gj-file-uploader-input")}
 	if props.InputID != "" {

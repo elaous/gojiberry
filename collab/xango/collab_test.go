@@ -21,7 +21,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// painter draws nothing and measures 8px a rune.
 type painter struct{}
 
 func (painter) SetFillStyle(string)               {}
@@ -48,8 +47,6 @@ func (painter) Rotate(float64)                    {}
 func (painter) DrawImage(canvas.ImageSource, float64, float64, float64, float64, float64, float64, float64, float64) {
 }
 
-// user is one person's canvas with a Collab element, and a lock standing in for
-// the UI goroutine.
 type user struct {
 	mu      sync.Mutex
 	root    *cxango.Root
@@ -125,7 +122,6 @@ func wait(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// hubHasDocument reports whether the hub holds any content for document d1.
 func hubHasDocument(srv *httptest.Server, role string) bool {
 	req, _ := http.NewRequest("GET", srv.URL+"/docs/d1/snapshot", nil)
 	req.Header.Set("X-Role", role)
@@ -147,7 +143,7 @@ func TestWrappingACanvasMakesItShared(t *testing.T) {
 	eachTransport(t, func(t *testing.T, tr collab.Transport) {
 		h := hub.New(hub.Config{SaveDelay: 10 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role { return hub.Role(r.Header.Get("X-Role")) }})
 		srv := httptest.NewServer(h.Handler())
-		t.Cleanup(srv.Close) // after the users' own cleanups, which disconnect them
+		t.Cleanup(srv.Close)
 		hdr := func(role string) http.Header { return http.Header{"X-Role": {role}} }
 
 		ana := newUser(t, srv, tr, hdr("owner"), canvas.Chars{Text: "hello world"})
@@ -167,7 +163,6 @@ func TestWrappingACanvasMakesItShared(t *testing.T) {
 			return ana.get(func(u *user) bool { return len(u.state.Peers) == 1 }) && bo.get(func(u *user) bool { return len(u.state.Peers) == 1 })
 		})
 
-		// A viewer: the stage is held to the server's role, and the document arrives.
 		vee := newUser(t, srv, tr, hdr("viewer"), canvas.Chars{Text: "x"})
 		wait(t, "Vee to be a viewer with the text", func() bool {
 			return vee.text() == "hello, world!" && vee.get(func(u *user) bool { return u.root.Stage.Role == canvas.RoleViewer })
@@ -188,7 +183,7 @@ func TestReRenderingDoesNotReconnectOrResetTheDocument(t *testing.T) {
 	wait(t, "the edit to be accepted", func() bool { return ana.get(func(u *user) bool { return u.state.Pending == 0 }) })
 	before := ana.get(func(u *user) bool { return u.state.Repairs == 0 })
 	ana.mu.Lock()
-	ana.render(t) // same props: nothing is re-applied, nothing reconnects
+	ana.render(t)
 	ana.mu.Unlock()
 	if got := ana.text(); got != "seed grows" {
 		t.Fatalf("a re-render reset the shared text: %q", got)
@@ -213,8 +208,6 @@ func TestUnknownFlowIsReported(t *testing.T) {
 	}
 }
 
-// page is a canvas with furniture and objects: a text flow with a header and
-// footer, a floating note and a table.
 func page(text, header string) func(u *user) []xango.Node {
 	return func(u *user) []xango.Node {
 		tpl := func(pg xango.Node, _ int) xango.Node {
@@ -300,9 +293,6 @@ func TestNoFlowInsideIsReported(t *testing.T) {
 	}
 }
 
-// A viewer cannot change the page furniture, so the session must not try to
-// share what it holds locally (the hub would refuse it and the session would
-// rebuild itself over and over).
 func TestViewerDoesNotPushSurfaces(t *testing.T) {
 	srv := httptest.NewServer(hub.New(hub.Config{Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -340,8 +330,6 @@ func TestViewerDoesNotPushSurfaces(t *testing.T) {
 	}
 }
 
-// Objects with a Key are shared under it, so a peer whose tree has other
-// objects (or the same ones in another order) still gets the right one.
 func TestKeyedObjectsDoNotShift(t *testing.T) {
 	srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
 	t.Cleanup(srv.Close)
@@ -360,7 +348,7 @@ func TestKeyedObjectsDoNotShift(t *testing.T) {
 	wait(t, "Ana online", func() bool { return ana.get(func(u *user) bool { return u.state.Status == client.Online }) })
 	time.Sleep(50 * time.Millisecond)
 	bo := newUser(t, srv, nil, nil)
-	bo.props.Flow, bo.kids = collabxango.FlowObjects, tree("b") // no "a": Bo's first note is Ana's second
+	bo.props.Flow, bo.kids = collabxango.FlowObjects, tree("b")
 	bo.render(t)
 	wait(t, "Bo online", func() bool { return bo.get(func(u *user) bool { return u.state.Status == client.Online }) })
 

@@ -8,25 +8,16 @@ import (
 
 // CapacityProps configures Capacity.
 type CapacityProps struct {
-	// Used and Total are bytes; Total 0 means the allocated space is not known,
-	// and only Used is shown. Label names what is measured ("Storage").
-	Used, Total int64
-	Label       string
-	// ShowCounts adds how many documents there are (and how many of them are in the
-	// trash) to the meter.
+	Used, Total        int64
+	Label              string
 	ShowCounts         bool
 	Documents, Trashed int
 }
 
-// CapacityWarnAt is the percentage of a store from which Capacity warns, and the
-// Session's status line adds a note after a save.
 const CapacityWarnAt = 80
 
-// CapacityFullAt is the percentage from which a store counts as full or nearly: the
-// advice is the urgent one, and the warning is an alert.
 const CapacityFullAt = 95
 
-// CapacityAdvice is what to do when a store is filling up, in words for the person.
 func CapacityAdvice(pct float64) string {
 	if pct >= CapacityFullAt {
 		return tr("capacity.full", "This store is full or nearly: a save may be refused, and then the document is not saved. Right now, download your documents (Download as, or a folder as a ZIP), then make room by deleting old versions and emptying the trash, or save somewhere else.")
@@ -34,10 +25,6 @@ func CapacityAdvice(pct float64) string {
 	return tr("capacity.nearlyFull", "This store is filling up. So that no work is lost: download your documents now (Download as, or a folder as a ZIP), delete old versions and empty the trash, or save to another place before it is full.")
 }
 
-// Capacity shows how full a store is: a meter with the percentage, how much is
-// used of how much was allocated, and how much is left. A meter above 90% is
-// marked, and one over 100% too. From CapacityWarnAt percent a notice says what to do
-// so that no work is lost.
 func Capacity(p CapacityProps) xango.Node {
 	label := p.Label
 	if label == "" {

@@ -89,8 +89,6 @@ func TestCSSImportErrors(t *testing.T) {
 	}
 }
 
-// A stylesheet in a module the current one requires -- found through the
-// go command, so replace directives and the module cache both work.
 func TestCSSImportFromARequiredModule(t *testing.T) {
 	dir := setupModuleWithXango(t)
 	lib := t.TempDir()

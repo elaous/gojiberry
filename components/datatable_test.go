@@ -93,9 +93,6 @@ func TestDataTable(t *testing.T) {
 	t.Run("OnSelectAll fires from the header checkbox", func(t *testing.T) {
 		var got bool
 		n := DataTable(DataTableProps{Columns: dtCols(), Rows: dtRows(), Selectable: true, OnSelectAll: func(checked bool) { got = checked }})
-		// Only OnSelectAll is set here (no OnSelectChange), so only the
-		// header checkbox gets a change handler -- per-row ones are only
-		// attached when OnSelectChange itself is non-nil.
 		handlers := findHandlers(n, "change")
 		if len(handlers) != 1 {
 			t.Fatalf("expected 1 change handler (select-all only), got %d", len(handlers))
@@ -145,7 +142,7 @@ func TestDataTable(t *testing.T) {
 
 	t.Run("rows are keyed by their own ID", func(t *testing.T) {
 		n := DataTable(DataTableProps{Columns: dtCols(), Rows: dtRows()})
-		body := n.Children[0].Children[1] // div > table > tbody (no Search/Pagination, so table is child 0)
+		body := n.Children[0].Children[1]
 		if body.Children[0].Key != "1" || body.Children[1].Key != "2" {
 			t.Errorf("row keys = %q, %q, want \"1\", \"2\"", body.Children[0].Key, body.Children[1].Key)
 		}
@@ -153,7 +150,6 @@ func TestDataTable(t *testing.T) {
 }
 
 func TestDataTableSelectAllChecksTheRowsOnShowNotTheCount(t *testing.T) {
-	// Two selected ids from another page happen to equal the row count.
 	html := render(t, DataTable(DataTableProps{Columns: dtCols(), Rows: dtRows(), Selectable: true, Selected: []string{"9", "8"}}))
 	if count := strings.Count(html, `checked="checked"`); count != 0 {
 		t.Errorf("stale selections checked %d boxes: %s", count, html)

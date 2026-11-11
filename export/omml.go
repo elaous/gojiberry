@@ -5,10 +5,7 @@ import (
 	"strings"
 )
 
-// OMML writes the formula as Office Math (the <m:oMath> element Word and LibreOffice typeset as an equation),
-// converted from the MathML of the same notation, so that the two always agree. Text is escaped; a formula the
-// notation cannot read comes out as the text it has. The fraction, the root, the scripts and the symbols of the
-// notation have their Office Math forms; a function name is upright text.
+// OMML writes a formula as Office Math.
 func OMML(formula string) string {
 	root := parseMathML(MathML(formula, ""))
 	var sb strings.Builder
@@ -20,16 +17,13 @@ func OMML(formula string) string {
 	return sb.String()
 }
 
-// mmlNode is a MathML element: its name, its children and, for a token, its text.
 type mmlNode struct {
-	name string
-	kids []*mmlNode
-	text string
-	// aligned says a table has columnalign set (aligned equations rather than a matrix).
+	name    string
+	kids    []*mmlNode
+	text    string
 	aligned bool
 }
 
-// parseMathML reads the well-formed MathML MathML() writes into a tree.
 func parseMathML(s string) *mmlNode {
 	dec := xml.NewDecoder(strings.NewReader(s))
 	root := &mmlNode{name: "root"}
@@ -60,7 +54,6 @@ func parseMathML(s string) *mmlNode {
 	}
 }
 
-// mathBody is the children of the formula's row: <math><semantics><mrow>…</mrow><annotation/></semantics></math>.
 func mathBody(root *mmlNode) []*mmlNode {
 	n := root
 	for _, name := range []string{"math", "semantics", "mrow"} {
@@ -90,7 +83,6 @@ func ommlRun(text string, upright bool) string {
 	return `<m:r>` + rpr + `<m:t xml:space="preserve">` + esc(text) + `</m:t></m:r>`
 }
 
-// ommlRow is the children of a row, or the one element.
 func ommlRow(n *mmlNode) string {
 	if n == nil {
 		return ""
@@ -125,7 +117,7 @@ func ommlOf(n *mmlNode) string {
 		return ommlRow(n)
 	case "mtable":
 		var sb strings.Builder
-		if n.aligned { // aligned equations: one line each, the & marking where they line up
+		if n.aligned {
 			sb.WriteString(`<m:eqArr>`)
 			for _, r := range n.kids {
 				sb.WriteString(`<m:e>`)

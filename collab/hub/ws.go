@@ -14,10 +14,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// handleWS serves GET /docs/{id}/ws: the same conversation as the event
-// stream plus the ops and presence posts, over one WebSocket (see wire.Frame).
-// Access, roles, replica binding and throttling are the HTTP transport's: both
-// go through the same checks.
 func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	rm, role, ok := h.access(w, r)
 	if !ok {
@@ -29,19 +25,13 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	replica := r.URL.Query().Get("replica")
-	// Who may open the socket was decided above (the Guard, the roles, the
-	// origin allow-list if one is set); the library's own same-host origin
-	// rule would only get in the way of a page on another origin.
+	// access decided above: the library's origin rule would only interfere
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		return // Accept has answered
 	}
 	defer func() { _ = c.CloseNow() }()
-	// A frame over MaxBody is answered with a 413 reject, as the POST would be,
-	// so the client learns that it will never be accepted; the library's hard
-	// limit (which closes the socket) is higher: four times, but no more than 1 MiB
-	// over MaxBody, so a client cannot make the hub buffer much more than a POST
-	// could carry.
+	// over MaxBody: 413 reject; the library limit closes the socket
 	c.SetReadLimit(min(4*h.cfg.MaxBody, h.cfg.MaxBody+1<<20))
 	s, snapshot, peers, ok := h.join(rm, role, r, replica)
 	if !ok {
@@ -52,10 +42,9 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	out := make(chan event, 64) // answers to the client's frames, written by the loop below
+	out := make(chan event, 64) // Answers to client frames, written by the loop.
 	incoming := make(chan struct{})
-	// send queues an answer, or gives up when the connection is done (a client
-	// that floods frames and never reads must not park this goroutine).
+	// gives up when done: a non-reading client must not park it
 	send := func(e event) bool {
 		select {
 		case out <- e:
@@ -77,8 +66,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			switch f.Event {
 			case "ops", "presence":
-				// Access is checked on every frame, not only on the keep-alive tick:
-				// a downgraded user must not write until the next tick.
+				// checked on every frame: a downgraded user must not write
 				if h.role(r, id) != role {
 					_ = c.Close(websocket.StatusPolicyViolation, "access changed")
 					return
@@ -145,7 +133,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case e, open := <-s.ch:
 			if !open {
-				if h.isDead(rm) { // the document expired: say so (4410 is 410 Gone) instead of just hanging up
+				if h.isDead(rm) { // 4410 is 410 Gone: say so instead of hanging up
 					_ = c.Close(websocket.StatusCode(4410), goneMsg)
 				}
 				return
@@ -174,7 +162,6 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ackData is what an ack or reject event carries inside the hub.
 type ackData struct {
 	ID     uint64 `json:"id"`
 	Error  string `json:"error,omitempty"`
@@ -185,10 +172,6 @@ func ackEvent(name string, id uint64, msg string, status int) event {
 	return jsonEvent(name, ackData{ID: id, Error: msg, Status: status})
 }
 
-// tokenFromQuery lets a browser, which cannot set headers on a WebSocket,
-// pass the sign-in token as ?access_token=: for the socket's path it becomes
-// the Authorization header the Roles and User functions read. (A token in a
-// URL can end up in logs; use it over TLS and keep tokens short-lived.)
 func tokenFromQuery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/ws") && r.Header.Get("Authorization") == "" {
@@ -200,8 +183,7 @@ func tokenFromQuery(next http.Handler) http.Handler {
 	})
 }
 
-// cookieSocketAllowed refuses a WebSocket from another origin that carries
-// cookies unless the origin is listed in Config.CookieOrigins (see there).
+// cross-origin cookie sockets are refused unless in CookieOrigins
 func (h *Hub) cookieSocketAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" || r.Header.Get("Cookie") == "" {

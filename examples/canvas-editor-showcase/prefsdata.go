@@ -8,41 +8,39 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// prefs are the display settings; an empty field means "as the system has it".
 type prefs struct {
-	Motion      string `json:"motion,omitempty"`      // "reduce"
-	Contrast    string `json:"contrast,omitempty"`    // "more"
-	Text        string `json:"text,omitempty"`        // "large", "larger", "largest"
-	Spacing     string `json:"spacing,omitempty"`     // "wide"
-	Focus       string `json:"focus,omitempty"`       // "on": distraction-free
-	Targets     string `json:"targets,omitempty"`     // "large"
-	Suggest     string `json:"suggest,omitempty"`     // word suggestions: "auto" opens the list while typing
-	Ghost       string `json:"ghost,omitempty"`       // "on": the best word is shown faintly after the caret, Tab accepts it
-	Speed       string `json:"speed,omitempty"`       // reading aloud: "slow", "fast"
-	Typing      string `json:"typing,omitempty"`      // what is said of typed text: "words", "characters"; "" nothing
-	TypeFmt     string `json:"typefmt,omitempty"`     // "on": formatting changes at the caret are said
-	TypeRead    string `json:"typeread,omitempty"`    // "on": the line is read when the caret moves
-	Collab      string `json:"collab,omitempty"`      // what is announced of a shared session: "" everything, "important", "off"
-	Memory      string `json:"memory,omitempty"`      // "low": fewer undo steps kept; "high": many; "normal": the person turned it off; "" automatic (low on a device that reports 2 GB or less)
-	Lang        string `json:"lang,omitempty"`        // the interface language chosen by the person ("" the browser's)
-	Theme       string `json:"theme,omitempty"`       // "dark": the page's chrome in the dark palette ("" the light one)
-	Typewriter  string `json:"typewriter,omitempty"`  // "on": the line being typed stays in the middle of the view and the page moves
-	TypewriterX string `json:"typewriterx,omitempty"` // "on": the page also slides sideways, the letter being typed stays in one place
-	Typed       string `json:"typed,omitempty"`       // "off": text other people type is not shown in their colour for a moment
-	Close       string `json:"close,omitempty"`       // "off": typing an opening bracket or quote does not add the closing one
-	Colours     string `json:"colours,omitempty"`     // "safe": other people's cursors in colours the common kinds of colour blindness tell apart
-	Dwell       string `json:"dwell,omitempty"`       // click by resting the pointer: "fast", "medium", "slow" (the pause)
-	Scan        string `json:"scan,omitempty"`        // single-switch scanning: "fast", "medium", "slow" (the step)
-	Hint        string `json:"hint,omitempty"`        // "on": the Pictures tab can draft a description from the picture, on this device
-	Voice       string `json:"voice,omitempty"`       // the name of the voice reading aloud uses for the document's language ("" the browser's choice)
-	Reader      string `json:"reader,omitempty"`      // "piper": reading aloud uses the downloaded voices ("hosted": the voices of a voice server) instead of the ones the browser offers
-	HVoice      string `json:"hvoice,omitempty"`      // the ID of the voice on the voice server reading aloud uses ("" the server's pick for the language)
-	PVoice      string `json:"pvoice,omitempty"`      // the ID of the downloaded voice reading aloud uses for the document's language ("" the first for the language)
-	Voices      string `json:"voices,omitempty"`      // "net": reading aloud may use voices that send the text to a speech service
-	Where       string `json:"where,omitempty"`       // "on": the presence list has a "Where is <name>?" button for each collaborator
+	Motion      string `json:"motion,omitempty"`   // "reduce"
+	Contrast    string `json:"contrast,omitempty"` // "more"
+	Text        string `json:"text,omitempty"`     // "large", "larger", "largest"
+	Spacing     string `json:"spacing,omitempty"`  // "wide"
+	Focus       string `json:"focus,omitempty"`    // "on": distraction-free
+	Targets     string `json:"targets,omitempty"`  // "large"
+	Suggest     string `json:"suggest,omitempty"`  // word suggestions: "auto" opens the list while typing
+	Ghost       string `json:"ghost,omitempty"`
+	Speed       string `json:"speed,omitempty"`    // reading aloud: "slow", "fast"
+	Typing      string `json:"typing,omitempty"`   // what is said of typed text: "words", "characters"; "" nothing
+	TypeFmt     string `json:"typefmt,omitempty"`  // "on": formatting changes at the caret are said
+	TypeRead    string `json:"typeread,omitempty"` // "on": the line is read when the caret moves
+	Collab      string `json:"collab,omitempty"`
+	Memory      string `json:"memory,omitempty"`
+	Lang        string `json:"lang,omitempty"` // the interface language chosen by the person ("" the browser's)
+	Theme       string `json:"theme,omitempty"`
+	Typewriter  string `json:"typewriter,omitempty"`
+	TypewriterX string `json:"typewriterx,omitempty"`
+	Typed       string `json:"typed,omitempty"`
+	Close       string `json:"close,omitempty"`
+	Colours     string `json:"colours,omitempty"`
+	Dwell       string `json:"dwell,omitempty"` // click by resting the pointer: "fast", "medium", "slow" (the pause)
+	Scan        string `json:"scan,omitempty"`  // single-switch scanning: "fast", "medium", "slow" (the step)
+	Hint        string `json:"hint,omitempty"`
+	Voice       string `json:"voice,omitempty"`
+	Reader      string `json:"reader,omitempty"`
+	HVoice      string `json:"hvoice,omitempty"`
+	PVoice      string `json:"pvoice,omitempty"`
+	Voices      string `json:"voices,omitempty"`
+	Where       string `json:"where,omitempty"`
 }
 
-// sanitize drops every value that is not one the page knows: unknown or unreadable ones are as if unset.
 func (p prefs) sanitize() prefs {
 	if p.Motion != "reduce" {
 		p.Motion = ""
@@ -137,7 +135,6 @@ func (p prefs) sanitize() prefs {
 	return p
 }
 
-// validLang says s looks like a language tag ("en", "pt-BR"): short, letters and digits, dashes between.
 func validLang(s string) bool {
 	if s == "" || len(s) > 12 {
 		return false
@@ -153,11 +150,8 @@ func validLang(s string) bool {
 	return true
 }
 
-// maxPrefsFile is the largest preferences file that is read.
 const maxPrefsFile = 16 << 10
 
-// parsePrefs reads preferences from JSON (a kept copy, or a file the person brings): values the page does
-// not know are dropped, so a file from another version or an edited one cannot set anything odd.
 func parsePrefs(data []byte) (prefs, error) {
 	if len(data) > maxPrefsFile {
 		return prefs{}, errors.New("preferences: the file is too large")
@@ -169,13 +163,11 @@ func parsePrefs(data []byte) (prefs, error) {
 	return p.sanitize(), nil
 }
 
-// encodePrefs is the preferences as a file: JSON, one setting to a line.
 func encodePrefs(p prefs) []byte {
 	b, _ := json.MarshalIndent(p.sanitize(), "", "  ")
 	return append(b, '\n')
 }
 
-// textScale is how much larger the text on the sheets is drawn for the text-size setting.
 func (p prefs) textScale() float64 {
 	switch p.Text {
 	case "large":
@@ -188,7 +180,6 @@ func (p prefs) textScale() float64 {
 	return 1
 }
 
-// peerPalette is the palette other people's cursors are drawn in (nil: the colours they chose themselves).
 func (p prefs) peerPalette() []string {
 	if p.Colours == "safe" {
 		return canvas.ColourBlindPalette

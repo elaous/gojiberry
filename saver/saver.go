@@ -1,14 +1,3 @@
-// Package saver saves and loads documents: a docfile.Document written in
-// one of the docfile formats (JSON, protobuf text, protobuf binary) to
-// one of several named targets, each a docstore.Adapter -- Postgres,
-// SQLite, S3, local files, memory, or an HTTP server in front of any of
-// them.
-//
-// A document is known by its ID, a UUID kept in the document itself; its name is
-// only a label, so two documents can have the same name. Each target keeps a
-// catalog of its documents (CatalogKey), which is what List reads.
-//
-// components.Saver is the user interface for it.
 package saver
 
 import (
@@ -26,16 +15,10 @@ import (
 
 // Target is a place documents can be saved to.
 type Target struct {
-	// Name identifies the target ("postgres"); Label is what a menu shows.
 	Name, Label string
 	Adapter     docstore.Adapter
-	// Capacity is the space allocated to the store in bytes, for Usage to measure
-	// against; 0 means the adapter's own answer if it gives one (a local disk does,
-	// a database or bucket does not).
-	Capacity int64
-	// CatalogKey is where the target keeps its catalog; "" means CatalogKey. It must
-	// start with "catalog:" and end with "index" (see UserCatalogKey). Give each person
-	// their own when several share one store: the default is one catalog for the store.
+	Capacity    int64
+	// must start with "catalog:" and end with "index"
 	CatalogKey string
 }
 
@@ -43,58 +26,14 @@ type Target struct {
 type Saver struct {
 	Targets []Target
 	// Codecs are the formats offered; nil means all of docfile.Formats.
-	Codecs []docfile.Codec
-	// MaxVersions is how many snapshots SaveVersion keeps of one document; 0
-	// means DefaultMaxVersions.
-	MaxVersions int
-	// PreviousCopies is how many earlier saves of each document are kept beside the
-	// current one, to fall back on if it is lost or damaged (see LoadChecked): 0 means
-	// DefaultPreviousCopies (1), negative means none. Only one earlier save is kept: any
-	// positive value means that one. It takes space, and Usage counts it.
-	PreviousCopies int
-	// RepairGrace is how long Repair waits, when it finds the store and its catalog
-	// disagreeing, before looking again and repairing what is still wrong: another
-	// process may be half way through an operation. 0 means DefaultRepairGrace; a
-	// negative value means no wait (for tests).
-	RepairGrace time.Duration
-	// ConfidentialCheck, when set, is called before a document is made end to end
-	// protected (SetProtection, or saving a new document that is marked so), and a
-	// non-nil error refuses it. It is where a deployment says what a confidential document
-	// needs, such as a recovery key besides a passkey (encrypt.ConfidentialCheck). Nil means
-	// no check. The saver does not know about keys: it only asks.
+	Codecs            []docfile.Codec
+	MaxVersions       int
+	PreviousCopies    int
+	RepairGrace       time.Duration
 	ConfidentialCheck func(ctx context.Context, target, id string) error
-	// Rekey, when set, is what makes the files of a document follow its protection level: it
-	// is called with the level the document is moving to (ProtectionServer or ProtectionE2EE)
-	// and must leave every stored file of the document (current copy, previous copy, every
-	// version snapshot) encrypted to that level's recipients, or fail naming what is left
-	// (encrypt.RekeyHook; the saver does not import it). It must be idempotent and cheap when
-	// the level is already settled, because SetProtection calls it again on a retry, and Save
-	// calls it before writing a confidential document, to assert its keys. It runs
-	// outside the saver's catalog lock (a re-key takes the store's). Nil means none: the
-	// store's keyring alone decides, and copies written before a switch keep their wrapping.
-	//
-	// An error from the hook that wraps docstore.ErrDowngrade (the encrypting adapter found the
-	// document's signed recipient record deleted or replaced by an older one) is returned by
-	// Save and SetProtection as it is, wrapped: nothing is written, and the saver does not
-	// retry or re-assert over it (that would sign the replay again). Load, Reveal and Verify
-	// report the same finding (VerifyReport.Downgraded); encrypt.Sharing.Recover is the owner's
-	// way forward when the record was lost or replaced (the error text says so), and
-	// encrypt.Sharing.Repair finishes a switch that was cut short. A file whose frame is not
-	// the owner's (encrypt.ErrForgedFrame) is the same finding, and a document file that cannot be
-	// opened and is not provably someone else's stops a save (encrypt.ErrUnreadable).
-	Rekey func(ctx context.Context, target, id, protection string) error
-	// PendingCheck, when set, is called by Verify and says which documents have a recipient
-	// re-key that was cut short (pending) and which of those for too long (stuck)
-	// (encrypt.PendingHook; the saver does not import it). The results are VerifyReport.Pending
-	// and PendingStuck. Nil means none are reported. If it returns an error beside its results (one
-	// record that does not verify), Verify keeps the results and adds the error to
-	// VerifyReport.Warnings instead of failing.
-	PendingCheck func(ctx context.Context, target string) (pending, stuck []string, err error)
-	// UnsignedCheck, when set, is called by Verify and says which documents a re-key left with a
-	// file saved unsigned after the record said Signed (encrypt.UnsignedHook; the saver does not
-	// import it): VerifyReport.Unsigned. Like PendingCheck it is a full scan of the keys: records,
-	// so Verify is the rare caller. An error beside its results goes to VerifyReport.Warnings.
-	UnsignedCheck func(ctx context.Context, target string) (docs []string, err error)
+	Rekey             func(ctx context.Context, target, id, protection string) error
+	PendingCheck      func(ctx context.Context, target string) (pending, stuck []string, err error)
+	UnsignedCheck     func(ctx context.Context, target string) (docs []string, err error)
 
 	mu sync.Mutex   // one catalog update at a time
 	tm sync.RWMutex // Targets, which AddTarget and RemoveTarget change
@@ -103,41 +42,29 @@ type Saver struct {
 // Entry is a saved document, as List reports it.
 type Entry struct {
 	ID      string // the document's UUID: what every method here takes
-	Key     string // where the target stores it: the ID and the format's extension
+	Key     string
 	Name    string // a label; not unique
 	Format  docfile.Codec
 	Size    int
 	Updated time.Time
 	Tags    []string
-	// Folder is the ID of the folder it is in, "" at the top level.
-	Folder string
-	// Trashed is when it was moved to the trash; zero for a document that is not.
+	Folder  string
 	Trashed time.Time
-	// Protection is ProtectionServer or ProtectionE2EE. For an end-to-end document Name is
-	// ConfidentialName and Tags is empty: see Reveal.
+	// Protection is ProtectionServer or ProtectionE2EE.
 	Protection string
 }
 
-// FontPrefix starts the store keys of downloaded font files; they are not
-// documents.
 const FontPrefix = "fonts/"
 
-// ErrUnreadable is wrapped in the error of an operation that met a document whose
-// file is missing or does not parse.
 var ErrUnreadable = errors.New("saver: the document's file is missing or damaged")
 
 // DefaultRepairGrace is the RepairGrace used when none is set.
 const DefaultRepairGrace = 2 * time.Second
 
-// ErrBusy is returned when other processes keep changing the store's catalog and an
-// update could not get in after several tries.
 var ErrBusy = errors.New("saver: the store is busy, try again")
 
-// ErrName is returned for a name that cannot be used: empty, too long, or with
-// control characters.
 var ErrName = errors.New("saver: the name is empty, too long, or has control characters")
 
-// ErrID is returned for something that is not a document ID.
 var ErrID = errors.New("saver: not a document id")
 
 // MaxNameRunes is the longest document name.
@@ -162,15 +89,12 @@ func (s *Saver) Target(name string) (Target, error) {
 	return Target{}, fmt.Errorf("saver: no target %q", name)
 }
 
-// TargetList is a copy of the targets, safe to read while AddTarget and RemoveTarget run.
 func (s *Saver) TargetList() []Target {
 	s.tm.RLock()
 	defer s.tm.RUnlock()
 	return append([]Target(nil), s.Targets...)
 }
 
-// AddTarget adds a place to save to while the program runs (a folder the person has just
-// chosen), replacing the one of the same name.
 func (s *Saver) AddTarget(t Target) {
 	s.tm.Lock()
 	defer s.tm.Unlock()
@@ -183,7 +107,6 @@ func (s *Saver) AddTarget(t Target) {
 	s.Targets = append(s.Targets, t)
 }
 
-// RemoveTarget takes a place out (nothing stored in it is touched).
 func (s *Saver) RemoveTarget(name string) {
 	s.tm.Lock()
 	defer s.tm.Unlock()
@@ -213,9 +136,6 @@ func ValidName(name string) bool {
 	return !strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f })
 }
 
-// reserved reports whether key is in a keyspace owned by something else
-// (document access lists, the shared-editing hub's documents, the catalog,
-// version history).
 func reserved(key string) bool {
 	return strings.HasPrefix(key, "acl:") || strings.HasPrefix(key, "collab:") || strings.HasPrefix(key, "catalog:") ||
 		strings.HasPrefix(key, VersionPrefix) || strings.HasPrefix(key, docstore.FolderSecretPrefix)
@@ -230,20 +150,11 @@ func (s *Saver) codecOf(key string) (docfile.Codec, string) {
 	return nil, ""
 }
 
-// Save writes doc to the target in the codec. The document's name is
-// doc.Name() (set it with SetName), and its ID doc.ID(): a document with none is
-// a new one and gets a fresh UUID; one with an ID replaces the saved document
-// with that ID. Saving does not change the document's tags if doc has none of its
-// own. It returns the entry as listed.
+// Save writes doc to the target in the codec.
 func (s *Saver) Save(ctx context.Context, target string, c docfile.Codec, doc docfile.Document) (Entry, error) {
 	return s.save(ctx, target, c, doc, false)
 }
 
-// save is Save; with e2ee the document is written end to end protected in this one step,
-// whatever its previous level was: over an ordinary document the ConfidentialCheck, if
-// there is one, is consulted first (a refusal leaves the saved document untouched), and the
-// catalog and the file never hold the real name and tags as an ordinary document's. The
-// document's own tags are the ones kept (they are the new content's).
 func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, e2ee bool) (Entry, error) {
 	if !ValidName(doc.Name()) {
 		return Entry{}, ErrName
@@ -254,12 +165,8 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	} else if !docfile.ValidID(id) {
 		return Entry{}, ErrID
 	}
-	// A folder's ID is never a document's ("keys:<ID>" and "folder-secret/<ID>" are one
-	// record each): refused before the ConfidentialCheck or the Rekey hook can act on it
-	// (saveLocked repeats the check under the lock; without hooks that one is enough, and no
-	// extra catalog read is made).
+	// a folder's ID is never a document's: refused before any hook
 	if s.Rekey == nil && s.ConfidentialCheck == nil {
-		// nothing to run first
 	} else if err := s.view(ctx, target, func(_ Target, cat *catalog) error {
 		if _, ok := cat.Folders[id]; ok {
 			return ErrFolderID
@@ -268,17 +175,9 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	}); err != nil {
 		return Entry{}, err
 	}
-	// A document that carries its history (an imported .open file) keeps it in versions,
-	// not in the document file.
+	// history lives in versions, not in the document file
 	history := doc.History
 	doc.History = nil
-	// A document that is written end to end here (a new confidential one, an import, a copy,
-	// or a save of one that is already confidential) has its files switched to people's keys
-	// before the first byte of it is written: the gate runs first, the re-key second, and the
-	// in-lock gates below are then not repeated. The re-key runs for an existing confidential
-	// document too: the signed record is what the keyring trusts, and one put back from before
-	// the switch (a replay) says "server", so each save asserts the level the catalog says (one
-	// record read when it is settled).
 	var out Entry
 	forced := false // the in-lock read found a level the first read did not
 	for attempt := 0; ; attempt++ {
@@ -292,10 +191,9 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 				case gerr == nil:
 					known = cur.Protection == ProtectionE2EE
 				case errors.Is(gerr, ErrNotFound):
-					// A new document takes its level from the file.
 					want = want || doc.Protection() == ProtectionE2EE
 				default:
-					// Never treated as "not there": the document may be, and be confidential.
+					// never treated as not there: the document may be confidential
 					return Entry{}, gerr
 				}
 			} else {
@@ -317,7 +215,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 		}
 		err := s.saveLocked(ctx, target, c, doc, history, id, e2ee, prechecked, rekeyed, &out)
 		if errors.Is(err, errNeedRekey) && attempt < 2 {
-			forced = true // the document's level changed since it was read: start over, re-keyed
+			forced = true // the level changed since it was read: start over, re-keyed
 			continue
 		}
 		if errors.Is(err, errNeedRekey) {
@@ -327,22 +225,16 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	}
 }
 
-// errNeedRekey is what the in-lock part of a save returns when the document ends up end to end
-// protected without the re-key having run: writing it then would wrap it with whatever keys the
-// store's record says, which may be the server's.
 var errNeedRekey = errors.New("saver: the document became confidential after it was read")
 
-// saveLocked is the catalog update of a save. doc is a copy: the caller can run it again.
 func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, doc docfile.Document, history []docfile.Revision, id string, e2ee, prechecked, rekeyed bool, out *Entry) error {
 	err := s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		prev, existed := cat.Docs[id]
 		protection := prev.Protection
 		if existed {
-			// The catalog is where tags are edited (SetTags); saving the document
-			// does not bring back what was removed there. For an end-to-end document
-			// the catalog has none: the saved document's own are kept.
+			// the catalog is where tags are edited: saving restores none
 			if e2ee && !prev.confidential() {
-				// Becoming confidential by this save: the same gate as SetProtection's.
+				// becoming confidential by this save: the same gate as SetProtection's
 				if s.ConfidentialCheck != nil && !prechecked {
 					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 						return fmt.Errorf("saver: not saved as confidential: %w", err)
@@ -364,13 +256,12 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			doc.SetFolder(prev.Folder) // moving is Move's job
 		} else {
 			if _, ok := cat.Folders[id]; ok {
-				return ErrFolderID // a folder was made with this ID since the first read
+				return ErrFolderID
 			}
 			if _, ok := cat.Folders[doc.Folder()]; !ok {
-				doc.SetFolder("") // a new document in a folder that is not there goes to the top
+				doc.SetFolder("")
 			}
-			// A new document marked confidential stays so (a copy or an import of one),
-			// if the check allows it.
+			// a copy or import of a confidential document stays so if allowed
 			if protection = doc.Protection(); e2ee {
 				protection = ProtectionE2EE
 			}
@@ -381,8 +272,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			}
 		}
 		if protection == ProtectionE2EE && s.Rekey != nil && !rekeyed {
-			// Confidential, and the keys were not asserted: the store's record may say
-			// "server" (a concurrent delete or switch, a replayed record). Not written.
+			// confidential but keys not asserted: not written
 			return errNeedRekey
 		}
 		doc.SetProtection(protection)
@@ -392,17 +282,12 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 		if err != nil {
 			return err
 		}
-		// A new file, never the one the catalog points at: the catalog switches to it once
-		// it is written, and the file it replaces stays as the previous copy.
+		// new file: the replaced one stays as previous copy
 		key := genKey(id, c)
 		cat.fresh = append(cat.fresh, key)
 		err = t.Adapter.Save(ctx, key, data)
 		inPlace := false
 		if errors.Is(err, docstore.ErrStorageFull) && existed {
-			// No room for a second whole file beside the current one and its previous
-			// copy. Give up the backup first, and if that is not enough, write over the
-			// current file, as before copies existed: a save that fits is better than
-			// one refused.
 			if prev.Prev != "" {
 				_ = t.Adapter.Delete(ctx, prev.Prev)
 				prev.Prev, prev.PrevSum = "", ""
@@ -437,14 +322,12 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 	return err
 }
 
-// Load reads a document back by ID. A document whose file is missing or damaged is read
-// from its previous copy when there is one (see LoadChecked).
+// Load reads a document back by ID.
 func (s *Saver) Load(ctx context.Context, target, id string) (docfile.Document, error) {
 	doc, _, err := s.LoadChecked(ctx, target, id)
 	return doc, err
 }
 
-// Delete removes a document, its history and its place in the trash for good.
 func (s *Saver) Delete(ctx context.Context, target, id string) error {
 	return s.update(ctx, target, func(t Target, cat *catalog, later *[]func()) error {
 		e, ok := cat.Docs[id]
@@ -463,8 +346,6 @@ func (s *Saver) Delete(ctx context.Context, target, id string) error {
 	})
 }
 
-// List returns the documents saved in the target that are not in the trash,
-// newest first.
 func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
 	var out []Entry
 	err := s.view(ctx, target, func(_ Target, cat *catalog) error {
@@ -474,8 +355,6 @@ func (s *Saver) List(ctx context.Context, target string) ([]Entry, error) {
 	return out, err
 }
 
-// Lists returns the documents in the target and those in its trash from one read
-// of the catalog, so a document is in exactly one of them.
 func (s *Saver) Lists(ctx context.Context, target string) (live, trashed []Entry, err error) {
 	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
 		live, trashed = cat.sorted(s, false), cat.sorted(s, true)
@@ -484,7 +363,6 @@ func (s *Saver) Lists(ctx context.Context, target string) (live, trashed []Entry
 	return live, trashed, err
 }
 
-// Overview is Lists and the folders, from one read of the catalog.
 func (s *Saver) Overview(ctx context.Context, target string) (live, trashed []Entry, folders []Folder, err error) {
 	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
 		live, trashed, folders = cat.sorted(s, false), cat.sorted(s, true), cat.folderList()
@@ -506,9 +384,6 @@ func (s *Saver) Get(ctx context.Context, target, id string) (Entry, error) {
 	return out, err
 }
 
-// Build makes a Target from a docstore config, the way a server's
-// settings choose a backend ("postgres" with {"dsn": ...}, "sqlite" with
-// {"path": ...}, "s3", "localfs", "memory").
 func Build(ctx context.Context, name, label string, cfg docstore.Config) (Target, error) {
 	a, err := docstore.BuildAdapter(ctx, cfg)
 	if err != nil {

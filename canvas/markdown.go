@@ -7,38 +7,16 @@ import (
 	"unicode"
 )
 
-// Markdown is a Transform for extended Markdown. It supports:
-//
-//	# Headings (1-6)            **bold**  __bold__  *italic*  _italic_  ***both***
-//	~~strikethrough~~           ++underline++       ==highlight==
-//	^superscript^               ~subscript~         `inline code`
-//	[links](url)                ![images](url)      \* backslash escapes
-//	- bullets, 1. numbers, - [ ] task lists (nest with 2-space indents)
-//	> block quotes              --- horizontal rules
-//	``` fenced code blocks      | pipe | tables |  (a header row, a ---|--- row, then rows)
-//
-// plus directives on a line of their own:
-//
-//	\pagebreak          a user page break
-//	\columnbreak        a user column break
-//	\columns N [gap=G]  N equal columns (default gap 24) from here on; \columns 1 goes back to one
-//
-// Tables become read-only table objects (the cells' inline markup is
-// stripped to plain text), rules become Rule objects, and images
-// become whatever Images returns for them. Soft line breaks inside a
-// paragraph are spaces; end a line with two spaces or a backslash for
-// a hard break.
+// Markdown is a Transform for extended Markdown syntax.
 type Markdown struct {
-	CodeFamily     string     // default "monospace"
-	HeadingScale   [6]float64 // size multipliers for # to ######; default 2, 1.6, 1.35, 1.2, 1.05, 1
-	LinkColor      string     // default LinkColor ("#1a5fb4")
-	CodeBackground string     // default "#eceef1"
-	MarkBackground string     // ==highlight==, default "#fff3a3"
-	QuoteColor     string     // default "#5b616b"
-	QuoteBar       string     // the bar beside a block quote, default "#c4c7cd"
-	// Images turns ![alt](url) into an inline object. If nil, or if it
-	// returns nil, the alt text is shown in brackets instead.
-	Images func(url, alt string) InlineObject
+	CodeFamily     string // default "monospace"
+	HeadingScale   [6]float64
+	LinkColor      string // default LinkColor ("#1a5fb4")
+	CodeBackground string // default "#eceef1"
+	MarkBackground string // ==highlight==, default "#fff3a3"
+	QuoteColor     string // default "#5b616b"
+	QuoteBar       string // the bar beside a block quote, default "#c4c7cd"
+	Images         func(url, alt string) InlineObject
 }
 
 func (m Markdown) codeFamily() string { return orStr(m.CodeFamily, "monospace") }
@@ -75,7 +53,6 @@ func (m Markdown) Transform(src string) []Item {
 	var out []Item
 	text := func(s string, f Format) { out = append(out, Chars{Text: s, Format: f}) }
 
-	// isBlockStart reports whether line starts something other than paragraph text.
 	isBlockStart := func(i int) bool {
 		l := lines[i]
 		return strings.TrimSpace(l) == "" || reHeading.MatchString(l) || reRule.MatchString(l) ||
@@ -83,8 +60,7 @@ func (m Markdown) Transform(src string) []Item {
 			strings.HasPrefix(l, `\`) && isDirective(l) || (strings.Contains(l, "|") && i+1 < len(lines) && reTableSep.MatchString(lines[i+1]))
 	}
 
-	// gap is the blank line that separates a block from the one after it
-	// -- but not from a directive or the end, where it would be wasted.
+	// no gap before a directive or the end
 	gap := func(i int) {
 		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
 			i++
@@ -238,7 +214,6 @@ func isDirective(line string) bool {
 	return d == `\pagebreak` || d == `\columnbreak` || reColumns.MatchString(d)
 }
 
-// trimTrailingNewlines drops the blank lines a final block leaves behind.
 func trimTrailingNewlines(items []Item) []Item {
 	for len(items) > 0 {
 		c, ok := items[len(items)-1].(Chars)
@@ -255,7 +230,6 @@ func trimTrailingNewlines(items []Item) []Item {
 	return items
 }
 
-// cells splits a table row into trimmed, inline-markup-stripped cells.
 func (m Markdown) cells(row string) []string {
 	row = strings.TrimSpace(row)
 	row = strings.TrimPrefix(row, "|")
@@ -280,7 +254,6 @@ func (m Markdown) cells(row string) []string {
 	return append(cells, m.plain(cur.String()))
 }
 
-// plain renders inline markup to unformatted text.
 func (m Markdown) plain(s string) string {
 	var b strings.Builder
 	for _, it := range m.inline(strings.TrimSpace(s), Format{}) {
@@ -290,8 +263,6 @@ func (m Markdown) plain(s string) string {
 	}
 	return b.String()
 }
-
-// --- inline ----------------------------------------------------------
 
 type mdState struct{ bold, italic, strike, under, sup, sub, mark bool }
 
@@ -313,7 +284,6 @@ func (st mdState) format(base Format, m Markdown) Format {
 	return f
 }
 
-// delimiters, longest first at each position.
 var mdDelims = []string{"***", "**", "__", "~~", "++", "==", "*", "_", "~", "^"}
 
 func (st *mdState) flag(tok string) []*bool {
@@ -340,7 +310,6 @@ func (st *mdState) flag(tok string) []*bool {
 
 func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
 
-// runLen counts consecutive copies of c starting at i.
 func runLen(r []rune, i int, c rune) int {
 	n := 0
 	for i+n < len(r) && r[i+n] == c {
@@ -349,7 +318,6 @@ func runLen(r []rune, i int, c rune) int {
 	return n
 }
 
-// findCloser finds the next closing delimiter tok after from, or -1.
 func findCloser(r []rune, from int, tok string) int {
 	c := []rune(tok)[0]
 	for j := from; j < len(r); j++ {
@@ -381,7 +349,6 @@ func containsSpace(r []rune) bool {
 	return false
 }
 
-// inline parses inline markup into Chars (and Inline objects for images).
 func (m Markdown) inline(s string, base Format) []Item {
 	var out []Item
 	var sb strings.Builder
@@ -461,8 +428,6 @@ func (m Markdown) inline(s string, base Format) []Item {
 	return out
 }
 
-// delimAt reports whether a formatting delimiter at r[i] opens or
-// closes formatting (toggling is up to the caller).
 func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 	for _, tok := range mdDelims {
 		n := len(tok)
@@ -485,7 +450,6 @@ func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 			}
 			return tok, true
 		}
-		// an opener
 		if nextSpace || (c == '_' && i > 0 && isWordRune(r[i-1])) {
 			return "", false
 		}
@@ -497,7 +461,6 @@ func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 	return "", false
 }
 
-// findRun finds the next run of exactly n copies of c at or after from.
 func findRun(r []rune, from int, c rune, n int) int {
 	for j := from; j < len(r); j++ {
 		if r[j] != c {
@@ -512,7 +475,6 @@ func findRun(r []rune, from int, c rune, n int) int {
 	return -1
 }
 
-// parseLink parses [label](url) starting at the '[' at r[i].
 func parseLink(r []rune, i int) (label, url string, end int, ok bool) {
 	depth, j := 0, i
 	for ; j < len(r); j++ {

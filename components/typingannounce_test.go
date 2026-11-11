@@ -8,7 +8,6 @@ import (
 
 var typingT0 = time.Date(2030, 1, 1, 10, 0, 0, 0, time.UTC)
 
-// typer drives a TypingAnnouncer like a person at the keyboard: the text and caret after each key.
 type typer struct {
 	a     *TypingAnnouncer
 	text  []rune
@@ -25,7 +24,6 @@ func newTyper(a *TypingAnnouncer, text string) *typer {
 
 func (ty *typer) state() TypingState {
 	s := TypingState{Text: string(ty.text), Caret: ty.caret}
-	// the line: the paragraph the caret is in
 	start := ty.caret
 	for start > 0 && ty.text[start-1] != '\n' {
 		start--
@@ -47,7 +45,6 @@ func (ty *typer) update(ms int) string {
 	return out
 }
 
-// typeKeys types s one key at a time, ms apart, and returns what was said.
 func (ty *typer) typeKeys(s string, ms int) {
 	for _, r := range s {
 		ty.text = append(ty.text[:ty.caret], append([]rune{r}, ty.text[ty.caret:]...)...)
@@ -74,11 +71,9 @@ func TestTypingWordsSaysEachFinishedWordAndHoldsToSpaceTheSpeech(t *testing.T) {
 		t.Fatalf("a word is said when it is finished, not letter by letter: %q", ty.said)
 	}
 	ty.typeKeys(" ", 100)
-	// the space finished "hello", but 0.6 s have not gone by since the start: first sentence is free
 	if strings.Join(ty.said, "|") != "hello" {
 		t.Fatalf("hello: %q", ty.said)
 	}
-	// two more words inside the spacing are held and said together
 	ty.typeKeys("big ", 50) // "big" held
 	ty.typeKeys("red ", 50) // "red" held
 	if strings.Join(ty.said, "|") != "hello" {
@@ -121,7 +116,6 @@ func TestTypingCharactersNamesSpacesAndLineBreaksAndSaysDeletions(t *testing.T) 
 	if got := strings.Join(ty.said, "|"); got != "a|space|new line|é|Deleted é" {
 		t.Errorf("each character as it is typed: %q", got)
 	}
-	// the same letter twice in a row is still two sentences
 	ty = newTyper(&TypingAnnouncer{Level: TypingCharacters}, "")
 	ty.typeKeys("aa", 600)
 	if got := strings.Join(ty.said, "|"); got != "a|a" {
@@ -131,7 +125,7 @@ func TestTypingCharactersNamesSpacesAndLineBreaksAndSaysDeletions(t *testing.T) 
 
 func TestTypingBoundsWhatIsHeldAndNamesAPaste(t *testing.T) {
 	ty := newTyper(&TypingAnnouncer{Level: TypingCharacters}, "")
-	ty.typeKeys("abcdefghijkl", 10) // faster than the spacing: held, and only the latest are kept
+	ty.typeKeys("abcdefghijkl", 10)
 	ty.update(600)
 	if got := ty.said[len(ty.said)-1]; got != "g h i j k l" {
 		t.Errorf("only the last few are kept: %q", ty.said)
@@ -142,7 +136,6 @@ func TestTypingBoundsWhatIsHeldAndNamesAPaste(t *testing.T) {
 	if got := ty.update(600); got != "Pasted 150 characters" {
 		t.Errorf("a paste is counted, not read: %q", got)
 	}
-	// a word taken from the list is a piece that is finished
 	ty = newTyper(&TypingAnnouncer{Level: TypingWords}, "ze")
 	ty.text = []rune("zebra")
 	ty.caret = 5
@@ -153,7 +146,6 @@ func TestTypingBoundsWhatIsHeldAndNamesAPaste(t *testing.T) {
 
 func TestTypingDoesNotSayChangesMadeElsewhere(t *testing.T) {
 	ty := newTyper(&TypingAnnouncer{Level: TypingCharacters}, "Hello")
-	// someone else adds text at the start: the local caret is not where the new text ends
 	ty.text = append([]rune("Ana: "), ty.text...)
 	ty.caret = 10
 	ty.update(600)
@@ -177,13 +169,11 @@ func TestTypingReadsTheLineTheCaretGoesToAndWhatItPassesOver(t *testing.T) {
 	if got := ty.move(23, 600); got != "blank" {
 		t.Errorf("an empty line: %q", got)
 	}
-	// the same text on two lines is still told apart
 	ty = newTyper(&TypingAnnouncer{Lines: true}, "same\nsame")
 	ty.move(2, 600)
 	if got := ty.move(7, 600); got != "same" {
 		t.Errorf("the second same: %q", got)
 	}
-	// without the preference nothing is read
 	ty = newTyper(&TypingAnnouncer{Level: TypingCharacters}, text)
 	if got := ty.move(15, 600); got != "" {
 		t.Errorf("not asked for: %q", got)
@@ -222,7 +212,6 @@ func TestTypingSaysFormattingChangesAtTheCaret(t *testing.T) {
 	if got := at(3000, nil, "Heading 2"); got != "" {
 		t.Errorf("no change, no words: %q", got)
 	}
-	// off by preference: silent
 	b := &TypingAnnouncer{}
 	b.Update(typingT0, TypingState{Text: "x"})
 	if got := b.Update(typingT0.Add(time.Second), TypingState{Text: "x", Marks: []string{"Bold"}}); got != "" {

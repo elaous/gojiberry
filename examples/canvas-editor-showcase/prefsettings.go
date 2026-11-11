@@ -10,13 +10,8 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The preferences are described once, in prefSettings: the View > Display preferences menu and the Preferences
-// tab (with its search) are both made from that list, so they cannot drift apart.
-
-// choice is one value of a choice setting: what is kept, its name in the panel, and its line in the menu.
 type choice struct{ value, label, menu string }
 
-// setting is one preference. A toggle has on/setOn; a choice has choices, cur and set.
 type setting struct {
 	group, id, label string
 	toggle           bool
@@ -25,7 +20,7 @@ type setting struct {
 	choices          []choice
 	cur              func(prefs) string
 	set              func(*prefs, string)
-	noMenu           bool // not in the Display preferences menu (it has a menu of its own)
+	noMenu           bool
 }
 
 func onOff(on bool, v string) string {
@@ -35,7 +30,6 @@ func onOff(on bool, v string) string {
 	return ""
 }
 
-// prefGroups are the groups of settings in order, by id and name.
 func prefGroups() [][2]string {
 	return [][2]string{
 		{"text", T("prefs.g.text", "Text and display")},
@@ -130,7 +124,6 @@ func prefSettings() []setting {
 	}
 }
 
-// change applies f to the preferences in force, keeps them, says msg and draws again.
 func changePrefs(u *ui, renderUI func(), msg string, f func(*prefs)) {
 	p := curPrefs
 	f(&p)
@@ -139,8 +132,6 @@ func changePrefs(u *ui, renderUI func(), msg string, f func(*prefs)) {
 	renderUI()
 }
 
-// prefsMenu is the display preferences: made from prefSettings, with the file import and export, the privacy
-// settings and a reset.
 func prefsMenu(u *ui, renderUI func()) []components.MenuItem {
 	var items []components.MenuItem
 	lastGroup := ""
@@ -207,8 +198,6 @@ func importPrefs(u *ui, renderUI func()) {
 	})
 }
 
-// matches says whether a setting (or its group) answers the words typed in the search box: every word must
-// be in the setting's name, its group's name or one of its values.
 func (s setting) matches(group, query string) bool {
 	hay := strings.ToLower(s.label + " " + group)
 	for _, c := range s.choices {
@@ -222,7 +211,6 @@ func (s setting) matches(group, query string) bool {
 	return true
 }
 
-// prefsPanel is the Preferences tab: every setting, grouped, with a search box that narrows the list.
 func prefsPanel(u *ui, renderUI func()) xango.Node {
 	kids := []xango.Node{
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("prefs.title", "Preferences"))),
@@ -253,7 +241,7 @@ func prefsPanel(u *ui, renderUI func()) xango.Node {
 		status = Tn("prefs.count", "%d preference", "%d preferences", shown)
 	}
 	kids = append(kids, xango.El("p", []xango.Attr{xango.A("class", "gj-prefs-count"), xango.A("role", "status")}, xango.Text(status)))
-	if u.prefsQuery == "" { // a search narrows the settings; the choice to keep them on the server is not one of them
+	if u.prefsQuery == "" {
 		kids = append(kids, prefsSyncNode(u, renderUI))
 	}
 	kids = append(kids,

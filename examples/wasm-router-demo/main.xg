@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Package main is a minimal two-page SPA proving browser.Router
-// actually unifies programmatic navigation and the browser's own
-// back/forward buttons under one callback: OnNavigate re-renders the
-// page for whatever the current path is, regardless of whether it got
-// there via Navigate, Replace, or the user clicking Back/Forward.
 package main
 
 import (

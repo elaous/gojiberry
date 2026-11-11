@@ -11,7 +11,6 @@ func TestEnglishFindsPoints(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("no points in hyphenation")
 	}
-	// hy-phen-ation: break after "hy" or "hyphen", never inside the first or last two letters.
 	for _, p := range got {
 		if p < 2 || p > len("hyphenation")-2 {
 			t.Errorf("point %d too near an end", p)

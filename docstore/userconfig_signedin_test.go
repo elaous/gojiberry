@@ -12,8 +12,6 @@ import (
 	"github.com/elaous/gojiberry/userconfig"
 )
 
-// The per-person settings routes with real sessions: each person reaches their own items only, the
-// address is read without regard to case, and a request with no session is refused.
 func TestMeConfigWithSignedInSessions(t *testing.T) {
 	ctx := context.Background()
 	m, err := auth.NewManager(ctx, auth.Config{BaseURL: "https://app.example.com"})
@@ -64,7 +62,6 @@ func TestMeConfigWithSignedInSessions(t *testing.T) {
 	if rec := call("GET", "/me/config/prefs", "not-a-real-token", "", ""); rec.Code != 401 {
 		t.Fatalf("an unknown token: %d", rec.Code)
 	}
-	// the document API cannot reach the items, even for the person they belong to
 	metas, _ := mem.List(ctx)
 	for _, meta := range metas {
 		if strings.HasPrefix(meta.ID, docstore.ConfigPrefix) {

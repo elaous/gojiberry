@@ -1,5 +1,3 @@
-// Package wire holds the types a collab server and its clients share, so a
-// WASM client need not import the server's dependencies.
 package wire
 
 import (
@@ -8,8 +6,7 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// Role is what a person may do with a document. The names match
-// canvas.Role and docstore's access levels.
+// Role is what a person may do with a document.
 type Role string
 
 const (
@@ -18,22 +15,16 @@ const (
 	Viewer Role = "viewer"
 )
 
-// CanRead reports whether the role may see the document at all (the empty
-// role may not).
+// CanRead reports whether the role may see the document.
 func (r Role) CanRead() bool { return r == Owner || r == Editor || r == Viewer }
 
-// CanEdit reports whether the role may change the text and everything else.
+// CanEdit reports whether the role may change the text.
 func (r Role) CanEdit() bool { return r == Owner || r == Editor }
 
-// CanComment reports whether the role may add comments and replies: every
-// role that can read.
+// CanComment reports whether the role may comment.
 func (r Role) CanComment() bool { return r.CanRead() }
 
-// Presence is one replica's cursor and who it belongs to. Positions are
-// character ids (crdt.Timestamp), the character just before the position, so they
-// stay right as the text changes; the zero id means the very start of the text.
-// Has says whether Anchor and Caret mean anything. The server sets User and
-// Role; the rest comes from the client.
+// Presence is one replica's cursor and its owner.
 type Presence struct {
 	Replica string         `json:"replica"`
 	Name    string         `json:"name,omitempty"`
@@ -43,23 +34,12 @@ type Presence struct {
 	Has     bool           `json:"has,omitempty"`
 	Anchor  crdt.Timestamp `json:"anchor"`
 	Caret   crdt.Timestamp `json:"caret"`
-	// Holding names the object (a picture, a form field, an equation) this replica is changing, "" for none: the others
-	// see it as busy until it is let go, and, since presence expires, until a few seconds after the last sign of life.
-	// It is advice for the interface and not a lock the server keeps (the text merges whatever it says).
+	// Holding names the object this replica is changing.
 	Holding string `json:"holding,omitempty"`
-	// Gone is set on the event sent when a replica leaves.
-	Gone bool `json:"gone,omitempty"`
+	Gone    bool   `json:"gone,omitempty"`
 }
 
-// Frame is one WebSocket message of the collab protocol (the transport in
-// collab/ws and the hub's /docs/{id}/ws endpoint). It mirrors the HTTP
-// transport's server-sent events and posts, in one stream.
-//
-// From the server: Event is "hello", "snapshot", "ops" or "presence" with the
-// same Data the SSE events carry, and "ack" or "reject" answering a client
-// "ops" frame by its ID (Error says why a rejection happened). From the
-// client: "ops" (with an ID, Data the operations) and "presence" (Data the
-// cursor).
+// Frame is one WebSocket message of the collab protocol.
 type Frame struct {
 	Event string          `json:"event"`
 	ID    uint64          `json:"id,omitempty"`

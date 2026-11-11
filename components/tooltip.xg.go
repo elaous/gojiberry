@@ -4,7 +4,6 @@ package components
 
 import "github.com/elaous/gojiberry/xango"
 
-// TooltipPlacement selects which side of the trigger Tooltip's bubble appears on.
 type TooltipPlacement string
 
 const (
@@ -21,9 +20,6 @@ type TooltipProps struct {
 	Children  []xango.Node     // whatever should trigger the tooltip on hover/focus
 }
 
-// Tooltip wraps Children with a bubble that shows Content on hover or
-// keyboard focus. Pure CSS (:hover/:focus-within) -- no JS, no
-// positioning logic to keep in sync with anything.
 func Tooltip(props TooltipProps) xango.Node {
 	placement := props.Placement
 	if placement == "" {

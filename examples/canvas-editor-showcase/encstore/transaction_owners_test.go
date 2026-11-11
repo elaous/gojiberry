@@ -18,7 +18,6 @@ import (
 	"time"
 )
 
-// confidentialRig is encryptedRig with three documents and a confidential one.
 func confidentialRig(t *testing.T) (*rig, string, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -56,7 +55,6 @@ func TestAddOwnerFailsAtEveryStepAndLeavesTheStoreUsable(t *testing.T) {
 			if !reflect.DeepEqual(r.saved, cfgBefore) || len(r.st.Owners()) != 2 || r.st.Interrupted() {
 				t.Errorf("the key list changed: %+v vs %+v", r.saved, cfgBefore)
 			}
-			// Still unlocked, still working: it is not left half changed.
 			if !r.st.Unlocked() {
 				t.Error("locked by the failure")
 			}
@@ -98,7 +96,6 @@ func TestACrashDuringAddOwnerIsFinishedOnTheNextLoad(t *testing.T) {
 	if !r.st.Interrupted() || r.saved.Pending.Op != OpAdd {
 		t.Fatalf("%+v", r.saved)
 	}
-	// The key list is still the old one, so the old keys unlock; the retry action finishes it.
 	r.unlockPasskey(t)
 	if err := r.st.Recover(ctx, true); err != nil {
 		t.Fatal(err)
@@ -121,8 +118,6 @@ func TestACrashDuringAddOwnerIsFinishedOnTheNextLoad(t *testing.T) {
 	}
 }
 
-// A recovery key becomes an owner only after its secret was shown and confirmed saved: a key whose
-// secret nobody saw would count as a way back that does not exist.
 func TestARecoveryKeyWithoutASavedSecretIsNotAnOwner(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
@@ -148,7 +143,6 @@ func TestARecoveryKeyWithoutASavedSecretIsNotAnOwner(t *testing.T) {
 	if len(r.st.Owners()) != 1 {
 		t.Fatal("the unseen key is an owner")
 	}
-	// And it does not make the passkey-only store look recoverable.
 	if err := r.saver.SetProtection(ctx, target, e.ID, saver.ProtectionE2EE); !errors.Is(err, encrypt.ErrNeedSecondRecipient) {
 		t.Fatalf("an unseen recovery key counted: %v", err)
 	}
@@ -189,13 +183,10 @@ func TestRemoveOwnerEncryptsEverythingAgainWithoutIt(t *testing.T) {
 			passkeyFP = o.Fingerprint
 		}
 	}
-	// Refusals: unknown, and a way back that would be lost.
 	if err := r.st.RemoveOwner(ctx, "SHA256:nobody"); !errors.Is(err, ErrNoSuchOwner) {
 		t.Fatalf("%v", err)
 	}
 	before := r.snapshot(t)
-	// The store is unlocked with the passkey: removing the SSH key is allowed; the document list
-	// signed by the passkey stays valid.
 	if err := r.st.RemoveOwner(ctx, sshFP); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +196,6 @@ func TestRemoveOwnerEncryptsEverythingAgainWithoutIt(t *testing.T) {
 	if reflect.DeepEqual(before, r.snapshot(t)) {
 		t.Fatal("nothing was re-encrypted")
 	}
-	// The removed key no longer opens anything saved.
 	r.open(t, r.saved)
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); !errors.Is(err, ErrNotAKey) {
 		t.Fatalf("the removed key unlocks: %v", err)
@@ -221,13 +211,10 @@ func TestRemoveOwnerEncryptsEverythingAgainWithoutIt(t *testing.T) {
 			t.Errorf("%s still opens with the removed key: %v", m.ID, err)
 		}
 	}
-	// Now the passkey is removed too, while unlocked with the recovery key: the lists signed by it
-	// are signed again by the recovery key, so the confidential document still opens afterwards.
 	if err := r.st.UnlockRecovery(rsecret); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.st.RemoveOwner(ctx, passkeyFP); !errors.Is(err, ErrWouldLoseRecovery) {
-		// A recovery key alone is recoverable (it is not a passkey): this must work.
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
@@ -242,7 +229,6 @@ func TestRemoveOwnerEncryptsEverythingAgainWithoutIt(t *testing.T) {
 	if name, _, err := r.saver.Reveal(ctx, target, id); err != nil || name != "Secret doc" {
 		t.Fatalf("the confidential document after the lists were re-signed: %q %v", name, err)
 	}
-	// The signed list of the document verifies under the keys that remain: it was signed again.
 	sh, err := r.st.Sharing()
 	if err != nil {
 		t.Fatal(err)
@@ -270,11 +256,9 @@ func TestRemoveOwnerRefusalsLeaveTheStoreAlone(t *testing.T) {
 		}
 	}
 	before := r.snapshot(t)
-	// Taking the recovery key out would leave passkeys only.
 	if err := r.st.RemoveOwner(ctx, recoveryFP); !errors.Is(err, ErrWouldLoseRecovery) {
 		t.Fatalf("%v", err)
 	}
-	// Unlocked with the passkey alone, the passkey cannot be the one removed.
 	if err := r.st.RemoveOwner(ctx, passkeyFP); !errors.Is(err, ErrUseAnotherKey) {
 		t.Fatalf("%v", err)
 	}
@@ -346,13 +330,10 @@ func TestReplaceOwnerSwapsAPasskeyInOneTransaction(t *testing.T) {
 	if name, _, err := r.saver.Reveal(ctx, target, id); err != nil || name != "Secret doc" {
 		t.Fatalf("the confidential document under the new passkey: %q %v", name, err)
 	}
-	// The recovery key (whose seal predates the swap) still unlocks: the link chain reaches the
-	// new list.
 	r.st.Lock()
 	if err := r.st.UnlockRecovery(rsecret); err != nil {
 		t.Fatalf("the recovery key after the swap: %v", err)
 	}
-	// A passkey-only store may swap its passkey (it is no worse); a swap that gives up a way back is refused.
 	if err := r.st.ReplaceOwner(ctx, r.st.Recipients()[1].Fingerprint, passkeyFrom(t, bytes.Repeat([]byte{8}, 32), "p3")); !errors.Is(err, ErrWouldLoseRecovery) && r.st.Recipients()[1].Type == "age-x25519" {
 		t.Fatalf("swapping the recovery key for a passkey: %v", err)
 	}
@@ -447,10 +428,6 @@ func TestACrashDuringDisableIsFinishedOnTheNextLoad(t *testing.T) {
 	}
 }
 
-// Disable holds the storage so that a save made while it runs cannot leave ciphertext behind: the
-// save waits, and then finds encryption off (it is refused rather than written under a key that is
-// gone). Without the hold the save lands in the middle of the pass and its ciphertext is never
-// decrypted.
 func TestDisableDoesNotRaceWithASave(t *testing.T) {
 	ctx := context.Background()
 	r, _ := encryptedRig(t)
@@ -461,10 +438,9 @@ func TestDisableDoesNotRaceWithASave(t *testing.T) {
 	r.raw.writes = 0
 	r.raw.loadHook = func(id string) {
 		if r.raw.writes == 0 || !started.CompareAndSwap(false, true) {
-			return // wait for the pass to be under way: a save before it would only be part of it
+			return
 		}
 		go func() { saveErr <- r.st.Adapter().Save(ctx, newID, []byte("saved during the disable")) }()
-		// Give the save every chance to get in: without the hold it lands now.
 		time.Sleep(150 * time.Millisecond)
 	}
 	if err := r.st.Disable(ctx); err != nil {
@@ -472,14 +448,12 @@ func TestDisableDoesNotRaceWithASave(t *testing.T) {
 	}
 	r.raw.loadHook = nil
 	err := <-saveErr
-	// Whatever the save did, no ciphertext may be left in a store that is no longer encrypted.
 	for id, b := range r.snapshot(t) {
 		if !encrypt.DefaultSkip(id) && strings.HasPrefix(b, "age-encryption.org/") {
 			t.Errorf("%s is ciphertext in a store that is not encrypted (the concurrent save returned %v)", id, err)
 		}
 	}
 	if err == nil {
-		// It was allowed: it must then be readable as plain text.
 		d, lerr := r.raw.inner.Load(ctx, newID)
 		if lerr != nil || string(d.Data) != "saved during the disable" {
 			t.Errorf("the save returned nil but stored %q (%v)", d.Data, lerr)
@@ -509,7 +483,6 @@ func TestEraseDeletesTheEncryptedStoreOnlyAndNeedsNoKey(t *testing.T) {
 	if d, err := other.Load(ctx, "00000000-0000-4000-8000-0000000000bb.open"); err != nil || string(d.Data) != "elsewhere" {
 		t.Fatal("another target was touched")
 	}
-	// A store can be turned on again from nothing.
 	rk, _ := recovery(t)
 	if err := r.st.Enable(ctx, Options{}, passkey(t, r), rk); err != nil {
 		t.Fatal(err)
@@ -533,7 +506,6 @@ func TestEraseWorksOnAnInterruptedStoreAndCanBeRepeated(t *testing.T) {
 		t.Fatal("no error")
 	}
 	if !r.st.Interrupted() || len(r.snapshot(t)) == 0 {
-		// Cut short: the journal is still there, and part of the data too.
 		t.Fatal("a half erase must not claim success")
 	}
 	r.raw.heal()
@@ -545,8 +517,6 @@ func TestEraseWorksOnAnInterruptedStoreAndCanBeRepeated(t *testing.T) {
 	}
 }
 
-// The config holds public keys, signatures and the journal: no secret of any key, the passkey's
-// PRF output and identity included.
 func TestConfigHoldsNoPrivateMaterial(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
@@ -559,7 +529,6 @@ func TestConfigHoldsNoPrivateMaterial(t *testing.T) {
 	}
 	r.open(t, r.saved)
 	r.unlockPasskey(t)
-	// Every config that was ever handed to Persist, and the one the store reports.
 	cfgs := []Config{r.saved, r.st.Config()}
 	idPRF, _ := encrypt.PRFIdentity(r.secret)
 	secrets := []string{"AGE-SECRET-KEY", rsecret, idPRF.String(), "PRIVATE KEY"}
@@ -577,7 +546,6 @@ func TestConfigHoldsNoPrivateMaterial(t *testing.T) {
 			}
 		}
 	}
-	// And during a change: the journal is a config too.
 	r.persist = 0
 	nk, _ := recovery(t)
 	var journals []Config
@@ -595,7 +563,6 @@ func TestUnlockClearsTheSecretsItIsGivenOnEveryPath(t *testing.T) {
 	r, _ := encryptedRig(t)
 	r.st.Lock()
 	_, priv := sshKeyPair(t, "stranger")
-	// A key that is not an owner, a file that is not a key, a passkey secret that is not the owner's.
 	for name, call := range map[string]func(b []byte) error{
 		"ssh stranger": r.st.UnlockSSH,
 		"ssh garbage":  r.st.UnlockSSH,
@@ -619,14 +586,11 @@ func TestUnlockClearsTheSecretsItIsGivenOnEveryPath(t *testing.T) {
 			t.Errorf("%s: the secret was left in memory", name)
 		}
 	}
-	// And on success.
 	good := bytes.Clone(r.secret)
 	if err := r.st.UnlockPasskey(good); err != nil || !bytes.Equal(good, make([]byte, 32)) {
 		t.Errorf("success: %v, cleared %v", err, bytes.Equal(good, make([]byte, 32)))
 	}
 }
-
-// --- binding the key list to the keys ---
 
 func attackerOwner(t *testing.T) Owner {
 	t.Helper()
@@ -638,7 +602,6 @@ func TestAReplacedKeyListIsRefusedAtUnlock(t *testing.T) {
 	r, rsecret := encryptedRig(t)
 	r.st.Lock()
 	cfg := r.st.Config()
-	// Someone who can write the storage adds their own key to the list.
 	evil := cfg
 	evil.Owners = append(slicesClone(cfg.Owners), attackerOwner(t))
 	r.open(t, evil)
@@ -651,10 +614,8 @@ func TestAReplacedKeyListIsRefusedAtUnlock(t *testing.T) {
 	if r.st.Unlocked() {
 		t.Fatal("unlocked on a replaced list")
 	}
-	// The genuine list unlocks.
 	r.open(t, cfg)
 	r.unlockPasskey(t)
-	// A forged link from the genuine list to the evil one, signed by the attacker's own key.
 	k, _, _ := NewRecoveryKey("x")
 	from, to := ownersDigest(cfg.Owners), ownersDigest(evil.Owners)
 	evil.Links = append(evil.Links, Link{From: from, To: evil.Owners, Signer: hexOf(k.SignerPub),
@@ -665,7 +626,6 @@ func TestAReplacedKeyListIsRefusedAtUnlock(t *testing.T) {
 	}
 }
 
-// A legitimate change made with one key is accepted by the others, whose seals predate it.
 func TestAKeyAcceptsAListAnotherKeyChanged(t *testing.T) {
 	ctx := context.Background()
 	r, rsecret := encryptedRig(t) // passkey + recovery; the recovery key's seal is from setup
@@ -678,8 +638,6 @@ func TestAKeyAcceptsAListAnotherKeyChanged(t *testing.T) {
 	if err := r.st.UnlockRecovery(rsecret); err != nil {
 		t.Fatalf("the recovery key after the passkey added a key: %v", err)
 	}
-	// The SSH key has no seal yet (trust on first use) and gets one on this unlock; after that a
-	// replaced list is caught for it too.
 	r.st.Lock()
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatal(err)
@@ -691,8 +649,6 @@ func TestAKeyAcceptsAListAnotherKeyChanged(t *testing.T) {
 		t.Fatalf("the ssh key after its first unlock: %v", err)
 	}
 }
-
-// --- small helpers ---
 
 func slicesClone[T any](s []T) []T { return append([]T(nil), s...) }
 
@@ -739,7 +695,6 @@ func TestStopPutsEverythingBackAndKeepsTheStoreUsable(t *testing.T) {
 	if !r.st.Unlocked() {
 		t.Error("locked by the stop")
 	}
-	// The same change goes through afterwards: the stop left nothing behind.
 	r.st.Progress = nil
 	if err := r.st.RemoveOwner(ctx, passkeyFP); err != nil {
 		t.Fatalf("RemoveOwner after a stop: %v", err)
@@ -775,7 +730,6 @@ func TestDeviceUseSurvivesAKeyChangeAndNamesOnlyCurrentKeys(t *testing.T) {
 	if err != nil || len(got) != 2 {
 		t.Fatalf("uses: %v, %v", got, err)
 	}
-	// Removing the passkey re-encrypts the store, records included, and its record goes from the list.
 	if err := r.st.RemoveOwner(ctx, passkey.Fingerprint()); err != nil {
 		t.Fatalf("RemoveOwner with a record present: %v", err)
 	}
@@ -803,7 +757,6 @@ func TestKeyListMovesToAnotherDevice(t *testing.T) {
 	if err != nil || code2 != code || len(cfg.Owners) != len(r.st.Owners()) {
 		t.Fatalf("parse: %+v %q %v", cfg, code2, err)
 	}
-	// A second device with the same files and nothing else: the list is all it needs besides a key.
 	second, err := New(r.raw, target, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -835,7 +788,6 @@ func TestParseKeyListRefusesWhatIsNotOne(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// A journal on the other device is not carried over.
 	cfg := r.st.Config()
 	cfg.Pending = &Pending{Op: OpAdd}
 	b, _ := json.Marshal(keyListEnvelope{Kind: keyListKind, Config: cfg})

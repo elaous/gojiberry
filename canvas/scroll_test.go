@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// A 100x80 viewport at (10, 20) over 300x400 content.
 func newScroll() (*ScrollView, *fakePainter) {
 	p := &fakePainter{}
 	sv := NewScrollView(10, 20, 100, 80)
@@ -14,7 +13,6 @@ func newScroll() (*ScrollView, *fakePainter) {
 	return sv, p
 }
 
-// probe is a content object that records the events it receives.
 type probe struct {
 	downs, moves, ups [][2]float64
 	wheelHandled      bool
@@ -152,8 +150,6 @@ func TestDrawClipsAndTranslates(t *testing.T) {
 	if content(sv).drew != 1 {
 		t.Fatal("content should be drawn once, between save and restore")
 	}
-	// The content draws inside the clip: its Draw must happen after the
-	// translate and before the restore.
 	var order []string
 	for _, c := range p.calls {
 		if c == "translate -5 -5" || c == "restore" {
@@ -234,17 +230,12 @@ func TestNestedScrollViewsChain(t *testing.T) {
 	}
 }
 
-// Vertical bar: x 100..110 (view x 10..110, minus 10), track y 20..100
-// (no horizontal bar? there is one: content is wider), so the track
-// ends at y=90. Horizontal bar: y 90..100.
-
 func TestScrollbarThumbDrag(t *testing.T) {
 	sv, _ := newScroll()
 	track, thumb := sv.bar(true)
 	if track[3] != 70 || thumb[3] < sv.Style.MinThumb {
 		t.Fatalf("track=%v thumb=%v", track, thumb)
 	}
-	// 70*80/400 = 14 < MinThumb 24 -> 24; room = 46 over 320px of scroll.
 	if !sv.MouseDown(thumb[0]+5, thumb[1]+5) {
 		t.Fatal("press on the thumb")
 	}
@@ -280,7 +271,6 @@ func TestScrollbarTrackClickCentersThumb(t *testing.T) {
 func TestHorizontalScrollbar(t *testing.T) {
 	sv, _ := newScroll()
 	track, thumb := sv.bar(false)
-	// Width 100 minus the vertical bar's 10.
 	if track[2] != 90 || track[1] != 90 {
 		t.Fatalf("track = %v", track)
 	}

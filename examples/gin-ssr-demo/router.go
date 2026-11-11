@@ -10,33 +10,9 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// newRouter builds the real Gin engine this demo serves, with the same
-// three security middlewares wired ahead of the page route:
-//
-//   - secure.New: sets the header-based protections (X-Frame-Options,
-//     X-Content-Type-Options, X-XSS-Protection, Content-Security-Policy,
-//     Referrer-Policy, Strict-Transport-Security) that gofiber/fiber's
-//     own helmet middleware covers, via gin-contrib's port of the same
-//     idea. SSLRedirect is left off deliberately -- this demo has no TLS
-//     listener, and redirecting every request to a nonexistent https
-//     port would just break it; a real deployment behind TLS would
-//     enable it (or set SSLProxyHeaders if TLS terminates upstream).
-//   - cors.New: a real (non-wildcard) CORS policy -- only AllowOrigins
-//     may make cross-origin requests, and only with AllowMethods/
-//     AllowHeaders, not "allow everything" defaults.
-//   - perClientRateLimit (ratelimit.go): a per-IP token bucket, since
-//     Gin ships no rate limiter of its own the way Echo does.
-//
-// It's a separate func (not inlined into main) so main_test.go can spin
-// up a real *httptest.Server against the exact same engine without
-// going through main's blocking Run.
 func newRouter() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	// This server is reached directly, not through a proxy, so the client is whoever the
-	// connection says it is: a forwarded-for header is only the client's own claim, and
-	// trusting it would let anyone pick a new "client" per request and walk around the
-	// rate limiter. (Behind a real proxy, list its address here instead.)
 	_ = r.SetTrustedProxies(nil)
 	r.Use(gin.Recovery())
 

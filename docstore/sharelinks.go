@@ -10,21 +10,14 @@ import (
 	"time"
 )
 
-// Share links (roadmap 75). A link is a secret token the owner hands out; whoever sends it in the
-// ShareHeader gets the link's role on that one document, until the link expires or the owner revokes it.
-// The access list keeps only a hash of the token (so a copy of the list is not a copy of the links) and
-// the role and deadline. A link never gives more than the document itself: not the access list, and not
-// deletion. The owner and per-person grants are unchanged and are checked first; a link only adds
-// access, it never reduces or replaces what a person was granted.
-
-// ShareHeader is the request header that carries a share link's token.
+// ShareHeader is the request header carrying a share token.
 const ShareHeader = "X-Gojiberry-Share"
 
 // Limits of share links.
 const (
-	// DefaultLinkLife is how long a link lasts when the owner does not say.
+	// DefaultLinkLife is how long a link lasts by default.
 	DefaultLinkLife = 7 * 24 * time.Hour
-	// MaxLinkLife is the longest a link may last: a link without an end is not offered.
+	// MaxLinkLife is the longest a link may last.
 	MaxLinkLife = 90 * 24 * time.Hour
 	// MinLinkLife is the shortest a link may last.
 	MinLinkLife = time.Minute
@@ -32,17 +25,16 @@ const (
 	MaxLinks = 20
 )
 
-// Link is one share link as the access list keeps it (the key of ACL.Links is the hash of its token).
 type Link struct {
 	Role    Role      `json:"role"`
 	Created time.Time `json:"created"`
 	Expires time.Time `json:"expires"`
 }
 
-// Live reports whether the link still works at now. A link works strictly before its deadline.
+// Live reports whether the link still works.
 func (l Link) Live(now time.Time) bool { return now.Before(l.Expires) }
 
-// NewShareToken is a new secret for a link: 32 random bytes, URL-safe.
+// NewShareToken is a new secret for a link.
 func NewShareToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -51,15 +43,13 @@ func NewShareToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// LinkID is what the access list calls a token: a hash, so the list cannot be turned back into links.
+// LinkID is what the access list calls a link.
 func LinkID(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
 
-// AddLink makes a link for token with the role, lasting life (DefaultLinkLife if zero) from now. The role
-// is viewer or editor; life must be between MinLinkLife and MaxLinkLife; expired links are dropped first,
-// and no more than MaxLinks live ones are kept. It returns the link's id.
+// AddLink makes a link for token with the given life.
 func (a *ACL) AddLink(token string, role Role, now time.Time, life time.Duration) (string, Link, error) {
 	switch {
 	case len(token) < 32:
@@ -86,7 +76,7 @@ func (a *ACL) AddLink(token string, role Role, now time.Time, life time.Duration
 	return id, l, nil
 }
 
-// RevokeLink ends the link with that id; it reports whether there was one.
+// RevokeLink ends the link with that id.
 func (a *ACL) RevokeLink(id string) bool {
 	_, ok := a.Links[id]
 	delete(a.Links, id)
@@ -102,8 +92,7 @@ func (a *ACL) PruneLinks(now time.Time) {
 	}
 }
 
-// LinkRole is the role the token gives at now: "" when it matches no link, the link was revoked, or it
-// has expired.
+// LinkRole is the role the token gives.
 func (a ACL) LinkRole(token string, now time.Time) Role {
 	if token == "" {
 		return ""
@@ -115,21 +104,20 @@ func (a ACL) LinkRole(token string, now time.Time) Role {
 	return l.Role
 }
 
-// Viewer is one line of the "who can see this" list.
+// Viewer is one line of the who-can-see list.
 type Viewer struct {
 	// Kind is "owner", "person" or "link".
 	Kind string `json:"kind"`
-	// ID is the address of a person, or the id of a link (to revoke it by).
+	// ID is the person's address or the link's id.
 	ID   string `json:"id"`
 	Role string `json:"role"`
-	// Expires is when a link or a person's access ends; zero for the owner and for people without an end.
+	// Expires is when a link or a person's access ends.
 	Expires time.Time `json:"expires,omitzero"`
 }
 
-// WhoCanSee lists everyone and everything that can open the document at now: the owner, the people
-// granted a role, and the links still alive (an expired link is not listed: it opens nothing).
+// WhoCanSee lists everyone and everything with access.
 func (a ACL) WhoCanSee(now time.Time) []Viewer {
-	a = a.Active(now) // a person whose access ended is not listed either
+	a = a.Active(now)
 	var out []Viewer
 	for _, p := range a.People() {
 		kind := "person"
@@ -157,7 +145,6 @@ func (a ACL) WhoCanSee(now time.Time) []Viewer {
 	return append(out, links...)
 }
 
-// clock is the server's time: time.Now unless WithClock set another.
 func (s *Server) clock() time.Time {
 	if s.now != nil {
 		return s.now()
@@ -165,7 +152,7 @@ func (s *Server) clock() time.Time {
 	return time.Now()
 }
 
-// WithClock sets the clock the deadlines of share links are read from (for tests).
+// WithClock sets the clock the deadlines use.
 func (s *Server) WithClock(now func() time.Time) *Server {
 	s.now = now
 	return s

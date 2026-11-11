@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
-// RecoveryFingerprint is the fingerprint of the recovery key with this secret, as the People tab shows
-// it, to print beside the key so that it can be compared with the store's list later.
 func RecoveryFingerprint(secret string) (string, error) {
 	ident, err := encrypt.ParseAgeIdentity(strings.TrimSpace(secret))
 	if err != nil {
@@ -24,21 +22,14 @@ func RecoveryFingerprint(secret string) (string, error) {
 	return Owner{Kind: KindRecovery, Type: "age-x25519", Public: xid.Recipient().String()}.Fingerprint(), nil
 }
 
-// SheetText is the words on a recovery sheet, in the page's language.
 type SheetText struct {
 	Title, Intro      string
 	KeyLabel, Finger  string
 	Keep, Lost, Print string
 	Date              string
-	// QRAlt, when not empty, adds a QR code of the key under the text, with this as its text
-	// alternative ("QR code of the recovery key; the same key is written above"). Empty: no code.
-	QRAlt string
+	QRAlt             string
 }
 
-// RecoverySheet is a self-contained, printable HTML page holding a recovery key: large plain text,
-// high contrast, no script that talks to anything, no external file, no font or image to fetch, and
-// nothing that is stored. The key is in the page's text and so can be typed from paper; the
-// fingerprint beside it says which store's key it is. The one script it has opens the print dialog.
 func RecoverySheet(t SheetText, label, secret, fingerprint string) []byte {
 	var b strings.Builder
 	e := html.EscapeString
@@ -83,15 +74,11 @@ func RecoverySheet(t SheetText, label, secret, fingerprint string) []byte {
 	return []byte(b.String())
 }
 
-// ReminderEvery is how often the person is asked to check the recovery key.
 const ReminderEvery = 90 * 24 * time.Hour
 
 // SnoozeFor is how long "remind me later" is quiet.
 const SnoozeFor = 7 * 24 * time.Hour
 
-// CheckDue says whether to remind the person to check their recovery key: it was never checked
-// (lastChecked is zero) or not within every, and the person has not asked to be left alone until
-// snoozedUntil. The times are kept in the browser, so a cleared browser asks again, which is the safe way.
 func CheckDue(now, lastChecked, snoozedUntil time.Time, every time.Duration) bool {
 	if now.Before(snoozedUntil) {
 		return false

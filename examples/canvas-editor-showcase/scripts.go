@@ -12,11 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Scripts tab: a script a person wrote or pasted runs in a sandbox (an iframe with an opaque origin, a policy that
-// allows no connection and no storage, and none of the page) and reaches the editor only through the requests of package
-// script: the commands of the registry, and, if allowed, the text of the document. docs/scripting.md says what is
-// guaranteed and what is not.
-
 const scriptTimeoutMs = 10_000
 
 const scriptSample = `// Every command of the editor can be run by name.
@@ -31,7 +26,7 @@ var scriptsUI struct {
 	noRun       bool // the person turned "run commands" off
 	allowRead   bool
 	allowWrite  bool
-	allowChange bool // may change the document by the get/set requests (format, style, descriptions, title, Markdown)
+	allowChange bool
 	running     bool
 	log         []string
 	msg         string
@@ -62,9 +57,6 @@ func (h scriptHost) Run(name string) bool { h.run(canvas.Command(name)); return 
 func (h scriptHost) Text() string         { return h.text() }
 func (h scriptHost) Insert(t string) bool { return h.insert(t) }
 
-// sandboxPage is the page of the iframe: a policy that allows nothing but its own inline script, the editor object, and
-// the person's script after it. The connections a script could make (fetch, sockets, workers, storage, peer
-// connections) are also removed, as a second line behind the policy.
 func sandboxPage(source string) string {
 	source = strings.ReplaceAll(source, "</script", `<\/script`)
 	source = strings.ReplaceAll(source, "<!--", `<\!--`)
@@ -102,7 +94,6 @@ func stopScript(reason string) {
 	}
 }
 
-// runScript starts the script in a new sandbox.
 func runScript(docAPI script.Document, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) {
 	stopScript("")
 	scriptsUI.renderUI = renderUI
@@ -145,7 +136,6 @@ func runScript(docAPI script.Document, commands func() []canvas.CommandInfo, run
 	renderUI()
 }
 
-// scriptsPanel is the Scripts tab.
 func scriptsPanel(state *State, doc script.Document, commands func() []canvas.CommandInfo, run func(canvas.Command), text func() string, insert func(string) bool, renderUI func()) xango.Node {
 	if !scriptsUI.started {
 		scriptsUI.started, scriptsUI.source = true, scriptSample
@@ -186,7 +176,6 @@ func scriptsPanel(state *State, doc script.Document, commands func() []canvas.Co
 	return xango.El("div", []xango.Attr{xango.A("id", "scripts-panel")}, nodes...)
 }
 
-// insertAtCaret puts text where the caret is, replacing the selection, as one change the undo history has.
 func insertAtCaret(stage *canvas.Stage, text string, redraw func()) bool {
 	t := stage.EditTarget()
 	if t == nil || text == "" {

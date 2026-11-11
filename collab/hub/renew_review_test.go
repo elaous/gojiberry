@@ -32,7 +32,6 @@ type logBuf struct {
 func (l *logBuf) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock(); return l.b.Write(p) }
 func (l *logBuf) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
-// captureLog sends the standard logger to a buffer for the test.
 func captureLog(t *testing.T) *logBuf {
 	t.Helper()
 	lb := &logBuf{}
@@ -44,8 +43,6 @@ func captureLog(t *testing.T) *logBuf {
 var defaultLogOut = log.Writer()
 
 func countLines(s, sub string) int { return strings.Count(s, sub) }
-
-// --- M1: a document that expired under an open room
 
 func exists(t *testing.T, a docstore.Adapter, id string) bool {
 	t.Helper()
@@ -68,7 +65,7 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c1", "alive")); s != 204 {
 		t.Fatalf("edit: %d", s)
 	}
-	_ = h.Flush() // saves collab:doc and waits for the (successful) renewal
+	_ = h.Flush()
 	if !exists(t, inner, StoreKey("doc")) {
 		t.Fatal("hub state was not saved")
 	}
@@ -80,13 +77,10 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	if exists(t, inner, StoreKey("doc")) {
 		t.Fatal("the sweeper left the hub state")
 	}
-	// ... but a tab keeps its room. The next edit is acknowledged (the renewal that finds out
-	// is asynchronous) and would, before the fix, mark the room dirty and rewrite collab:doc.
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c2", "stale tab")); s != 204 {
 		t.Fatalf("first stale edit: %d", s)
 	}
 	h.waitRenewals()
-	// From now on the room is dead: 410 with a clear message, for editors and commenters alike.
 	body := func(role string) (int, string) {
 		req, _ := http.NewRequest("POST", e.srv.URL+"/docs/doc/ops?replica=r1", strings.NewReader(textOps(t, "c3", "more")))
 		req.Header.Set("X-Role", role)
@@ -123,7 +117,6 @@ func TestExpiredDocumentClosesTheStaleRoom(t *testing.T) {
 	}
 }
 
-// A save that wins the race with the renewal that discovers the expiry is undone by it.
 func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -148,7 +141,7 @@ func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	h.mu.Lock()
 	rm := h.rooms["doc"]
 	h.mu.Unlock()
-	if err := h.save(rm); err != nil { // the save timer fires before the renewal returns
+	if err := h.save(rm); err != nil {
 		t.Fatal(err)
 	}
 	if !exists(t, inner, StoreKey("doc")) {
@@ -162,8 +155,6 @@ func TestExpiryDiscoveredAfterASaveRemovesTheResurrectedState(t *testing.T) {
 	if err := h.save(rm); err != nil || exists(t, inner, StoreKey("doc")) {
 		t.Fatalf("a dead room saved again: %v", err)
 	}
-	// A caller that still holds the room (a connection that was mid-request) is refused too,
-	// and the room does not schedule a save.
 	var ops []crdt.Op
 	_ = json.Unmarshal([]byte(textOps(t, "c7", "late")), &ops)
 	req, _ := http.NewRequest("POST", "/", nil)
@@ -182,7 +173,6 @@ type rf func(ctx context.Context, id string) error
 
 func (f rf) Renew(ctx context.Context, id string) error { return f(ctx, id) }
 
-// A document that exists only in the hub always renews to "not found" and must keep working.
 func TestHubOnlyDocumentIsNeverRefused(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -205,7 +195,6 @@ func TestHubOnlyDocumentIsNeverRefused(t *testing.T) {
 	_ = ctx
 }
 
-// A 404 only counts after a success: success, then not found, closes; not found first does not.
 func TestDeadRoomNeedsAnEarlierSuccess(t *testing.T) {
 	var calls atomic.Int32
 	h, e := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error {
@@ -230,8 +219,6 @@ func TestDeadRoomNeedsAnEarlierSuccess(t *testing.T) {
 	}
 }
 
-// A stale tab that reconnects does not start a new room that writes the content back; later the
-// id can be used again.
 func TestDeadDocumentIsRefusedOnReconnectForAWhile(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -257,13 +244,12 @@ func TestDeadDocumentIsRefusedOnReconnectForAWhile(t *testing.T) {
 	if exists(t, inner, StoreKey("doc")) {
 		t.Fatal("a reconnecting tab resurrected the state")
 	}
-	clk.Add(2 * time.Hour) // the memory ends: the id is usable again (a new document)
+	clk.Add(2 * time.Hour)
 	if st := e.get(t, "/docs/doc/snapshot", "editor"); st != http.StatusOK {
 		t.Fatalf("after the memory ended: %d", st)
 	}
 }
 
-// Over a WebSocket the client is told with a close frame carrying the reason.
 func TestDeadRoomClosesTheWebSocketWithAReason(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -302,8 +288,6 @@ func TestDeadRoomClosesTheWebSocketWithAReason(t *testing.T) {
 	}
 }
 
-// --- m3: role disagreement shows up
-
 func TestRenewalRefusedIsWarnedOnceAndCounted(t *testing.T) {
 	lb := captureLog(t)
 	h, e := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error {
@@ -325,7 +309,6 @@ func TestRenewalRefusedIsWarnedOnceAndCounted(t *testing.T) {
 		t.Fatalf("the warning does not explain the cause:\n%s", out)
 	}
 
-	// /healthz reports it.
 	req, _ := http.NewRequest("GET", e.srv.URL+"/healthz", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -352,7 +335,6 @@ func TestOtherRenewalErrorsCountButDoNotWarnAboutRoles(t *testing.T) {
 	if h.Health().RenewFailures != 1 || h.Health().RenewDenied != 0 || strings.Contains(lb.String(), "WARNING") {
 		t.Fatalf("%+v\n%s", h.Health(), lb.String())
 	}
-	// A document that is just not in the store is not a failure.
 	h2, e2 := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error { return docstore.ErrNotFound })})
 	e2.post(t, "d", "editor", "", "r", textOps(t, "c", "x"))
 	h2.waitRenewals()
@@ -361,11 +343,8 @@ func TestOtherRenewalErrorsCountButDoNotWarnAboutRoles(t *testing.T) {
 	}
 }
 
-// --- n1: secrets stay out of the log
-
 func TestRenewalLogsCarryNoCredentials(t *testing.T) {
 	lb := captureLog(t)
-	// A server that fails with a 500 (and one nothing listens on) behind a URL with userinfo.
 	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
@@ -392,8 +371,6 @@ func TestRenewalLogsCarryNoCredentials(t *testing.T) {
 		}
 	}
 }
-
-// --- n2: interval clamp, token refresh, panics
 
 func TestRenewIntervalClampedToAQuarterOfTheTTL(t *testing.T) {
 	lb := captureLog(t)
@@ -425,9 +402,6 @@ func TestRenewIntervalClampedToAQuarterOfTheTTL(t *testing.T) {
 	}
 }
 
-// With a 4-hour TTL and the clamp, a document that is edited every 3 hours stays alive; at the
-// unclamped default of one minute nothing changes. Behaviourally: the interval in force is
-// what rate-limits renewals.
 func TestClampedIntervalRateLimitsRenewals(t *testing.T) {
 	fr := &fakeRenewer{}
 	clk := newClock()
@@ -442,7 +416,6 @@ func TestClampedIntervalRateLimitsRenewals(t *testing.T) {
 	}
 }
 
-// The renewal of a long-lived WebSocket uses a token that is read afresh each time.
 func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 	lb := captureLog(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -454,7 +427,7 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		mu.Lock()
 		seen = append(seen, a)
 		mu.Unlock()
-		if a != "Bearer fresh-2" && a != "Bearer fresh-3" { // the token the socket was opened with has expired
+		if a != "Bearer fresh-2" && a != "Bearer fresh-3" {
 			http.Error(w, "token expired", http.StatusUnauthorized)
 			return
 		}
@@ -484,7 +457,6 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		return h, strings.Join(seen, ",")
 	}
 
-	// Without AuthFunc every renewal carries the upgrade request's token, which is refused.
 	h, got := run(nil)
 	if got != "Bearer opened-with,Bearer opened-with,Bearer opened-with" {
 		t.Fatalf("without AuthFunc the renewals carried %q", got)
@@ -493,7 +465,6 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		t.Fatalf("denied=%d, want 3 with one warning:\n%s", h.Health().RenewDenied, lb.String())
 	}
 
-	// With AuthFunc each renewal reads the current one: first still stale (1), then fresh.
 	mu.Lock()
 	seen = nil
 	mu.Unlock()
@@ -506,7 +477,7 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 	if got != "Bearer fresh-1,Bearer fresh-2,Bearer fresh-3" {
 		t.Fatalf("with AuthFunc the renewals carried %q", got)
 	}
-	if h.Health().RenewDenied != 1 { // fresh-1 was refused, the rest renewed
+	if h.Health().RenewDenied != 1 {
 		t.Fatalf("denied = %d, want 1", h.Health().RenewDenied)
 	}
 }
@@ -523,7 +494,7 @@ func TestPanickingRenewerOrAuthFuncDoesNotCrashTheHub(t *testing.T) {
 			if s := e.post(t, "d", "editor", "", "r", textOps(t, "c"+string(rune('a'+i)), "x")); s != 204 {
 				t.Fatalf("%s: edit %d: %d", name, i, s)
 			}
-			h.waitRenewals() // must return: the in-flight count is released
+			h.waitRenewals()
 		}
 		if got := h.Health().RenewFailures; got != 2 {
 			t.Fatalf("%s: renewFailures = %d", name, got)

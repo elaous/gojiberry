@@ -7,29 +7,14 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Recovered is what is left of a pack whose footer or index cannot be used.
 type Recovered struct {
-	Meta Meta
-	// Docs are the documents whose records are intact, in file order of first appearance;
-	// a document whose ID appears in more than one record is the last of them.
-	Docs []docfile.Document
-	// Sealed are encrypted records, kept as stored with the index's entry for each; they
-	// are only found when the index is intact, because without it nothing says whose they
-	// are (an encrypted record has no readable ID).
-	Sealed []Sealed
-	// Skipped counts intact records that were not documents that could be read, including
-	// encrypted ones that are not in Sealed.
-	Skipped int
-	// SealedLost counts the encrypted records that were found but could not be attributed
-	// to a document, because the index that says whose they are is damaged (or does not
-	// match them). Repack does not write them: they are gone from the recovered pack. Recover
-	// from a copy of the pack whose index is intact first, if there is one. It cannot count
-	// the records after the first bad frame, which the walk never reaches.
-	SealedLost int
-	// Attachments are the intact attachment records found (version 2); Repack writes them as a version 2 pack.
+	Meta        Meta
+	Docs        []docfile.Document
+	Sealed      []Sealed
+	Skipped     int
+	SealedLost  int
 	Attachments []RecoveredAttachment
-	// Complete says the walk ended exactly at a valid index: nothing was lost.
-	Complete bool
+	Complete    bool
 }
 
 // RecoveredAttachment is an attachment found by Recover.
@@ -38,22 +23,11 @@ type RecoveredAttachment struct {
 	Data []byte
 }
 
-// Sealed is an encrypted record carried through recovery without being opened.
 type Sealed struct {
 	Entry    Entry
 	Envelope []byte
 }
 
-// Recover walks the records from the header, checking each frame and keeping every
-// document that parses, and stops at the first bad frame. Folder names live only in the
-// index, so a recovered pack has the documents' own folder IDs and no folders; the
-// documents keep their name, tags and trash flag.
-//
-// When the pack's index is intact the index decides what is in the pack: records it does
-// not list (documents removed since, an append that did not finish) are not recovered.
-// When it is not, every intact record counts and, a document appended again under the same
-// ID being a newer version of it, the last record with an ID wins. A document removed
-// with Appender.Remove cannot be told from a live one without an index, so it comes back.
 func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	meta, hdr, ver, err := readHeaderV(r, size)
 	var rec Recovered
@@ -85,7 +59,6 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 			}
 		case kindDocument:
 			if flags&flagEncrypted != 0 {
-				// Opaque: only an intact index can say which document it is.
 				sealed[off] = data
 				rec.Skipped++
 			} else if doc, err := docfile.Open.Unmarshal(data); err == nil && docfile.ValidID(doc.ID()) {
@@ -105,7 +78,6 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	rd, openErr := Open(r, size)
 	rec.Complete = openErr == nil
 	if rd != nil {
-		// The index knows each attachment's type; the walk found the bytes (the same bytes once).
 		mime := map[[32]byte]string{}
 		for _, a := range rd.index.Attachments {
 			mime[a.SHA256] = a.MIME
@@ -149,7 +121,6 @@ func Recover(r io.ReaderAt, size int64) (Recovered, error) {
 	return rec, nil
 }
 
-// Repack writes the documents of a recovered pack as a new pack.
 func Repack(rec Recovered, dst io.Writer) error {
 	meta := rec.Meta
 	if meta.Description != "" {
@@ -165,9 +136,6 @@ func Repack(rec Recovered, dst io.Writer) error {
 			return err
 		}
 	}
-	// A recovered document names its folder by ID only: list those folders, under a name
-	// made from the ID, so the index has no dangling reference; an ID that is not a
-	// folder ID is dropped.
 	seen := map[string]bool{}
 	for _, d := range rec.Docs {
 		if f := d.Folder(); f != "" {

@@ -14,9 +14,6 @@ import (
 
 func decodeJSON(r io.Reader, into any) error { return json.NewDecoder(r).Decode(into) }
 
-// Openverse searches Openverse (api.openverse.org), which indexes public-domain and Creative Commons pictures. Only
-// licences that allow reuse with credit are asked for (CC0, public domain mark, CC BY, CC BY-SA). Pictures are
-// fetched through Openverse's own thumbnail endpoint, which allows cross-origin reads from a page.
 type Openverse struct {
 	Base   string // default https://api.openverse.org
 	Label  string // the name shown; default "Openverse"
@@ -84,9 +81,8 @@ func licenseName(code, version string) string {
 	return s
 }
 
-// Commons searches Wikimedia Commons for pictures whose licence is public domain, CC0 or Creative Commons.
 type Commons struct {
-	Base   string // default https://commons.wikimedia.org; any MediaWiki site with the same file search works
+	Base   string
 	Label  string // the name shown; default "Wikimedia Commons"
 	Client *http.Client
 }
@@ -174,8 +170,6 @@ func (c Commons) Search(ctx context.Context, q string, page int) ([]Result, erro
 	return res, nil
 }
 
-// reusable reports whether a Commons licence short name is public domain, CC0 or Creative Commons (no
-// "non-commercial" or "no derivatives" terms, which an editor cannot honour).
 func reusable(short string) bool {
 	s := strings.ToLower(strings.TrimSpace(short))
 	switch {

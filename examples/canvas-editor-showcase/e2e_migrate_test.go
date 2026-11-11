@@ -23,9 +23,6 @@ func wordBytes(t *testing.T, text string) []byte {
 	return data
 }
 
-// TestMigrateFromGoogleDocsAndWordFiles migrates from a fake Google Drive (folders
-// kept, a bad token refused) and from a Word file picked on the computer; the
-// documents land in the Save tab's list.
 func TestMigrateFromGoogleDocsAndWordFiles(t *testing.T) {
 	doc := wordBytes(t, "migrated text")
 	drive := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +77,6 @@ func TestMigrateFromGoogleDocsAndWordFiles(t *testing.T) {
 	d.WaitFor("Budget", "document.querySelectorAll('.gj-doclist-item').length === 1")
 	d.OK(d.Text(".gj-doclist-item .gj-doc-name") == "Budget", "Budget came in under Work, where it was")
 
-	// A Word file from this computer.
 	d.Click(`button[data-tab="migrate"]`)
 	d.ChooseFile(func() { d.Click(".gj-migrate-pick") }, "Letter.docx", wordBytes(t, "dear reader"))
 	d.WaitFor("the report", `(document.querySelector('.gj-migrate-report') || {textContent: ''}).textContent === '1 documents migrated'`)
@@ -88,8 +84,6 @@ func TestMigrateFromGoogleDocsAndWordFiles(t *testing.T) {
 	d.WaitFor("Letter in Work", `Array.from(document.querySelectorAll('.gj-doclist-item .gj-doc-name')).some((e) => e.textContent === 'Letter')`)
 }
 
-// A link can set ?driveapi=, so it must not be able to send the token typed in the
-// Migrate tab to another host: the address is ignored and Google's own is used.
 func TestMigrateIgnoresAnAddressOnAnotherHost(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?driveapi=https://evil.example")
 	evil := d.Route("evil.example", func() (int, string, []byte) { return 200, "application/json", []byte(`{"files":[]}`) })

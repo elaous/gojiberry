@@ -8,28 +8,20 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// DefaultConflictWindow is how long a paragraph counts as "being edited here" after the last local change in it
-// (Bridge.ConflictWindow).
+// DefaultConflictWindow is the default recent-edit window.
 const DefaultConflictWindow = 10 * time.Second
 
-// Conflict is a paragraph that another person changed while it was being edited here. The merge keeps both
-// changes (characters are merged one by one), so nothing is lost; it is worth saying because the text the
-// person is looking at moved under them.
 type Conflict struct {
-	// Paragraph is the paragraph as it was here just before the other change arrived.
 	Paragraph string
-	// Replicas are the replicas whose operations arrived (other than this one), in order.
+	// Replicas are the replicas whose changes were merged.
 	Replicas []string
 }
 
-// recentEdit is a local change, by the ids of the characters it put in or took out beside (a deletion is
-// remembered by the character before it), and when it was made.
 type recentEdit struct {
 	ids []crdt.Timestamp
 	at  time.Time
 }
 
-// now is replaced by tests.
 var now = time.Now
 
 func (b *Bridge) conflictWindow() time.Duration {
@@ -39,7 +31,6 @@ func (b *Bridge) conflictWindow() time.Duration {
 	return DefaultConflictWindow
 }
 
-// noteRecent remembers that the characters with these ids were just edited here.
 func (b *Bridge) noteRecent(ids []crdt.Timestamp) {
 	if len(ids) == 0 {
 		return
@@ -53,10 +44,6 @@ func (b *Bridge) noteRecent(ids []crdt.Timestamp) {
 	}
 }
 
-// checkConflict looks at the operations other people sent, against the text as it was here before they were
-// merged (before, and the id of each of its characters): an insert placed after a character of a paragraph
-// that was edited here lately, or a deletion of one, is a change to that paragraph. Paragraphs are found by the
-// ids of their characters, so two paragraphs with the same words are not mixed up.
 func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []crdt.Op) {
 	if b.OnConflict == nil || len(b.recent) == 0 || len(before) != len(beforeIDs) {
 		return
@@ -81,7 +68,6 @@ func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []
 	for i, id := range beforeIDs {
 		index[id] = i
 	}
-	// the paragraphs (index ranges) edited here lately
 	type span struct{ start, end int }
 	var spans []span
 	for _, r := range b.recent {
@@ -120,7 +106,7 @@ func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []
 			case crdt.CharInsert:
 				at, ok = index[c.Origin] // placed after this character
 				if ok && before[at].r == '\n' {
-					at++ // after a line break: the start of the next paragraph
+					at++
 				}
 			case crdt.CharDelete:
 				at, ok = index[c.ID]
@@ -129,8 +115,6 @@ func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []
 				continue
 			}
 			for _, sp := range spans {
-				// an insert at the very end of the paragraph (after its last character) or the start of the next
-				// (after the break) is at e / e+1: only e belongs to this one.
 				if at >= sp.start && at <= sp.end {
 					b.OnConflict(Conflict{Paragraph: paragraphText(before, sp.start, sp.end), Replicas: replicas})
 					b.recent = nil

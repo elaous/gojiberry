@@ -6,34 +6,21 @@ import (
 	"unicode"
 )
 
-// Paragraph formatting in a TextFlow: see ParaFormat. The format of a
-// paragraph is an item of the content stream sitting at its start;
-// ApplyParagraph creates it when needed and removes it again when it
-// ends up empty.
-
-// ParagraphEditor is implemented by a target that has paragraphs with
-// formats (a TextFlow); the paragraph features need it.
+// ParagraphEditor is implemented by targets with paragraph formats.
 type ParagraphEditor interface {
-	// ApplyParagraph applies fn to the format of every paragraph the
-	// cursors touch, and reports whether any changed.
+	// ApplyParagraph applies fn to the paragraphs the cursors touch.
 	ApplyParagraph(fn func(*ParaFormat)) bool
-	// ParagraphFormats returns the format of every paragraph the cursors
-	// touch, in order.
+	// ParagraphFormats returns the format of each touched paragraph.
 	ParagraphFormats() []ParaFormat
 }
 
 var _ ParagraphEditor = (*TextFlow)(nil)
 
-// paraBounds returns the paragraph around offset o: its start, and the
-// offset of its '\n' (or the end of the text).
 func paraBounds(rs []rune, o int) (ps, pe int) {
 	o = min(max(o, 0), len(rs))
 	return lineStart(rs, o), lineEnd(rs, o)
 }
 
-// touchedParagraphs lists the start offsets of the paragraphs the
-// cursors touch (a selection ending at the very start of a paragraph
-// does not touch it).
 func touchedParagraphs(rs []rune, cs []Cursor) []int {
 	var starts []int
 	for _, c := range normalize(cs) {
@@ -55,7 +42,6 @@ func touchedParagraphs(rs []rune, cs []Cursor) []int {
 	return starts
 }
 
-// ParagraphFormats implements ParagraphEditor.
 func (f *TextFlow) ParagraphFormats() []ParaFormat {
 	d := f.flatten()
 	var out []ParaFormat
@@ -73,8 +59,6 @@ func (f *TextFlow) ParagraphAt(o int) ParaFormat {
 	return d.paraIn(ps, pe)
 }
 
-// paraIndex returns the index in f.Items of the ParaFormat of the
-// paragraph [ps, pe], or -1.
 func (f *TextFlow) paraIndex(ps, pe int) int {
 	off := 0
 	for i, it := range f.Items {
@@ -92,7 +76,6 @@ func (f *TextFlow) paraIndex(ps, pe int) int {
 	return -1
 }
 
-// setParagraph applies fn to the format of the paragraph [ps, pe].
 func (f *TextFlow) setParagraph(ps, pe int, fn func(*ParaFormat)) bool {
 	f.materialize()
 	idx := f.paraIndex(ps, pe)
@@ -115,7 +98,6 @@ func (f *TextFlow) setParagraph(ps, pe int, fn func(*ParaFormat)) bool {
 	return after != before
 }
 
-// ApplyParagraph implements ParagraphEditor.
 func (f *TextFlow) ApplyParagraph(fn func(*ParaFormat)) bool {
 	changed := false
 	rs := f.flatten().runes
@@ -132,14 +114,12 @@ func (f *TextFlow) ApplyParagraph(fn func(*ParaFormat)) bool {
 	return changed
 }
 
-// ToggleCheckAt ticks or unticks the check box at (x, y), if there is
-// one.
+// ToggleCheckAt ticks or unticks the check box at (x, y).
 func (f *TextFlow) ToggleCheckAt(x, y float64) bool {
 	x, y = f.vpt(x, y)
 	return f.toggleCheckAt(x, y)
 }
 
-// toggleCheckAt is ToggleCheckAt for a point in the plane the text is laid out in.
 func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		m := ln.Marker
@@ -156,9 +136,6 @@ func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	return false
 }
 
-// enter handles Enter: in a formatted paragraph the new one continues
-// the format (a list gets its next item), and Enter on an empty list
-// item ends the list instead of adding a line.
 func (f *TextFlow) enter() bool {
 	if len(f.extra) > 0 || f.HasSelection() {
 		return f.InsertText("\n")
@@ -187,8 +164,6 @@ func (f *TextFlow) enter() bool {
 	return ok
 }
 
-// indentList changes the nesting level of the list item at the caret
-// (Tab and Shift+Tab); it reports whether there was one.
 func (f *TextFlow) indentList(delta int) bool {
 	if len(f.extra) > 0 {
 		return false
@@ -205,15 +180,6 @@ func (f *TextFlow) indentList(delta int) bool {
 	return true
 }
 
-// markdownTableOnEnter turns three lines typed as a Markdown table into a table when Enter ends the third:
-//
-//	| A | B |
-//	|---|---|
-//	| a | b |
-//
-// A header row, the row of dashes under it and one row of cells, all with the same number of columns, is the least that
-// makes a table. The lines are replaced by the table and the caret goes to the paragraph after it. Cells keep their
-// text, so a cell that starts with = is a formula. It reports whether it made a table; otherwise Enter is untouched.
 func (f *TextFlow) markdownTableOnEnter() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret
@@ -246,10 +212,6 @@ func (f *TextFlow) markdownTableOnEnter() bool {
 	return f.InsertText("\n")
 }
 
-// dollarMathOnType turns text typed as $formula$ into an inline formula when the closing $ is typed: the text between
-// two dollar signs of the same paragraph, not empty, without a space next to either sign (so a price like "$5 and $6"
-// stays text) and without an object in it. The formula has no text alternative yet; the accessibility check asks for
-// words. It reports whether it made a formula.
 func (f *TextFlow) dollarMathOnType() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret

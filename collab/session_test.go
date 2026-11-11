@@ -17,8 +17,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// testTransport is what the rig's sessions connect over; TestOverWebSockets
-// runs the same scenarios again with the WebSocket transport.
 var testTransport Transport = HTTPEndpoints()
 
 type rig struct {
@@ -30,7 +28,6 @@ type rig struct {
 	conns map[net.Conn]bool
 }
 
-// track remembers the server's connections (ConnState sees hijacked ones too).
 func (r *rig) track(c net.Conn, st http.ConnState) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -41,8 +38,6 @@ func (r *rig) track(c net.Conn, st http.ConnState) {
 	}
 }
 
-// cut closes every connection the server has, hijacked ones (WebSockets)
-// included, as a network failure would.
 func (r *rig) cut() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -83,7 +78,6 @@ func (r *rig) connect(replica, role string, flow *canvas.TextFlow) *Session {
 
 func byHeader(req *http.Request, _ string) hub.Role { return hub.Role(req.Header.Get("X-Role")) }
 
-// waitFor polls the sessions until cond holds.
 func waitFor(t *testing.T, what string, cond func() bool, sessions ...*Session) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -118,7 +112,6 @@ func TestTwoSessionsShareEdits(t *testing.T) {
 	if a.Status != client.Online {
 		t.Fatalf("status %v", a.Status)
 	}
-	// Both type at once; both end the same.
 	click(a.Bridge.Flow, 0)
 	a.Bridge.Flow.InsertText(">")
 	click(b.Bridge.Flow, 13)
@@ -148,7 +141,6 @@ func TestPresenceAndPeerCursors(t *testing.T) {
 	if b.Pending() != 0 {
 		t.Fatal("nothing waiting")
 	}
-	// The cursor follows the text when b types in front of it.
 	click(b.Bridge.Flow, 0)
 	b.Bridge.Flow.InsertText(">>")
 	waitFor(t, "the peer cursor to move", func() bool {
@@ -166,7 +158,6 @@ func TestPresenceAndPeerCursors(t *testing.T) {
 	if len(b.Bridge.Flow.RemoteCursors) != 0 {
 		t.Fatal("a left, so its cursor goes")
 	}
-	// Not ready: nothing to publish.
 	idle, _ := Join("z", newFlow())
 	(&Session{Bridge: idle}).PublishCursor()
 }
@@ -178,8 +169,6 @@ func TestRolesAreEnforced(t *testing.T) {
 	viewer := r.connect("v", "viewer", newFlow())
 	waitFor(t, "viewer has the text", func() bool { return text(viewer.Bridge.Flow) == "the text" && viewer.Role == wire.Viewer }, owner, viewer)
 
-	// A viewer's text edit is refused, and the owner never sees it. The
-	// viewer's session repairs itself: its flow goes back to the server's text.
 	click(viewer.Bridge.Flow, 3)
 	viewer.Bridge.Flow.InsertText("X")
 	waitFor(t, "the viewer's session to repair itself", func() bool {
@@ -194,7 +183,6 @@ func TestRolesAreEnforced(t *testing.T) {
 		t.Fatalf("a viewer changed the text: %q", text(owner.Bridge.Flow))
 	}
 
-	// A fresh viewer can comment: a comment mark on the text plus new comment records.
 	v2 := r.connect("v2", "viewer", newFlow())
 	waitFor(t, "v2 has the text", func() bool { return text(v2.Bridge.Flow) == "the text" }, owner, v2)
 	v2.Bridge.Flow.SetCursors([]canvas.Cursor{{Anchor: 0, Caret: 3}})
@@ -211,7 +199,6 @@ func TestRolesAreEnforced(t *testing.T) {
 		t.Fatalf("the comment is on its text: %v", owner.Bridge.Flow.CommentExcerpts())
 	}
 
-	// No role at all: the stream never opens.
 	var errs []error
 	var mu sync.Mutex
 	f := newFlow()
@@ -240,7 +227,6 @@ func TestDocumentsPersistAndReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A new hub on the same store serves the same document.
 	r2 := newRig(t, hub.Config{Store: store})
 	b := r2.connect("b", "", newFlow())
 	waitFor(t, "b to get the saved document", func() bool { return text(b.Bridge.Flow) == "saved text!" }, b)
@@ -264,7 +250,6 @@ func TestReconnectResyncsAndSendsWhatWaited(t *testing.T) {
 	waitFor(t, "both to reconnect and converge", func() bool {
 		return text(a.Bridge.Flow) == ">one two!" && normalized(a.Bridge.Flow) == normalized(b.Bridge.Flow)
 	}, a, b)
-	// The others may see an edit a moment before its sender hears it accepted.
 	waitFor(t, "nothing left waiting", func() bool { return a.Conn.Pending() == 0 }, a, b)
 }
 
@@ -276,8 +261,6 @@ func TestConnectRefusesUnsupportedContent(t *testing.T) {
 	}
 }
 
-// Edits a hub acknowledged are gone if it restarts without them; the client
-// sends its whole document again when it reconnects to a poorer one.
 func TestClientResendsWhatARestartedHubLost(t *testing.T) {
 	var cur atomic.Pointer[hub.Hub]
 	cur.Store(hub.New(hub.Config{}))
@@ -325,8 +308,6 @@ func TestNoRepairLeavesTheErrorForTheCaller(t *testing.T) {
 	waitFor(t, "the manual repair", func() bool { return viewer.Bridge.Ready() && text(viewer.Bridge.Flow) == "the text" }, owner, viewer)
 }
 
-// TestOverWebSockets runs the session scenarios again over the WebSocket
-// transport: everything the HTTP transport does, the socket does too.
 func TestOverWebSockets(t *testing.T) {
 	testTransport = ws.WebSockets()
 	defer func() { testTransport = HTTPEndpoints() }()

@@ -7,40 +7,26 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// MenuItem is one entry of a Menu: a command, a separator, or (with
-// Items) a submenu.
 type MenuItem struct {
 	Label string
-	// Icon is the name of a Material Symbols icon drawn before the label (see Material);
-	// "" for none.
-	Icon string
+	Icon  string
 	// Shortcut is shown at the right ("Ctrl+B"); see FormatChord.
-	Shortcut string
-	// Checked puts a check mark in front (a toggle that is on).
+	Shortcut  string
 	Checked   bool
 	Disabled  bool
 	Separator bool
 	OnSelect  func()
-	// Items makes this entry a submenu, opened when it is hovered or
-	// has the keyboard focus (pure CSS: no state to keep).
-	Items []MenuItem
+	Items     []MenuItem
 }
 
 // MenuProps configures Menu.
 type MenuProps struct {
-	Items []MenuItem
-	// OnClose is called after an entry is chosen, so a popup can close.
+	Items   []MenuItem
 	OnClose func()
 	// Label names the menu for assistive technology.
 	Label string
 }
 
-// Menu renders a clean, lightweight menu: a list of entries with
-// optional shortcuts, check marks, separators and nested submenus. It
-// holds no state -- submenus open with CSS (:hover, :focus-within) -- and
-// has no position of its own: put it in whatever popup or panel you
-// like, or use MenuBar for a bar of them. It is built from plain <ul>/
-// <li> with ARIA menu roles; its stylesheet is menu.css.
 func Menu(props MenuProps) xango.Node {
 	attrs := []xango.Attr{xango.A("class", "gj-menu"), xango.A("role", "menu")}
 	if props.Label != "" {
@@ -53,21 +39,14 @@ func Menu(props MenuProps) xango.Node {
 	return xango.El("ul", attrs, items...)
 }
 
-// menuEntries selects the entries of the menu a key press happened in (its own, not a submenu's).
 const menuEntries = ":scope > li.gj-menu-item[tabindex]"
 
-// menuItemKey is the keyboard model of a menu entry. Up and Down move among the entries of the
-// menu (wrapping), Home and End go to the ends, Right opens the submenu of an entry that has one and
-// goes into it, Left goes back out to the entry that opened the submenu, and Enter or Space
-// chooses the entry (choose is nil for an entry that only opens a submenu). A key with a
-// modifier is left alone.
 func menuItemKey(e xango.Event, choose func()) {
 	k, ok := e.Value.(xango.KeyData)
 	if !ok || k.Ctrl || k.Alt || k.Meta {
 		return
 	}
-	// A key handled here must not go on to the entry that holds this one's submenu: its handler would move the
-	// focus again, from the same target, and a submenu would be walked two entries at a time.
+	// a handled key must not reach the parent entry's handler
 	move := func(step xango.FocusStep) {
 		e.PreventDefault()
 		e.StopPropagation()
@@ -83,13 +62,11 @@ func menuItemKey(e xango.Event, choose func()) {
 	case "End":
 		move(xango.FocusLast)
 	case "ArrowRight":
-		// into the submenu of the focused entry, if it has one
 		if e.MoveFocus(".gj-menu-item-sub", ":scope > .gj-menu > li.gj-menu-item[tabindex]", xango.FocusFirst) {
 			e.PreventDefault()
 			e.StopPropagation()
 		}
 	case "ArrowLeft":
-		// out of a submenu, to the entry that opened it
 		if e.MoveFocus(".gj-menu-item-sub", ":scope", xango.FocusFirst) {
 			e.PreventDefault()
 			e.StopPropagation()
@@ -108,7 +85,6 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 		return xango.El("li", []xango.Attr{xango.A("class", "gj-menu-separator"), xango.A("role", "separator")})
 	}
 	class := "gj-menu-item"
-	// aria-checked is allowed on a checkable menu item only.
 	role := "menuitem"
 	if it.Checked {
 		role = "menuitemcheckbox"
@@ -131,8 +107,7 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 			}
 		}
 		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) { choose() }),
-			// Enter and Space choose the focused entry, as a click does (a menu entry is not a
-			// button, so the browser does not do it).
+			// Enter and Space choose: a menu entry is not a button
 			xango.On("keydown", func(e xango.Event) { menuItemKey(e, choose) }))
 	}
 	if it.Checked {
@@ -167,16 +142,10 @@ type MenuBarEntry struct {
 // MenuBarProps configures MenuBar.
 type MenuBarProps struct {
 	Entries []MenuBarEntry
-	// Open is the index of the entry whose menu is showing, or -1.
-	Open int
-	// OnOpen is called with the entry to open: a click toggles (-1
-	// closes), and moving onto another entry while one is open switches.
-	OnOpen func(index int)
+	Open    int
+	OnOpen  func(index int)
 }
 
-// MenuBar renders a row of menus (File, Edit, ...), at most one open at a
-// time. It is controlled: the caller owns Open. A click anywhere outside
-// closes it.
 func MenuBar(props MenuBarProps) xango.Node {
 	var entries []xango.Node
 	for i, e := range props.Entries {
@@ -199,8 +168,6 @@ func MenuBar(props MenuBarProps) xango.Node {
 					props.OnOpen(i)
 				}
 			}),
-			// Left and Right move along the bar (taking an open menu along); Down, and Up, open
-			// the menu and go into it, at its first and last entry.
 			xango.On("keydown", func(e xango.Event) {
 				k, ok := e.Value.(xango.KeyData)
 				if !ok || k.Ctrl || k.Alt || k.Meta || props.OnOpen == nil {
@@ -243,20 +210,15 @@ func MenuBar(props MenuBarProps) xango.Node {
 		}
 		entries = append(entries, xango.El("div", []xango.Attr{xango.A("class", class)}, children...))
 	}
-	// Escape closes the open menu from wherever the focus is inside it (keydown bubbles up to the bar).
 	escape := xango.On("keydown", func(e xango.Event) {
 		if k, ok := e.Value.(xango.KeyData); ok && k.Key == "Escape" && props.Open >= 0 && props.OnOpen != nil {
 			e.PreventDefault()
-			// the focus goes back to the button of the menu that closes, not to the page
 			e.MoveFocus(".gj-menubar", ".gj-menubar-entry-open > .gj-menubar-button", xango.FocusFirst)
 			props.OnOpen(-1)
 		}
 	})
 	nodes := []xango.Node{xango.El("nav", []xango.Attr{xango.A("class", "gj-menubar"), xango.A("role", "menubar"), escape}, entries...)}
 	if props.Open >= 0 {
-		// After the bar, not before it: the bar keeps its place among its siblings when a menu
-		// opens, so the browser keeps the focus on the button that was pressed (the bar is above the
-		// backdrop by z-index either way).
 		nodes = append(nodes, xango.El("div", []xango.Attr{
 			xango.A("class", "gj-menubar-backdrop"),
 			xango.On("click", func(xango.Event) {
@@ -269,8 +231,6 @@ func MenuBar(props MenuBarProps) xango.Node {
 	return xango.Frag(nodes...)
 }
 
-// FormatChord writes a key chord ("Mod+Alt+Shift+K") for people: "Ctrl+
-// Alt+Shift+K", or on a Mac "⌃⌥⇧K" with ⌘ for Mod.
 func FormatChord(chord string, mac bool) string {
 	if chord == "" {
 		return ""
@@ -297,9 +257,6 @@ func FormatChord(chord string, mac bool) string {
 	return strings.Join(parts, "+")
 }
 
-// CommandMenu turns registered commands (canvas.Registry.Commands) into
-// menu entries, one submenu per feature, each entry showing its current
-// shortcut from keymap (Stage.EffectiveKeymap) and running via run.
 func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run func(canvas.Command)) []MenuItem {
 	var order []string
 	byFeature := map[string][]MenuItem{}
@@ -323,8 +280,6 @@ func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run 
 	return out
 }
 
-// featureTitle turns a feature name ("markdown-clipboard") into a label
-// ("Markdown clipboard").
 func featureTitle(name string) string {
 	s := strings.ReplaceAll(name, "-", " ")
 	if s == "" {

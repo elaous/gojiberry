@@ -15,10 +15,6 @@ func exportHTML(d *e2etest.Tab) string {
 	return string(data)
 }
 
-// An equation goes into the document only with a text alternative, is listed and editable in the Pictures
-// tab, is read in the reading copy as words, is a finding of the Check tab when the alternative is taken away,
-// and is MathML in the HTML export with the words as its alternative. A diagram gets a long description and a
-// code block a language, and both reach the export.
 func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -27,14 +23,12 @@ func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	d.WaitSelector("#eq-insert")
 	d.OK(d.Has("#eq-none"), "no equation yet")
 
-	// the formula alone is refused, in words, and the alternative takes the focus
 	d.Fill("#eq-formula", "x^2 + y^2 = z^2")
 	d.Click("#eq-insert")
 	d.WaitFor("refused", `(document.getElementById('eq-message') || {textContent: ''}).textContent.includes('needs a text alternative')`)
 	d.WaitFor("the alternative has the focus", `document.activeElement && document.activeElement.id === 'eq-alt'`)
 	d.OK(d.Has("#eq-none"), "nothing was inserted")
 
-	// with the alternative it goes in
 	d.Fill("#eq-alt", "x squared plus y squared equals z squared")
 	d.Click("#eq-insert")
 	d.WaitSelector("#eq-alt-0")
@@ -44,7 +38,6 @@ func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	runCheck(d)
 	d.WaitFor("clean", `document.getElementById('gj-check-summary').textContent.includes('Nothing found')`)
 
-	// taking the alternative away is an error of the Check tab, which sends the person back to write it
 	d.Click(`button[data-tab="images"]`)
 	d.Fill("#eq-alt-0", "")
 	d.WaitSelector("#eq-missing-0")
@@ -57,14 +50,12 @@ func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	runCheck(d)
 	d.WaitFor("clean again", `document.getElementById('gj-check-summary').textContent.includes('Nothing found')`)
 
-	// a diagram: a picture with a long description
 	d.Click(`button[data-tab="images"]`)
 	d.ChooseFile(func() { d.Click("#img-insert") }, "bar.png", pngBytes(t))
 	d.WaitSelector("#img-alt-0")
 	d.Fill("#img-alt-0", "Flow chart")
 	d.Fill("#img-long-0", "Three boxes: input, process and output, joined by arrows.")
 
-	// a code block with a language
 	d.Click(`button[data-tab="styles"]`)
 	d.Click(`.gj-stylepicker-item[data-style="Code"]`)
 	d.Click(`button[data-tab="images"]`)
@@ -92,8 +83,6 @@ func TestInsertAnEquationRequireItsAlternativeAndExportIt(t *testing.T) {
 	d.NoErrors()
 }
 
-// A formula can stand in its line of text: it is typeset there, and every export writes the words that stand for it
-// in the sentence.
 func TestAnInlineEquationStandsInItsSentence(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

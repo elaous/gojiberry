@@ -17,22 +17,13 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Public link tab is the browser's side of the public offer (docs/public-docstore.md): no account, one
-// document, deleted 24 hours after the last edit. It publishes a copy, shows the edit link and the view link, the
-// countdown with a warning in the last hour, keeps the copy fresh while the page is edited (every edit renews the
-// 24 hours), offers to keep the document in a store of the person's own ("Keep this document"), and opens a page
-// that was reached by one of the links: a view link shows the document read only with a report link, an edit link
-// carries on editing it. The session token is the edit capability; it is kept in this browser's localStorage so a
-// restart continues the same document.
-
 const (
 	publicKey   = "showcase:public" // localStorage: the token and what is known of the document
-	publicDelay = 4 * time.Second   // after an edit, how long the page waits before it updates the public copy
-	publicTick  = 20 * time.Second  // how often the countdown is drawn again
-	publicMax   = 8 * time.Second   // an update that takes longer is given up (the next edit tries again)
+	publicDelay = 4 * time.Second
+	publicTick  = 20 * time.Second // how often the countdown is drawn again
+	publicMax   = 8 * time.Second
 )
 
-// publicUI is the state of the tab.
 type publicUI struct {
 	u      *ui
 	render func()
@@ -41,7 +32,7 @@ type publicUI struct {
 	mu       sync.Mutex
 	doc      client.Doc // what the server said of the document
 	has      bool       // the session has a live public document
-	viewing  bool       // this page was opened on a view link: the document is read only
+	viewing  bool
 	viewID   string
 	busy     bool
 	err      string
@@ -54,8 +45,6 @@ type publicUI struct {
 	reportReason string
 }
 
-// newPublic makes the tab's state. The offer is the page's own origin, or the address in ?publicapi= when it is
-// this origin or a loopback host (like the other backends).
 func newPublic(u *ui, renderUI func()) *publicUI {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	base := ""
@@ -80,8 +69,6 @@ func newPublic(u *ui, renderUI func()) *publicUI {
 	return p
 }
 
-// ---- what is kept between visits ----
-
 type publicSaved struct {
 	Token   string    `json:"token"`
 	ViewID  string    `json:"view,omitempty"`
@@ -89,7 +76,7 @@ type publicSaved struct {
 }
 
 func publicStore(f func(js.Value)) {
-	defer func() { _ = recover() }() // storage can be blocked or full: the page works without it
+	defer func() { _ = recover() }()
 	if ls := js.Global().Get("localStorage"); !ls.IsUndefined() && !ls.IsNull() {
 		f(ls)
 	}
@@ -129,11 +116,8 @@ func (p *publicUI) forget() {
 	p.remember()
 }
 
-// ---- operations ----
-
 func (p *publicUI) bytesOfDoc() ([]byte, error) { return docfile.Open.Marshal(p.u.current()) }
 
-// words turns an error of the offer into a sentence for the person.
 func (p *publicUI) words(err error) string {
 	var e *client.Error
 	wait := ""
@@ -186,7 +170,6 @@ func (p *publicUI) run(f func(ctx context.Context) error) {
 	}()
 }
 
-// publish puts a copy on the offer, or updates the one that is there.
 func (p *publicUI) publish() {
 	p.run(func(ctx context.Context) error { return p.push(ctx, true) })
 }
@@ -236,8 +219,6 @@ func (p *publicUI) push(ctx context.Context, fresh bool) error {
 	return nil
 }
 
-// edited is told after each edit in the page: while a public copy is linked, it is updated shortly after the last
-// edit (an edit is what renews the 24 hours; reading never does).
 func (p *publicUI) edited() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -284,8 +265,6 @@ func (p *publicUI) discard() {
 	})
 }
 
-// keep is the way out of the 24 hours: the document is saved in the store chosen in the Save tab, which the
-// person controls (a store on a server, the encrypted one, a folder). The public copy goes on until it ends.
 func (p *publicUI) keep() {
 	p.u.tab = "save"
 	p.u.saver.Pending.Run(p.u.saver.Save)
@@ -293,10 +272,6 @@ func (p *publicUI) keep() {
 	p.render()
 }
 
-// ---- opening a link ----
-
-// openLink opens the document a page address names: a view link (read only, with the report link) or an edit link
-// (the session of the link is taken on, and the document carries on).
 func (p *publicUI) openLink(ready func() bool) {
 	kind, val := client.ParseLink(js.Global().Get("location").Get("hash").String())
 	if kind == "" {
@@ -361,7 +336,7 @@ func (p *publicUI) openLink(ready func() bool) {
 		p.remember()
 		p.u.load(doc)
 	}
-	// The token does not stay in the address bar or the history.
+	// the token does not stay in the address bar or history
 	js.Global().Get("history").Call("replaceState", nil, "", js.Global().Get("location").Get("pathname").String()+js.Global().Get("location").Get("search").String())
 	p.render()
 }
@@ -373,8 +348,6 @@ func decodePublic(data []byte) (docfile.Document, error) {
 	return docfile.JSON.Unmarshal(data)
 }
 
-// setNoindex tells search engines to leave this page alone when it serves a public document (the routes of the
-// offer say it in their headers; the page that shows the document says it too).
 func setNoindex() {
 	doc := js.Global().Get("document")
 	m := doc.Call("createElement", "meta")
@@ -382,8 +355,6 @@ func setNoindex() {
 	m.Set("content", "noindex, nofollow, noarchive")
 	doc.Get("head").Call("appendChild", m)
 }
-
-// ---- the tab ----
 
 func (p *publicUI) report() {
 	p.run(func(ctx context.Context) error {
@@ -422,7 +393,6 @@ func publicPanel(p *publicUI) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("id", "public-panel")}, nodes...)
 }
 
-// countdown is the line under the links: the time left, a warning in the last hour.
 func (p *publicUI) countdown() xango.Node {
 	left := client.Remaining(p.doc.Expires, time.Now())
 	text := T("public.countdown", "Deleted in %s unless edited.", client.Countdown(left))

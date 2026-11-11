@@ -25,7 +25,6 @@ func TestIconToolbarIsAToolbarOfNamedButtons(t *testing.T) {
 	if n := strings.Count(html, "<button"); n != 3 {
 		t.Errorf("%d buttons, want 3 (the item without a label is not drawn)", n)
 	}
-	// only one stop in the tab order, and it is the first button that can be pressed
 	if n := strings.Count(html, `tabindex="0"`); n != 1 {
 		t.Errorf("%d tab stops, want 1", n)
 	}
@@ -40,8 +39,6 @@ func TestIconToolbarIsAToolbarOfNamedButtons(t *testing.T) {
 	}
 }
 
-// The items made from commands carry the menu's own name, icon and shortcut, skip a command that is not installed,
-// and put gaps between groups only.
 func TestCommandToolbarItemsAgreeWithTheMenu(t *testing.T) {
 	cmds := []canvas.CommandInfo{{Name: canvas.CmdBold, Title: "Bold"}, {Name: canvas.CmdItalic, Title: "Italic"}, {Name: canvas.CmdBulletList, Title: "Bulleted list"}}
 	km := canvas.DefaultKeymap()
@@ -69,7 +66,6 @@ func TestCommandToolbarItemsAgreeWithTheMenu(t *testing.T) {
 	}
 }
 
-// Every command the showcase's toolbar uses has an icon that is in the set.
 func TestToolbarCommandsHaveIcons(t *testing.T) {
 	for _, c := range []canvas.Command{canvas.CmdUndo, canvas.CmdRedo, canvas.CmdBold, canvas.CmdItalic, canvas.CmdUnderline, canvas.CmdStrike,
 		canvas.CmdBulletList, canvas.CmdNumberedList, canvas.CmdAlignLeft, canvas.CmdAlignCenter, canvas.CmdAlignRight, canvas.CmdEditLink, canvas.CmdCommentAdd} {

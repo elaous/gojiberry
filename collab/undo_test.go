@@ -40,7 +40,6 @@ func TestUndoOnlyUndoesMyChanges(t *testing.T) {
 	if a.Flow.Redo() {
 		t.Fatal("nothing more to redo")
 	}
-	// B has nothing of its own to undo that A's undo touched.
 	if !b.CanUndo() {
 		t.Fatal("B still has its own step")
 	}
@@ -59,8 +58,6 @@ func TestTypingAndBackspaceRunsAreOneStep(t *testing.T) {
 	if text(a.Flow) != "hello world" {
 		t.Fatalf("%q", text(a.Flow))
 	}
-	// Backspacing "world" one character at a time is one step too, and B's
-	// edit elsewhere in between does not get in the way.
 	click(a.Flow, 11)
 	for i := 0; i < 5; i++ {
 		a.Flow.HandleKey("Backspace", false)
@@ -77,7 +74,6 @@ func TestTypingAndBackspaceRunsAreOneStep(t *testing.T) {
 	if text(a.Flow) != "!!hello world" || text(b.Flow) != "!!hello world" {
 		t.Fatalf("the deleted word is back in place: %q %q", text(a.Flow), text(b.Flow))
 	}
-	// The Delete key runs forward.
 	click(a.Flow, 2)
 	for i := 0; i < 5; i++ {
 		a.Flow.HandleKey("Delete", false)
@@ -134,7 +130,6 @@ func TestUndoParagraphFormatsAndEdgeCases(t *testing.T) {
 	if hasAlign(a.Flow, canvas.AlignCenter) || hasAlign(b.Flow, canvas.AlignCenter) {
 		t.Fatal("alignment undone")
 	}
-	// Steps whose text someone else removed are skipped, not an error.
 	click(a.Flow, 0)
 	a.Flow.InsertText("Q")
 	exchange(a, b)
@@ -147,7 +142,6 @@ func TestUndoParagraphFormatsAndEdgeCases(t *testing.T) {
 	if ctrlZ(a.Flow) { // no step left that still has something to undo
 		t.Fatalf("undid something that was already gone: %q", text(a.Flow))
 	}
-	// Not ready: no undo. New edits clear redo.
 	idle, _ := Join("z", newFlow(canvas.Chars{Text: "x"}))
 	if idle.Flow.Undo() {
 		t.Fatal("a bridge that is not sharing yet cannot undo")
@@ -183,8 +177,6 @@ func hasAlign(f *canvas.TextFlow, al canvas.Align) bool {
 	return false
 }
 
-// Random edits and undos by one person while another edits: both end the
-// same, and the replica always matches its flow.
 func TestRandomUndoConverges(t *testing.T) {
 	for trial := 0; trial < 100; trial++ {
 		rng := rand.New(rand.NewSource(int64(trial)))

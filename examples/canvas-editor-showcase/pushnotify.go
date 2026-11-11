@@ -18,40 +18,28 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Mentions when the page is closed (Web Push). If the operator names a push server in push.json next to the page
-// ({"server": "https://..."}, https or relative), and the browser has service workers, push and notifications, the
-// Comments tab offers "Notify me of mentions when this page is closed". Turning it on asks the browser for permission
-// (only then), takes the server's public key (GET key), subscribes this browser to its push service, and gives the
-// subscription to the server (POST subscribe) under the person's handle; turning it off does the reverse. The service
-// worker that shows the notification is sw.js (package wasmserve). Nothing is asked of the server before the person
-// turns it on, except one look at push.json and, to show the box ticked, the browser's own record of a subscription.
-
 var pushUI struct {
 	started    bool
 	configured bool
 	server     string
 	subscribed bool
 	checked    bool // the browser was asked whether there is a subscription
-	synced     bool // the server was given the browser's current subscription since the page opened (or since it changed)
+	synced     bool
 	busy       bool
 	msg        string
 }
 
-// pushSupported says the browser has what push needs.
 func pushSupported() bool {
 	g := js.Global()
 	nav := g.Get("navigator")
 	return nav.Truthy() && nav.Get("serviceWorker").Truthy() && g.Get("PushManager").Truthy() && g.Get("Notification").Truthy()
 }
 
-// ensurePush reads push.json (once) and the state of the subscription.
 func ensurePush(renderUI func()) {
 	if pushUI.started || !pushSupported() {
 		return
 	}
 	pushUI.started = true
-	// The worker tells the page when the browser replaced the subscription (see sw.go): the page gives the new one to
-	// the server under the person's handle, or says the notifications stopped when it could not be made again.
 	sw := js.Global().Get("navigator").Get("serviceWorker")
 	if sw.Get("addEventListener").Truthy() {
 		sw.Call("addEventListener", "message", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -94,7 +82,6 @@ func ensurePush(renderUI func()) {
 	}()
 }
 
-// pushServerOK: https, or an address relative to the page.
 func pushServerOK(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -106,8 +93,6 @@ func pushServerOK(s string) bool {
 	return !strings.Contains(s, "://") && !strings.HasPrefix(s, "//") && !strings.ContainsAny(s, " \t\r\n\"'<>")
 }
 
-// pushRegistration is the service worker registration, waited for a few seconds (there is none when the page was opened
-// with ?nosw).
 func pushRegistration(ctx context.Context) (js.Value, error) {
 	type result struct {
 		v   js.Value
@@ -134,7 +119,6 @@ func pushSubscription(ctx context.Context) (js.Value, error) {
 	return domrt.Await(reg.Get("pushManager").Call("getSubscription"))
 }
 
-// post sends JSON to the push server and reports whether it answered with success.
 func pushPost(path string, body any) error {
 	b, _ := json.Marshal(body)
 	resp, err := domrt.Await(js.Global().Call("fetch", pushUI.server+path, map[string]any{
@@ -153,7 +137,6 @@ func pushFail(renderUI func(), msg string) {
 	renderUI()
 }
 
-// turnOnPush asks for permission (the call is made here, in the click, as browsers require), then subscribes.
 func turnOnPush(handle string, renderUI func()) {
 	pushUI.busy, pushUI.msg = true, ""
 	permission := js.Global().Get("Notification").Call("requestPermission")
@@ -217,16 +200,13 @@ func turnOffPush(handle string, renderUI func()) {
 		if sub, err := pushSubscription(ctx); err == nil && sub.Truthy() {
 			endpoint := sub.Get("endpoint").String()
 			_, _ = domrt.Await(sub.Call("unsubscribe"))
-			_ = pushPost("/unsubscribe", map[string]any{"handle": handle, "endpoint": endpoint}) // the server also forgets it when the push service says it is gone
+			_ = pushPost("/unsubscribe", map[string]any{"handle": handle, "endpoint": endpoint})
 		}
 		pushUI.busy, pushUI.subscribed, pushUI.msg = false, false, T("push.off", "You will no longer be notified when this page is closed.")
 		renderUI()
 	}()
 }
 
-// pushResync gives the server the browser's current subscription under the person's handle: it may be a new one (the
-// browser replaced it while the page was closed), and the server keeps a subscription once per endpoint, so repeating a
-// known one changes nothing.
 func pushResync(handle string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -243,7 +223,6 @@ func pushResync(handle string) {
 	}
 }
 
-// pushSection is the box in the Comments tab; nothing when the operator did not name a server or the browser cannot.
 func pushSection(u *ui, renderUI func()) xango.Node {
 	ensurePush(renderUI)
 	h := u.myHandle()

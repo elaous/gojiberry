@@ -27,12 +27,8 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// saveLabels are the English words for the save states.
 var saveLabels = map[string]string{"saved": "Saved", "saving": "Saving…", "unsaved": "Unsaved changes", "failed": "Save failed"}
 
-// statusBar is the status bar: a selection's counts when there is one, the page
-// setup, the pages the text reaches, where saving stands, the heading the caret
-// is under, the counts and the mode.
 func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canvas.Mode, setup components.PageSetup, save string, sync *components.StatusItem) components.StatusBarProps {
 	var items []components.StatusItem
 	if st.HasSelection {
@@ -59,7 +55,6 @@ func statusBar(flow *canvas.TextFlow, st canvas.FlowStats, sheets int, mode canv
 		components.StatusItem{ID: "mode", Text: T("status.mode."+mode.String(), mode.String()+" mode")})}
 }
 
-// readTime formats a reading time the way a status bar would.
 func readTime(st canvas.TextStats) string {
 	if m := st.ReadingTime().Minutes(); m >= 1 {
 		return fmt.Sprintf("%.0f min", m)
@@ -67,7 +62,6 @@ func readTime(st canvas.TextStats) string {
 	return "under a minute"
 }
 
-// statsState is the counts for #state (the e2e tests read it).
 func statsState(st canvas.FlowStats) map[string]any {
 	out := map[string]any{"words": st.Text.Words, "characters": st.Text.Characters, "charactersNoSpaces": st.Text.CharactersNoSpaces,
 		"paragraphs": st.Text.Paragraphs, "sentences": st.Text.Sentences, "pages": st.Pages, "hasSelection": st.HasSelection}
@@ -77,8 +71,6 @@ func statsState(st canvas.FlowStats) map[string]any {
 	return out
 }
 
-// statsPanel is the Stats tab: a table of the counts, for the whole text and
-// for the selection.
 func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
 	row := func(label string, whole, sel any) xango.Node {
 		selCell := xango.El("td", []xango.Attr{xango.A("style", "text-align:right;color:#6b7280")}, xango.Text("–"))
@@ -99,8 +91,7 @@ func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
 	)
 }
 
-// shareParams are the parameters of the current page a shared link keeps: which
-// document and hub, over what; never the sign-in token or who you are.
+// never the sign-in token or the identity
 func shareParams() url.Values {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	out := url.Values{}
@@ -115,8 +106,6 @@ func shareParams() url.Values {
 	return out
 }
 
-// pageDoc is the shared document the page was opened on: /d/{doc} in the path,
-// or the older ?doc= in the query.
 func pageDoc() string {
 	loc := js.Global().Get("location")
 	if _, doc := share.SplitPath(loc.Get("pathname").String()); doc != "" {
@@ -129,15 +118,12 @@ func pageDoc() string {
 	return ""
 }
 
-// pageBase is the page's address without a /d/{doc} on the end.
 func pageBase() string {
 	loc := js.Global().Get("location")
 	base, _ := share.SplitPath(loc.Get("pathname").String())
 	return loc.Get("origin").String() + base
 }
 
-// sharePanel is the Share tab: the selected text, a link to it, and buttons to
-// copy the link or hand it to the device's share sheet.
 func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) xango.Node {
 	from, to := flow.Selection()
 	sel := share.Of(flow.EditText(), from, to)
@@ -173,8 +159,6 @@ func sharePanel(u *ui, flow *canvas.TextFlow, origin string, renderUI func()) xa
 	)
 }
 
-// openSharedSelection selects the text a shared link points at, once the
-// text is there (a shared document's arrives after the page does).
 func openSharedSelection(u *ui, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	sel, ok := share.Parse(url.Values{"sel": {q.Call("get", "sel").String()}, "q": {strings.TrimPrefix(q.Call("get", "q").String(), "<null>")}})
@@ -199,27 +183,19 @@ func openSharedSelection(u *ui, flow func() *canvas.TextFlow, scroller func() *c
 	}
 }
 
-// --- the interface language ---------------------------------------------
-
 var (
 	catalog = i18n.Default()
 	locale  = "en"
 )
 
-// T is the text for a message id in the interface language, or def (English).
 func T(id, def string, args ...any) string { return catalog.Text(locale, id, def, args...) }
 
-// Tn is the text for a message that depends on the number n, in the plural form of the interface
-// language; the texts take n as their %d.
 func Tn(id, one, other string, n int, args ...any) string {
 	return catalog.Plural(locale, id, one, other, n, args...)
 }
 
-// languageNames are the interface languages on offer, by their own names.
 var languageNames = map[string]string{"en": "English", "es": "Español", "fr": "Français", "de": "Deutsch", "pt": "Português", "ar": "العربية", "he": "עברית", "en-x-plain": "English, plain words"}
 
-// setLocale changes the interface language: the components, the page's lang and
-// reading direction.
 func setLocale(code string) {
 	locale = code
 	components.Translate = func(id, def string) string { return catalog.Text(locale, id, def) }
@@ -230,7 +206,6 @@ func setLocale(code string) {
 	root.Call("setAttribute", "dir", i18n.Direction(code))
 }
 
-// initLocale picks the language from ?lang=, else the browser's preferences.
 func initLocale() {
 	var prefs []string
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
@@ -248,7 +223,6 @@ func initLocale() {
 	useLocale(i18n.Match(prefs, langCodes(), "en"))
 }
 
-// languageMenu lists the interface languages, the current one ticked.
 func languageMenu(u *ui, renderUI func()) []components.MenuItem {
 	codes := langCodes()
 	var items []components.MenuItem
@@ -268,16 +242,10 @@ func languageMenu(u *ui, renderUI func()) []components.MenuItem {
 	return items
 }
 
-// --- accessibility -------------------------------------------------------
-
-// a11yBlocks is the document as the blocks a screen reader is given, found
-// again only when the text changes.
 func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBlock {
 	if flow == nil {
 		return nil
 	}
-	// What the screen-reader copy says depends on the structure (a heading, a list, a
-	// quote), not only on the text, so the cache key is the whole content.
 	doc := docfile.FromFlow(title, flow)
 	content, _ := json.Marshal(doc.Content)
 	h := fnv.New64a()
@@ -290,7 +258,6 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	snap := export.FromDocumentTracked(doc)
 	var out []components.A11yBlock
 	var cur export.Block
-	// add puts a block in the copy, mapped to where the document block starts in the editor's text stream.
 	add := func(blk components.A11yBlock) {
 		if cur.Start >= 0 {
 			blk.Mapped, blk.Start, blk.Lead = true, cur.Start, cur.Lead
@@ -305,7 +272,6 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 		for _, s := range b.Segments {
 			switch {
 			case s.Format.Change == export.Deleted:
-				// text suggested to be removed is in Runs, not in the block's text
 			case s.SoftBreak:
 				text += " "
 			default:
@@ -332,7 +298,6 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 		case export.Image:
 			switch {
 			case b.ImageDecorative && b.ImageAlt == "":
-				// nothing a reader needs
 			case b.ImageAlt != "":
 				add(components.A11yBlock{Kind: components.A11yParagraph, Text: T("a11y.imageAlt", "Image: %s", b.ImageAlt)})
 			default:
@@ -362,11 +327,8 @@ func (u *ui) a11yBlocks(flow *canvas.TextFlow, title string) []components.A11yBl
 	return out
 }
 
-// announce has a screen reader say msg.
 func (u *ui) announce(msg string) { u.announcement = msg }
 
-// selectedText is what is selected, cut short, for the screen reader's copy of
-// the document.
 func selectedText(flow *canvas.TextFlow) string {
 	if flow == nil || !flow.HasSelection() {
 		return ""
@@ -378,8 +340,6 @@ func selectedText(flow *canvas.TextFlow) string {
 	return s
 }
 
-// labelCanvas gives the canvas and its hidden input names and a description a
-// screen reader can use: the canvas is a text box whose text is the hidden copy.
 func labelCanvas(canvasEl, inputEl js.Value) {
 	for _, el := range []js.Value{canvasEl, inputEl} {
 		el.Call("setAttribute", "aria-describedby", "a11y-text")
@@ -391,9 +351,6 @@ func labelCanvas(canvasEl, inputEl js.Value) {
 	inputEl.Call("setAttribute", "aria-label", T("a11y.input", "Document editor"))
 }
 
-// a11yObjects is the floating text, tables and pictures of the page, which are
-// not in the text flow, as blocks for the screen reader's copy, with where each is (readingorder.go puts them
-// among the text).
 func a11yObjects(root *cxango.Root) []placedBlock {
 	var out []placedBlock
 	for n := 0; ; n++ {
@@ -431,7 +388,6 @@ func a11yObjects(root *cxango.Root) []placedBlock {
 	return out
 }
 
-// floatingObjects are the floating pictures and tables of the page as the checker takes them.
 func floatingObjects(root *cxango.Root) []a11ycheck.Object {
 	var out []a11ycheck.Object
 	for n := 0; root.Find(cxango.TagImage, n) != nil; n++ {
@@ -449,8 +405,6 @@ func floatingObjects(root *cxango.Root) []a11ycheck.Object {
 	return out
 }
 
-// pageEndpoint is a backend address from the page's query string if it passes
-// allowedEndpoint, else "" (and a warning in the console says it was ignored).
 func pageEndpoint(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
@@ -464,8 +418,6 @@ func pageEndpoint(raw string) string {
 	return got
 }
 
-// a11yRuns are a block's segments as pieces with a language, a link, comments and a suggested change each
-// (neighbours with the same of all of them joined), or nil when none of the text has any of these.
 func a11yRuns(segs []export.Segment) []components.A11yRun {
 	tagged := false
 	for _, s := range segs {
@@ -478,7 +430,7 @@ func a11yRuns(segs []export.Segment) []components.A11yRun {
 	for _, s := range segs {
 		r := components.A11yRun{Text: s.Text, Lang: s.Format.Lang, Href: s.Format.Href, Comments: s.Format.Comment}
 		if s.Format.NoteRef > 0 {
-			r.Stream = 1 // the mark of a footnote is one rune of the stream, "12" in the copy
+			r.Stream = 1
 		}
 		switch s.Format.Change {
 		case export.Inserted:
@@ -502,7 +454,6 @@ func a11yRuns(segs []export.Segment) []components.A11yRun {
 	return out
 }
 
-// sameRunKind reports whether two pieces are alike in everything but their text.
 func sameRunKind(a, b components.A11yRun) bool {
 	if a.Stream > 0 || b.Stream > 0 {
 		return false
@@ -511,8 +462,6 @@ func sameRunKind(a, b components.A11yRun) bool {
 	return a == b
 }
 
-// selectionLanguageMenu tags the selected text (or the text typed next) with its language, so that a
-// screen reader switches voice for it; the first entry returns it to the document's own.
 func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus, renderUI func()) []components.MenuItem {
 	set := func(tag, name string) func() {
 		return func() {
@@ -537,26 +486,16 @@ func selectionLanguageMenu(u *ui, flow func() *canvas.TextFlow, redraw, refocus,
 	return items
 }
 
-// checkState is the Check tab: whether a check has run on this page and what it found.
 type checkState struct {
 	ran      bool
 	findings []a11ycheck.Finding
 	override bool // the next export is allowed whatever the gate says
 }
 
-// exportGateKey is where the person's choice of what exporting does about errors is kept.
 const exportGateKey = "showcase:export-gate"
 
-// exportGateMetaName is the page's operator setting: <meta name="gojiberry-min-export-gate" content="warn">
-// (or "block") in the index.html the host serves. It is the least strict gate the person may choose, and
-// part of the page the operator delivers, not of a link or of this browser's storage, so a person cannot
-// lower it from the page (a query parameter is deliberately not read for it). With "block" an export with
-// errors cannot be allowed anyway. A value that is not a gate is read as "block": a typo must not leave
-// the gate open. It stops the page's own export paths; a host that must hold the line against someone
-// who edits the page needs to run package a11ycheck where the document is stored or sent.
 const exportGateMetaName = "gojiberry-min-export-gate"
 
-// operatorGateFloor reads the operator's minimum gate from the page.
 func operatorGateFloor() a11ycheck.GateMode {
 	defer func() { _ = recover() }()
 	m := js.Global().Get("document").Call("querySelector", `meta[name="`+exportGateMetaName+`"]`)
@@ -575,7 +514,6 @@ func operatorGateFloor() a11ycheck.GateMode {
 	return mode
 }
 
-// exportGate is the gate in force: the person's choice, raised to the operator's minimum.
 func exportGate() a11ycheck.GateMode {
 	person := a11ycheck.GateAllow
 	switch m := a11ycheck.GateMode(lsGet(exportGateKey)); m {
@@ -585,11 +523,9 @@ func exportGate() a11ycheck.GateMode {
 	return person.AtLeast(operatorGateFloor())
 }
 
-// gatedExport is the export of the page: the document is checked first when the gate asks for it, an
-// export with errors is refused unless the person allowed this one, or is done with a warning.
 func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, string, error) {
 	mode := exportGate()
-	gateSaid := false // the gate has already announced the export, and one announcement is heard at a time
+	gateSaid := false
 	if mode != a11ycheck.GateAllow {
 		findings := a11ycheck.Check(doc, a11ycheck.Options{})
 		floor := operatorGateFloor()
@@ -608,7 +544,6 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 	}
 	file, data, mime, err := u.transfer.Export(format, doc)
 	if err == nil {
-		// Whatever the way to export, the person hears what the format left out (the Files tab lists it).
 		rep, _ := remote.Fidelity(callFiles, format, doc)
 		if n := len(rep.Losses); n > 0 && !gateSaid {
 			u.announce(Tn("fidelity.announce", "Exported: %d thing left out or simplified in the %s file. The Files tab lists them.", "Exported: %d things left out or simplified in the %s file. The Files tab lists them.", n, format))
@@ -617,8 +552,6 @@ func (u *ui) gatedExport(format string, doc docfile.Document) (string, []byte, s
 	return file, data, mime, err
 }
 
-// checkPanel is the Check tab: it runs the document's accessibility check (package a11ycheck) and lists
-// the findings, each with a button that moves the caret to it.
 func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) xango.Node {
 	props := components.CheckPanelProps{Checked: u.check.ran}
 	for _, f := range u.check.findings {
@@ -666,7 +599,7 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 			fl.SetCursors([]canvas.Cursor{canvas.At(f.Offset)})
 			fl.ApplyParagraph(func(p *canvas.ParaFormat) { p.Style = fmt.Sprintf("Heading %d", f.Arg) })
 		case a11ycheck.ActionToParagraph:
-			if f.Length > 0 { // blank text at a heading's size goes back to the body size
+			if f.Length > 0 {
 				fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
 				fl.ApplyFormat(func(c *canvas.Format) { c.Scale = 0 })
 			}
@@ -676,7 +609,6 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 			fl.SetCursors([]canvas.Cursor{{Anchor: f.Offset, Caret: f.Offset + f.Length}})
 			fl.SetTextColor("")
 		case a11ycheck.ActionToList:
-			// the paragraphs become a list, then the typed markers go, last first so the offsets before them hold
 			kind := canvas.ListBullet
 			if f.Arg == 1 {
 				kind = canvas.ListOrdered
@@ -698,14 +630,14 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 			return
 		}
 		redraw()
-		run() // check again: the fix may show the next problem, or none
+		run()
 	}
 	props.OnGo = func(i int) {
 		fl := flow()
 		if fl == nil || i < 0 || i >= len(u.check.findings) {
 			return
 		}
-		if u.check.findings[i].Offset < 0 { // a floating object has no place in the text: it is named in the message
+		if u.check.findings[i].Offset < 0 {
 			u.announce(u.check.findings[i].Text)
 			return
 		}
@@ -717,7 +649,6 @@ func checkPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroller func
 	return components.CheckPanel(props)
 }
 
-// fixLabel is the text of the one-click fix of a finding, or "" if there is none.
 func fixLabel(f a11ycheck.Finding) string {
 	switch f.Action {
 	case a11ycheck.ActionHeadingLevel:
@@ -734,8 +665,6 @@ func fixLabel(f a11ycheck.Finding) string {
 	return ""
 }
 
-// documentLanguageMenu sets the language of the whole document, which exports carry (HTML, EPUB, Word) and
-// the reading copy is tagged with; the first entry says there is none.
 func documentLanguageMenu(u *ui, renderUI func()) []components.MenuItem {
 	set := func(tag, name string) func() {
 		return func() {
@@ -757,9 +686,6 @@ func documentLanguageMenu(u *ui, renderUI func()) []components.MenuItem {
 	return items
 }
 
-// noteCollab announces what changed in the shared session (who joined or left, the connection, a problem),
-// grouped and spaced by components.CollabAnnouncer and as much as the person chose in the preferences. What
-// is held back is said a little later.
 func (u *ui) noteCollab(renderUI func()) {
 	s := u.live
 	if s == nil {
@@ -775,8 +701,6 @@ func (u *ui) noteCollab(renderUI func()) {
 		problem = s.Err.Error()
 	}
 	u.noteComments()
-	// Changes made offline that met the document, and changes the server refused: counted by the session,
-	// announced once each (a count that went down is a new session).
 	if s.Merged >= u.collabMerged {
 		u.collab.NoteMerged(s.Merged - u.collabMerged)
 	}
@@ -790,7 +714,6 @@ func (u *ui) noteCollab(renderUI func()) {
 	u.collabMerged, u.collabRejected = s.Merged, s.Rejected
 	u.noteAway(s.Status, renderUI)
 	if msg := u.collab.Update(time.Now(), s.Status == client.Online, names, problem); msg != "" {
-		// the announcer holds one message: what it was told of a mention in this same pass is not lost under it
 		u.announce(strings.TrimSpace(u.mentionSaid + " " + msg))
 	}
 	u.mentionSaid = ""
@@ -804,9 +727,6 @@ func (u *ui) noteCollab(renderUI func()) {
 	}
 }
 
-// sayWhere answers "Where is <name>?" in the presence list: the paragraph and the words before the caret
-// of that person's cursor, said once through the live region. The cursors are never announced as they
-// move; this is the only way the position is spoken.
 func (u *ui) sayWhere(flow *canvas.TextFlow, p components.PresencePeer) {
 	name := p.Name
 	if name == "" {
@@ -833,14 +753,12 @@ func (u *ui) sayWhere(flow *canvas.TextFlow, p components.PresencePeer) {
 	u.announce(components.WhereSentence(name, text, cur.Anchor, cur.Caret, true))
 }
 
-// noteComments tells the announcer about comments that appeared in the shared document and are not
-// the local person's own (those were announced by the action that made them).
 func (u *ui) noteComments() {
 	if u.stateRef == nil || u.stateRef.Comments == nil {
 		return
 	}
 	seen := map[string]commentSeen{}
-	prefix := u.stateRef.Comments.IDPrefix // a shared session gives each copy of the document its own
+	prefix := u.stateRef.Comments.IDPrefix
 	for _, c := range u.stateRef.Comments.List() {
 		seen[c.ID] = commentSeen{replies: len(c.Replies), resolved: c.Resolved}
 		if u.commentsSeen == nil {
@@ -853,8 +771,6 @@ func (u *ui) noteComments() {
 			}
 			continue
 		}
-		// The local person's own replies and resolving update the snapshot as they are made
-		// (sealComments), so what differs here was done by someone else.
 		for i := was.replies; i < len(c.Replies); i++ {
 			u.collab.NoteReply(authorOrSomeone(c.Replies[i].Author))
 		}
@@ -867,8 +783,6 @@ func (u *ui) noteComments() {
 	u.noteMentions(first)
 }
 
-// myHandle is the handle the local person is mentioned by: their handle in the people list, else their name when it can
-// be written as one ("" when neither).
 func (u *ui) myHandle() string {
 	if u.stateRef == nil || strings.TrimSpace(u.stateRef.Author) == "" {
 		return ""
@@ -885,9 +799,6 @@ func (u *ui) myHandle() string {
 	return who
 }
 
-// noteMentions tells the local person about comments and replies by others that mention them (@handle): the
-// announcer says it once for each, and the Comments tab lists them until they are marked as read. The first look
-// only remembers, so opening a document does not announce the old ones one by one (the tab still lists them).
 func (u *ui) noteMentions(first bool) {
 	h := u.myHandle()
 	if h == "" || u.stateRef == nil || u.stateRef.Comments == nil {
@@ -905,7 +816,6 @@ func (u *ui) noteMentions(first bool) {
 	}
 }
 
-// commentSeen is what the page knew of a comment the last time it looked.
 type commentSeen struct {
 	replies  int
 	resolved bool
@@ -918,8 +828,6 @@ func authorOrSomeone(a string) string {
 	return a
 }
 
-// sealComments makes what is in the comment set now the known state without announcing it: the local
-// person's own reply or resolving is not news to them.
 func (u *ui) sealComments() {
 	if u.stateRef == nil || u.stateRef.Comments == nil || u.commentsSeen == nil {
 		return
@@ -931,7 +839,6 @@ func (u *ui) sealComments() {
 	}
 }
 
-// syncItem is the status bar item of a shared document (nil for one that is not shared).
 func (u *ui) syncItem() *components.StatusItem {
 	s := u.live
 	if s == nil {
@@ -945,8 +852,6 @@ func (u *ui) syncItem() *components.StatusItem {
 	return &it
 }
 
-// commentSignature changes when a comment is added, a reply is added or a thread is resolved or opened
-// again, whoever did it.
 func commentSignature(set *canvas.CommentSet) string {
 	replies, resolved := 0, 0
 	list := set.List()

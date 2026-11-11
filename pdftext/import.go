@@ -6,9 +6,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Import reads a PDF's text as a document: every page's lines as paragraphs,
-// with a page break between pages. Only text is read (no layout, pictures or
-// fonts), and a PDF that is a scan has none.
 func Import(data []byte) (docfile.Document, error) {
 	pages, err := ExtractPagesBytes(data)
 	if err != nil {

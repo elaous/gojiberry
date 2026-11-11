@@ -12,21 +12,12 @@ import (
 	"time"
 )
 
-// versionsKeyPrefix is where a store that keeps version snapshots (docstore.DefaultRelated's
-// layout) holds those of public documents; the byte budget counts them with the documents.
 const versionsKeyPrefix = "versions/" + docKeyPrefix
 
-// ---- the global byte budget
-
-// budgetEntry is what the counter holds for one document: doc is its own bytes (as the service
-// wrote them), extra the bytes of its version snapshots (known only from a listing).
 type budgetEntry struct{ doc, extra int64 }
 
 func (e budgetEntry) bytes() int64 { return e.doc + e.extra }
 
-// budgetTouch is what writes did to a document while a reconcile was listing the store: removed
-// (a discard, a takedown), the size of the document a commit stored (hasDoc, doc), and the bytes of
-// version snapshots written since (extra), which a listing that predates them has not counted.
 type budgetTouch struct {
 	removed bool
 	hasDoc  bool
@@ -34,29 +25,6 @@ type budgetTouch struct {
 	extra   int64
 }
 
-// budget is the global counter of live public bytes (documents and their version snapshots).
-//
-// It is a ledger, one entry per document, plus the bytes that writes have reserved and not stored
-// yet (pending). A write reserves before it stores and commits (or cancels) after, so the
-// counter never admits more than the budget while a write is in flight. Sweep and the first write
-// reconcile it: they list the store, and the result replaces the ledger, except that a
-// document a write committed or removed while the listing ran (a "touch", kept per open reconcile
-// window) keeps the write's word, since the listing may predate it. Pending reservations are not
-// part of the ledger and so are never dropped by a reconcile (the generation, gen, counts
-// completed reconciles). A removal (discard, takedown, a rolled-back create) subtracts exactly
-// what the ledger holds for that document, and nothing if the current generation does not count
-// it: the total can neither go below the sum of its documents nor subtract a document twice.
-// The one inexactness is the safe one: a write that lands while a listing runs can be counted
-// twice until the next reconcile, never missed.
-//
-// Version snapshots (the saver's "versions/pubdoc/<id>/...", written by something other than this
-// service) are added to their document's entry when they are written (addExtra, fed by the
-// ExpiringAdapter's Guard hook or Service.NoteVersionWrite), not only when a reconcile lists
-// them, so the budget stops admitting new documents as soon as they fill it. Through an
-// ExpiringAdapter a snapshot that would pass the budget is refused (docstore.ErrStorageFull)
-// and a deleted one is subtracted at once (OnDelete). A snapshot written some other way
-// (NoteVersionWrite after the fact) cannot be refused, and one deleted some other way is
-// subtracted by the next reconcile.
 type budget struct {
 	mu         sync.Mutex
 	ledger     map[string]budgetEntry
@@ -68,14 +36,13 @@ type budget struct {
 	windows    map[uint64]map[string]budgetTouch
 }
 
-// full reports whether nothing more fits.
 func (b *budget) full(limit int64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.total+b.pending >= limit
 }
 
-// reservation is a write's claim on the budget. Exactly one of commit and cancel ends it.
+// exactly one of commit and cancel ends it
 type reservation struct {
 	b     *budget
 	doc   string
@@ -84,9 +51,6 @@ type reservation struct {
 	ended bool
 }
 
-// reserve claims growth of delta bytes (a negative delta always fits and claims nothing) for
-// document doc, whose size will be size once the write is stored; it fails if the budget limit
-// would be passed.
 func (b *budget) reserve(doc string, size, delta, limit int64) (*reservation, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -109,7 +73,6 @@ func (b *budget) unholdLocked(n int64) {
 	}
 }
 
-// commit turns the reservation into the document's counted size (the write is stored).
 func (r *reservation) commit() {
 	if r == nil {
 		return
@@ -126,7 +89,6 @@ func (r *reservation) commit() {
 	b.setLocked(r.doc, budgetEntry{doc: max(0, r.size), extra: e.extra}, e)
 }
 
-// cancel gives the reservation back (the write was not stored).
 func (r *reservation) cancel() {
 	if r == nil {
 		return
@@ -141,7 +103,6 @@ func (r *reservation) cancel() {
 	b.unholdLocked(r.held)
 }
 
-// setLocked records doc's entry (old is what it replaces) and tells the open reconcile windows.
 func (b *budget) setLocked(doc string, e, old budgetEntry) {
 	if b.ledger == nil {
 		b.ledger = map[string]budgetEntry{}
@@ -155,8 +116,6 @@ func (b *budget) setLocked(doc string, e, old budgetEntry) {
 	}
 }
 
-// addExtra counts n bytes of a version snapshot of document doc at once (a snapshot of a document
-// the ledger does not know yet gets an entry of its own: its bytes are in the store).
 func (b *budget) addExtra(doc string, n int64) {
 	if n <= 0 {
 		return
@@ -179,9 +138,6 @@ func (b *budget) addExtra(doc string, n int64) {
 	}
 }
 
-// holdExtra claims n bytes of a version snapshot that is about to be written, if they fit under
-// limit; releaseExtra gives the claim back (the write ended, stored or not: a stored one is then
-// counted by addExtra).
 func (b *budget) holdExtra(n, limit int64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -198,8 +154,7 @@ func (b *budget) releaseExtra(n int64) {
 	b.unholdLocked(n)
 }
 
-// subExtra takes n bytes of a deleted version snapshot of document doc off the count (never more
-// than the document's entry holds as snapshots).
+// never more than the document's entry holds as snapshots
 func (b *budget) subExtra(doc string, n int64) {
 	if n <= 0 {
 		return
@@ -220,14 +175,11 @@ func (b *budget) subExtra(doc string, n int64) {
 	for _, w := range b.windows {
 		t := w[doc]
 		t.removed = false
-		t.extra -= n // a listing that predates the delete counted it
+		t.extra -= n
 		w[doc] = t
 	}
 }
 
-// release removes document doc from the count and returns the bytes it held: what a discard, a
-// takedown or a rolled-back write subtracts. A document the current generation does not count
-// subtracts nothing.
 func (b *budget) release(doc string) int64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -247,8 +199,6 @@ func (b *budget) release(doc string) int64 {
 	return e.bytes()
 }
 
-// begin opens a reconcile window: the documents that writes touch until set or abort are
-// remembered. Windows may overlap; each keeps its own touches, so none loses a write.
 func (b *budget) begin() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -260,15 +210,12 @@ func (b *budget) begin() uint64 {
 	return b.nextWin
 }
 
-// abort closes a window whose listing failed.
 func (b *budget) abort(win uint64) {
 	b.mu.Lock()
 	delete(b.windows, win)
 	b.mu.Unlock()
 }
 
-// set replaces the ledger with the listing, keeping what writes did to documents since begin, and
-// starts a new generation.
 func (b *budget) set(win uint64, listed map[string]budgetEntry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -299,21 +246,18 @@ func (b *budget) set(win uint64, listed map[string]budgetEntry) {
 	b.reconciled = true
 }
 
-// get is the bytes counted, reserved ones included, and whether a reconcile has completed.
 func (b *budget) get() (used int64, reconciled bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.total + b.pending, b.reconciled
 }
 
-// generation is the number of completed reconciles.
 func (b *budget) generation() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.gen
 }
 
-// reportInfo is what the counters need to know about a stored report.
 type reportInfo struct {
 	reporter string
 	doc      string
@@ -321,14 +265,12 @@ type reportInfo struct {
 	at       time.Time
 }
 
-// reportWindow is what was added while a reconcile listed the reports.
 type reportWindow struct {
 	n     int
 	bytes int64
 	rep   map[string]int
 }
 
-// reportStats counts the stored reports, their bytes and how many each reporter holds.
 type reportStats struct {
 	mu        sync.Mutex
 	n         int
@@ -338,8 +280,6 @@ type reportStats struct {
 	windows   map[uint64]*reportWindow
 }
 
-// add changes the counts (a negative n is an eviction; the counts are clamped at zero and a
-// clamp is logged: it means a report was counted out twice).
 func (r *reportStats) add(n int, bytes int64, reporter string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -357,7 +297,7 @@ func (r *reportStats) add(n int, bytes int64, reporter string) {
 			delete(r.reporters, reporter)
 		}
 	}
-	if n > 0 { // only growth is remembered: a listing that missed it must not lose it
+	if n > 0 { // only growth is remembered: a missed listing must not lose it
 		for _, w := range r.windows {
 			w.n += n
 			w.bytes += bytes
@@ -385,7 +325,6 @@ func (r *reportStats) abort(win uint64) {
 	r.mu.Unlock()
 }
 
-// set replaces the counts with a listing, plus the reports stored since begin.
 func (r *reportStats) set(win uint64, n int, bytes int64, reporters map[string]int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -411,32 +350,19 @@ func (r *reportStats) over(maxN int, maxBytes int64) bool {
 	return r.n > maxN || r.bytes > maxBytes
 }
 
-// held is how many reports are stored in all, and how many of them reporter's.
 func (r *reportStats) held(reporter string) (all, mine int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.n, r.reporters[reporter]
 }
 
-// reconcileBackoff is how long writes stay refused after the first reconcile failed: the counters
-// are unknown, and guessing zero would admit writes past the budget.
+// counters unknown: guessing zero would admit writes past the budget
 const reconcileBackoff = 15 * time.Second
 
-// reconcileTimeout bounds the first reconcile. It runs on a context of its own (the request that
-// happens to start it may go away, and its disconnect must not fail the reconcile for everyone),
-// so it needs a bound of its own.
+// own context: the starting request's disconnect must not fail it
 const reconcileTimeout = 2 * time.Minute
 
-// ensureCounters reconciles the counters with the store once before the first write (every Sweep
-// does it afterwards): the budget must not start from zero after a restart. It reports whether
-// writes may go on. If the first reconcile fails, writes fail CLOSED (false) for
-// reconcileBackoff, then try again, instead of running against an empty count.
-//
-// The reconcile does not run on the caller's context: a client that disconnects mid-way would
-// cancel the store listing and put every write of everyone into the backoff. It runs under
-// context.WithoutCancel with reconcileTimeout. A request that finds a reconcile under way waits for
-// it for at most its own context (its client going away) or RequestTimeout, and is answered as a
-// refusal (false) if that runs out first; the reconcile goes on.
+// the budget must not start from zero after a restart
 func (s *Service) ensureCounters(ctx context.Context) bool {
 	if _, done := s.bytes.get(); done {
 		return true
@@ -470,7 +396,6 @@ func (s *Service) ensureCounters(ctx context.Context) bool {
 	return true
 }
 
-// listBudget lists the public documents and their version snapshots as a ledger.
 func (s *Service) listBudget(ctx context.Context) (map[string]budgetEntry, error) {
 	metas, err := docstore.ListPrefix(ctx, s.store, docKeyPrefix)
 	if err != nil {
@@ -496,8 +421,6 @@ func (s *Service) listBudget(ctx context.Context) (map[string]budgetEntry, error
 	return out, nil
 }
 
-// reconcile recomputes the byte and report counters from the store. The two are independent: the
-// bytes are set even if the reports cannot be listed.
 func (s *Service) reconcile(ctx context.Context) error {
 	win := s.bytes.begin()
 	listed, err := s.listBudget(ctx)
@@ -509,7 +432,6 @@ func (s *Service) reconcile(ctx context.Context) error {
 	return s.recountReports(ctx)
 }
 
-// listReports lists the stored reports and reads each one's reporter and priority.
 func (s *Service) listReports(ctx context.Context) ([]docstore.Meta, map[string]reportInfo, error) {
 	metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix)
 	if err != nil {
@@ -527,13 +449,10 @@ func (s *Service) listReports(ctx context.Context) ([]docstore.Meta, map[string]
 	return metas, info, nil
 }
 
-// recountReports sets the report counters from a fresh listing.
 func (s *Service) recountReports(ctx context.Context) error {
 	return s.recountReportsIn(ctx, s.reports.begin())
 }
 
-// recountReportsIn is recountReports for a window opened earlier (Sweep opens it at its start, so
-// the reports stored while it works are kept).
 func (s *Service) recountReportsIn(ctx context.Context, win uint64) error {
 	start := s.now()
 	metas, info, err := s.listReports(ctx)
@@ -558,8 +477,6 @@ func (s *Service) setReportCounts(win uint64, metas []docstore.Meta, info map[st
 	s.reports.set(win, len(metas), b, reporters)
 }
 
-// isPriority reports whether a report category is on the priority list. The free-text reason has
-// no say.
 func (s *Service) isPriority(category string) bool {
 	n := categoryOf(category)
 	for _, p := range s.cfg.ReportPriorityCategories {
@@ -570,9 +487,6 @@ func (s *Service) isPriority(category string) bool {
 	return false
 }
 
-// evictReports deletes reports among metas until the stored reports are within MaxReports and
-// MaxReportBytes (a little under, so the next report does not evict again): the oldest first, but
-// every report whose reason is a priority one only after all the others.
 func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info map[string]reportInfo) int {
 	maxN, maxB := s.cfg.MaxReports, s.cfg.MaxReportBytes
 	targetN, targetB := maxN-max(1, maxN/20), maxB-max(1, maxB/20)
@@ -612,10 +526,7 @@ func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info 
 	return evicted
 }
 
-// dropRef removes the reference to report reportID from its document's record, under the
-// document's lock: a report that was deleted (evicted, or past its TTL) must not stay in the
-// record, where it would count against the document's slots and answer a duplicate with the id of
-// a report that is gone. The caller must not hold any document lock.
+// under the document's lock
 func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
 	if !validID(docID) || reportID == "" {
 		return
@@ -637,8 +548,6 @@ func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
 	}
 }
 
-// removeRef deletes the reference with the given report id from meta and reports whether it was
-// there; the count follows.
 func removeRef(meta *docMeta, reportID string) bool {
 	for i, ref := range meta.ReportRefs {
 		if ref.ID == reportID {
@@ -650,13 +559,9 @@ func removeRef(meta *docMeta, reportID string) bool {
 	return false
 }
 
-// ---- small helpers
-
-// keyPattern matches the store keys of this package: they hold document IDs, which a log line
-// must not carry.
 var keyPattern = regexp.MustCompile(`(?i)(pubdoc|public|report|versions/pubdoc|expiry:pubdoc)/[A-Za-z0-9_/.\-]*`)
 
-// redact is err's text with store keys (which contain document IDs) replaced by their keyspace.
+// store keys hold document IDs: logs show only their keyspace
 func redact(err error) string {
 	if err == nil {
 		return ""
@@ -664,8 +569,6 @@ func redact(err error) string {
 	return keyPattern.ReplaceAllString(err.Error(), "$1/<id>")
 }
 
-// canListPrefix reports whether a listing by prefix is cheaper than listing the store: a
-// PrefixLister, looking through the ExpiringAdapter (which always has the method).
 func canListPrefix(a docstore.Adapter) bool {
 	if e, ok := a.(*docstore.ExpiringAdapter); ok {
 		return canListPrefix(e.Inner)
@@ -674,9 +577,7 @@ func canListPrefix(a docstore.Adapter) bool {
 	return ok
 }
 
-// RequireDocsClosed is the check behind "the public offer does not start with the generic /docs API
-// open": it returns an error unless srv's /docs is closed (docstore.Server.DocsClosed: CloseDocs, or
-// required ACLs with sign-in) or the operator has explicitly allowed an open one (allowOpen).
+// RequireDocsClosed is the check behind closing the generic routes.
 func RequireDocsClosed(srv *docstore.Server, allowOpen bool) error {
 	if srv.DocsClosed() || allowOpen {
 		return nil

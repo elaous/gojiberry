@@ -11,11 +11,6 @@ import (
 )
 
 func TestParseCSSFontFacesExtractsWeightStyleAndURL(t *testing.T) {
-	// A real captured response (Google's own legacy css?family=
-	// endpoint, "Mozilla/4.0" User-Agent) for
-	// "Open+Sans:400,700,400italic,700italic" -- see
-	// fetchGoogleFontFilesAPI's own doc comment for how this was
-	// confirmed against the real API while building this.
 	css := `@font-face {
   font-family: 'Open Sans';
   font-style: italic;
@@ -62,23 +57,12 @@ func TestParseCSSFontFacesExtractsWeightStyleAndURL(t *testing.T) {
 }
 
 func TestParseCSSFontFacesEmptyForUnrecognizedFamily(t *testing.T) {
-	// Google's own legacy endpoint returns a body with no @font-face
-	// blocks at all for a family it doesn't recognize (an HTTP-level
-	// error is the other real failure shape fetchGoogleFontFilesAPI
-	// itself handles separately, before this ever runs).
 	if got := parseCSSFontFaces(""); len(got) != 0 {
 		t.Fatalf("parseCSSFontFaces(\"\") = %+v, want empty", got)
 	}
 }
 
 func TestParseCSSFontFacesSkipsBlocksWithNoTrueTypeFormat(t *testing.T) {
-	// A variable-font "kit=" URL with no format('truetype') annotation
-	// -- fetchGoogleFontFilesAPI's own doc comment explains why a
-	// fuller legacy-browser User-Agent can produce this for some
-	// families, and why this server's own request deliberately avoids
-	// it; this proves the parser itself also just skips a block shaped
-	// like that rather than mis-extracting a URL with nothing useful
-	// behind it.
 	css := `@font-face {
   font-family: 'Roboto';
   font-style: normal;
@@ -147,10 +131,6 @@ func TestLocalDownloadFetchesWritesAndRescans(t *testing.T) {
 		t.Fatalf("families = %+v, want one \"Test Family\" with 2 variants", body.Families)
 	}
 
-	// Written under its own slugged subdirectory, not loose in the
-	// font directory's own root -- keeps a downloaded family's files
-	// visibly grouped and avoids colliding with a same-named file a
-	// deployment already had on disk for some other reason.
 	entries, err := os.ReadDir(filepath.Join(dir, "google-cache", "test-family"))
 	if err != nil {
 		t.Fatalf("google-cache/test-family: %v", err)
@@ -159,9 +139,6 @@ func TestLocalDownloadFetchesWritesAndRescans(t *testing.T) {
 		t.Fatalf("google-cache/test-family has %d files, want 2: %+v", len(entries), entries)
 	}
 
-	// The newly downloaded family is immediately servable from
-	// /local/files/* -- the whole point of writing to disk and
-	// re-scanning rather than just returning the bytes to the caller.
 	relPath := body.Families[0].Variants[0].Path
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/local/files/"+relPath, nil))

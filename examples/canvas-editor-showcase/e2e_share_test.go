@@ -12,9 +12,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestShareAndStats drives the word count and "share the selection": the counts
-// in the status bar and the Stats tab (for the text and for the selection), and
-// a link to the selected text that selects it again when opened.
 func TestShareAndStats(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.Open(t, "")

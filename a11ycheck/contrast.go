@@ -10,12 +10,10 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// WCAG 2 success criterion 1.4.3: text needs a contrast ratio of 4.5 to its background, or 3 when it
-// is large (24px, or 18.66px and bold).
 const (
 	minRatio      = 4.5
 	minRatioLarge = 3.0
-	baseFontSize  = 16.0 // what a run with no size of its own is drawn at
+	baseFontSize  = 16.0
 )
 
 func checkContrast(doc docfile.Document, opt Options) []Finding {
@@ -28,7 +26,7 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 	for i, it := range doc.Content {
 		c := it.Chars
 		if c == nil || strings.TrimSpace(c.Text) == "" || c.Format.Color == "" {
-			continue // the default colour is the page's own to get right
+			continue
 		}
 		fg, ok := parseColor(c.Format.Color)
 		if !ok {
@@ -63,7 +61,6 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 
 type rgb struct{ r, g, b uint8 }
 
-// luminance is the relative luminance of a colour (WCAG 2).
 func (c rgb) luminance() float64 {
 	lin := func(v uint8) float64 {
 		s := float64(v) / 255
@@ -75,7 +72,6 @@ func (c rgb) luminance() float64 {
 	return 0.2126*lin(c.r) + 0.7152*lin(c.g) + 0.0722*lin(c.b)
 }
 
-// contrast is the contrast ratio of two colours, 1 to 21.
 func contrast(a, b rgb) float64 {
 	la, lb := a.luminance(), b.luminance()
 	if la < lb {
@@ -84,8 +80,6 @@ func contrast(a, b rgb) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// parseColor reads "#rgb", "#rrggbb", "rgb(r, g, b)" and the CSS colour names; anything else (a transparent
-// colour, a variable, a name not listed) is not understood, and the caller skips the check.
 func parseColor(s string) (rgb, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if c, ok := colornames.Map[s]; ok {
@@ -123,8 +117,6 @@ func parseColor(s string) (rgb, bool) {
 	return rgb{}, false
 }
 
-// Contrast is the WCAG 2 contrast ratio (1 to 21) of two CSS colours given as text ("#rgb", "#rrggbb",
-// "rgb(r, g, b)" or a basic name). ok is false when either one is not understood.
 func Contrast(fg, bg string) (ratio float64, ok bool) {
 	a, ok1 := parseColor(fg)
 	b, ok2 := parseColor(bg)

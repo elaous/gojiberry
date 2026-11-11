@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Word suggestions: Ctrl+Space lists the words that continue the one being typed, the list is an ARIA
-// listbox the input element controls (the focus never leaves the input), Down moves the highlight,
-// Enter puts the word in place (and types no new line), Escape closes the list, and typing narrows it.
 func TestWordSuggestions(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -19,7 +16,7 @@ func TestWordSuggestions(t *testing.T) {
 	d.Focus("#input")
 	d.Press("Home")
 	d.Type("zebra zebra zeppelin ze ")
-	d.Press("ArrowLeft") // the caret is at the end of "ze", before the space
+	d.Press("ArrowLeft")
 
 	d.Press("Control+Space")
 	d.WaitSelector(`#suggestions[role="listbox"]`)
@@ -48,8 +45,6 @@ func TestWordSuggestions(t *testing.T) {
 	d.NoErrors()
 }
 
-// With "Suggest words as I type" on, the list opens by itself after a pause in typing, and says
-// nothing when there is nothing to offer.
 func TestWordSuggestionsOpenByThemselves(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({suggest: 'auto'}))`, nil)
@@ -70,7 +65,6 @@ func TestWordSuggestionsOpenByThemselves(t *testing.T) {
 	d.NoErrors()
 }
 
-// With spell check on, the dictionary's words fill the list after the document's own.
 func TestWordSuggestionsUseTheDictionary(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -89,8 +83,6 @@ func TestWordSuggestionsUseTheDictionary(t *testing.T) {
 	d.NoErrors()
 }
 
-// With a document language that has a word list (German, French, Spanish), its common words fill the list
-// after the document's own, and with no language set they do not.
 func TestWordSuggestionsUseTheLanguageWordList(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -120,7 +112,6 @@ func TestWordSuggestionsUseTheLanguageWordList(t *testing.T) {
 	d.NoErrors()
 }
 
-// Portuguese has a list too: with it as the document language, a prefix finds its word.
 func TestWordSuggestionsUseThePortugueseList(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

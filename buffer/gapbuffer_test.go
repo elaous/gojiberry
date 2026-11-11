@@ -67,9 +67,6 @@ func TestDeleteAtStartMiddleEnd(t *testing.T) {
 
 func TestGapMovesBothDirectionsRepeatedly(t *testing.T) {
 	g := FromSlice([]rune("0123456789"))
-	// Bounce the edit point back and forth across the buffer, the
-	// access pattern most likely to expose an off-by-one in
-	// moveGapTo's two branches.
 	g.InsertAt(5, 'a') // "01234a56789"
 	g.InsertAt(2, 'b') // "01b234a56789"
 	g.InsertAt(9, 'c') // "01b234a56c789" (index 9 is between '6' and '7')
@@ -99,7 +96,6 @@ func TestAtAndSet(t *testing.T) {
 	if got := string(g.ToSlice()); got != "hallo" {
 		t.Fatalf("after Set: got %q, want %q", got, "hallo")
 	}
-	// Reading shouldn't move the gap or otherwise disturb later inserts.
 	g.InsertAt(0, 'h')
 	if got := string(g.ToSlice()); got != "hhallo" {
 		t.Fatalf("got %q, want %q", got, "hhallo")
@@ -108,7 +104,7 @@ func TestAtAndSet(t *testing.T) {
 
 func TestSliceRange(t *testing.T) {
 	g := FromSlice([]rune("0123456789"))
-	g.InsertAt(5, 'x') // gap now sits at index 5/6, splitting the two live spans there
+	g.InsertAt(5, 'x')
 	if got := string(g.Slice(2, 8)); got != "234x56" {
 		t.Fatalf("Slice straddling the gap: got %q, want %q", got, "234x56")
 	}
@@ -135,12 +131,6 @@ func TestGrowsBeyondInitialCapacity(t *testing.T) {
 	}
 }
 
-// TestAgainstNaiveReference drives both a GapBuffer and a plain []rune
-// reference implementation through the same long random sequence of
-// inserts/deletes/reads and asserts they agree after every single
-// operation -- the strongest correctness check available for a data
-// structure whose whole point is an internal representation trick
-// (the gap) that must never be observable from the outside.
 func TestAgainstNaiveReference(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	g := &GapBuffer[rune]{}
@@ -183,10 +173,6 @@ func TestAgainstNaiveReference(t *testing.T) {
 }
 
 func TestCharFormatPayload(t *testing.T) {
-	// GapBuffer is generic specifically so a real editor can pair each
-	// rune with its formatting in one buffer (avoiding two parallel
-	// structures that could drift out of sync) -- exercise that with a
-	// representative payload type instead of only ever testing rune.
 	type char struct {
 		Rune rune
 		Bold bool

@@ -12,8 +12,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// crashAfterEnroll publishes a key for ana (when withKey), enrolls an owner key and then drops the
-// enrollment record, as a crash between the log entry and the record would.
 func crashAfterEnroll(t *testing.T, e *ownerEnv, withKey bool) (Recipient, []byte) {
 	t.Helper()
 	ctx := context.Background()
@@ -35,8 +33,6 @@ func crashAfterEnroll(t *testing.T, e *ownerEnv, withKey bool) (Recipient, []byt
 	return k, nil
 }
 
-// The first enrollment of an address has no enrollment record to start from: the reconciliation
-// finds the address through the keys published for it.
 func TestReconcileFindsAFirstEnrollmentThroughThePublishedKeys(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -57,7 +53,6 @@ func TestReconcileFindsAFirstEnrollmentThroughThePublishedKeys(t *testing.T) {
 	}
 }
 
-// An address with entries and nothing the store can name it by is counted, not silently skipped.
 func TestReconcileCountsAnAddressItCannotName(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -69,8 +64,6 @@ func TestReconcileCountsAnAddressItCannotName(t *testing.T) {
 	}
 }
 
-// A publication and a revocation reconcile first: after a crash the address would look un-enrolled
-// (no owner signature asked) while the log says it is enrolled.
 func TestPublishAndRevokeReconcileTheEnrollment(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -85,7 +78,6 @@ func TestPublishAndRevokeReconcileTheEnrollment(t *testing.T) {
 	if _, err := e.d.PublishWith(ctx, ana, newRecovery(t), PublishOptions{}); !errors.Is(err, ErrOwnerRequired) {
 		t.Fatalf("the record is completed and the owner's signature asked: %v", err)
 	}
-	// Drop the record again: the revocation completes it too.
 	for _, id := range e.d.enrollNames("ana@x.io") {
 		_ = e.store.Delete(ctx, id)
 	}
@@ -94,8 +86,6 @@ func TestPublishAndRevokeReconcileTheEnrollment(t *testing.T) {
 	}
 }
 
-// A restart inside the grace leaves an entry the start-up cannot judge: RunSweep reconciles again
-// once the grace is over, and keeps trying while entries are still too young.
 func TestRunSweepReconcilesAgainAfterTheGrace(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -106,12 +96,10 @@ func TestRunSweepReconcilesAgainAfterTheGrace(t *testing.T) {
 		t.Fatalf("the start-up reconcile finds it too young: %+v %v", rep, err)
 	}
 	go e.d.RunSweep(ctx, time.Hour)
-	// Several retries pass while the entry is still young by the directory's clock...
 	time.Sleep(300 * time.Millisecond)
 	if v, _ := e.d.Enrollment(ctx, "ana@x.io"); v.Enrolled {
 		t.Fatal("completed before the grace was over")
 	}
-	// ...and the next one after it completes the record.
 	e.clk.Add(time.Minute)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -123,9 +111,6 @@ func TestRunSweepReconcilesAgainAfterTheGrace(t *testing.T) {
 	t.Fatal("the record was not completed after the grace")
 }
 
-// A revoked key must not come back when its tombstone is pruned: a live copy under a retired
-// name that a failed delete left behind goes with the tombstone (Sweep, and the prune a
-// publication does).
 func TestPruningATombstoneRemovesTheRetiredNameCopies(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
@@ -166,7 +151,6 @@ func TestPruningATombstoneRemovesTheRetiredNameCopies(t *testing.T) {
 		t.Fatalf("while the tombstones stand the keys stay revoked: %+v", rows)
 	}
 	clk.Add(DefaultRevokeWindow + time.Hour)
-	// Sweep prunes both tombstones; the copies must go with them.
 	if n, err := d.Sweep(ctx); err != nil || n < 2 {
 		t.Fatalf("%d %v", n, err)
 	}
@@ -174,7 +158,6 @@ func TestPruningATombstoneRemovesTheRetiredNameCopies(t *testing.T) {
 		t.Fatalf("a revoked key came back from a retired-name copy: %+v", rows)
 	}
 
-	// The same through the prune a publication does (tombstones past their window).
 	clk.Add(time.Minute)
 	for _, k := range []Recipient{k1, k2} {
 		if err := d.Publish(ctx, ana, k); err != nil {
@@ -192,7 +175,6 @@ func TestPruningATombstoneRemovesTheRetiredNameCopies(t *testing.T) {
 	if rows, _ := d.Lookup(ctx, "ana@x.io"); len(rows) != 1 {
 		t.Fatalf("only the new key: %+v", rows)
 	}
-	// A live copy published after the revocation is not removed with the tombstone.
 	k3 := newRecovery(t)
 	if err := d.Publish(ctx, ana, k3); err != nil {
 		t.Fatal(err)
@@ -227,8 +209,6 @@ func testSeed(fill byte) string {
 	return string(b)
 }
 
-// A void is the compensation of a failed write: made in the same round. One written long after
-// the entry it names cancels nothing and is a violation (the boundary is VoidWindow itself).
 func TestAuditHoldsAVoidToTheVoidWindow(t *testing.T) {
 	d, _, _ := newTestDirectory(t)
 	addr := d.LogAddressFor("ana@x.io")
@@ -252,8 +232,6 @@ func TestAuditHoldsAVoidToTheVoidWindow(t *testing.T) {
 	}
 }
 
-// The failed-admin budget is per client: by default the connection's address (behind a proxy,
-// everybody's), by the function WithDirectoryClientIP is given otherwise.
 func TestAdminFailureBudgetFollowsTheConfiguredClientAddress(t *testing.T) {
 	path := "/admin/directory/reset-enrollment/" + strings.Repeat("ab", 32)
 	fail := func(e *dirEnv, client string) int {
@@ -286,7 +264,6 @@ func TestAdminFailureBudgetFollowsTheConfiguredClientAddress(t *testing.T) {
 	}
 }
 
-// The per-address lookup budget follows the configured client address too.
 func TestLookupIPBudgetFollowsTheConfiguredClientAddress(t *testing.T) {
 	limits := func(name string, perMinute float64, burst int) docstore.Limiter {
 		if name == "dir-lookup-ip" {

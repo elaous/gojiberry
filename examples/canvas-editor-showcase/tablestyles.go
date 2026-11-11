@@ -12,16 +12,12 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// tableStyleForm is the style being defined in the Styles tab.
 type tableStyleForm struct {
 	name, header, headerText, band string
 	headerBold, firstBold          bool
 	msg                            string
 }
 
-// tableTarget is the table a style is for: of the tables in the text (typed, imported or pasted: read-only objects) the
-// one the caret is below (else the first one after it); with none in the text, the table placed on the page that the
-// person last worked in, since the focus may have moved to the panel.
 func tableTarget(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 	if flow != nil {
 		caret := flow.Cursors()[0].Caret
@@ -61,8 +57,6 @@ func tableTarget(root *cxango.Root, flow *canvas.TextFlow) *canvas.TableView {
 	}
 }
 
-// tableStylesPanel is the "Table styles" part of the Styles tab: the styles on offer (the built-in ones and the ones
-// the person defined), the one the table in hand is dressed in marked, a way to define one, and to forget one.
 func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	f := &u.tableStyle
 	tv := tableTarget(root(), flow())
@@ -135,8 +129,6 @@ func tableStylesPanel(u *ui, root func() *cxango.Root, flow func() *canvas.TextF
 	return xango.El("div", []xango.Attr{xango.A("id", "tstyle-panel")}, nodes...)
 }
 
-// tableGripSection acts on what a grip of a table in the text has selected: a column, a row or the table. Nothing is
-// shown when no grip is selected (press the letter above a column or the number beside a row, or the icon in the corner).
 func (u *ui) tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	if fl == nil {
 		return nil
@@ -165,7 +157,6 @@ func (u *ui) tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xa
 	var buttons []xango.Node
 	add := func(id, label string, act func(), disabled bool) {
 		buttons = append(buttons, btn("tgrip-"+id, label, func() {
-			// Changing the table is its hold: somebody else's busy table is left alone (the grips choose, they do not hold).
 			if id != "done" && !u.claim(key, T("lock.table", "table"), renderUI) {
 				return
 			}
@@ -213,13 +204,10 @@ func (u *ui) tableGripSection(fl *canvas.TextFlow, redraw, renderUI func()) []xa
 	}
 }
 
-// wireTables makes pressing a grip of a table in the text open the Styles tab, where what the grip selected is acted on.
 func (u *ui) wireTables(fl *canvas.TextFlow, renderUI func()) {
 	if fl == nil {
 		return
 	}
-	// Resizing by dragging a grip's edge is changing the table: it takes the table's hold, or is refused when somebody
-	// else has it.
 	for i, t := range fl.Tables() {
 		key := tableKey(i)
 		t.Allow = func() bool { return u.claim(key, T("lock.table", "table"), renderUI) }

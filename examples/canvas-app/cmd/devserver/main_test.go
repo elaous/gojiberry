@@ -16,16 +16,6 @@ import (
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
 )
 
-// openTestDB opens the Postgres the tests run against: TEST_DATABASE_URL, or the local default below.
-// The database needs the documents table (canvas/migrations/1_create_documents.up.sql).
-//
-// With no reachable server the test is skipped, and a skip is easy to miss, so the message says what
-// to set and how to start one (docs/testing-workflow.md has the full commands):
-//
-//	initdb -D "$PGDATA" -A trust -U postgres && pg_ctl -D "$PGDATA" -l "$PGDATA/log" -w start
-//	createuser -U postgres canvas && createdb -U postgres -O canvas canvas
-//	psql -U canvas canvas -f canvas/migrations/1_create_documents.up.sql
-//	TEST_DATABASE_URL=postgres://canvas:canvas@127.0.0.1:5432/canvas?sslmode=disable go test ./...
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -48,12 +38,8 @@ func openTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// TestDevserverEndToEnd exercises the whole create -> view -> save ->
-// reload -> list flow against a real Postgres (started directly on
-// this machine; see the README for why not a Docker container).
 func TestDevserverEndToEnd(t *testing.T) {
 	db := openTestDB(t)
-	// Registered after the Close cleanup above, so it runs first (cleanups are LIFO), while the pool is still open.
 	t.Cleanup(func() {
 		if _, err := db.Exec(`DELETE FROM documents`); err != nil {
 			t.Errorf("emptying documents: %v", err)
@@ -64,7 +50,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 	srv := httptest.NewServer(newMux(store, nil))
 	defer srv.Close()
 
-	// Create a document.
 	resp, err := http.Post(srv.URL+"/documents", "application/x-www-form-urlencoded", nil)
 	if err != nil {
 		t.Fatalf("POST /documents: %v", err)
@@ -79,7 +64,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 	}
 	id := docURL[strings.LastIndex(docURL, "/")+1:]
 
-	// The freshly created document's canvas page should render with empty content.
 	resp, err = http.Get(docURL)
 	if err != nil {
 		t.Fatalf("GET %s: %v", docURL, err)
@@ -90,7 +74,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("expected canvas page markup, got: %s", body)
 	}
 
-	// Save some content via the same PUT endpoint the WASM client uses.
 	saveReq, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/documents/"+id,
 		strings.NewReader(`{"content":"hello from the test"}`))
 	saveReq.Header.Set("Content-Type", "application/json")
@@ -105,7 +88,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected save response: %s (err %v)", saveBody, err)
 	}
 
-	// Reloading the canvas page should reflect the saved content.
 	resp, err = http.Get(docURL)
 	if err != nil {
 		t.Fatalf("GET %s: %v", docURL, err)
@@ -116,7 +98,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("expected saved content in reloaded page, got: %s", body)
 	}
 
-	// The home page should list the document with its preview text.
 	resp, err = http.Get(srv.URL + "/")
 	if err != nil {
 		t.Fatalf("GET /: %v", err)
@@ -127,9 +108,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 		t.Fatalf("expected home page to list the document's preview, got: %s", body)
 	}
 
-	// Saving to a document that doesn't exist is a 404, not a server error: canvas.Store.SaveDocument
-	// wraps canvas.ErrNotFound and the PUT handler maps that to http.StatusNotFound (an ID that is not
-	// a UUID is the same case; see canvas/store_notfound_test.go).
 	badReq, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/documents/does-not-exist",
 		strings.NewReader(`{"content":"x"}`))
 	badReq.Header.Set("Content-Type", "application/json")
@@ -143,10 +121,6 @@ func TestDevserverEndToEnd(t *testing.T) {
 	}
 }
 
-// TestDevModeInjectsLiveReloadScript covers cmd/devwatch's live-reload
-// mechanism: with DEV=1 behavior on, every rendered page should carry
-// a script polling /__dev/version, and that route should exist; with
-// it off (the default), neither should be present.
 func TestDevModeInjectsLiveReloadScript(t *testing.T) {
 	db := openTestDB(t)
 	store := canvas.NewStore(db)

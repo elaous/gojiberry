@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// fakeTranslator is a translator stub for hermetic tests -- no real
-// DeepL API call, no API key needed.
 type fakeTranslator struct {
 	got struct {
 		text       []string
@@ -29,12 +27,6 @@ func (f *fakeTranslator) Translate(_ context.Context, text []string, targetLang,
 	return f.result, f.err
 }
 
-// newTestServer builds a Server around t, or with no translator
-// configured at all if t is nil -- assigning a nil *fakeTranslator
-// straight into the translator interface field would leave a
-// non-nil interface holding a nil pointer (the classic Go "typed nil"
-// trap), which handleTranslate's own `s.translator == nil` check
-// wouldn't catch.
 func newTestServer(t *fakeTranslator) *Server {
 	srv := &Server{cfg: Config{Addr: ":0"}}
 	if t != nil {
@@ -177,7 +169,6 @@ func TestTranslationsAreReported(t *testing.T) {
 	if got := b.Count(observe.WorkRuns, "work", "translate", "result", "ok"); got != 1 {
 		t.Errorf("translate ok = %d, want 1", got)
 	}
-	// A request refused before any translation is not work done.
 	srv.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/translate", strings.NewReader(`{}`)))
 	if got := b.Count(observe.WorkRuns, "work", "translate"); got != 1 {
 		t.Errorf("translate runs = %d, want 1", got)

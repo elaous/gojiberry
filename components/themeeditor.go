@@ -10,17 +10,12 @@ import (
 
 // ThemeEditorProps configures ThemeEditor.
 type ThemeEditorProps struct {
-	// Set is the theme being edited. The editor does not keep it: it shows Set, and calls OnChange with
-	// the edited copy (a copy, so the caller's own map is never changed under it).
-	Set tokens.Set
-	// OnChange is called as the person types, with the set whether or not it is valid; Problems of the
-	// set are shown at once, and the caller decides what to apply (only a set without problems).
+	// Set is the theme being edited.
+	Set      tokens.Set
 	OnChange func(tokens.Set)
-	// OnReset puts the default theme back; the button is left out when nil.
-	OnReset func()
+	OnReset  func()
 }
 
-// themeColors are the colours the editor offers, in the order they are listed, with their words.
 var themeColors = []struct{ name, id, def string }{
 	{tokens.Text, "theme.text", "Text"},
 	{tokens.Background, "theme.background", "Page background"},
@@ -31,11 +26,6 @@ var themeColors = []struct{ name, id, def string }{
 	{tokens.Danger, "theme.danger", "Errors"},
 }
 
-// ThemeEditor edits a design-token set (package tokens): the colours as text fields with a swatch, the type
-// scale and the spacing as lists of numbers. It checks the set as it is typed: what is wrong is listed
-// under the fields in plain words (a text colour under the contrast of 4.5:1, a body size under 16px), the
-// field that has the problem says so (aria-invalid, described by the list), and a sample shows how the
-// colours read together. Nothing is applied here; the caller applies a set that has no problems.
 func ThemeEditor(p ThemeEditorProps) xango.Node {
 	problems := p.Set.Validate()
 	byField := map[string][]string{}
@@ -117,7 +107,6 @@ func ThemeEditor(p ThemeEditorProps) xango.Node {
 	return xango.El("section", []xango.Attr{xango.A("class", "gj-theme"), xango.A("aria-label", tr("theme.title", "Theme"))}, children...)
 }
 
-// numberList writes sizes as "16, 18, 20".
 func numberList(v []float64) string {
 	parts := make([]string, len(v))
 	for i, n := range v {
@@ -126,8 +115,6 @@ func numberList(v []float64) string {
 	return strings.Join(parts, ", ")
 }
 
-// parseNumberList reads "16, 18 20" back; what is not a number is left out, so the scale then reads as
-// shorter or as growing wrongly, which Validate says.
 func parseNumberList(s string) []float64 {
 	var out []float64
 	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
@@ -138,8 +125,6 @@ func parseNumberList(s string) []float64 {
 	return out
 }
 
-// safeCSSColour passes a colour through to a style attribute only when it is a plain hex or rgb() value, so
-// a field cannot write more CSS than a colour.
 func safeCSSColour(c string) string {
 	c = strings.TrimSpace(c)
 	if c == "" {

@@ -70,8 +70,6 @@ func TestMatchAndDirection(t *testing.T) {
 	}
 }
 
-// The shipped packs hold the same ids, so no language is left half done, and
-// every message keeps the fmt verbs of its English original's count.
 func TestShippedPacksAreComplete(t *testing.T) {
 	c := Default()
 	langs := c.Languages()
@@ -102,9 +100,6 @@ func TestShippedPacksAreComplete(t *testing.T) {
 	}
 }
 
-// Every message the code asks for by id, with its English text, is in the shipped packs. A new T("id", "text")
-// (or tr, trf, Translate) in the sources without a translation fails here, so a language is never left behind
-// by a feature. Ids built at run time ("tab."+name) are not seen by this check; add them by hand.
 func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -112,7 +107,6 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 	}
 	ref := Default().msgs["es"]
 	callers := map[string]bool{"T": true, "tr": true, "trf": true, "Translate": true}
-	// plural callers take (id, one, other, n): the pack must hold id#other
 	plurals := map[string]bool{"Tn": true, "trn": true, "TranslatePlural": true}
 	fset := token.NewFileSet()
 	missing := map[string]string{}
@@ -180,10 +174,6 @@ func TestEveryMessageInTheSourcesIsInThePacks(t *testing.T) {
 	}
 }
 
-// A pack message the sources no longer ask for is stale: it is translated for nothing and hides that a
-// feature was removed. An id counts as used when its text is a string literal in the sources, or begins
-// with one that ends in "." or "-" (an id built at run time, as "tab."+name), or is the "#form" of a plural id
-// that is used.
 func TestNoStaleMessagesInThePacks(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

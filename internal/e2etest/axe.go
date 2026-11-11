@@ -20,7 +20,6 @@ type AxeNode struct {
 	Summary string `json:"failureSummary"`
 }
 
-// AxeViolation is one failed accessibility rule with the elements it failed on.
 type AxeViolation struct {
 	ID     string    `json:"id"`
 	Impact string    `json:"impact"`
@@ -46,15 +45,10 @@ func (v AxeViolation) String() string {
 	return b.String()
 }
 
-// Axe runs axe-core over the page as it is now (open menus and dialogs included) and returns what
-// failed. context is a CSS selector to limit the run to, or "" for the whole document. It checks
-// what a tool can: roles, names, labels, contrast, landmarks and ids. It does not replace using the
-// page with a screen reader or the keyboard. Rules in disable are left out (name the reason where
-// the test lists them).
 func (d *Tab) Axe(context string, disable ...string) []AxeViolation {
 	d.t.Helper()
 	d.Eval(`(function(){ if (!window.axe) { `+axeSource+` } return true })()`, nil)
-	// #state is the harness's JSON dump of the page's state, not part of the page.
+	// #state is the harness's state dump, not page content.
 	ctx := `{exclude: [['#state']]}`
 	if context != "" {
 		ctx = fmt.Sprintf(`{include: [[%q]], exclude: [['#state']]}`, context)

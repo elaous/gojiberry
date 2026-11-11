@@ -11,8 +11,6 @@ type ChipProps struct {
 	OnRemove xango.EventHandler // nil renders a plain, non-removable chip
 }
 
-// Chip renders a small labeled pill, optionally with a leading icon
-// and a remove button.
 func Chip(props ChipProps) xango.Node {
 	var children []xango.Node
 	if props.Icon != nil {

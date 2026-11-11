@@ -11,18 +11,9 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// The inline ghost-text suggestion (roadmap 79). With the preference "Show a suggestion after the
-// caret" on, the best word that continues the one being typed is drawn faintly after the caret, by
-// the canvas itself, in the font of the word it continues. It is a picture only: Tab puts it in, no other
-// key does, Escape hides it until the next letter. A screen-reader user hears it once, politely, a
-// moment after typing stops ("Suggestion: zebra. Press Tab to accept."). It is off by default, never
-// shows while an input method is composing, a selection is held or the word list is open, and in the
-// middle of a line it is a small tag under the caret (so it does not hide the words after it).
-
 type ghostUI struct {
-	state components.GhostState
-	gen   int // bumped by every change, so a late announcement for an old suggestion says nothing
-	// refresh recomputes the suggestion for the caret (set in main); flow and redraw reach the canvas.
+	state   components.GhostState
+	gen     int
 	refresh func()
 	flow    func() *canvas.TextFlow
 	redraw  func()
@@ -30,7 +21,6 @@ type ghostUI struct {
 
 func ghostOn() bool { return curPrefs.Ghost == "on" }
 
-// hideGhost removes the suggestion from sight.
 func (u *ui) hideGhost() {
 	u.ghost.state.Clear()
 	u.ghost.gen++
@@ -42,7 +32,6 @@ func (u *ui) hideGhost() {
 	}
 }
 
-// ghostSuffix is what is shown now ("" none): the state of the suggestion for the tests.
 func (u *ui) ghostSuffix() string {
 	if u.ghost.state.Visible() {
 		return u.ghost.state.Suffix
@@ -50,8 +39,6 @@ func (u *ui) ghostSuffix() string {
 	return ""
 }
 
-// refreshGhost recomputes the suggestion for the caret and shows it (or hides it). The faint text is
-// drawn by the canvas itself (canvas.TextFlow.Ghost), in the font of the word it continues.
 func (u *ui) refreshGhost(flow *canvas.TextFlow, redraw, renderUI func()) {
 	g := &u.ghost
 	g.gen++
@@ -81,7 +68,7 @@ func (u *ui) refreshGhost(flow *canvas.TextFlow, redraw, renderUI func()) {
 	}
 	flow.Ghost = g.state.Suffix
 	redraw()
-	// Said once, a moment after typing stops, so that fast typing is not interrupted by speech.
+	// said once after typing stops: fast typing is not interrupted by speech
 	gen := g.gen
 	time.AfterFunc(600*time.Millisecond, func() {
 		if g.gen != gen || !g.state.Visible() {
@@ -94,7 +81,6 @@ func (u *ui) refreshGhost(flow *canvas.TextFlow, redraw, renderUI func()) {
 	})
 }
 
-// langAt is the language the word at the caret is written in: the run's own tag, else the document's.
 func (u *ui) langAt(flow *canvas.TextFlow, caret int) string {
 	if l := flow.LangAt(caret); l != "" {
 		return l
@@ -102,7 +88,6 @@ func (u *ui) langAt(flow *canvas.TextFlow, caret int) string {
 	return u.docLang
 }
 
-// acceptGhost puts the suggestion in at the caret; false when there is none for this caret.
 func (u *ui) acceptGhost(flow *canvas.TextFlow, renderUI func()) bool {
 	if flow == nil {
 		return false
@@ -122,9 +107,6 @@ func (u *ui) acceptGhost(flow *canvas.TextFlow, renderUI func()) bool {
 	return true
 }
 
-// ghostKey gives the ghost text its keys before the canvas sees them; true when the key was for it.
-// Tab accepts, Escape dismisses, and any other key that can change the text or the caret hides it
-// (the key-up then offers the suggestion for the new word).
 func (u *ui) ghostKey(e js.Value, flow *canvas.TextFlow, renderUI, redraw func()) bool {
 	if !ghostOn() {
 		return false
@@ -155,7 +137,6 @@ func (u *ui) ghostKey(e js.Value, flow *canvas.TextFlow, renderUI, redraw func()
 	return false
 }
 
-// watchGhostPointer hides the suggestion when the pointer moves the caret.
 func (u *ui) watchGhostPointer() {
 	js.Global().Get("document").Call("addEventListener", "mousedown", js.FuncOf(func(js.Value, []js.Value) any {
 		u.hideGhost()

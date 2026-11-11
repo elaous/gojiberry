@@ -18,23 +18,17 @@ const RetentionDays = 90
 // DefaultK is the smallest count Report shows (see Counters.Report).
 const DefaultK = 5
 
-// Counters are the totals the server keeps: a number per day, name and value, and nothing else. It
-// is safe for concurrent use. Counts older than RetentionDays are dropped on write.
 type Counters struct {
 	mu       sync.Mutex
 	days     map[string]map[Event]int
 	accepted int
 	refused  int
-	// seed keys the noise of Report; noise is its rounding step (0: none). onChange and saveErr belong
-	// to Persist (persist.go).
 	seed     []byte
 	noise    int
 	onChange func()
 	saveErr  error
-	// shared and base belong to PersistShared (shared.go): the store several processes count into, and the
-	// totals as they were when this process last read or wrote it.
-	shared SharedStore
-	base   *decoded
+	shared   SharedStore
+	base     *decoded
 }
 
 // NewCounters is an empty set of totals.
@@ -64,8 +58,6 @@ func (c *Counters) Add(b Batch, now time.Time) {
 	}
 }
 
-// Totals is how many batches were taken and how many requests were refused. It counts requests,
-// not people, which is why /admin/usage can show it without the k threshold.
 type Totals struct {
 	Accepted int `json:"accepted"`
 	Refused  int `json:"refused"`
@@ -95,10 +87,7 @@ type Reported struct {
 	N     int    `json:"n"`
 }
 
-// Report lists the totals per day with a count of at least k (DefaultK if k < 1). A smaller total
-// is left out, so a rare value cannot point at a single visitor; the list is in day order. With noise
-// on (SetNoise) each total is first rounded at random to a multiple of the step and k is applied to
-// the rounded number, so the figures are coarse and a total just under k is not told apart from one just over.
+// k applies to the rounded number: a rare value points at none
 func (c *Counters) Report(k int) []Reported {
 	if k < 1 {
 		k = DefaultK
@@ -127,10 +116,7 @@ func (c *Counters) Report(k int) []Reported {
 	return out
 }
 
-// Receiver is the server side: an http.Handler that takes POSTed batches and increments counters. It
-// reads no header (no cookie, no token, no user agent), never reads or stores the source address
-// itself, and answers with a status only. A request with anything outside the allowlist is
-// refused whole.
+// reads no header: no cookie, token or user agent
 type Receiver struct {
 	counters *Counters
 	now      func() time.Time
@@ -145,19 +131,14 @@ func NewReceiver(c *Counters) *Receiver { return &Receiver{counters: c, now: tim
 // WithClock sets the clock (for tests).
 func (r *Receiver) WithClock(now func() time.Time) *Receiver { r.now = now; return r }
 
-// WithLimit sets a rate limit; allow is asked for each request and chooses the budget, which is
-// the caller's business (the receiver itself never reads the address).
+// the receiver never reads the address
 func (r *Receiver) WithLimit(allow func(*http.Request) (bool, time.Duration)) *Receiver {
 	r.allow = allow
 	return r
 }
 
-// WithAudit logs a refused request as an audit event (no content, no address).
 func (r *Receiver) WithAudit(l *audit.Logger) *Receiver { r.log = l; return r }
 
-// WithBatchHook calls hook with every accepted batch after its counts are added (for example to route
-// them to the sinks of package observe). The batch has been validated against the allowlist; the
-// hook gets nothing of the request, only the batch.
 func (r *Receiver) WithBatchHook(hook func(Batch)) *Receiver { r.hook = hook; return r }
 
 // Counters are the totals this receiver increments.

@@ -1,11 +1,5 @@
 //go:build !(js && wasm)
 
-// Package e2etest drives a real headless Chromium over the DevTools protocol
-// (chromedp) for the examples' end-to-end tests. A Site builds and serves a wasm
-// example; a Tab is one browser on it, with the calls the tests need: selectors
-// (CSS plus :has-text and :text-is), real mouse and keyboard events, waits on
-// the page's #state JSON, dialogs, downloads and file choosers. A test skips,
-// rather than fails, when there is no Chromium to run.
 package e2etest
 
 import (
@@ -32,7 +26,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Timeout is how long a wait or an action polls before the test fails.
 const Timeout = 15 * time.Second
 
 // Options for Open.
@@ -69,9 +62,6 @@ type route struct {
 	hits   int
 }
 
-// chromiumPath is the browser executable: $CHROMIUM or $PLAYWRIGHT_CHROMIUM, else the
-// first Chromium or Chrome found. With none, a test is skipped, or fails when
-// GOJIBERRY_REQUIRE_BROWSER is set (the accessibility gate, make a11y-test).
 func chromiumPath(t testing.TB) string {
 	for _, env := range []string{"CHROMIUM", "PLAYWRIGHT_CHROMIUM"} {
 		if p := os.Getenv(env); p != "" {
@@ -87,15 +77,13 @@ func chromiumPath(t testing.TB) string {
 		}
 	}
 	if os.Getenv("GOJIBERRY_REQUIRE_BROWSER") != "" {
-		// a gate (make a11y-test) must not pass by skipping
+		// a gate must not pass by skipping
 		t.Fatal("no Chromium found (set CHROMIUM), and GOJIBERRY_REQUIRE_BROWSER is set")
 	}
 	t.Skip("no Chromium found (set CHROMIUM)")
 	return ""
 }
 
-// Open starts a browser and loads the page: query is "?x=y" on index.html, or a
-// path ("/d/doc?x=y"). It waits for the page's #state to be filled.
 func (s *Site) Open(t testing.TB, query string, opts ...Options) *Tab {
 	t.Helper()
 	var o Options
@@ -118,7 +106,6 @@ func (s *Site) Open(t testing.TB, query string, opts ...Options) *Tab {
 	return tab
 }
 
-// OpenURL loads any URL (a page that is not a canvas example, with no #state).
 func (s *Site) OpenURL(t testing.TB, path string, opts ...Options) *Tab {
 	t.Helper()
 	var o Options
@@ -135,8 +122,7 @@ func (s *Site) OpenURL(t testing.TB, path string, opts ...Options) *Tab {
 
 func (s *Site) launch(t testing.TB, o Options) *Tab {
 	exe := chromiumPath(t)
-	// Many packages start a browser at once on a busy machine (CI), and one can
-	// miss Chrome's start-up deadline: give it longer and try again before failing.
+	// busy CI: Chrome can miss its start-up deadline; retry longer
 	var tab *Tab
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -144,15 +130,13 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 			append(chromedp.DefaultExecAllocatorOptions[:],
 				chromedp.ExecPath(exe), chromedp.NoSandbox, chromedp.Flag("headless", true),
 				chromedp.Flag("disable-gpu", true), chromedp.WindowSize(o.Width, o.Height),
-				// a microphone made of test tones, with no permission prompt (the Speech tab)
 				chromedp.Flag("use-fake-device-for-media-stream", true), chromedp.Flag("use-fake-ui-for-media-stream", true),
 				chromedp.WSURLReadTimeout(60*time.Second))...)
 		ctx, cancel := chromedp.NewContext(alloc)
 		tab = &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
 		tab.closeFns = append(tab.closeFns, cancel, cancelAlloc)
 		chromedp.ListenTarget(ctx, tab.onEvent(o))
-		// Start the browser on the long-lived context: a Run on a context with a
-		// timeout would tie the browser to it.
+		// long-lived context: a timeout context would tie the browser to it
 		if err = chromedp.Run(ctx); err == nil {
 			break
 		}
@@ -174,7 +158,6 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 			return err
 		}),
 	})
-	// The selector helper also goes into the current (blank) document.
 	tab.must(chromedp.Evaluate(selectorJS, nil))
 	return tab
 }
@@ -187,9 +170,6 @@ func (d *Tab) Close() {
 	d.closeFns = nil
 }
 
-// CallTimeout bounds one call to the browser: a page that hangs (or an awaited
-// promise that never settles) fails the test instead of waiting for go test's own
-// limit.
 const CallTimeout = 45 * time.Second
 
 func (d *Tab) run(a chromedp.Action) error {
@@ -215,8 +195,6 @@ func (d *Tab) onEvent(o Options) func(any) {
 			}
 			d.addErr(msg)
 		case *runtime.EventConsoleAPICalled:
-			// The Go runtime writes a panic's trace to the console as plain log
-			// output, not as an error: catch that too.
 			for _, a := range e.Args {
 				if v := string(a.Value); strings.Contains(v, "panic: ") || strings.Contains(v, "fatal error: ") {
 					d.addErr(strings.Trim(v, `"`))
@@ -287,13 +265,11 @@ func (d *Tab) NoErrors() {
 	d.OK(len(d.Errors()) == 0, "no page errors: "+strings.Join(d.Errors(), "; "))
 }
 
-// OK reports a check: it fails the test when cond is false.
 func (d *Tab) OK(cond bool, msg string) {
 	d.t.Helper()
 	OK(d.t, cond, msg)
 }
 
-// OK is a check that logs "ok: msg" or fails the test.
 func OK(t testing.TB, cond bool, msg string) {
 	t.Helper()
 	if !cond {
@@ -301,8 +277,6 @@ func OK(t testing.TB, cond bool, msg string) {
 	}
 	t.Logf("ok: %s", msg)
 }
-
-// --- evaluating ---------------------------------------------------------
 
 // J is v as a JavaScript literal, for building expressions.
 func J(v any) string {
@@ -313,14 +287,11 @@ func J(v any) string {
 	return string(b)
 }
 
-// Eval evaluates a JavaScript expression (awaiting a promise) into out, which
-// may be nil.
 func (d *Tab) Eval(js string, out any) {
 	d.t.Helper()
 	d.must(chromedp.Evaluate(js, out, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) }))
 }
 
-// Str, Int and Bool are Eval for one kind of result.
 func (d *Tab) Str(js string) (s string)    { d.t.Helper(); d.Eval(js, &s); return }
 func (d *Tab) Int(js string) (n int)       { d.t.Helper(); d.Eval(js, &n); return }
 func (d *Tab) Bool(js string) (b bool)     { d.t.Helper(); d.Eval(js, &b); return }
@@ -341,7 +312,6 @@ func (d *Tab) State() State {
 	return s
 }
 
-// Is evaluates a JavaScript expression with s bound to the page's state.
 func (d *Tab) Is(expr string) bool {
 	d.t.Helper()
 	var ok bool
@@ -369,7 +339,6 @@ func (d *Tab) WaitForTimeout(what, expr string, limit time.Duration) {
 	}
 }
 
-// Wait polls until the expression is true of the state s.
 func (d *Tab) Wait(expr string) {
 	d.t.Helper()
 	d.WaitFor("state "+expr, `(s => !!(`+expr+`))(`+stateJS+`)`)
@@ -377,8 +346,6 @@ func (d *Tab) Wait(expr string) {
 
 // Sleep waits, for the cases with nothing to poll.
 func (d *Tab) Sleep(ms int) { time.Sleep(time.Duration(ms) * time.Millisecond) }
-
-// --- elements -----------------------------------------------------------
 
 func sel(s string) string { return J(s) }
 
@@ -391,7 +358,6 @@ func (d *Tab) Count(selector string) int {
 // Has is whether any element matches.
 func (d *Tab) Has(selector string) bool { d.t.Helper(); return d.Count(selector) > 0 }
 
-// need waits for an element to exist.
 func (d *Tab) need(selector string) {
 	d.t.Helper()
 	d.WaitFor("an element "+selector, `window.__e2e.first(`+sel(selector)+`)`)
@@ -400,7 +366,6 @@ func (d *Tab) need(selector string) {
 // WaitSelector waits for an element matching the selector to exist.
 func (d *Tab) WaitSelector(selector string) { d.t.Helper(); d.need(selector) }
 
-// Text is the text of the first match (waiting for it).
 func (d *Tab) Text(selector string) string {
 	d.t.Helper()
 	d.need(selector)
@@ -413,7 +378,6 @@ func (d *Tab) Texts(selector string) []string {
 	return d.Strs(`window.__e2e.all(` + sel(selector) + `).map(e => e.textContent)`)
 }
 
-// Attr is an attribute of the first match, "" if it has none.
 func (d *Tab) Attr(selector, name string) string {
 	d.t.Helper()
 	d.need(selector)
@@ -454,7 +418,6 @@ func (d *Tab) Fill(selector, value string) {
 	d.Eval(`(e => { e.focus(); e.value = `+J(value)+`; e.dispatchEvent(new Event('input', {bubbles: true})); })(window.__e2e.first(`+sel(selector)+`))`, nil)
 }
 
-// Select chooses an option of a <select> by value and fires change.
 func (d *Tab) Select(selector, value string) {
 	d.t.Helper()
 	d.need(selector)
@@ -468,7 +431,6 @@ func (d *Tab) Dispatch(selector, event string) {
 	d.Eval(`window.__e2e.first(`+sel(selector)+`).dispatchEvent(new Event(`+J(event)+`, {bubbles: true}))`, nil)
 }
 
-// SetChecked ticks or unticks a checkbox with a real click when it differs.
 func (d *Tab) SetChecked(selector string, on bool) {
 	d.t.Helper()
 	d.need(selector)
@@ -483,8 +445,6 @@ func (d *Tab) Checked(selector string) bool {
 	d.need(selector)
 	return d.Bool(`window.__e2e.first(` + sel(selector) + `).checked`)
 }
-
-// --- mouse --------------------------------------------------------------
 
 func (d *Tab) mouse(typ input.MouseType, x, y float64, button input.MouseButton, clicks int64, dx, dy float64) {
 	d.t.Helper()
@@ -504,7 +464,6 @@ func (d *Tab) MouseMove(x, y float64) {
 	d.mouse(input.MouseMoved, x, y, input.None, 0, 0, 0)
 }
 
-// MouseClick is a click at page coordinates; clicks 2 is a double click.
 func (d *Tab) MouseClick(x, y float64, clicks int) {
 	d.t.Helper()
 	d.MouseMove(x, y)
@@ -520,8 +479,6 @@ func (d *Tab) Wheel(dx, dy float64) {
 	d.mouse(input.MouseWheel, d.mx, d.my, input.None, 0, dx, dy)
 }
 
-// Click clicks the first element matching the selector, waiting for it to be
-// visible.
 func (d *Tab) Click(selector string) { d.t.Helper(); d.clickSel(selector, 1) }
 
 // DblClick double-clicks it.
@@ -534,8 +491,6 @@ func (d *Tab) Hover(selector string) {
 	d.MouseMove(x, y)
 }
 
-// Reveal scrolls the first element matching the selector into view, as a person scrolls a menu that is longer
-// than the window, so that Click can reach it.
 func (d *Tab) Reveal(selector string) {
 	d.t.Helper()
 	d.WaitFor("an element "+selector, `!!window.__e2e.first(`+sel(selector)+`)`)
@@ -545,7 +500,6 @@ func (d *Tab) Reveal(selector string) {
 func (d *Tab) centre(selector string) (x, y float64) {
 	d.t.Helper()
 	d.WaitFor("a visible "+selector, `window.__e2e.centre(`+sel(selector)+`)`)
-	// Like a person, wait for it to stop moving (a panel that has just rendered).
 	var prev []float64
 	for i := 0; i < 50; i++ {
 		var c []float64
@@ -569,7 +523,7 @@ func (d *Tab) clickSel(selector string, clicks int) {
 // At turns canvas (#stage) coordinates into page coordinates.
 func (d *Tab) At(x, y float64) (float64, float64) {
 	d.t.Helper()
-	d.refreshBox() // the page may have scrolled or reflowed since it was last measured
+	d.refreshBox()
 	return d.box[0] + x, d.box[1] + y
 }
 
@@ -615,7 +569,6 @@ func (d *Tab) CanvasDrag(x0, y0, x1, y1 float64) {
 	d.mouse(input.MouseReleased, bx, by, input.Left, 1, 0, 0)
 }
 
-// Pixel is the canvas pixel [r g b a] at canvas coordinates.
 func (d *Tab) Pixel(x, y int) [4]int {
 	d.t.Helper()
 	var p []int
@@ -625,8 +578,6 @@ func (d *Tab) Pixel(x, y int) [4]int {
 
 // ToggleMode clicks the page's #mode button.
 func (d *Tab) ToggleMode() { d.t.Helper(); d.Click("#mode") }
-
-// --- keyboard -----------------------------------------------------------
 
 func (d *Tab) key(typ input.KeyType, k keyDef, mods input.Modifier, text string) {
 	d.t.Helper()
@@ -668,7 +619,6 @@ func (d *Tab) Press(spec string) {
 	}
 }
 
-// KeyDown holds a modifier key down (until KeyUp), for mouse events with it.
 func (d *Tab) KeyDown(name string) {
 	d.t.Helper()
 	d.mods |= modBits[name]
@@ -701,12 +651,9 @@ func (d *Tab) Type(text string) {
 	}
 }
 
-// --- dialogs, downloads, files, routes -----------------------------------
-
 // AnswerDialog accepts the next prompt or confirm with text.
 func (d *Tab) AnswerDialog(text string) { d.mu.Lock(); d.dialog = &text; d.mu.Unlock() }
 
-// AnswerDialogs lines up answers for the next prompts, one each, for a page that asks again.
 func (d *Tab) AnswerDialogs(texts ...string) {
 	d.mu.Lock()
 	d.dialogQ = append(d.dialogQ[:0:0], texts...)
@@ -714,15 +661,12 @@ func (d *Tab) AnswerDialogs(texts ...string) {
 	d.mu.Unlock()
 }
 
-// DialogsSeen lists the messages of the dialogs that opened since AnswerDialogs.
 func (d *Tab) DialogsSeen() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return append([]string(nil), d.dialogSeen...)
 }
 
-// Download runs action, which starts a download, and returns the file's
-// suggested name and bytes.
 func (d *Tab) Download(action func()) (name string, data []byte) {
 	d.t.Helper()
 	dir := d.t.TempDir()
@@ -749,7 +693,6 @@ func (d *Tab) Download(action func()) (name string, data []byte) {
 	}
 }
 
-// ChooseFile runs action, which opens a file chooser, and gives it a file.
 func (d *Tab) ChooseFile(action func(), name string, data []byte) {
 	d.t.Helper()
 	path := filepath.Join(d.t.TempDir(), name)
@@ -778,8 +721,6 @@ func (d *Tab) GrantClipboard() {
 	}
 }
 
-// Route answers requests whose URL contains substr itself; the returned func is
-// how many it has answered.
 func (d *Tab) Route(substr string, handle func() (status int, contentType string, body []byte)) (hits func() int) {
 	d.t.Helper()
 	r := &route{substr: substr, handle: handle}
@@ -813,7 +754,7 @@ func (d *Tab) fulfil(e *fetch.EventRequestPaused) {
 		if r == nil {
 			return fetch.ContinueRequest(e.RequestID).Do(ctx)
 		}
-		if preflight { // answer the CORS preflight, which is not a use of the route
+		if preflight {
 			return fetch.FulfillRequest(e.RequestID, 204).WithResponseHeaders([]*fetch.HeaderEntry{
 				{Name: "access-control-allow-origin", Value: "*"}, {Name: "access-control-allow-headers", Value: "*"}}).Do(ctx)
 		}
@@ -831,8 +772,6 @@ func (d *Tab) Reload() {
 	d.WaitFor("the page to start", "document.getElementById('state') && document.getElementById('state').textContent !== '(pending)'")
 }
 
-// Goto loads another address of the site in the same tab (the browser's profile, its
-// localStorage and its virtual authenticators stay) and waits for #state again: path is "/index.html?x=y".
 func (d *Tab) Goto(s *Site, path string) {
 	d.t.Helper()
 	d.must(chromedp.Navigate(s.URL + path))
@@ -852,8 +791,6 @@ func (d *Tab) Screenshot(path string) {
 	}
 }
 
-// ScreenshotView saves what is on the screen (the viewport, not the whole page) as a WebP picture of quality 55, small
-// enough to keep in the repository (about 40 KB for a page of the showcase).
 func (d *Tab) ScreenshotView(path string) {
 	d.t.Helper()
 	var buf []byte
@@ -867,7 +804,6 @@ func (d *Tab) ScreenshotView(path string) {
 	}
 }
 
-// ScreenshotOf saves the element that matches selector as a WebP picture (as ScreenshotView).
 func (d *Tab) ScreenshotOf(selector, path string) {
 	d.t.Helper()
 	var buf []byte
@@ -890,10 +826,6 @@ func jsString(s string) string { b, _ := json.Marshal(s); return string(b) }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
-// VirtualAuthenticator adds a software authenticator to the browser (Chrome's WebAuthn
-// virtual authenticator: CTAP2, internal transport, discoverable credentials, user verification
-// that succeeds), which answers navigator.credentials.create and .get with no dialog. It returns
-// the authenticator's ID, for RemoveVirtualAuthenticator.
 func (d *Tab) VirtualAuthenticator() string {
 	d.t.Helper()
 	var id webauthn.AuthenticatorID
@@ -917,14 +849,11 @@ func (d *Tab) RemoveVirtualAuthenticator(id string) {
 	d.must(webauthn.RemoveVirtualAuthenticator(webauthn.AuthenticatorID(id)))
 }
 
-// ReloadPage reloads a page that is not a canvas example (it has no #state to wait for).
 func (d *Tab) ReloadPage() {
 	d.t.Helper()
 	d.must(chromedp.Reload())
 }
 
-// OnNewDocument runs a script at the start of every document the tab loads from now on (and
-// not in the current one): to replace a browser API before the page's own code looks at it.
 func (d *Tab) OnNewDocument(script string) {
 	d.t.Helper()
 	d.must(chromedp.ActionFunc(func(ctx context.Context) error {
@@ -933,14 +862,8 @@ func (d *Tab) OnNewDocument(script string) {
 	}))
 }
 
-// Context is the tab's browser context, for helpers that talk to the browser themselves (the screen
-// reader in internal/screenreader uses the Accessibility domain). Calls made with it have no timeout of
-// their own: give them one (context.WithTimeout).
 func (d *Tab) Context() context.Context { return d.ctx }
 
-// Offline makes the browser behave as if the network were gone (true) or back (false): new requests
-// fail at once, the way they do on a plane, with the page itself left running. (The command is sent
-// by name: the browser in use has the older Network.emulateNetworkConditions, which cdproto dropped.)
 func (d *Tab) Offline(off bool) {
 	d.t.Helper()
 	d.must(chromedp.ActionFunc(func(ctx context.Context) error {

@@ -22,7 +22,6 @@ func TestMaterialDrawsAMaskedSpanAndKnowsItsNames(t *testing.T) {
 	if !HasMaterial("link") || HasMaterial("nope") || len(MaterialNames()) < 80 {
 		t.Error("names")
 	}
-	// Every symbol the library refers to exists.
 	for cmd, name := range commandMaterial {
 		if !HasMaterial(name) {
 			t.Errorf("command %q: no symbol %q", cmd, name)

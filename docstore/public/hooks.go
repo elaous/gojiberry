@@ -11,20 +11,15 @@ import (
 	"sync"
 )
 
-// AdminGuard decides who may call the admin routes (takedown). The default is TokenAdmin; a
-// deployment with its own operator sign-in, mTLS or a gateway that authenticates operators
-// plugs in its own. A nil AdminGuard allows nobody.
+// AdminGuard decides who may call the admin routes.
 type AdminGuard interface {
 	Allow(r *http.Request) bool
 }
 
-// AdminHeader is the header TokenAdmin reads (the token alone, not "Bearer ...": the
-// Authorization header belongs to sign-in).
+// AdminHeader is the header TokenAdmin reads.
 const AdminHeader = "X-Gojiberry-Admin-Token"
 
-// TokenAdmin is an AdminGuard that wants the shared secret in AdminHeader, compared in constant
-// time (over the SHA-256 of both, so neither the content nor the length leaks). An empty token
-// allows nobody: a server that has no admin token has no takedown route to call.
+// TokenAdmin is an AdminGuard that wants the shared secret.
 type TokenAdmin string
 
 // Allow implements AdminGuard.
@@ -40,11 +35,7 @@ func (t TokenAdmin) Allow(r *http.Request) bool {
 	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
 
-// Blocklist refuses content before it is stored. Blocked is asked for every body a session
-// writes (create and edit); true refuses it (422). The default is NoBlocklist; HashBlocklist
-// refuses known content by its SHA-256; a deployment plugs in a hash-matching service (known
-// abusive content, a perceptual hash for images, a scanner) here. An error means "could not
-// decide" and fails closed (503), so an outage of the checker does not become a way around it.
+// Blocklist refuses content before it is stored.
 type Blocklist interface {
 	Blocked(ctx context.Context, content []byte) (bool, error)
 }
@@ -55,14 +46,13 @@ type NoBlocklist struct{}
 // Blocked implements Blocklist.
 func (NoBlocklist) Blocked(context.Context, []byte) (bool, error) { return false, nil }
 
-// HashBlocklist refuses content whose SHA-256 (hex) is in the set. Add is safe for concurrent
-// use, so an operator process can grow it while the server runs.
+// HashBlocklist refuses content whose SHA-256 is listed.
 type HashBlocklist struct {
 	mu     sync.RWMutex
 	hashes map[string]struct{}
 }
 
-// NewHashBlocklist makes a blocklist of the given SHA-256 hex digests.
+// NewHashBlocklist makes a blocklist of the given SHA-256 hashes.
 func NewHashBlocklist(hexDigests ...string) *HashBlocklist {
 	b := &HashBlocklist{hashes: map[string]struct{}{}}
 	for _, h := range hexDigests {
@@ -71,7 +61,7 @@ func NewHashBlocklist(hexDigests ...string) *HashBlocklist {
 	return b
 }
 
-// Add adds a SHA-256 digest in hex (case-insensitive).
+// Add adds a SHA-256 digest in hex, case-insensitive.
 func (b *HashBlocklist) Add(hexDigest string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -90,11 +80,6 @@ func (b *HashBlocklist) Blocked(_ context.Context, content []byte) (bool, error)
 	return bad, nil
 }
 
-// Challenger is the hook for a captcha or proof of work: Verify is called before a session is
-// issued and before a document is created, with the request (which carries whatever the client
-// solved: a header, a field). Returning an error refuses the request with 403 and the error's
-// text, so a deployment can ask for a challenge only when a range is busy. The default,
-// NoChallenge, accepts everything. This is the interface only; no challenge ships.
 type Challenger interface {
 	Verify(r *http.Request) error
 }
@@ -105,5 +90,5 @@ type NoChallenge struct{}
 // Verify implements Challenger.
 func (NoChallenge) Verify(*http.Request) error { return nil }
 
-// ErrChallenge may be returned (or wrapped) by a Challenger to say a challenge is needed.
+// ErrChallenge may be returned by a Challenger.
 var ErrChallenge = errors.New("public: a challenge must be solved first")

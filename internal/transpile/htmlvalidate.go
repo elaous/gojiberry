@@ -2,15 +2,7 @@ package transpile
 
 import "strings"
 
-// validHTMLTags is the living-standard HTML element set xango recognizes
-// for a lowercase (non-Component) tag. Deliberately excludes obsolete/
-// deprecated elements (center, font, marquee, tt, ...) -- there's no
-// good reason a new .xg file should start using one of those, and
-// omitting them helps catch a typo'd real tag rather than silently
-// accepting a fossil. isKnownTag below also accepts any name
-// containing a hyphen unconditionally (a custom element, e.g.
-// <my-widget> -- see the root README's "Components" section), so this
-// list only needs to cover standard elements.
+// deliberately excludes obsolete elements (center, font, marquee)
 var validHTMLTags = map[string]bool{
 	"a": true, "abbr": true, "address": true, "area": true, "article": true,
 	"aside": true, "audio": true, "b": true, "base": true, "bdi": true,
@@ -37,17 +29,7 @@ var validHTMLTags = map[string]bool{
 	"u": true, "ul": true, "var": true, "video": true, "wbr": true,
 }
 
-// validHTMLAttrs is the global-attribute set plus commonly-used
-// element-specific attributes xango recognizes on a lowercase tag.
-// data-* and aria-* are accepted unconditionally by isKnownAttr below
-// (both are explicitly open-ended extension points per the HTML/ARIA
-// specs, not a fixed list), so this only needs to cover everything
-// else. Deliberately includes a handful of deprecated-but-still
-// browser-accepted presentational attributes (align, bgcolor, border,
-// ...) -- rejecting a real attribute someone pasted from existing
-// markup would be a worse false positive than tolerating a fossil.
 var validHTMLAttrs = map[string]bool{
-	// Global attributes.
 	"accesskey": true, "autocapitalize": true, "autofocus": true,
 	"class": true, "contenteditable": true, "dir": true, "draggable": true,
 	"enterkeyhint": true, "exportparts": true, "hidden": true, "id": true,
@@ -58,7 +40,6 @@ var validHTMLAttrs = map[string]bool{
 	"slot": true, "spellcheck": true, "style": true, "tabindex": true,
 	"title": true, "translate": true,
 
-	// Common element-specific attributes.
 	"href": true, "target": true, "download": true, "rel": true,
 	"hreflang": true, "type": true, "ping": true, "referrerpolicy": true,
 	"src": true, "srcset": true, "sizes": true, "alt": true, "width": true,
@@ -83,15 +64,10 @@ var validHTMLAttrs = map[string]bool{
 	"scoped": true, "shape": true, "coords": true, "span": true,
 	"dropzone": true,
 
-	// Deprecated but still browser-accepted presentational attributes.
 	"align": true, "valign": true, "bgcolor": true, "background": true,
 	"border": true, "cellpadding": true, "cellspacing": true,
 }
 
-// isKnownTag reports whether name is a real HTML element xango will
-// render as-is, or a custom element (any name containing a hyphen is
-// always accepted, per the Custom Elements spec and this repo's own
-// <my-widget> convention).
 func isKnownTag(name string) bool {
 	if strings.ContainsRune(name, '-') {
 		return true
@@ -99,9 +75,6 @@ func isKnownTag(name string) bool {
 	return validHTMLTags[name]
 }
 
-// isKnownAttr reports whether name is a real HTML attribute xango will
-// set as-is, or a data-*/aria-* attribute (both open-ended extension
-// points, not a fixed list, per the HTML and ARIA specs).
 func isKnownAttr(name string) bool {
 	if strings.HasPrefix(name, "data-") || strings.HasPrefix(name, "aria-") {
 		return true

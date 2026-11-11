@@ -17,7 +17,6 @@ func TestHTMLCarriesTheDocumentsOwnTheme(t *testing.T) {
 	if !strings.Contains(string(out), "--gj-color-text:#111111") {
 		t.Errorf("the document's theme is not in the page:\n%s", out)
 	}
-	// An exporter's own theme wins; an unsafe stored theme is left out, not an error.
 	out, _ = HTML{Theme: ":root{--gj-color-text:#222222;}"}.Export(FromDocument(d))
 	if strings.Contains(string(out), "#111111") || !strings.Contains(string(out), "#222222") {
 		t.Error("the exporter's theme should win")

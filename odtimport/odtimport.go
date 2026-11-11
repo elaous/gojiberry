@@ -1,20 +1,3 @@
-// Package odtimport reads an OpenDocument text file (.odt) into a docfile.Document.
-//
-// LibreOffice, Collabora, Google Docs (File > Download > OpenDocument) and many public offices write this
-// format. It is read directly from the package:
-//
-//   - paragraphs and headings (by outline level), quotes and code (by their style), alignment is not kept
-//   - bullet and numbered lists with their nesting
-//   - runs: bold, italic, underline, strike-through, super and subscript, and the language of a run
-//   - hyperlinks (http, https, mailto and in-page only), tabs, spaces and line breaks
-//   - tables (the text of each cell, spans, and the fill of a cell)
-//   - pictures (embedded in the package, as data: URLs, with their size and alternative text)
-//   - footnotes, the title and the language of the document
-//
-// Not read: comments, headers and footers, text boxes and other drawings, charts, tracked changes (the text
-// is read as it stands), fields (the last shown text stays), bookmarks, columns, and paragraph spacing,
-// borders and fonts. Inspect counts these, so a person can be told what an import leaves out. The package
-// is untrusted input: sizes, nesting and the number of elements are limited.
 package odtimport
 
 import (
@@ -32,7 +15,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// ErrNotODT is returned for data that is not an OpenDocument text file.
 var ErrNotODT = errors.New("odtimport: not an .odt file")
 
 const (
@@ -48,7 +30,6 @@ const (
 
 var headingScales = [5]float64{2, 1.6, 1.35, 1.2, 1.05}
 
-// node is an element with its children and the text between them in order ("#text" nodes).
 type node struct {
 	name  string
 	attrs map[string]string
@@ -123,7 +104,6 @@ func parseXML(data []byte) (*node, error) {
 	return root, nil
 }
 
-// props are the text and paragraph properties of a style that matter here.
 type props struct {
 	bold, italic, underline, strike bool
 	pos                             string // "super", "sub" or ""
@@ -155,7 +135,6 @@ func Import(data []byte) (docfile.Document, error) {
 	return d, err
 }
 
-// Inspect counts what Import would leave out of an .odt file.
 func Inspect(data []byte) (Skipped, error) {
 	_, s, err := ImportReport(data)
 	return s, err
@@ -208,7 +187,6 @@ func (r *reader) xml(name string) *node {
 	return n
 }
 
-// ImportReport reads an .odt file and says what it left out.
 func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	r, content, styles, err := newReader(data)
 	if err != nil {
@@ -216,7 +194,7 @@ func ImportReport(data []byte) (docfile.Document, Skipped, error) {
 	}
 	if styles != nil {
 		r.loadStyles(styles)
-		styles.walk(func(n *node) bool { // vertical text: the page's writing mode runs top to bottom, right to left
+		styles.walk(func(n *node) bool {
 			if n.name == "page-layout-properties" && strings.HasPrefix(n.attr("writing-mode"), "tb") {
 				l := r.doc.PageLayout()
 				l.Vertical = true
@@ -325,7 +303,6 @@ func v(s string) string {
 	return s
 }
 
-// resolve is the properties of a style with the ones it inherits from its parents.
 func (r *reader) resolve(name string) props {
 	var out props
 	seen := 0
@@ -390,7 +367,6 @@ func (r *reader) format(base docfile.Format, p props) docfile.Format {
 	return f
 }
 
-// blocks reads block-level children.
 func (r *reader) blocks(kids []*node, inherit props, depth int) {
 	if depth > maxDepth {
 		return
@@ -407,8 +383,6 @@ func (r *reader) blocks(kids []*node, inherit props, depth int) {
 		case "table":
 			r.table(k)
 		case "table-of-content":
-			// A table of contents is made from the headings (and its page numbers are the producer's): its entries are
-			// not text of the document, and reading them would write every heading twice.
 		case "section", "index-body", "index-title", "alphabetical-index":
 			r.blocks(k.kids, inherit, depth+1)
 		}
@@ -435,7 +409,6 @@ func (r *reader) paragraph(p *node, heading int, list *docfile.List) {
 
 func (r *reader) endLine() { r.text("\n", docfile.Format{}) }
 
-// inline reads the children of a paragraph, span or link.
 func (r *reader) inline(kids []*node, f docfile.Format, depth int) {
 	if depth > maxDepth {
 		return
@@ -476,14 +449,11 @@ func (r *reader) inline(kids []*node, f docfile.Format, depth int) {
 			r.skipped.Fields++
 			r.inline(k.kids, f, depth+1)
 		case "annotation", "annotation-end":
-			// counted by countSkipped
 		case "change-start", "change-end", "change":
 		}
 	}
 }
 
-// collapseXMLSpace is the text of a text node: ODF collapses a run of white space to one space, and
-// white space made only of line ends and indentation is not text.
 func collapseXMLSpace(s string) string {
 	var sb strings.Builder
 	space := false

@@ -11,8 +11,6 @@ import (
 
 var lineBreaks = regexp.MustCompile(`(\d)(w\d)`)
 
-// widowSnapshot is paragraphs of two to six lines each, every word carrying its paragraph's number, so a
-// page's text says how many lines of each paragraph it holds.
 func widowSnapshot() Snapshot {
 	var blocks []Block
 	for i := 0; i < 40; i++ {
@@ -22,8 +20,6 @@ func widowSnapshot() Snapshot {
 	return Snapshot{Title: "T", Lang: "en", Blocks: blocks, PageWidth: 600, PageHeight: 700, MarginLeft: 60, MarginTop: 70, MarginRight: 60, MarginBottom: 70}
 }
 
-// TestPDFNeverLeavesAWidowOrAnOrphanLine checks every page: of each paragraph that is split over two
-// pages, both pages hold at least two of its lines.
 func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	data, err := PDF{}.Export(widowSnapshot())
 	if err != nil {
@@ -31,7 +27,7 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 	pages, err := pdftext.ExtractPagesBytes(data)
 	for i := range pages {
-		pages[i] = lineBreaks.ReplaceAllString(pages[i], "$1\n$2") // the extractor joins lines without a space
+		pages[i] = lineBreaks.ReplaceAllString(pages[i], "$1\n$2")
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +37,7 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 	split := 0
 	for pi, txt := range pages {
-		lines := map[string]int{} // paragraph word -> lines of it on this page
+		lines := map[string]int{}
 		for _, line := range strings.Split(txt, "\n") {
 			if f := strings.Fields(line); len(f) > 0 && strings.HasPrefix(f[0], "w") {
 				lines[f[0]]++
@@ -69,9 +65,6 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 }
 
-// TestPDFTableNeverLeavesALoneRowAtAPageEdge slides a table down the page, a line at a time, and checks every
-// page that holds part of it holds at least two of its rows (the header counts as one): the header is not
-// alone at the foot of a page and the last row is not alone at the head of one.
 func TestPDFTableNeverLeavesALoneRowAtAPageEdge(t *testing.T) {
 	const rows = 9
 	rowRe := regexp.MustCompile(`hdr|row\d\d`)

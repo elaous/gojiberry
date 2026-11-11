@@ -2,32 +2,6 @@
 
 //go:build js && wasm
 
-// Package main wires model.go's document, linewise.go's line/word
-// commands, and layout.go's word-wrap engine to a real canvas element
-// and a hidden input element that captures actual keyboard input
-// (including paste, and IME composition, which is held until it ends):
-// typed characters arrive as ordinary "input" events, while
-// navigation/deletion (arrows, Backspace, Delete, Enter) are
-// intercepted on "keydown" via domrt/html's Element.OnKeyDown, since a
-// plain xango.EventHandler carries none of that. Mouse position for
-// click-to-position-cursor and drag-to-select comes from
-// Element.OnMouseDown/OnMouseMove/OnMouseUp, the same kind of typed
-// escape hatch OnContextMenu already used for exactly this problem
-// (xango.Event carries no coordinates at all); Element.OnWheel drives
-// scrolling the same way, since a canvas has no native scroll
-// position of its own.
-//
-// VSCode-style shortcuts beyond the base editing above: Ctrl/Cmd+Left
-// /Right jumps by word (Shift extends the selection the same way
-// plain arrows do); Alt+Up/Down moves the current logical line;
-// Shift+Alt+Down duplicates it; Ctrl/Cmd+Shift+U/L upper/lowercases
-// the current selection; Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or +Y
-// redoes (history.go: typing is one step, an edit that changes nothing
-// is none); Ctrl/Cmd+C and +X copy and cut every cursor's selection
-// (to the clipboard from the key handler, since the hidden input is
-// always empty). "Logical line" means a run delimited by
-// '\n', not a word-*wrapped* visual row -- see linewise.go's doc
-// comment for why that distinction matters here.
 package main
 
 import (
@@ -37,9 +11,6 @@ import (
 	"github.com/elaous/gojiberry/domrt/html"
 )
 
-// jsFuncOf adapts a plain, argument-less Go closure to the
-// js.FuncOf(func(js.Value, []js.Value) any) shape AddEventListener
-// expects, for the handlers here that don't need the raw event.
 func jsFuncOf(fn func()) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) any {
 		fn()
@@ -60,11 +31,8 @@ type editor struct {
 	lastLayout *layout
 	dragging   bool
 	caretOn    bool
-	// rowEndAt is the position the caret sits at the END of the previous
-	// (soft-wrapped) row for, after End or a click past a row's end; -1 when
-	// it is at the start of its row. Any other movement or edit clears it.
-	rowEndAt int
-	scrollY  float64 // pixels of document content scrolled above the viewport's top edge
+	rowEndAt   int
+	scrollY    float64 // pixels of document content scrolled above the viewport's top edge
 }
 
 func newEditor(doc *html.Document) *editor {
@@ -81,9 +49,6 @@ func newEditor(doc *html.Document) *editor {
 	return ed
 }
 
-// loadDocument restores autosaved content, or a short welcome message
-// (with a couple of formatted words, so the very first render already
-// shows Bold/Italic actually doing something) if there's nothing saved yet.
 func loadDocument() *document {
 	if saved, ok := browser.LocalStorage.Get(storageKey); ok && saved != "" {
 		if d, err := unmarshalDocument(saved); err == nil {
@@ -128,19 +93,10 @@ func (ed *editor) save() {
 	}
 }
 
-// redraw recomputes layout, scrolls just enough to keep the cursor
-// in view (since the cursor -- or the document around it -- just
-// changed), then paints. Call redrawPreservingScroll instead from
-// anywhere the cursor didn't move but a repaint is still needed (the
-// blink timer, a manual scroll): otherwise this would immediately snap
-// the viewport back to the cursor on every single repaint, making
-// wheel-scrolling to look at another part of the document impossible.
 func (ed *editor) redraw() {
 	ed.redrawImpl(true)
 }
 
-// redrawPreservingScroll repaints without re-following the cursor --
-// see redraw's doc comment for why this distinction exists.
 func (ed *editor) redrawPreservingScroll() {
 	ed.redrawImpl(false)
 }
@@ -198,9 +154,6 @@ func (ed *editor) redrawImpl(followCursor bool) {
 			}
 			cl := lay.Chars[c.Pos]
 			if c.Pos == ed.rowEndAt && c.Pos > 0 {
-				// After End (or a click) at the end of a soft-wrapped row the
-				// caret is drawn after that row's last character, not at the
-				// start of the next row, though the position is the same.
 				prev := lay.Chars[c.Pos-1]
 				cl = charLayout{X: prev.X + prev.W, Y: prev.Y, Line: prev.Line}
 			}
@@ -214,11 +167,7 @@ func (ed *editor) redrawImpl(followCursor bool) {
 	ed.updateDebugState()
 }
 
-// scrollToCursor adjusts scrollY (if needed) so the cursor's current
-// line is within [0, viewportH) -- called on every redraw so any
-// cursor-moving operation (typing at the bottom, arrow keys, Home/End,
-// a click) automatically scrolls into view without every call site
-// needing to remember to ask for it.
+// scrollToCursor runs on every redraw: call sites need not ask.
 func (ed *editor) scrollToCursor(viewportH float64) {
 	cl := ed.lastLayout.Chars[ed.doc.Cursor]
 	top, bottom := cl.Y-fontSize, cl.Y+4
@@ -229,9 +178,6 @@ func (ed *editor) scrollToCursor(viewportH float64) {
 	}
 }
 
-// clampScroll keeps scrollY within [0, maxScroll] -- maxScroll is 0
-// (no scrolling at all) once the whole document already fits in the
-// viewport.
 func (ed *editor) clampScroll(lay *layout, viewportH float64) {
 	contentHeight := topMargin + float64(lay.Lines)*lineHeight
 	maxScroll := contentHeight - viewportH
@@ -245,12 +191,6 @@ func (ed *editor) clampScroll(lay *layout, viewportH float64) {
 	}
 }
 
-// updateDebugState writes a small machine-readable summary of the
-// document into #doc-state. There's no DOM text to read back from a
-// canvas-rendered document, so this is the hook a real browser test
-// (and a curious human) uses to check what actually got typed/
-// selected/formatted, the same role FileUploader/ContextMenu's own
-// #*-result spans play elsewhere in this repo.
 func (ed *editor) updateDebugState() {
 	lo, hi := ed.doc.selection()
 	bold, italic := false, false
@@ -311,20 +251,11 @@ func boolstr(b bool) string {
 	return "false"
 }
 
-// canvasLocal converts viewport-relative (x, y) -- what
-// OnMouseDown/OnMouseMove report -- into coordinates relative to the
-// canvas's own top-left corner, which is what layoutDocument/hitTest
-// work in.
 func (ed *editor) canvasLocal(x, y float64) (float64, float64) {
 	rect := ed.canvasElem.BoundingRect()
 	return x - rect.Left, y - rect.Top
 }
 
-// moveVertical moves every live cursor up/down one visual row, each
-// keeping its own column (X position) -- unlike horizontal/word moves,
-// the target index for each cursor depends on that cursor's own current
-// layout position, so the newPos closure passed to moveCursors captures
-// ed.lastLayout instead of being a fixed offset.
 func (ed *editor) moveVertical(dir int, extend bool) {
 	if ed.lastLayout == nil {
 		return
@@ -343,10 +274,6 @@ func (ed *editor) moveVertical(dir int, extend bool) {
 
 func (ed *editor) wire() {
 	ed.canvasElem.OnMouseDown(func(evt html.MouseEvent) {
-		// Canvas isn't focusable on its own, so without PreventDefault
-		// the browser clears focus right after this handler returns --
-		// undoing the ed.hidden.Focus() call below. See MouseEvent's
-		// doc comment.
 		evt.PreventDefault()
 		lx, ly := ed.canvasLocal(evt.X, evt.Y)
 		idx, atEnd := hitTestEnd(ed.lastLayout, lx, ly+ed.scrollY, ed.doc.isNewline)
@@ -377,8 +304,6 @@ func (ed *editor) wire() {
 	ed.canvasElem.OnMouseUp(func(evt html.MouseEvent) {
 		ed.dragging = false
 	})
-	// The button can be let go outside the canvas: then the drag is over too, or the
-	// selection would keep following the pointer with no button pressed.
 	js.Global().Get("window").Call("addEventListener", "mouseup", jsFuncOf(func() { ed.dragging = false }))
 	ed.canvasElem.OnWheel(func(evt html.WheelEvent) {
 		evt.PreventDefault()
@@ -386,9 +311,7 @@ func (ed *editor) wire() {
 		ed.redrawPreservingScroll()
 	})
 
-	// Text typed arrives as "input" events, except while an IME or a dead key is
-	// composing: the box then holds the unfinished text, which must not be inserted
-	// (or cleared) until the composition ends.
+	// IME or dead key composing: the box holds unfinished text
 	takeInput := func() {
 		v := ed.hidden.GetValue()
 		if v != "" {
@@ -412,12 +335,6 @@ func (ed *editor) wire() {
 		}
 	}))
 
-	// Copy and cut: the box is always empty, so the browser has nothing of its own to
-	// copy (and does not even fire a copy event for an empty box): the keys are handled
-	// in OnKeyDown and the selection (every cursor's, a line each) is written to the
-	// clipboard from there, where the key press counts as the user gesture it needs. A cut
-	// removes the text only once the clipboard has accepted it (it is not there on a page
-	// that is not a secure context, and the write can be refused).
 	writeClipboard := func(text string, written func()) bool {
 		clip := js.Global().Get("navigator").Get("clipboard")
 		if !clip.Truthy() {
@@ -520,7 +437,7 @@ func (ed *editor) wire() {
 					ed.save()
 				}
 			}) {
-				return // no clipboard here: leave the keys to the browser, and the text where it is
+				return // no clipboard here: leave the keys to the browser
 			}
 			e.PreventDefault()
 			return // a cut finishes when the write does
@@ -587,8 +504,6 @@ func (ed *editor) wire() {
 	}, 500)
 }
 
-// lineStart/lineEnd find the first/last character index sharing idx's
-// line, for Home/End.
 func lineStart(lay *layout, idx int) int {
 	line := lay.Chars[idx].Line
 	for i := idx; i > 0; i-- {

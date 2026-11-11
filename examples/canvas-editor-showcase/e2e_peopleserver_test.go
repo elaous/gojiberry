@@ -13,9 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A document saved on the server the person confirmed has its access list on that server: the People tab
-// reads it from there, a person added in the tab is on the server's list at once, a share link is made and
-// revoked by the server, and a document that is not on the server says its list is only in the page.
 func TestThePeopleTabIsTheServersAccessList(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -37,7 +34,6 @@ func TestThePeopleTabIsTheServersAccessList(t *testing.T) {
 	d.Click("#dir-offer-review")
 	confirmDialog(d)
 
-	// Save a document on the server.
 	d.Click(`button[data-tab="save"]`)
 	d.WaitSelector(`.gj-saver-select[data-field="Save to"] option[value="server"]`)
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "server")
@@ -50,7 +46,6 @@ func TestThePeopleTabIsTheServersAccessList(t *testing.T) {
 	d.Click(`button[data-tab="people"]`)
 	d.WaitFor("the server's list", `(document.getElementById('people-where') || {textContent: ''}).textContent.includes("This list is the server's")`)
 
-	// A person added in the tab is on the server's list.
 	d.Fill(".gj-people-invite-id", "bo@example.com")
 	d.WaitFor("the invite button", `!document.querySelector('.gj-people-invite').disabled`)
 	d.Click(".gj-people-invite")
@@ -73,7 +68,6 @@ func TestThePeopleTabIsTheServersAccessList(t *testing.T) {
 		t.Fatalf("the server's list = %q (%v)", got.Data, err)
 	}
 
-	// A link is made by the server, and it is on the list; revoking it removes it there.
 	d.Click("#link-create")
 	d.WaitSelector("#link-new-url")
 	d.OK(strings.Contains(d.Value("#link-new-url"), "#share="), "the link: "+d.Value("#link-new-url"))

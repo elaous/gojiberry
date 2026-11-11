@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// conditionalOnly hides DeleteIf, so Take must consume with the SaveIf used marker.
 type conditionalOnly struct{ docstore.ConditionalAdapter }
 
 func newShared(t *testing.T) (*docstore.MemoryAdapter, *StoreChallenges) {
@@ -32,7 +31,6 @@ func TestStoreChallengesNeedConditionalWrites(t *testing.T) {
 	}
 }
 
-// plainAdapter exposes only the Adapter methods.
 type plainAdapter struct{ a docstore.Adapter }
 
 func (p plainAdapter) Save(c context.Context, id string, d []byte) error { return p.a.Save(c, id, d) }
@@ -112,7 +110,6 @@ func TestStoreChallengesConcurrentTakeHasExactlyOneWinner(t *testing.T) {
 			mem := docstore.NewMemoryAdapter()
 			store := wrap(mem)
 			ctx := context.Background()
-			// Several "replicas": separate StoreChallenges over one store.
 			const replicas, perReplica, rounds = 4, 16, 25
 			reps := make([]*StoreChallenges, replicas)
 			for i := range reps {
@@ -160,8 +157,6 @@ func TestStoreChallengesAreCappedAndSwept(t *testing.T) {
 	if _, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)}); !errors.Is(err, ErrBusy) {
 		t.Fatalf("full of live challenges: %v, want ErrBusy (a live one is never evicted)", err)
 	}
-	// Put never sweeps: it stays busy until the sweep runs (the server runs it every minute).
-	// Expired ones are only dropped once they are past the grace and Life.
 	now = now.Add(10 * time.Minute)
 	if _, err := sc.Put(ctx, Challenge{Expires: now.Add(time.Minute)}); !errors.Is(err, ErrBusy) {
 		t.Fatalf("Put at the cap does not sweep inline: %v, want ErrBusy", err)
@@ -175,8 +170,6 @@ func TestStoreChallengesAreCappedAndSwept(t *testing.T) {
 	if n := countRecords(t, sc); n != 1 {
 		t.Fatalf("%d records, the expired three are swept", n)
 	}
-	// A second replica that has not listed yet trusts its own count (the documented overshoot),
-	// and learns the store's at its next sweep.
 	other, _ := NewStoreChallenges(mem, 1)
 	other.Now = sc.Now
 	if _, err := other.Sweep(ctx); err != nil {
@@ -198,7 +191,6 @@ func TestParseChallengeMode(t *testing.T) {
 	}
 }
 
-// Two Services (two replicas) sharing one store of accounts and one of ceremonies.
 func twoReplicas(t *testing.T, ttl time.Duration) (a, b *rig) {
 	t.Helper()
 	mem := docstore.NewMemoryAdapter()
@@ -227,7 +219,6 @@ func (r *rig) begin(path string) (string, map[string]any) {
 func TestReplicasShareCeremoniesBeginOnAFinishOnB(t *testing.T) {
 	a, b := twoReplicas(t, 0)
 	a.register("ana@opendocs.io", "") // the account lives in the shared store
-	// Login: begin on A, finish on B.
 	tok, begin := a.begin("/auth/passkey/login/begin")
 	answer, err := a.user.Get(asJSON(t, map[string]any{"publicKey": begin["options"].(map[string]any)["publicKey"]}), origin)
 	if err != nil {
@@ -236,7 +227,6 @@ func TestReplicasShareCeremoniesBeginOnAFinishOnB(t *testing.T) {
 	if code, out := b.do("POST", "/auth/passkey/login/finish?token="+tok, "", answer); code != 200 || out["auth_token"] == "" {
 		t.Fatalf("finish on the other replica: %d %v", code, out)
 	}
-	// Replay: the same answer on A after B consumed the challenge.
 	if code, _ := a.do("POST", "/auth/passkey/login/finish?token="+tok, "", answer); code != 410 {
 		t.Fatalf("replay on A = %d, want 410", code)
 	}
@@ -244,7 +234,6 @@ func TestReplicasShareCeremoniesBeginOnAFinishOnB(t *testing.T) {
 		t.Fatalf("replay on B = %d, want 410", code)
 	}
 
-	// Registration too: begin on B, finish on A.
 	code, rb := b.do("POST", "/auth/passkey/register/begin", "", asJSON(t, map[string]string{"email": "bo@opendocs.io"}))
 	if code != 200 {
 		t.Fatalf("register begin: %d %v", code, rb)
@@ -270,7 +259,6 @@ func TestReplicasRefuseAnExpiredCeremony(t *testing.T) {
 }
 
 func TestWithoutASharedStoreAnotherReplicaDoesNotKnowTheCeremony(t *testing.T) {
-	// The failure the shared store removes: per-process challenges.
 	mem := docstore.NewMemoryAdapter()
 	accounts := &AdapterStore{Adapter: mem}
 	a, b := newRig(t, accounts), newRig(t, accounts)
@@ -283,7 +271,6 @@ func TestWithoutASharedStoreAnotherReplicaDoesNotKnowTheCeremony(t *testing.T) {
 	}
 }
 
-// counting counts every call that reaches the store.
 type counting struct {
 	*docstore.MemoryAdapter
 	loads, deletes, deleteIfs, lists, saveIfs atomic.Int64
@@ -335,13 +322,11 @@ func TestTokenCarriesTheBucketAndNamesTheRecord(t *testing.T) {
 	if len(metas) != 1 || !strings.HasPrefix(metas[0].ID, ChallengePrefix+tok[i+1:]+"/") {
 		t.Fatalf("record names = %+v, want %s<minute>/<hash>", metas, ChallengePrefix)
 	}
-	// The bucket end is never before the expiry.
 	if b, ok := idBucket(metas[0].ID); !ok || bucketEnd(b).Before(exp) {
 		t.Fatalf("bucket %d ends before %v", b, exp)
 	}
 }
 
-// A token that is not exactly one of ours never reaches the store.
 func TestMalformedTokensNeverReachTheStore(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	sc, _ := NewStoreChallenges(c, 0)
@@ -363,15 +348,12 @@ func TestMalformedTokensNeverReachTheStore(t *testing.T) {
 	if n := c.calls(); n != 0 {
 		t.Fatalf("malformed tokens made %d store calls", n)
 	}
-	// A well-formed token does reach the store (the control of the test).
 	_, _, _ = sc.Take(ctx, "abc.5")
 	if c.loads.Load() != 1 {
 		t.Fatalf("a well-formed token must be looked up: %d loads", c.loads.Load())
 	}
 }
 
-// lenientDelete is a store whose plain Delete of a missing record is not an error (as on S3), so
-// only a conditional step can tell winner from loser.
 type lenientDelete struct{ *docstore.MemoryAdapter }
 
 func (l lenientDelete) Delete(ctx context.Context, id string) error {
@@ -381,7 +363,6 @@ func (l lenientDelete) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// lenientCAS exposes the ConditionalAdapter methods only (no DeleteIf), with the lenient Delete.
 type lenientCAS struct {
 	docstore.ConditionalAdapter
 	l lenientDelete
@@ -431,7 +412,6 @@ func TestConcurrentTakeHasOneWinnerOnAStoreWhosePlainDeleteNeverFails(t *testing
 	}
 }
 
-// The sweep deletes by name, only past the bucket and the grace, and reads nothing.
 func TestSweepDeletesOnlyExpiredByNameWithoutLoads(t *testing.T) {
 	for name, wrap := range map[string]func(*counting) docstore.Adapter{
 		"DeleteIf":  func(c *counting) docstore.Adapter { return c },
@@ -450,11 +430,10 @@ func TestSweepDeletesOnlyExpiredByNameWithoutLoads(t *testing.T) {
 				tok, _ = sc.Put(ctx, Challenge{Expires: now.Add(20 * time.Minute)})
 				live = append(live, tok)
 			}
-			// Records of the earlier layout and foreign names are left alone.
 			old := ChallengePrefix + strings.Repeat("a", 64)
 			_ = c.Save(ctx, old, []byte(`{"expires":"2000-01-01T00:00:00Z"}`))
 			_ = c.Save(ctx, ChallengePrefix+"x/y", []byte(`junk`))
-			now = now.Add(5 * time.Minute) // past the dead bucket and the grace, before the live ones
+			now = now.Add(5 * time.Minute)
 			c.loads.Store(0)
 			c.saveIfs.Store(0)
 			c.deletes.Store(0)
@@ -482,7 +461,6 @@ func TestSweepDeletesOnlyExpiredByNameWithoutLoads(t *testing.T) {
 			if got := sc.approx.Load(); got != int64(len(live)) {
 				t.Fatalf("count = %d, want the %d live ones (foreign names are not counted)", got, len(live))
 			}
-			// Live ones are still good.
 			if _, ok, _ := sc.Take(ctx, live[0]); !ok {
 				t.Fatal("a live ceremony survives the sweep")
 			}
@@ -490,7 +468,6 @@ func TestSweepDeletesOnlyExpiredByNameWithoutLoads(t *testing.T) {
 	}
 }
 
-// A used marker (a Take whose final delete failed) is swept by its own bucket, with no Load.
 func TestSweepDeletesAUsedMarkerByItsBucket(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	failing := &failDelete{counting: c, fail: true}
@@ -516,7 +493,6 @@ func TestSweepDeletesAUsedMarkerByItsBucket(t *testing.T) {
 	}
 }
 
-// failDelete makes plain Delete fail while fail is true (a Take's cleanup that did not happen).
 type failDelete struct {
 	*counting
 	fail bool
@@ -529,7 +505,6 @@ func (f *failDelete) Delete(ctx context.Context, id string) error {
 	return f.counting.Delete(ctx, id)
 }
 
-// Put at the cap costs nothing and evicts nothing; the sweep is a listing and no Load.
 func TestFullStoreCostsNoCallsInPutAndNoLoadsInSweep(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	const total = 1000
@@ -566,16 +541,11 @@ func TestFullStoreCostsNoCallsInPutAndNoLoadsInSweep(t *testing.T) {
 	if _, ok, _ := sc.Take(ctx, first); !ok {
 		t.Fatal("the first live ceremony is still good at the cap")
 	}
-	// A Take made room.
 	if _, err := sc.Put(ctx, Challenge{Expires: time.Now().Add(time.Minute)}); err != nil {
 		t.Fatalf("after a Take there is room: %v", err)
 	}
 }
 
-// The cap across replicas: replicas that have just listed each accept up to the cap on their own
-// count, so the store may exceed it, by no more than the writes of one refresh interval; the next
-// listing stops the growth on every replica. With the per-client limiter in front, the overshoot
-// is at most limiterWrites (a rate times clients times the interval).
 func TestCapOvershootAcrossReplicasIsBoundedByTheWritesOfOneInterval(t *testing.T) {
 	const cap, replicas, prefill, perInterval = 10, 3, 8, 4 // perInterval: what the limiters let one replica write
 	mem := docstore.NewMemoryAdapter()
@@ -596,7 +566,6 @@ func TestCapOvershootAcrossReplicasIsBoundedByTheWritesOfOneInterval(t *testing.
 			t.Fatal(err)
 		}
 	}
-	// One interval: each replica writes until busy or until its limiters stop it.
 	for _, r := range reps {
 		for i := 0; i < perInterval; i++ {
 			if _, err := r.Put(ctx, Challenge{Expires: now.Add(time.Hour)}); err != nil {
@@ -614,7 +583,6 @@ func TestCapOvershootAcrossReplicasIsBoundedByTheWritesOfOneInterval(t *testing.
 	if got > cap+replicas*perInterval || got > replicas*cap {
 		t.Fatalf("%d records, over the documented bound cap+replicas x writes = %d (and replicas x cap = %d)", got, cap+replicas*perInterval, replicas*cap)
 	}
-	// The next listing: everyone sees the true count and refuses, so growth stops.
 	for _, r := range reps {
 		if _, err := r.Sweep(ctx); err != nil {
 			t.Fatal(err)
@@ -628,11 +596,9 @@ func TestCapOvershootAcrossReplicasIsBoundedByTheWritesOfOneInterval(t *testing.
 	}
 }
 
-// The real bound is the per-client limiter on the Begin routes: a client flooding Begin on any
-// replica is stopped at its budget, so the store gets at most budget records from it.
 func TestPerClientLimiterBoundsWhatOneClientWritesAcrossReplicas(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
-	shared := NewRateLimiter(1, 5) // 5 at once, 1 a minute; one budget, as with GOJIBERRY_DOCSTORE_LIMITER=store
+	shared := NewRateLimiter(1, 5)
 	mk := func() *rig {
 		ch, _ := NewStoreChallenges(mem, 0)
 		return newRigWith(t, &AdapterStore{Adapter: mem}, Config{Challenges: ch, Limiter: shared})
@@ -653,7 +619,6 @@ func TestPerClientLimiterBoundsWhatOneClientWritesAcrossReplicas(t *testing.T) {
 	}
 }
 
-// brokenChallenges fails Put like a store that is down.
 type brokenChallenges struct{ ChallengeStore }
 
 func (brokenChallenges) Put(context.Context, Challenge) (string, error) {
@@ -671,8 +636,6 @@ func TestChallengeStoreFailureIs500NotBadRequest(t *testing.T) {
 	}
 }
 
-// aged reports the modification times in times (zero for a name not in the map, when zeroOthers) in
-// listings, and runs hook after each listing is taken (a Put during a sweep).
 type aged struct {
 	*docstore.MemoryAdapter
 	times map[string]time.Time
@@ -738,7 +701,6 @@ func TestSweepDeletesOldFormatRecordsAfterADayAndNothingForeign(t *testing.T) {
 	if got := sc.approx.Load(); got != 0 {
 		t.Fatalf("count = %d, old-format and foreign names are not counted", got)
 	}
-	// A minute short of a day stays, a minute past goes.
 	a.times[oldFresh] = now.Add(-oldChallengeAge)
 	if n, _ := sc.Sweep(ctx); n != 0 {
 		t.Fatalf("exactly a day old must stay, deleted %d", n)
@@ -789,7 +751,6 @@ func TestSweepOldFormatWithoutModificationTimeReadsOnce(t *testing.T) {
 	}
 }
 
-// agedCounting lists through aged and counts Loads.
 type agedCounting struct {
 	*aged
 	c *counting

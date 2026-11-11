@@ -15,11 +15,7 @@ const (
 
 // ButtonProps configures Button.
 type ButtonProps struct {
-	Label string
-	// Content overrides Label with arbitrary child nodes (e.g. an icon
-	// beside the text) when set -- the same "override the plain-text
-	// default with real markup" shape DialogProps' own Body/Actions
-	// already take.
+	Label    string
 	Content  []xango.Node
 	Variant  ButtonVariant // defaults to ButtonPrimary
 	Type     string        // "button" (default), "submit", or "reset"

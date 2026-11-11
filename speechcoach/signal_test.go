@@ -7,14 +7,11 @@ import (
 	"testing"
 )
 
-// tone is secs seconds of a 220 Hz tone gated on and off (a stand-in for speech) at amp of
-// full scale, over noise at noise of full scale.
 func tone(secs, amp, noise float64) []int16 {
 	r := rand.New(rand.NewSource(1))
 	n := int(secs * SampleRate)
 	out := make([]int16, n)
 	for i := range out {
-		// words with gaps: on for about 0.4 s, off for about 0.27 s
 		env := math.Max(0, math.Sin(2*math.Pi*1.5*float64(i)/SampleRate)) * 1.4
 		if env > 1 {
 			env = 1
@@ -35,7 +32,6 @@ func TestWAVRoundTripAndRefusals(t *testing.T) {
 	if err != nil || !slices.Equal(got, pcm) {
 		t.Fatalf("round trip: %v", err)
 	}
-	// an extra chunk before data is skipped
 	extra := append(append(append([]byte{}, b[:36]...), 'L', 'I', 'S', 'T', 2, 0, 0, 0, 'x', 'y'), b[36:]...)
 	if got, err := DecodeWAV(extra); err != nil || len(got) != len(pcm) {
 		t.Fatalf("with a LIST chunk: %v", err)
@@ -51,14 +47,12 @@ func TestWAVRoundTripAndRefusals(t *testing.T) {
 			t.Errorf("%s: want an error", name)
 		}
 	}
-	// a data chunk longer than the file says is read as far as the file goes, never past it
 	if got, err := DecodeWAV(b[:44+10]); err != nil || len(got) != 5 {
 		t.Errorf("stream cut: %d, %v", len(got), err)
 	}
 }
 
 func TestResample(t *testing.T) {
-	// 48 kHz sine of 1 s down to 16 kHz keeps its length and its level
 	in := make([]float32, 48000)
 	for i := range in {
 		in[i] = float32(0.5 * math.Sin(2*math.Pi*200*float64(i)/48000))
@@ -70,7 +64,6 @@ func TestResample(t *testing.T) {
 	if q := Analyze(out); q.PeakDB < -6.5 || q.PeakDB > -5.5 {
 		t.Errorf("peak %.1f dB, want about -6", q.PeakDB)
 	}
-	// up from 8 kHz doubles the length; clipping and NaN are tamed; nonsense is empty
 	if got := Resample(make([]float32, 8000), 8000); len(got) != SampleRate {
 		t.Errorf("up: %d", len(got))
 	}
@@ -113,7 +106,6 @@ func TestLongPauseIsFoundBetweenSounds(t *testing.T) {
 	if !slices.Contains(q.Hints(), HintLongPause) {
 		t.Errorf("hints %v", q.Hints())
 	}
-	// leading and trailing silence are not pauses
 	if q := Analyze(append(make([]int16, 6*SampleRate), tone(0.3, 0.4, 0.001)...)); q.LongestPause != 0 {
 		t.Errorf("leading silence counted: %.2f", q.LongestPause)
 	}

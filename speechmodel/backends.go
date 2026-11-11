@@ -14,9 +14,6 @@ func init() {
 	Register(httpBackend{})
 }
 
-// The "stub" backend is a model that answers with fixed text and wears adapters, so that the editor's
-// dictation, correction and contribution flows can be built and tested before a real model exists. It is
-// never a recogniser: its text is whatever the Spec's URL field holds ("" answers "stub").
 type stubBackend struct{}
 
 func (stubBackend) Name() string { return "stub" }
@@ -85,9 +82,6 @@ func (s *Stub) Close() error {
 	return nil
 }
 
-// The "http" backend reaches a recogniser with the contract of cmd/voiceserver (package speechcoach's
-// Recogniser): the audio goes to Spec.URL when a transcription is asked for, and nowhere else. It takes no
-// adapter; a personalised model behind the URL is the service's business.
 type httpBackend struct{}
 
 func (httpBackend) Name() string { return "http" }

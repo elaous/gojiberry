@@ -13,8 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The Speech tab: record the phrases (with a fake microphone), keep the takes in the page, download them,
-// and dictate through a recogniser the person names.
 func TestSpeechTabRecordsPhrasesAndDictates(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	var heard int
@@ -37,7 +35,6 @@ func TestSpeechTabRecordsPhrasesAndDictates(t *testing.T) {
 	d.OK(first != "", "a phrase is shown: "+first)
 	d.OK(d.Str(`String(document.getElementById('speech-download').disabled)`) == "true", "nothing to download before a take")
 
-	// Record a phrase for a second, then stop.
 	d.Click("#speech-record")
 	d.WaitFor("recording", `document.getElementById('speech-record').textContent.includes('Stop')`)
 	d.Sleep(1200)
@@ -45,11 +42,9 @@ func TestSpeechTabRecordsPhrasesAndDictates(t *testing.T) {
 	d.WaitFor("the take kept", `document.getElementById('speech-progress').textContent.includes('Recorded: 1')`)
 	d.OK(strings.Contains(d.Text("#speech-count"), "1 recording"), "the take is counted: "+d.Text("#speech-count"))
 
-	// The phrase stays until the person moves on; Next shows another.
 	d.Click("#speech-next")
 	d.WaitFor("another phrase", `document.getElementById('speech-phrase').textContent !== `+e2etest.J(first))
 
-	// The download is a zip with the manifest and the audio.
 	name, data := d.Download(func() { d.Click("#speech-download") })
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil || name != "my-speech.zip" {
@@ -62,7 +57,6 @@ func TestSpeechTabRecordsPhrasesAndDictates(t *testing.T) {
 	}
 	d.OK(wav && manifest, "the zip holds the manifest and a recording")
 
-	// Dictation sends one recording to the address typed, and puts the answer in the document.
 	d.OK(d.Str(`String(document.getElementById('speech-dictate').disabled)`) == "true", "dictation is off without an address")
 	d.Fill("#speech-address", rec.URL+"/transcribe")
 	d.WaitFor("dictation on", `!document.getElementById('speech-dictate').disabled`)
@@ -74,7 +68,6 @@ func TestSpeechTabRecordsPhrasesAndDictates(t *testing.T) {
 	d.WaitFor("the answer in the document", `JSON.parse(document.getElementById('state').textContent).text.includes('dictated words')`)
 	d.OK(heard == 1, "exactly one recording was sent")
 
-	// Deleting needs a second press.
 	d.Click("#speech-delete")
 	d.OK(strings.Contains(d.Text("#speech-count"), "1 recording"), "one press deletes nothing")
 	d.Click("#speech-delete")

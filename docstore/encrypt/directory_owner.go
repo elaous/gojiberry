@@ -18,77 +18,39 @@ import (
 	"time"
 )
 
-// Owner-held identity for an address.
-//
-// The directory key lets the server publish a key for any address, so a Verified mark ends at the
-// server. An owner who enrolls closes that: the owner holds an Ed25519 signing key (made and kept
-// client-side, GenerateOwnerKey), registers its public half for the address (Enroll: needs the
-// signed-in provider session AND a signature by the new key over a server challenge), and from
-// then on every publish and revoke for that address needs the owner's signature over
-// "directory-op|<op>|<address>|<fingerprint>|<time>|<prev log head>" in addition to the session.
-// The server checks it and records it in the log entry (and in the record), so anyone who knows
-// the address can check, from the log alone, that each entry for it carries a valid owner
-// signature (AuditAddress): a server alone cannot fabricate entries, it can only withhold them or
-// show an older state. Lookup marks such a key OwnerSigned.
-//
-// What stays with the server (and is stated plainly in docs/encryption-and-passkeys.md, 4b):
-// withholding (an address that looks empty, a key that is not shown) and showing an older state;
-// and trust on first use, because the first enrollment for an address is accepted on the provider
-// session alone: whoever is signed in as the address first (the provider, or the server with a
-// provider session of its own) can enroll first. The log shows the enrollment to everybody who
-// watches the address, and a replacement by reset is delayed by ResetWait (24 hours) and visible
-// in the log before it takes effect, which is the owner's window to cancel it with their own key.
-
-// DefaultResetWait is how long a reset of the owner key (a provider-session replacement of a
-// lost key) waits between its request and its taking effect.
 const DefaultResetWait = 24 * time.Hour
 
-// ownerSkew is how far an owner signature's time may be from the server's clock.
+// max clock difference for an owner signature
 const ownerSkew = 10 * time.Minute
 
-// auditSkew is the tolerance an auditor allows between a log entry's time and the time the owner
-// signed: the server's skew check plus the time to append.
 const auditSkew = ownerSkew + time.Minute
 
-// OwnerOpMessage is what the owner key signs: "directory-op|<op>|<address>|<fingerprint>|<unix
-// seconds>|<prev>", the address lower-cased and trimmed. op is "publish", "revoke", "enroll",
-// "rotate", "accept" (the new key's acceptance of a rotation or reset), or "reset-cancel";
-// fingerprint is the key's (for enroll, rotate and accept the new owner key's, OwnerFingerprint;
-// empty for reset-cancel); prev is the log position the signer last saw (FormatLogPosition of
-// the head).
+// OwnerOpMessage is what the owner key signs for an operation.
 func OwnerOpMessage(op, email, fingerprint string, at int64, prev string) []byte {
 	return []byte("directory-op|" + op + "|" + normalizeEmail(email) + "|" + fingerprint + "|" + strconv.FormatInt(at, 10) + "|" + prev)
 }
 
-// OwnerPublishMessageV2 is what the owner key signs for a publication since the label was
-// covered: "directory-op-v2|publish|<address>|<fingerprint>|<label hash>|<unix seconds>|<prev>".
-// labelHash is LabelHash of the label as the directory stores it (CleanLabel). The "-v2" prefix
-// separates it from OwnerOpMessage's, so a signature of one is never valid for the other.
+// OwnerPublishMessageV2 is what the owner key signs for a publication.
 func OwnerPublishMessageV2(email, fingerprint, labelHash string, at int64, prev string) []byte {
 	return []byte("directory-op-v2|" + OpPublish + "|" + normalizeEmail(email) + "|" + fingerprint + "|" + labelHash + "|" + strconv.FormatInt(at, 10) + "|" + prev)
 }
 
-// LabelHash is the hex SHA-256 of a key's (cleaned) label, what a version 2 owner signature and
-// its log entry carry instead of the label itself.
+// LabelHash is the hex SHA-256 of a key's cleaned label.
 func LabelHash(label string) string {
 	sum := sha256.Sum256([]byte(label))
 	return hex.EncodeToString(sum[:])
 }
 
-// CleanLabel is the label as the directory stores it (trimmed, control characters removed,
-// shortened): what an owner signs the hash of (SignOwnerPublish).
+// CleanLabel is the label as the directory stores it.
 func CleanLabel(s string) string { return cleanLabel(s) }
 
-// SignOwnerPublish signs a publication of the key with this fingerprint and label (version 2: the
-// signature covers the label, so the server cannot change it).
+// SignOwnerPublish signs a publication of the key.
 func SignOwnerPublish(priv ed25519.PrivateKey, email, fingerprint, label string, at time.Time, prev string) docstore.DirectoryOwnerSig {
 	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, V: 2,
 		Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, OwnerPublishMessageV2(email, fingerprint, LabelHash(CleanLabel(label)), at.Unix(), prev)))}
 }
 
-// SignOwnerPublishWith is SignOwnerPublish for an owner key that cannot be handed over as bytes: any
-// crypto.Signer whose Public is an ed25519.PublicKey, such as a non-extractable browser key. Its
-// Sign is called with the message and crypto.Hash(0), as ed25519 requires.
+// SignOwnerPublishWith is SignOwnerPublish with a given signer.
 func SignOwnerPublishWith(signer crypto.Signer, email, fingerprint, label string, at time.Time, prev string) (docstore.DirectoryOwnerSig, error) {
 	sig, err := signer.Sign(nil, OwnerPublishMessageV2(email, fingerprint, LabelHash(CleanLabel(label)), at.Unix(), prev), crypto.Hash(0))
 	if err != nil {
@@ -97,7 +59,6 @@ func SignOwnerPublishWith(signer crypto.Signer, email, fingerprint, label string
 	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, V: 2, Sig: base64.StdEncoding.EncodeToString(sig)}, nil
 }
 
-// verifyOwnerPublishV2 checks a version 2 publication signature.
 func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	b, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil || len(b) != ed25519.SignatureSize || len(pub) != ed25519.PublicKeySize {
@@ -106,8 +67,6 @@ func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash s
 	return ed25519.Verify(pub, OwnerPublishMessageV2(email, fingerprint, labelHash, at, prev), b)
 }
 
-// verifyOwnerVersion checks the signature of an entry or record by its version: 2 (a
-// publication) covers the label hash, anything else is the original message.
 func verifyOwnerVersion(pub ed25519.PublicKey, v int, op, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	if v == 2 {
 		return op == OpPublish && verifyOwnerPublishV2(pub, email, fingerprint, labelHash, at, prev, sig)
@@ -115,19 +74,18 @@ func verifyOwnerVersion(pub ed25519.PublicKey, v int, op, email, fingerprint, la
 	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
 }
 
-// OwnerFingerprint names an owner public key: "OWNER:" and the base64 SHA-256 of its 32 bytes.
+// OwnerFingerprint names an owner public key.
 func OwnerFingerprint(pub ed25519.PublicKey) string {
 	sum := sha256.Sum256(pub)
 	return "OWNER:" + base64.RawStdEncoding.EncodeToString(sum[:])
 }
 
-// GenerateOwnerKey makes an owner signing key. It is held by the owner, client-side (a browser
-// stores it, a CLI keeps a file): the server never sees the private half.
+// GenerateOwnerKey makes an owner signing key.
 func GenerateOwnerKey() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	return ed25519.GenerateKey(rand.Reader)
 }
 
-// FormatOwnerPub is the form an owner public key travels in: base64 of its 32 bytes.
+// FormatOwnerPub is the form an owner public key travels in.
 func FormatOwnerPub(pub ed25519.PublicKey) string { return base64.StdEncoding.EncodeToString(pub) }
 
 // ParseOwnerPub reads an owner public key.
@@ -139,7 +97,7 @@ func ParseOwnerPub(s string) (ed25519.PublicKey, error) {
 	return ed25519.PublicKey(b), nil
 }
 
-// FormatLogPosition is "<seq>:<hash>": the log position an owner signature names.
+// FormatLogPosition is "<seq>:<hash>": the log position.
 func FormatLogPosition(seq int64, hash string) string { return strconv.FormatInt(seq, 10) + ":" + hash }
 
 // ParseLogPosition reads FormatLogPosition's output.
@@ -155,13 +113,13 @@ func ParseLogPosition(s string) (seq int64, hash string, err error) {
 	return seq, h, nil
 }
 
-// SignOwnerOp signs an operation with the owner key at time at, naming the log position prev.
+// SignOwnerOp signs an operation with the owner key.
 func SignOwnerOp(priv ed25519.PrivateKey, op, email, fingerprint string, at time.Time, prev string) docstore.DirectoryOwnerSig {
 	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev,
 		Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, OwnerOpMessage(op, email, fingerprint, at.Unix(), prev)))}
 }
 
-// SignOwnerOpWith is SignOwnerOp for any crypto.Signer (see SignOwnerPublishWith).
+// SignOwnerOpWith is SignOwnerOp for any crypto.Signer.
 func SignOwnerOpWith(signer crypto.Signer, op, email, fingerprint string, at time.Time, prev string) (docstore.DirectoryOwnerSig, error) {
 	sig, err := signer.Sign(nil, OwnerOpMessage(op, email, fingerprint, at.Unix(), prev), crypto.Hash(0))
 	if err != nil {
@@ -178,24 +136,16 @@ func verifyOwner(pub ed25519.PublicKey, op, email, fingerprint string, at int64,
 	return ed25519.Verify(pub, OwnerOpMessage(op, email, fingerprint, at, prev), b)
 }
 
-// VerifyOwnerOp says sig is the owner key pub's signature of the operation: it checks one entry or
-// request the way the server and AuditAddress do.
 func VerifyOwnerOp(pub ed25519.PublicKey, op, email, fingerprint string, at int64, prev, sig string) bool {
 	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
 }
 
-// VerifyOwnerOpV is VerifyOwnerOp for a message of version v (see docstore.DirectoryOwnerSig): 2
-// is a publication whose signature covers the label, whose hash is labelHash.
+// VerifyOwnerOpV is VerifyOwnerOp for a message of a given version.
 func VerifyOwnerOpV(pub ed25519.PublicKey, v int, op, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	return verifyOwnerVersion(pub, v, op, email, fingerprint, labelHash, at, prev, sig)
 }
 
-// VerifyOwnerEvidence checks, without the server's word, that a lookup row's owner signature is
-// valid for the address: the evidence's key signed the publication of the row's fingerprint (and,
-// for a version 2 signature, its label). Whether that key is the address's owner key is the
-// client's to decide (pinned from an earlier lookup, or from the enrollment entry in the log:
-// AuditAddress): this checks the signature under the key the row itself carries, which the
-// server supplies, so on its own it proves nothing about the owner.
+// VerifyOwnerEvidence checks owner evidence without the server.
 func VerifyOwnerEvidence(email string, k docstore.DirectoryKey) bool {
 	if k.Owner == nil {
 		return false
@@ -207,9 +157,6 @@ func VerifyOwnerEvidence(email string, k docstore.DirectoryKey) bool {
 	return verifyOwnerVersion(pub, k.Owner.V, OpPublish, email, k.Fingerprint, LabelHash(k.Label), k.Owner.Time, k.Owner.Prev, k.Owner.Sig)
 }
 
-// enrollRecord is the stored enrollment of an address: the chain of owner keys and a pending
-// reset, signed by the server key (so a record that was not written by the directory is
-// ignored). The log is the proof; this is the state.
 type enrollRecord struct {
 	V          int                          `json:"v"`
 	Kid        string                       `json:"kid"`
@@ -251,10 +198,7 @@ func (d *AdapterDirectory) enrollNames(email string) []string {
 
 var errEnrollmentCorrupt = errors.New("encrypt: the owner enrollment of this address cannot be read or verified")
 
-// readEnrollment reads the enrollment of an address: nil, "" when there is none. A record that
-// exists but is unreadable or whose signature does not verify is an error (the address must not
-// look un-enrolled because someone damaged the record): publishing and revoking for it are
-// refused until it is repaired.
+// an unreadable or unverifiable record is an error, never none
 func (d *AdapterDirectory) readEnrollment(ctx context.Context, email string) (*enrollRecord, string, error) {
 	want := normalizeEmail(email)
 	for _, id := range d.enrollNames(want) {
@@ -289,8 +233,7 @@ func (d *AdapterDirectory) enrollmentView(rec *enrollRecord) docstore.DirectoryE
 	return out
 }
 
-// Enrollment is the owner enrollment of an address: whether it has an owner key, the chain of
-// keys (the last is current) and a pending reset.
+// Enrollment is the owner enrollment of an address.
 func (d *AdapterDirectory) Enrollment(ctx context.Context, email string) (docstore.DirectoryEnrollment, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryEnrollment{}, ErrDirectoryOff
@@ -305,8 +248,6 @@ func (d *AdapterDirectory) Enrollment(ctx context.Context, email string) (docsto
 	return d.enrollmentView(rec), nil
 }
 
-// writeEnrollment saves rec (signed now) under the current key's name, only if the record is
-// still the one with digest prev ("" if there was none), and drops a copy under a retired name.
 func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, rec enrollRecord, prev string) error {
 	names := d.enrollNames(email)
 	id := names[0]
@@ -317,7 +258,7 @@ func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, re
 		return err
 	}
 	if prev != "" {
-		// The record read may sit under a retired name: then the current name is new.
+		// the record may sit under a retired name: current name is new
 		if _, err := d.Store.Load(ctx, id); errors.Is(err, docstore.ErrNotFound) {
 			prev = ""
 		}
@@ -331,7 +272,6 @@ func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, re
 	return nil
 }
 
-// checkLogPosition says prev names an entry that is in the log (or the empty log).
 func (d *AdapterDirectory) checkLogPosition(ctx context.Context, prev string) error {
 	seq, hash, err := ParseLogPosition(prev)
 	if err != nil {
@@ -362,9 +302,6 @@ var (
 	ErrResetWait     = docstore.ErrDirectoryResetWait
 )
 
-// checkOwner checks the owner signature an operation on an enrolled address needs: it must be
-// there, dated within ownerSkew of now, name a position that is in the log, and verify under the
-// current owner key. With no enrollment nothing is required (and a signature sent is ignored).
 func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op, email, fingerprint, labelHash string, o *docstore.DirectoryOwnerSig, now time.Time) (*docstore.DirectoryOwnerSig, error) {
 	if enr == nil {
 		return nil, nil
@@ -384,8 +321,7 @@ func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op
 		return nil, ErrBadOwnerSig
 	}
 	if op == OpPublish {
-		// A publication must be signed over its label too (version 2): a server that held a
-		// version 1 signature could otherwise put any label on the key.
+		// signed over the label too (v2): a v1 signature allows any label
 		if o.V != 2 || !verifyOwnerPublishV2(pub, email, fingerprint, labelHash, o.Time, o.Prev, o.Sig) {
 			return nil, fmt.Errorf("%w: a publication is signed with version 2 of the message, which covers the label", ErrBadOwnerSig)
 		}
@@ -398,9 +334,6 @@ func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op
 	return o, nil
 }
 
-// enrollToken is the payload of an enroll challenge's token: it fixes the time and log position
-// the enrollment signatures must carry, for this user and address, until Exp. It is signed by the
-// current server key only.
 type enrollToken struct {
 	ID    string `json:"id"`
 	Kid   string `json:"kid"`
@@ -415,9 +348,7 @@ func enrollMessage(payload []byte) []byte {
 	return append([]byte("gojiberry-directory-enroll-challenge-v1|"), payload...)
 }
 
-// EnrollChallenge starts an enrollment, rotation or reset for user's own address: the time and
-// log position the signatures must name, and a single-use token that binds them to the user and
-// address (valid ChallengeTTL).
+// EnrollChallenge starts an enrollment, rotation or reset.
 func (d *AdapterDirectory) EnrollChallenge(ctx context.Context, user auth.User) (docstore.DirectoryEnrollChallenge, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryEnrollChallenge{}, ErrDirectoryOff
@@ -453,7 +384,7 @@ func (d *AdapterDirectory) checkEnrollToken(user auth.User, token string, now ti
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
-	// Only the current key: a challenge issued under a retired key is refused (it lives two minutes).
+	// only the current key: a challenge under a retired key is refused
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, enrollMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}
@@ -469,7 +400,6 @@ func (d *AdapterDirectory) checkEnrollToken(user auth.User, token string, now ti
 	return tok, nil
 }
 
-// checkUser is the common gate of the operations on the user's own address.
 func (d *AdapterDirectory) checkUser(user auth.User) error {
 	if !publishable(user) {
 		return ErrNotPublishable
@@ -488,14 +418,7 @@ func decodePub(s string) (ed25519.PublicKey, error) {
 	return pub, nil
 }
 
-// Enroll installs an owner key for user's own address. mode "enroll": the address has none, and
-// req.Sig is the new key's signature over the enroll operation (possession; the session is the
-// authority: trust on first use). "rotate": req.Sig is the current owner key's signature over
-// the rotate operation naming the new key, and req.Proof the new key's acceptance. "reset": a
-// reset was requested at least ResetWait ago (RequestReset) and not cancelled; req.Proof is the
-// new key's acceptance. The time and log position in the signatures are the ones the challenge
-// (EnrollChallenge) fixed, and the challenge is used up. The change is logged first, with the
-// signatures, so that anyone who knows the address can audit it (AuditAddress).
+// Enroll installs an owner key for a user's own address.
 func (d *AdapterDirectory) Enroll(ctx context.Context, user auth.User, req docstore.DirectoryEnroll) (docstore.DirectoryEnrollment, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryEnrollment{}, ErrDirectoryOff
@@ -600,11 +523,7 @@ func (d *AdapterDirectory) Enroll(ctx context.Context, user auth.User, req docst
 	return docstore.DirectoryEnrollment{}, docstore.ErrDirectoryBusy
 }
 
-// RequestReset starts the waiting period of a reset of user's own address's owner key: a provider
-// session replaces a lost owner key, but not at once. The request is logged (op "reset-request",
-// no signature), so the owner and everybody who watches the address see it, and Enroll with mode
-// "reset" is accepted only ResetWait later; the owner cancels it with their own key
-// (CancelReset). Asking again while one is pending changes nothing.
+// RequestReset starts the waiting period of a reset.
 func (d *AdapterDirectory) RequestReset(ctx context.Context, user auth.User) (docstore.DirectoryEnrollment, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryEnrollment{}, ErrDirectoryOff
@@ -648,9 +567,7 @@ func (d *AdapterDirectory) RequestReset(ctx context.Context, user auth.User) (do
 	return docstore.DirectoryEnrollment{}, docstore.ErrDirectoryBusy
 }
 
-// CancelReset ends a pending reset; it needs the current owner key's signature over the
-// "reset-cancel" operation, so a provider session alone cannot cancel (or keep) a reset the owner
-// wants gone.
+// CancelReset ends a pending reset.
 func (d *AdapterDirectory) CancelReset(ctx context.Context, user auth.User, owner *docstore.DirectoryOwnerSig) (docstore.DirectoryEnrollment, error) {
 	if d.Signer == nil {
 		return docstore.DirectoryEnrollment{}, ErrDirectoryOff
@@ -698,6 +615,4 @@ func (d *AdapterDirectory) CancelReset(ctx context.Context, user auth.User, owne
 	return docstore.DirectoryEnrollment{}, docstore.ErrDirectoryBusy
 }
 
-// maxCASRounds bounds how often an operation re-reads and retries after a conditional write lost
-// to another replica.
 const maxCASRounds = 8

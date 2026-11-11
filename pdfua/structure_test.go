@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/export"
 )
 
-// buildPDF writes a minimal PDF with a correct cross reference table from numbered object bodies
-// (objects[0] is object 1). The trailer names object 1 as /Root and, when info > 0, that object as /Info.
 func buildPDF(objects []string, info int) []byte {
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.7\n")
@@ -33,12 +31,9 @@ func buildPDF(objects []string, info int) []byte {
 	return b.Bytes()
 }
 
-// goodCatalog is a catalog that passes every document-level rule; its structure tree root is object 2.
 const goodCatalog = "<< /Type /Catalog /Pages 3 0 R /MarkInfo << /Marked true >> /Lang (en-US) " +
 	"/ViewerPreferences << /DisplayDocTitle true >> /StructTreeRoot 2 0 R >>"
 
-// structPDF builds a file that passes the document-level rules, whose structure tree root is strRoot
-// and whose further objects (from number 5 on) are extra.
 func structPDF(strRoot string, extra ...string) []byte {
 	objs := []string{
 		goodCatalog,
@@ -84,7 +79,6 @@ func TestUnknownTypeIsReportedAndRoleMapFixesIt(t *testing.T) {
 		t.Errorf("String() = %q, want %q", got[0].String(), want)
 	}
 
-	// Mapped through /RoleMap the same element is acceptable; a map for another name does not help.
 	got, err = Check(structPDF("<< /Type /StructTreeRoot /K 5 0 R /RoleMap << /Callout /P >> >>", elem))
 	if err != nil || len(got) != 0 {
 		t.Fatalf("mapped type: %v, %v", got, err)
@@ -114,7 +108,6 @@ func TestEmptyStructureTreeIsReported(t *testing.T) {
 	if len(got) != 1 || got[0].Rule != "StructTreeRoot" || !strings.Contains(got[0].Message, "no elements") {
 		t.Fatalf("got %v", got)
 	}
-	// Marked content ids alone are not elements either.
 	got, err = Check(structPDF("<< /Type /StructTreeRoot /K [0 1 2] >>"))
 	if err != nil || len(got) != 1 || got[0].Rule != "StructTreeRoot" {
 		t.Fatalf("got %v, %v", got, err)
@@ -178,7 +171,6 @@ func TestEverythingMissingReportsEverything(t *testing.T) {
 }
 
 func TestNoCatalogIsAnError(t *testing.T) {
-	// A trailer without /Root: the file parses, but there is nothing to check.
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.7\n")
 	off := b.Len()
@@ -223,8 +215,6 @@ func nestedTree(depth int) []byte {
 }
 
 func TestHostileDeepTreeStaysBounded(t *testing.T) {
-	// Arrays nested far deeper than the walk's limit, with an element of an unknown type at the bottom.
-	// The walk gives up at its depth limit, so it returns and never sees the buried element.
 	done := make(chan []Finding, 1)
 	go func() {
 		got, _ := Check(nestedTree(5000))
@@ -254,7 +244,6 @@ func TestDepthLimitBoundary(t *testing.T) {
 }
 
 func TestSelfReferencingTreeTerminates(t *testing.T) {
-	// Object 5 is its own kid; the depth limit ends the walk.
 	got, err := Check(structPDF("<< /Type /StructTreeRoot /K 5 0 R >>", "<< /S /Document /K 5 0 R >>"))
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +254,6 @@ func TestSelfReferencingTreeTerminates(t *testing.T) {
 }
 
 func TestWideTreeStopsAtNodeLimit(t *testing.T) {
-	// More elements than maxNodes, then one of an unknown type: the walk stops before reaching it.
 	var kids strings.Builder
 	kids.WriteString("[")
 	for i := 0; i < maxNodes/100+10; i++ {

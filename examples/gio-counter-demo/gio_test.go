@@ -16,15 +16,6 @@ import (
 	"github.com/elaous/gojiberry/xango/gio"
 )
 
-// TestCounterRendersAndClicksThroughRealGio drives the exact same
-// shared.Counter component and gio.Renderer that main.go's run
-// mounts into a real desktop window, but through Gio's own headless
-// GPU backend (gioui.org/gpu/headless) instead of app.Window, so it
-// runs without a display server or compositor: each frame is a real
-// (software-rasterized where no GPU is present) rendered image read
-// back pixel-for-pixel, and the "+" button's handler is driven by a
-// real widget.Clickable click via Renderer.Click, not a direct Go call
-// to OnInc bypassing the renderer entirely.
 func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 	w, err := headless.NewWindow(300, 80)
 	if err != nil {
@@ -61,26 +52,12 @@ func TestCounterRendersAndClicksThroughRealGio(t *testing.T) {
 		return img
 	}
 
-	// Two consecutive frames of unchanged state should screenshot
-	// identically -- establishes a stable baseline and rules out
-	// nondeterministic rendering before attributing any later
-	// difference to the click.
 	frame()
 	before := frame()
 
 	if !renderer.Click("inc") {
 		t.Fatal("no clickable registered for the inc button's id -- Renderer never laid out a button identified \"inc\"")
 	}
-	// Clicked() fires (and count updates) synchronously the next time
-	// Layout walks a tree containing "inc", but Gio's headless backend
-	// settles a newly-rasterized glyph (here, the "1" that wasn't in
-	// the glyph atlas before) one frame late: the very next Screenshot
-	// still shows the pre-click pixels even though count has already
-	// changed. Render once to let the click and the new glyph enter the
-	// atlas, then again to read back the settled result -- confirmed by
-	// hand: three same-state frames in a row are pixel-identical, but
-	// the frame immediately after a state change never is until this
-	// second render.
 	frame()
 	after := frame()
 

@@ -7,7 +7,7 @@ import "syscall/js"
 // FormElement is an Element known to be a <form>.
 type FormElement struct{ Element }
 
-// AsForm casts e to a FormElement, or returns nil if e isn't a <form>.
+// AsForm casts e to a FormElement, or returns nil.
 func (e *Element) AsForm() *FormElement {
 	if e.GetTagName() != "FORM" {
 		return nil
@@ -15,21 +15,16 @@ func (e *Element) AsForm() *FormElement {
 	return &FormElement{Element: *e}
 }
 
-// Submit submits the form, bypassing any submit event listener (the
-// same as calling the native HTMLFormElement.submit() -- use Click()
-// on a submit button, or dispatch the submit event yourself, to go
-// through OnSubmit instead).
+// Submit submits the form, bypassing submit listeners.
 func (f *FormElement) Submit() { f.Call("submit") }
 
-// Reset resets every control in the form to its default value.
+// Reset resets every control to its default value.
 func (f *FormElement) Reset() { f.Call("reset") }
 
-// CheckValidity reports whether every control in the form currently
-// satisfies its validation constraints, without showing any UI.
+// CheckValidity reports whether every control is valid.
 func (f *FormElement) CheckValidity() bool { return f.Call("checkValidity").Bool() }
 
-// ReportValidity is like CheckValidity but also shows the browser's
-// native validation UI for the first invalid control.
+// ReportValidity checks validity and shows the first invalid control.
 func (f *FormElement) ReportValidity() bool { return f.Call("reportValidity").Bool() }
 
 // Action returns the URL the form submits to.
@@ -44,8 +39,7 @@ func (f *FormElement) Method() string { return f.Get("method").String() }
 // SetMethod sets the form's HTTP method.
 func (f *FormElement) SetMethod(method string) { f.Set("method", method) }
 
-// Elements returns the form's controls (input/select/textarea/button/
-// fieldset/...) in document order.
+// Elements returns the form's controls in document order.
 func (f *FormElement) Elements() []Element {
 	return wrapAll(f.Get("elements"))
 }
@@ -55,8 +49,7 @@ type SubmitEvent struct {
 	Value js.Value
 }
 
-// PreventDefault stops the form's default full-page-navigation submit,
-// e.g. to handle it with FormData/fetch instead.
+// PreventDefault stops the default full-page submit.
 func (e SubmitEvent) PreventDefault() { e.Value.Call("preventDefault") }
 
 // StopPropagation stops the event from bubbling further.

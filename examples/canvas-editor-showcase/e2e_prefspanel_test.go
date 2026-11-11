@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The Preferences tab lists every setting in groups, a search box narrows the list, and a change there is the
-// same change the menu makes: applied at once and kept for the next visit. Language and theme are in it too.
 func TestPreferencesTab(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -19,7 +17,6 @@ func TestPreferencesTab(t *testing.T) {
 	all := d.Count(".gj-prefs-group")
 	d.OK(all == 6, "six groups: "+d.Text(".gj-prefs-count"))
 
-	// the search narrows the list to what answers it
 	d.Fill(".gj-prefs-search", "contrast")
 	d.Dispatch(".gj-prefs-search", "input")
 	d.WaitFor("one preference", `document.querySelector('.gj-prefs-count').textContent === '1 preference'`)
@@ -33,10 +30,8 @@ func TestPreferencesTab(t *testing.T) {
 	d.Dispatch(".gj-prefs-search", "input")
 	d.WaitFor("all again", `document.querySelectorAll('.gj-prefs-group').length === 6`)
 
-	// the theme
 	d.Select(".gj-prefs-theme", "dark")
 	d.WaitFor("the dark palette", `document.documentElement.getAttribute('data-gj-theme') === 'dark' && getComputedStyle(document.body).backgroundColor === 'rgb(26, 29, 36)'`)
-	// the interface language, kept for the next visit
 	d.Select(".gj-prefs-lang", "de")
 	d.WaitFor("German", `document.documentElement.getAttribute('lang') === 'de'`)
 	d.WaitFor("kept", `JSON.parse(localStorage.getItem('showcase:a11y')).lang === 'de' && JSON.parse(localStorage.getItem('showcase:a11y')).theme === 'dark'`)
@@ -47,7 +42,6 @@ func TestPreferencesTab(t *testing.T) {
 	d.NoErrors()
 }
 
-// Typing an opening bracket adds the closing one, unless the preference is off.
 func TestAutoClosePreference(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -55,7 +49,7 @@ func TestAutoClosePreference(t *testing.T) {
 	d.ToggleMode()
 	d.CanvasClick(240, 164)
 	d.Focus("#input")
-	d.Press("End") // the end of the line: an opener before a word stays single, one at the end pairs
+	d.Press("End")
 	d.Type("(")
 	d.Wait("s.text.includes('()')") // by default the closing bracket comes with it
 
@@ -74,7 +68,6 @@ func TestAutoClosePreference(t *testing.T) {
 	d.NoErrors()
 }
 
-// The text size setting makes the text on the sheets larger too, not only the page around the canvas.
 func TestTextSizeSettingReachesTheTextOnTheSheets(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -95,7 +88,6 @@ func TestTextSizeSettingReachesTheTextOnTheSheets(t *testing.T) {
 	d.NoErrors()
 }
 
-// A shortcut the person changes in the Keys tab is still changed on the next visit.
 func TestChangedShortcutsAreKept(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")

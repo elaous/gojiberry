@@ -16,9 +16,6 @@ type CheckboxGroupProps struct {
 	OnChange func(value string, checked bool) // called with the toggled option's Value and its new state
 }
 
-// CheckboxGroup renders a set of independent checkboxes -- unlike
-// RadioGroup, any number (including all or none) may be checked at
-// once.
 func CheckboxGroup(props CheckboxGroupProps) xango.Node {
 	selected := make(map[string]bool, len(props.Selected))
 	for _, v := range props.Selected {

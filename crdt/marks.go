@@ -2,19 +2,6 @@ package crdt
 
 import "sort"
 
-// Marks are formatting spans over a block's Text, kept in a list of their
-// own next to the characters (in the style of Peritext). A Mark says "from
-// here to there, Key is Value": the two ends are Anchors that name a gap
-// between characters by the id of the character beside it, so a span stays
-// on the right text while other replicas insert and delete around it.
-// Formatting ten thousand characters is one Mark, not ten thousand writes.
-//
-// Reading the formatting is a merge of the two lists (Text.Runs): walk the
-// characters once, keep the marks that cover the current one, and for each
-// key the covering mark with the latest id wins. A mark with an empty Value
-// removes the key.
-
-// Side says which side of a character an Anchor sits on.
 type Side uint8
 
 const (
@@ -24,32 +11,24 @@ const (
 	After
 )
 
-// Anchor names a gap in a Text: the one on Side of character ID. The zero
-// ID stands for the ends of the text: {zero, After} is the very start and
-// {zero, Before} the very end.
 type Anchor struct {
 	ID   Timestamp
 	Side Side
 }
 
-// Mark is a formatting span: Key is Value for the characters between Start
-// and End. ID is unique and orders marks (a later one wins where marks of
-// the same key overlap).
+// ID is unique; a later mark wins where same-key marks overlap
 type Mark struct {
 	ID         Timestamp
 	Key, Value string
 	Start, End Anchor
 }
 
-// Run is a stretch of visible text with the same formatting.
 type Run struct {
 	Text string
-	// Attrs holds the keys whose winning mark has a non-empty Value.
+	// Attrs holds the keys whose winning mark has a value.
 	Attrs map[string]string
 }
 
-// addMark records m; a mark already known (same ID) is ignored, which
-// makes receiving it twice harmless.
 func (t *Text) addMark(m Mark) {
 	if t.markIDs[m.ID] {
 		return
@@ -61,9 +40,6 @@ func (t *Text) addMark(m Mark) {
 	t.marks = append(t.marks, m)
 }
 
-// gap returns the index in chars of the gap an anchor names, or false if
-// its character has not arrived yet (the mark then does not apply until it
-// does).
 func (t *Text) gap(a Anchor) (int, bool) {
 	if a.ID == (Timestamp{}) {
 		if a.Side == After {
@@ -81,13 +57,6 @@ func (t *Text) gap(a Anchor) (int, bool) {
 	return i, true
 }
 
-// anchorsFor chooses the anchors of a mark over the visible characters
-// [from, to). The start gap is in front of the first character, so text
-// typed before the range is outside it. growEnd makes the end gap in front
-// of the character after the range (or the end of the text), so text typed
-// at the end of the range is inside it; otherwise it sits behind the last
-// character and typed text is outside. Reports false for an empty or
-// out-of-range span.
 func (t *Text) anchorsFor(from, to int, growEnd bool) (start, end Anchor, ok bool) {
 	_, ids := t.visible()
 	if from < 0 || to > len(ids) || from >= to {
@@ -105,13 +74,11 @@ func (t *Text) anchorsFor(from, to int, growEnd bool) (start, end Anchor, ok boo
 	return start, end, true
 }
 
-// resolved is a mark placed on the character array.
 type resolved struct {
 	m          Mark
 	start, end int
 }
 
-// Runs returns the visible text split into runs of equal formatting.
 func (t *Text) Runs() []Run {
 	var marks []resolved
 	for _, m := range t.marks {
@@ -202,8 +169,7 @@ func sameAttrs(a, b map[string]string) bool {
 	return true
 }
 
-// MarkKeys returns the keys of marks in the text, sorted (for tests and
-// tools).
+// MarkKeys returns the keys of marks in the text.
 func (t *Text) MarkKeys() []string {
 	seen := map[string]bool{}
 	for _, m := range t.marks {

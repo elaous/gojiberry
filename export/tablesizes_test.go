@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// A column and a row a person sized keep their sizes in the formats that can say so.
 func sizedTableDoc() docfile.Document {
 	return docfile.Document{Title: "T", Content: []docfile.Item{
 		{Table: &docfile.TableItem{
@@ -88,7 +87,7 @@ func TestSizedTableInRTFAndColumnShares(t *testing.T) {
 		t.Fatalf("shares %v", w)
 	}
 	w = tableColumnWidths([]Block{{TableCols: 2, TableColW: 1000}, {TableCols: 2}}, 300, 1)
-	if w[0]+w[1] != 300 || w[1] < 37 { // the sized column is scaled to leave the other a quarter of an even share
+	if w[0]+w[1] != 300 || w[1] < 37 {
 		t.Fatalf("scaled %v", w)
 	}
 }

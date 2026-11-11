@@ -6,31 +6,23 @@ import (
 	"unicode"
 )
 
-// TextStats counts a piece of text the way a word processor's status bar
-// does.
 type TextStats struct {
 	Words int
-	// Characters counts every visible character, spaces included;
-	// CharactersNoSpaces leaves the spaces out. Paragraph and line breaks,
-	// and inline objects, are not characters.
+	// Characters counts visible characters, including spaces.
 	Characters         int
 	CharactersNoSpaces int
-	// Paragraphs counts the non-empty paragraphs; Sentences the runs of
-	// words ended by . ! or ? (or by the end of the text).
+	// Paragraphs counts non-empty paragraphs; Sentences counts sentences.
 	Paragraphs int
 	Sentences  int
 }
 
-// wordsPerMinute is the reading speed ReadingTime assumes.
 const wordsPerMinute = 238
 
-// ReadingTime is how long the text takes to read at an average speed.
+// ReadingTime estimates the time to read the text.
 func (s TextStats) ReadingTime() time.Duration {
 	return time.Duration(float64(s.Words) / wordsPerMinute * float64(time.Minute))
 }
 
-// isBreak reports whether r separates words without being a character:
-// paragraph and line breaks, a column break and an inline object.
 func isBreak(r rune) bool {
 	return r == '\n' || r == ' ' || r == ' ' || r == objectRune
 }
@@ -82,16 +74,12 @@ func CountText(s string) TextStats {
 
 // FlowStats is what Stats reports about a text flow.
 type FlowStats struct {
-	// Text counts the whole text; Selection the selected part (zero when
-	// nothing is selected, see HasSelection).
+	// Text counts the whole text; Selection counts the selected part.
 	Text, Selection TextStats
 	HasSelection    bool
-	// Pages is how many pages the text reached in the latest layout drawn
-	// (0 before the first); it settles one redraw after a change.
-	Pages int
+	Pages           int
 }
 
-// Stats counts the flow's text and, if there is one, its selection.
 func (f *TextFlow) Stats() FlowStats {
 	st := FlowStats{Text: CountText(f.EditText()), Pages: f.lastLay.Pages}
 	if f.HasSelection() {

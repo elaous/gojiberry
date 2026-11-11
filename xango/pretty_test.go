@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestRenderIndentedBreaksBetweenBlockLevelSiblingsOnly proves the
-// core case: consecutive block-level element children (div, ul/li)
-// get a newline+indent between them, recursed at every depth.
 func TestRenderIndentedBreaksBetweenBlockLevelSiblingsOnly(t *testing.T) {
 	n := El("div", []Attr{A("id", "root")},
 		El("div", []Attr{A("id", "a")}, Text("one")),
@@ -32,12 +29,6 @@ func TestRenderIndentedBreaksBetweenBlockLevelSiblingsOnly(t *testing.T) {
 	}
 }
 
-// TestRenderIndentedBreaksNextToASingleInlineSibling proves that an
-// inline-level child (span) flanked by block-level siblings still
-// gets its own boundaries broken -- canBreakBoundary only needs *one*
-// side of a gap to be block-level, matching the real CSS rule that a
-// block-level box's edge always forces a line boundary regardless of
-// what's on the other side.
 func TestRenderIndentedBreaksNextToASingleInlineSibling(t *testing.T) {
 	n := El("div", []Attr{A("id", "root")},
 		El("div", nil, Text("one")),
@@ -58,24 +49,6 @@ func TestRenderIndentedBreaksNextToASingleInlineSibling(t *testing.T) {
 	}
 }
 
-// TestRenderIndentedNeverBreaksBetweenTwoInlineSiblings proves the
-// one case RenderIndented has to stay conservative about: the sibling
-// boundary between two adjacent inline-level elements (button, button
-// -- exactly the shape a row of toolbar buttons has, each with an
-// icon span and a text label the same way ui/toolbar.xg's own
-// iconBtn builds one) with nothing block-level anywhere between them
-// never gets a newline inserted, since that whitespace would sit
-// mid-line and render as a real, visible gap. Each button itself
-// still renders as one compact unit (its own icon-span-plus-text-
-// label content is exactly the "mixes in real text" case
-// RenderIndented always leaves untouched) -- unlike the trailing
-// <select>, whose own single non-text <option> child still gets
-// indented onto its own line the same safe way
-// TestRenderIndentedBreaksNextToASingleInlineSibling's lone <span>
-// does (a parent/child boundary, not a sibling one, so
-// canBreakBoundary never even applies there); this test only asserts
-// the two sibling boundaries that actually matter for a toolbar's own
-// giant line stay glued, not that the whole subtree is newline-free.
 func TestRenderIndentedNeverBreaksBetweenTwoInlineSiblings(t *testing.T) {
 	n := El("div", []Attr{A("id", "toolbar")},
 		El("button", nil, El("span", nil, Text("icon")), Text("A")),
@@ -92,11 +65,6 @@ func TestRenderIndentedNeverBreaksBetweenTwoInlineSiblings(t *testing.T) {
 	}
 }
 
-// TestRenderIndentedMatchesRenderByteForByte proves RenderIndented
-// only ever *adds* whitespace: stripping every newline and the
-// indentation immediately following it must reproduce RenderString's
-// own plain single-line output exactly, for a mix of breakable and
-// unbreakable trees.
 func TestRenderIndentedMatchesRenderByteForByte(t *testing.T) {
 	trees := []Node{
 		El("div", []Attr{A("id", "root")},
@@ -128,10 +96,6 @@ func TestRenderIndentedMatchesRenderByteForByte(t *testing.T) {
 	}
 }
 
-// stripIndentation removes every newline and the run of spaces
-// immediately following it, mirroring exactly what RenderIndented
-// itself inserts (newline() in pretty.go), so the result is directly
-// comparable to RenderString's own output.
 func stripIndentation(s string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(s, "\n") {
@@ -140,15 +104,6 @@ func stripIndentation(s string) string {
 	return b.String()
 }
 
-// TestRenderIndentedPassesMultilineRawThroughVerbatim proves a Raw
-// child (dangerouslySetInnerHTML-equivalent, e.g. editor/ui/shell.xg's
-// own bootScript, whose <script> content is real multi-line JavaScript
-// with genuine leading-space indentation of its own) is emitted
-// completely untouched -- RenderIndented must never insert, remove, or
-// reindent so much as one byte inside it, since a naive "strip
-// whitespace and compare" test (the mistake this test itself guards
-// against) could easily eat real content that merely happens to look
-// like the indentation this package adds.
 func TestRenderIndentedPassesMultilineRawThroughVerbatim(t *testing.T) {
 	const script = "\n    const go = new Go();\n    go.run(x);\n  "
 	n := El("div", nil,
@@ -165,11 +120,6 @@ func TestRenderIndentedPassesMultilineRawThroughVerbatim(t *testing.T) {
 	}
 }
 
-// TestRenderIndentedLeavesTextMixedContainersAlone proves a container
-// that mixes text and element children (e.g. inline formatting around
-// a <b>) never gets a newline inserted anywhere inside it, since that
-// whitespace would be visible -- while an *outer* container around it
-// still breaks normally.
 func TestRenderIndentedLeavesTextMixedContainersAlone(t *testing.T) {
 	n := El("div", nil,
 		El("div", nil, Text("before")),

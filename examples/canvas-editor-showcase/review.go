@@ -11,9 +11,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// reviewPanel is the Review tab: suggestion mode on or off, and the suggested changes to accept or
-// reject one by one or all at once. Only someone who can edit settles them (a commenter or viewer sees
-// the list).
 func reviewPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, refocus, renderUI func()) xango.Node {
 	fl := flow()
 	if fl == nil {
@@ -58,7 +55,6 @@ func reviewPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, refo
 	return components.ProposalPanel(p)
 }
 
-// proposalsSigFor is proposalsSig while the Review tab is open (the other tabs do not pay for it).
 func proposalsSigFor(tab string, fl *canvas.TextFlow) string {
 	if tab != "review" {
 		return ""
@@ -66,7 +62,6 @@ func proposalsSigFor(tab string, fl *canvas.TextFlow) string {
 	return proposalsSig(fl)
 }
 
-// proposalsSig changes when the suggested changes do (so the Review tab follows the typing).
 func proposalsSig(fl *canvas.TextFlow) string {
 	if fl == nil {
 		return ""

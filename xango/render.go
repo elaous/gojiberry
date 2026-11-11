@@ -7,23 +7,19 @@ import (
 	"strings"
 )
 
-// voidElements never have a closing tag or children per the HTML spec.
 var voidElements = map[string]bool{
 	"area": true, "base": true, "br": true, "col": true, "embed": true,
 	"hr": true, "img": true, "input": true, "link": true, "meta": true,
 	"param": true, "source": true, "track": true, "wbr": true,
 }
 
-// Render writes n as HTML to w. Text content and attribute values are
-// escaped automatically; use Raw to inject pre-trusted HTML deliberately.
+// Render writes n as HTML to w.
 func Render(w io.Writer, n Node) error {
 	rw := renderWriter{w: w}
 	rw.render(n)
 	return rw.err
 }
 
-// RenderString is a convenience wrapper around Render for tests and
-// callers that don't have an io.Writer handy.
 func RenderString(n Node) (string, error) {
 	var b strings.Builder
 	if err := Render(&b, n); err != nil {
@@ -71,8 +67,7 @@ func (rw *renderWriter) renderElement(n Node) {
 	rw.writeString(n.Tag)
 	for _, a := range n.Attrs {
 		if a.Handler != nil {
-			// Event bindings are inert in server-side HTML; the client
-			// runtime (domrt) wires the real listener after hydration.
+			// event bindings are inert in server-side HTML; domrt wires them
 			continue
 		}
 		rw.writeString(" ")
@@ -93,9 +88,7 @@ func (rw *renderWriter) renderElement(n Node) {
 	rw.writeString(">")
 }
 
-// Raw constructs a text node whose content is emitted verbatim, without
-// HTML-escaping. Callers are responsible for ensuring the content is safe;
-// this is the equivalent of dangerouslySetInnerHTML.
+// emitted unescaped: callers must ensure the content is safe
 func Raw(html string) Node {
 	return Node{Kind: KindRaw, Text: html}
 }

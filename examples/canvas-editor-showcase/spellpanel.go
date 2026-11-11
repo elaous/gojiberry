@@ -19,8 +19,6 @@ import (
 
 const customWordsKey = "showcase:dictionary"
 
-// spellState is the spell checker: off until asked for (the dictionary takes a
-// moment to load), then every change of the text is checked again.
 type spellState struct {
 	enabled bool
 	checker *spell.Checker
@@ -28,17 +26,14 @@ type spellState struct {
 	text    string // the text the spans were found in
 	words   []components.SpellItem
 
-	// Dictionaries beyond English come from a server on demand (spell.Remote, spell/dictserver).
 	remote  *spell.Remote
-	offered []spell.Language // what the server has; nil until asked, empty if it has none
+	offered []spell.Language
 	asked   bool
-	dict    string // the dictionary in use: "en", a name from offered, or "addon:" and the id of one the spell add-on keeps
+	dict    string
 	note    string
 	failed  bool
 }
 
-// dictionaryServer is the address of the dictionary server: ?dictapi= when it is this origin or a loopback host,
-// else /dict/ on the page's own origin.
 func dictionaryServer() string {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	if q.Call("has", "dictapi").Bool() {
@@ -49,7 +44,6 @@ func dictionaryServer() string {
 	return js.Global().Get("location").Get("origin").String() + "/dict"
 }
 
-// askDictionaries finds out which dictionaries the server has (once); nothing is shown if it has none.
 func (u *ui) askDictionaries(renderUI func()) {
 	s := &u.spell
 	if s.asked {
@@ -70,7 +64,6 @@ func (u *ui) askDictionaries(renderUI func()) {
 	}()
 }
 
-// dictionaryName is how a dictionary is shown to people.
 func (s *spellState) dictionaryName(name string) string {
 	if name == "" || name == "en" {
 		return lang.Names["en"]
@@ -91,7 +84,6 @@ func (s *spellState) dictionaryName(name string) string {
 	return name
 }
 
-// chooseDictionary switches the checker to the English dictionary or loads one from the server.
 func (u *ui) chooseDictionary(name string, again, renderUI func()) {
 	s := &u.spell
 	if s.checker == nil {
@@ -153,7 +145,6 @@ func saveCustomWords(words []string) {
 	}
 }
 
-// enableSpell loads the dictionary and the user's own words.
 func (u *ui) enableSpell() {
 	if u.spell.checker == nil {
 		c := spell.NewChecker(spell.English())
@@ -165,7 +156,6 @@ func (u *ui) enableSpell() {
 	u.spell.enabled = true
 }
 
-// refreshSpell checks the flow's text again and marks the words on the canvas.
 func (u *ui) refreshSpell(flow *canvas.TextFlow) {
 	s := &u.spell
 	s.spans, s.words = nil, nil
@@ -201,7 +191,6 @@ func (u *ui) refreshSpell(flow *canvas.TextFlow) {
 	flow.SetSquigglesAs("spell", s.spans, "")
 }
 
-// occurrences returns the spans of word (any case) in the checked text.
 func (u *ui) occurrences(word string) []canvas.Match {
 	rs := []rune(u.spell.text)
 	var out []canvas.Match
@@ -213,7 +202,6 @@ func (u *ui) occurrences(word string) []canvas.Match {
 	return out
 }
 
-// spellPanel is the Spelling tab.
 func spellPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(), redraw, renderUI func()) xango.Node {
 	s := &u.spell
 	fl := flow()

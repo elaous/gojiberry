@@ -2,7 +2,7 @@ package canvas
 
 import "slices"
 
-// DefaultSquiggleColor is the colour of the wavy underline SetSquiggles draws.
+// DefaultSquiggleColor is the colour of SetSquiggles underlines.
 const DefaultSquiggleColor = "#d93025"
 
 type squiggleSet struct {
@@ -10,18 +10,11 @@ type squiggleSet struct {
 	color string
 }
 
-// squiggleState holds the sets of wavy underlines, by name.
 type squiggleState struct{ sets map[string]squiggleSet }
 
-// SetSquiggles underlines ranges of the text with a wavy line, the way a spell
-// checker marks a word (see package spell). color "" means DefaultSquiggleColor.
-// The ranges are rune offsets of the text stream (as Find returns them); they
-// are drawn on the next Draw, and are not part of the document. It replaces
-// the earlier call's ranges; SetSquigglesAs keeps several sets (spelling and
-// grammar, say) apart.
 func (f *TextFlow) SetSquiggles(spans []Match, color string) { f.SetSquigglesAs("", spans, color) }
 
-// SetSquigglesAs is SetSquiggles for the set called name. No spans removes it.
+// SetSquigglesAs sets the named squiggle set; no spans removes it.
 func (f *TextFlow) SetSquigglesAs(name string, spans []Match, color string) {
 	if len(spans) == 0 {
 		delete(f.squiggles.sets, name)

@@ -27,7 +27,7 @@ func TestFormFieldProblems(t *testing.T) {
 		{FormSelect, "", false, []string{"a", "b"}, "b", ""},
 		{FormText, `[A-Z]{2}\d{3}`, false, nil, "AB123", ""},
 		{FormText, `[A-Z]{2}\d{3}`, false, nil, "AB1234", FormProblemPattern}, // the whole value has to match
-		{FormText, `(`, false, nil, "anything", ""},                           // a pattern that is not one asks nothing of the value
+		{FormText, `(`, false, nil, "anything", ""},
 		{FormCheckbox, "", true, nil, "", FormProblemRequired},
 		{FormCheckbox, "", true, nil, "true", ""},
 	} {

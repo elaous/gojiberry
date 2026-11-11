@@ -8,33 +8,19 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-// Beyond English. A dictionary for another language needs more of the Hunspell format than the embedded English
-// one: its character encoding (SET), the forms that take both a prefix and a suffix (cross products), compound
-// words (COMPOUNDFLAG, COMPOUNDBEGIN, COMPOUNDMIDDLE, COMPOUNDEND, COMPOUNDRULE, COMPOUNDMIN), stems that are words
-// only with an affix (NEEDAFFIX) and words that are never right (FORBIDDENWORD), and, for suggestions, the
-// language's letters (TRY), its common mistakes (REP) and its keyboard (KEY). LoadHunspell reads all of that; the
-// plain FromHunspell keeps the single-level reading the embedded English dictionary is built with, which holds
-// its memory down in the browser.
-
 // HunspellOptions say how much of the format LoadHunspell uses.
 type HunspellOptions struct {
-	// NoCrossProducts leaves out the forms with both a prefix and a suffix.
 	NoCrossProducts bool
-	// MaxWords stops the expansion when the set reaches this many words (0: 4 million), so a hostile or
-	// broken dictionary cannot use all the memory.
+	// a hostile dictionary cannot use all the memory
 	MaxWords int
 }
 
-// compoundData is what the compound words of a dictionary are checked with.
 type compoundData struct {
-	stems map[string]map[string]bool // lower stem -> its flags, for the stems that have a compound flag
+	stems map[string]map[string]bool
 	aff   *hunspellAffixFile
 	min   int
 }
 
-// LoadHunspell reads a Hunspell dictionary of any language from the bytes of its .dic and .aff files: it decodes the
-// character set the .aff names (UTF-8 and the usual ISO 8859 and Windows ones), expands the affixes with cross
-// products, and keeps what compounds, suggestions and forbidden words need.
 func LoadHunspell(dic, aff []byte, o HunspellOptions) *Dictionary {
 	affText := string(aff)
 	set := parseHunspellAffix(affText).Set
@@ -56,7 +42,6 @@ func decodeWith(enc encoding.Encoding, b []byte) string {
 	return string(out)
 }
 
-// encodingOf maps the name after SET to a decoder; nil for UTF-8 and for names this does not know.
 func encodingOf(name string) encoding.Encoding {
 	switch strings.ToUpper(strings.ReplaceAll(name, "_", "-")) {
 	case "ISO8859-1", "ISO-8859-1", "LATIN1":
@@ -179,7 +164,6 @@ func loadHunspell(dicText, affText string, o HunspellOptions) *Dictionary {
 			}
 		}
 		if !o.NoCrossProducts && len(prefixed) > 0 && len(suffixed) > 0 {
-			// A form with a suffix and a prefix: the prefix of a class that crosses, put on the word the suffix made.
 			for _, f := range flags {
 				class, ok := aff.Classes[f]
 				if !ok || class.IsSuffix || !class.CrossProduct {
@@ -205,11 +189,8 @@ func loadHunspell(dicText, affText string, o HunspellOptions) *Dictionary {
 	return d
 }
 
-// appliedAffix is a form an affix rule made, kept while the cross products are made.
 type appliedAffix struct{ word string }
 
-// applyPrefixTo puts a prefix rule on a word that already has its suffix; the rule's condition was checked
-// against the stem by the caller.
 func applyPrefixTo(word []rune, rule hunspellAffixRule) (string, bool) {
 	strip := []rune(rule.Strip)
 	if !runesHavePrefix(word, strip) {
@@ -218,8 +199,6 @@ func applyPrefixTo(word []rune, rule hunspellAffixRule) (string, bool) {
 	return rule.Affix + string(word[len(strip):]), true
 }
 
-// parseCompoundRule reads the pattern of a COMPOUNDRULE line: flags, each with an optional * or ?; in long mode
-// each flag is two characters in parentheses, in UTF-8 mode a rune.
 func parseCompoundRule(pat string, mode hunspellFlagMode) []compoundElem {
 	var out []compoundElem
 	rs := []rune(pat)
@@ -253,15 +232,11 @@ func parseCompoundRule(pat string, mode hunspellFlagMode) []compoundElem {
 	return out
 }
 
-// isCompound says the word is made of dictionary stems by the compound rules of the language: at least two parts,
-// each at least COMPOUNDMIN letters, with flags that fit COMPOUNDFLAG, COMPOUNDBEGIN, COMPOUNDMIDDLE and
-// COMPOUNDEND, or a COMPOUNDRULE pattern.
 func (c *compoundData) isCompound(word string) bool {
 	rs := []rune(word)
 	if len(rs) < 2*c.min {
 		return false
 	}
-	// COMPOUNDFLAG / BEGIN / MIDDLE / END
 	if c.aff.CompoundFlag != "" || c.aff.CompoundBegin != "" {
 		memo := map[int]bool{}
 		var split func(pos, parts int) bool
@@ -314,7 +289,6 @@ func (c *compoundData) isCompound(word string) bool {
 			}
 			e := rule[el]
 			res := false
-			// zero parts of this element, if it may repeat or be absent
 			if e.Mod == '*' || e.Mod == '?' {
 				res = match(pos, el+1, parts)
 			}

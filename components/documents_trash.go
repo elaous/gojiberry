@@ -6,31 +6,20 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// --- Trash ---------------------------------------------------------------
-
 // TrashProps configures Trash.
 type TrashProps struct {
 	// Docs are the documents in the trash.
 	Docs []Doc
-	// Restore puts documents back; Delete removes them for good. Either may be
-	// nil.
-	Restore DocsAction
-	Delete  DocsAction
-	// Selected are the IDs ticked in the trash; with OnSelect set, each row gets a
-	// checkbox and the buttons act on the ticked rows, else on the row itself.
+	// Restore puts documents back; Delete removes them for good.
+	Restore  DocsAction
+	Delete   DocsAction
 	Selected []string
 	OnSelect func(ids []string)
-	// Children are what goes with the trash: usually the list of documents that
-	// can be trashed. They are drawn above it.
 	Children []xango.Node
 	Pending  *Pending
-	// Confirm, if set, is asked before documents are deleted for good (see
-	// Asker.Ask); nil deletes at once.
-	Confirm func(message string, do func())
+	Confirm  func(message string, do func())
 }
 
-// TrashBackend is what a trash needs from a store; Use fills Restore and Delete
-// from one.
 type TrashBackend interface {
 	Restore(ctx context.Context, ids ...string) error
 	// Purge deletes documents in the trash for good.
@@ -44,9 +33,6 @@ func (p TrashProps) Use(b TrashBackend) TrashProps {
 	return p
 }
 
-// Trash shows the documents in the trash, each to Restore or Delete forever, and
-// Empty trash to delete them all; Children (the live list) come first. With
-// nothing in the trash only the Children are drawn.
 func Trash(p TrashProps) xango.Node {
 	children := append([]xango.Node{}, p.Children...)
 	if len(p.Docs) > 0 {
@@ -97,33 +83,22 @@ func Trash(p TrashProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-trash")}, children...)
 }
 
-// --- Versions ------------------------------------------------------------
-
 // VersionsProps configures Versions.
 type VersionsProps struct {
-	// Name is the document the versions are of, for the heading.
 	Name     string
 	Versions []DocVersion
-	// Save snapshots the document being edited; Open puts a snapshot in the
-	// editor; Delete removes one. Each may be nil.
-	Save    func(ctx context.Context) error
-	Open    DocAction
-	Delete  DocAction
-	Pending *Pending
-	// Compare shows what changed between a snapshot and the document being edited; Diff is that
-	// comparison (nil before one was asked for) and DiffKey the snapshot it is for.
-	Compare DocAction
-	Diff    []docdiff.Change
-	DiffKey string
-	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
-	Rename func(ctx context.Context, key, name string) error
-	Pin    func(ctx context.Context, key string, pinned bool) error
-	// Restore goes back to a snapshot, keeping the current text as a version first; may be nil.
-	Restore DocAction
+	Save     func(ctx context.Context) error
+	Open     DocAction
+	Delete   DocAction
+	Pending  *Pending
+	Compare  DocAction
+	Diff     []docdiff.Change
+	DiffKey  string
+	Rename   func(ctx context.Context, key, name string) error
+	Pin      func(ctx context.Context, key string, pinned bool) error
+	Restore  DocAction
 }
 
-// Versions lists a document's snapshots, newest first, to open or delete, with a
-// button to save a new one.
 func Versions(p VersionsProps) xango.Node {
 	busy := p.Pending.Busy()
 	head := []xango.Node{xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(trf("docs.versionsOf", "Versions of %s", p.Name)))}

@@ -67,15 +67,12 @@ func TestLibraryDownloadsOnFirstUseOnly(t *testing.T) {
 	if len(ready) != 1 || !ready[0].Downloaded || ready[0].Variant.Key != key {
 		t.Fatalf("%+v", ready)
 	}
-	// Again: nothing more happens.
 	if _, err := lib.Use(ctx, "Lato", 700, false); err != nil || len(fetched) != 1 || len(ready) != 1 {
 		t.Fatalf("second use: %v %v %v", err, fetched, ready)
 	}
-	// 600 is nearest the 700 cut too.
 	if k, _ := lib.Use(ctx, "Lato", 600, false); k != key || len(fetched) != 1 {
 		t.Fatal(k)
 	}
-	// The recorded font carries the key.
 	for _, v := range lib.Added()[0].Variants {
 		if (v.Weight == 700) != (v.Key == key) {
 			t.Fatalf("variant keys: %+v", lib.Added()[0].Variants)
@@ -164,7 +161,6 @@ func TestKey(t *testing.T) {
 	if k := Key("A", Variant{Weight: 300, URL: "https://x/y"}); !regexp.MustCompile(`^fonts/A/300-n-[0-9a-f]{8}\.font$`).MatchString(k) {
 		t.Fatal(k)
 	}
-	// Another URL for the same cut is another file.
 	if Key("A", Variant{Weight: 400, URL: "https://one/f.woff2"}) == Key("A", Variant{Weight: 400, URL: "https://two/f.woff2"}) {
 		t.Fatal("two sources of one cut share a key")
 	}

@@ -1,20 +1,3 @@
-// Command devserver runs the xango-canvas demo against a real Postgres
-// using plain net/http -- no Encore CLI required. It exists because
-// this sandbox's network policy blocked the Encore CLI installer, so
-// this is how the app is actually run and tested in this repo; a real
-// Encore deployment would use canvas/api.go's //encore:api-annotated
-// handlers instead, which call into the exact same Store.
-//
-// Usage:
-//
-//	DATABASE_URL=postgres://... go run ./cmd/devserver
-//
-// Set DEV=1 (cmd/devwatch does this) to inject a small live-reload
-// script into every rendered page, via the gojiberry/devreload package:
-// it polls GET /__dev/version and reloads the tab once the value
-// changes, i.e. once devwatch has rebuilt and restarted this process.
-// Off by default -- production (or a plain `go run` without devwatch)
-// renders exactly the same bytes as before, no injected script.
 package main
 
 import (
@@ -56,9 +39,7 @@ func main() {
 
 	store := canvas.NewStore(db)
 
-	// A nil *devreload.Reloader outside dev mode makes Wrap a no-op and
-	// Handler always 404 -- newMux and renderPage need no devMode branch
-	// of their own, they just always call through Reloader.
+	// nil Reloader outside dev: Wrap is a no-op, Handler 404s
 	var reloader *devreload.Reloader
 	if os.Getenv("DEV") == "1" {
 		reloader = devreload.New()
@@ -76,9 +57,6 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
-// newMux wires the same canvas.Store logic that canvas/api.go's Encore
-// handlers use into a plain http.ServeMux (Go 1.22+ method+path-param
-// patterns, no third-party router needed).
 func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -132,7 +110,6 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 	mux.HandleFunc("PUT /api/documents/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		var req canvas.SaveDocumentRequest
-		// A document is text typed in a box: a few MiB is far more than it needs.
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
 			var tooBig *http.MaxBytesError
 			if errors.As(err, &tooBig) {
@@ -157,12 +134,8 @@ func newMux(store *canvas.Store, reloader *devreload.Reloader) *http.ServeMux {
 		}
 	})
 
-	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
-	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
 	mux.Handle("/static/", http.StripPrefix("/static/", wasmserve.Handler(os.DirFS("static"), wasmserve.Options{GzipLevel: gzip.BestSpeed})))
 
-	// Handler on a nil reloader serves 404, so this is safe to mount
-	// unconditionally rather than gating it on dev mode too.
 	mux.Handle(devreload.Path(), reloader.Handler())
 
 	return mux

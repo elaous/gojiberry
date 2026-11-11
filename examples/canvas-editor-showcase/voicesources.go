@@ -18,12 +18,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The sources of reader voices, in the Reader voices tab: the project's hub (four voices whose terms have been read, with
-// the terms shown), Piper's own catalogue and the repositories the person adds (each voice has the terms its publisher
-// wrote, shown before a download, and the person says they read them), voices from the person's own files (their own
-// terms and responsibility), and the voices of the operating system and the browser (the "Voices on this device" reader).
-// Nothing is asked of any of them until the person presses a button that says which host it contacts.
-
 type voiceRepo struct {
 	ID, Name, Address string
 	loaded            bool
@@ -31,15 +25,11 @@ type voiceRepo struct {
 }
 
 var voiceSources struct {
-	selected string // "hub" (the default), "piper", a repository's id, "files" or "device"
-	repos    []*voiceRepo
-	// the form to add a repository
-	addName, addAddress string
-	// the voices whose terms the person said they read, by voice id
-	read map[string]bool
-	// loading a repository
-	loading string
-	// own files
+	selected                     string // "hub" (the default), "piper", a repository's id, "files" or "device"
+	repos                        []*voiceRepo
+	addName, addAddress          string
+	read                         map[string]bool
+	loading                      string
 	ownName, ownModel, ownConfig string
 	ownModelData, ownConfigData  []byte
 	ownConfirmed                 bool
@@ -47,7 +37,6 @@ var voiceSources struct {
 
 const reposKey = "gj-voice-repos"
 
-// loadVoiceRepos reads the repositories the person added in this browser.
 func loadVoiceRepos() {
 	defer func() { _ = recover() }()
 	raw := js.Global().Get("localStorage").Call("getItem", reposKey)
@@ -82,7 +71,6 @@ func hostOf(address string) string {
 	return T("voices.thisServer", "this server")
 }
 
-// voiceSourcesSection is the part of the tab that lists where voices can come from and what each source offers.
 func voiceSourcesSection(u *ui, e interface {
 	read.Engine
 	read.Downloader
@@ -139,8 +127,6 @@ func voiceSourcesSection(u *ui, e interface {
 	return nodes
 }
 
-// listVoices lists the voices with their terms and a Download button; a voice of a source whose terms the project has not
-// read needs the person's word that they read them.
 func listVoices(u *ui, e read.Downloader, list []read.Installable, needRead bool, renderUI func()) []xango.Node {
 	if len(list) == 0 {
 		return []xango.Node{para("vsrc-empty", T("vsrc.empty", "Nothing to list for this language."), false)}
@@ -209,7 +195,6 @@ func listVoices(u *ui, e read.Downloader, list []read.Installable, needRead bool
 	return []xango.Node{xango.El("ul", []xango.Attr{xango.A("class", "gj-doc-list"), xango.A("id", "voices-list")}, items...)}
 }
 
-// catalogueList is Piper's own catalogue: asked for when the person presses the button, then listed for the language.
 func catalogueList(u *ui, e interface {
 	read.Engine
 	read.Downloader
@@ -242,7 +227,6 @@ func catalogueList(u *ui, e interface {
 	return listVoices(u, e, own, true, renderUI)
 }
 
-// addRepositoryForm adds a repository by the address of its catalogue.
 func addRepositoryForm(renderUI func()) []xango.Node {
 	vs := &voiceSources
 	nodes := []xango.Node{
@@ -275,8 +259,6 @@ func addRepositoryForm(renderUI func()) []xango.Node {
 	return nodes
 }
 
-// repoSection is one repository the person added: its host, a button to show its voices, and, once shown, the voices
-// with their model cards.
 func repoSection(u *ui, e interface {
 	read.Engine
 	read.Downloader
@@ -324,7 +306,6 @@ func repoSection(u *ui, e interface {
 	return append(nodes, listVoices(u, e, list, true, renderUI)...)
 }
 
-// ownFilesForm keeps a voice the person brings: the model and its configuration from their own device.
 func ownFilesForm(u *ui, renderUI func()) []xango.Node {
 	vs := &voiceSources
 	pickFile := func(model bool) func() {
@@ -380,7 +361,6 @@ func ownFilesForm(u *ui, renderUI func()) []xango.Node {
 	}
 }
 
-// deviceVoices says what the operating system and the browser offer: the "Voices on this device" reader.
 func deviceVoices() []xango.Node {
 	nodes := []xango.Node{para("vsrc-device-about", T("vsrc.deviceAbout", "The operating system and the browser have voices of their own. Choose \"Voices on this device\" above to read with them; add more in the operating system's settings. Some of them send the text to a speech service; the page uses those only when you allow voices that use the internet."), false)}
 	var items []xango.Node

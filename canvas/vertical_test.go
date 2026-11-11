@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// verticalFlow is vertical text in a text area 160 wide and 80 tall at (10, 30): a column holds ten letters of
-// 8px, the columns follow one another to the left from x = 170.
 func verticalFlow(text string) (*TextFlow, *fakePainter) {
 	p := &fakePainter{}
 	f := NewTextFlow(text, 10, 30, 160, 80)
@@ -15,7 +13,6 @@ func verticalFlow(text string) (*TextFlow, *fakePainter) {
 	return f, p
 }
 
-// startEditing puts a vertical flow in edit mode with the caret in it, by a click on the first column.
 func startEditing(f *TextFlow) {
 	f.SetMode(ModeEdit)
 	NewStage(f.Painter.(*fakePainter), 400, 400, f)
@@ -35,7 +32,6 @@ func TestVerticalLinesAreColumns(t *testing.T) {
 func TestVerticalTextIsDrawnTurned(t *testing.T) {
 	f, p := verticalFlow("abc")
 	f.Draw()
-	// the text area's top right corner is the origin, the plane turned a quarter turn clockwise
 	want := []string{"save", "translate 170 30", "rotate 1.571", "translate -10 0"}
 	var got []string
 	for _, c := range p.calls {
@@ -59,7 +55,6 @@ func TestVerticalIdeographsStandUpright(t *testing.T) {
 			seq = append(seq, c)
 		}
 	}
-	// "a" along the line; each ideograph turned back about its centre
 	joined := strings.Join(seq, "\n")
 	for _, want := range []string{`fillText "a"`, "rotate -1.571", `fillText "日" 0 0`, `fillText "本" 0 0`} {
 		if !strings.Contains(joined, want) {
@@ -71,8 +66,6 @@ func TestVerticalIdeographsStandUpright(t *testing.T) {
 	}
 }
 
-// A point on the screen and the offset it is at agree with the caret box: clicking where the caret is finds the
-// offset.
 func TestVerticalCaretAndClicksAgree(t *testing.T) {
 	f, _ := verticalFlow(strings.Repeat("x", 25))
 	startEditing(f)
@@ -93,7 +86,6 @@ func TestVerticalCaretAndClicksAgree(t *testing.T) {
 			prev.x, prev.y = x, y
 		}
 	}
-	// the second column is to the left of the first
 	f.SetCursors([]Cursor{At(0)})
 	x0, _, _, _ := f.CaretBox()
 	f.SetCursors([]Cursor{At(11)})
@@ -106,7 +98,6 @@ func TestVerticalCaretAndClicksAgree(t *testing.T) {
 	}
 }
 
-// Down the column is forward along the line, left is the next column.
 func TestVerticalArrowKeys(t *testing.T) {
 	f, _ := verticalFlow(strings.Repeat("x", 25))
 	startEditing(f)
@@ -140,7 +131,6 @@ func TestHorizontalFlowIsUnchangedByTheVerticalCode(t *testing.T) {
 	}
 }
 
-// The keyboard arriving in the editor starts editing in edit mode, with no click; in view mode it does not.
 func TestFocusInStartsEditing(t *testing.T) {
 	f, p := verticalFlow("abc")
 	f.Vertical = false

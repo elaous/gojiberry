@@ -1,12 +1,3 @@
-// Command server serves the passkey demo page and the passkey routes on localhost:
-//
-//	GOOS=js GOARCH=wasm go build -o examples/passkey-demo/main.wasm ./examples/passkey-demo
-//	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/passkey-demo/
-//	cp components/base.css components/button.css components/documents.css examples/passkey-demo/
-//	go run ./examples/passkey-demo/cmd/server -dir examples/passkey-demo
-//
-// then open http://localhost:8080/ (not 127.0.0.1: a passkey is bound to a domain name). Accounts
-// are kept in memory.
 package main
 
 import (
@@ -38,8 +29,6 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/auth/passkey/", svc.Handler())
 	mux.Handle("/auth/", mgr.Routes())
-	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
-	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
 	mux.Handle("/", wasmserve.Handler(os.DirFS(*dir), wasmserve.Options{GzipLevel: gzip.BestSpeed}))
 	log.Printf("open %s/", origin)
 	log.Fatal(http.ListenAndServe(*addr, mux))

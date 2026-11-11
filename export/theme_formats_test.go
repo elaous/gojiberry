@@ -67,7 +67,6 @@ func TestDOCXTakesTheDocumentsTheme(t *testing.T) {
 	if !strings.Contains(zipText(t, out, "word/settings.xml"), "displayBackgroundShape") {
 		t.Error("the background is not shown without the setting")
 	}
-	// no theme: as before (no settings part, Word's blue for links)
 	plain := themedDoc()
 	plain.SetTheme("")
 	plain.Content[0].Chars.Format = docfile.Format{Link: "https://example.org"}

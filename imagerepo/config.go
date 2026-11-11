@@ -7,16 +7,13 @@ import (
 	"strings"
 )
 
-// Config is one entry of the operator's list of repositories (a JSON array of these): a mirror of Openverse or any
-// MediaWiki site with a Commons-style file search, under a name of the operator's choosing.
 type Config struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"` // "openverse" or "mediawiki"
 	Base string `json:"base"` // https address of the API's site
 }
 
-// ParseConfig reads the operator's list. Every entry needs a name that is not already used in it, a known kind and an
-// https address (http only for localhost, for tests and local mirrors).
+// ParseConfig reads the operator's list.
 func ParseConfig(data []byte) ([]Repository, error) {
 	var cs []Config
 	if err := json.Unmarshal(data, &cs); err != nil {
@@ -47,7 +44,6 @@ func ParseConfig(data []byte) ([]Repository, error) {
 	return out, nil
 }
 
-// RegisterAll adds repositories to the library; they stay off until the person turns them on.
 func (l *Library) RegisterAll(rs []Repository) {
 	for _, r := range rs {
 		l.Register(r)

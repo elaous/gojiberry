@@ -27,12 +27,10 @@ func TestCaseDisplay(t *testing.T) {
 			t.Errorf("%q missing from %q", want, got)
 		}
 	}
-	// The text itself is untouched: copying gives what was typed.
 	f.SelectAll()
 	if !strings.HasPrefix(f.SelectedText(), "hello wORLD Hello wORLD it's a tITLE-case") {
 		t.Errorf("selected text = %q", f.SelectedText())
 	}
-	// Small caps: lower-case letters become smaller capitals (own run, 0.8 size).
 	f, p := paraFlow(Chars{Text: "Ab", Format: Format{Case: CaseSmallCaps}})
 	lines := f.Layout().Lines
 	runs := lines[0].Runs
@@ -120,7 +118,6 @@ func TestLinkStyleHoverAndClick(t *testing.T) {
 		t.Error("the pointer leaving the canvas clears the hover")
 	}
 
-	// Edit mode: a plain click edits, Ctrl+click opens.
 	f.SetMode(ModeEdit)
 	st.MouseDown(x, y)
 	st.MouseUp(0, 0)
@@ -148,20 +145,17 @@ func TestLinkCommands(t *testing.T) {
 	}
 	linkOf := func(i int) string { return f.Slice(i, i+1)[0].(Chars).Format.Link }
 
-	// Caret inside the link: edit changes the whole link.
 	f.SetCursors([]Cursor{At(6)})
 	answer = "http://new"
 	if !st.HandleChord("Mod+K") || asked[0] != "http://x.y" || linkOf(4) != "http://new" || linkOf(7) != "http://new" || linkOf(3) != "" || linkOf(8) != "" {
 		t.Fatalf("edit link: %v %+v", asked, f.ContentItems())
 	}
-	// A selection becomes a link.
 	f.SetCursors([]Cursor{{Anchor: 0, Caret: 3}})
 	answer = "http://see"
 	st.HandleChord("Mod+K")
 	if linkOf(0) != "http://see" || linkOf(2) != "http://see" || linkOf(3) != "" {
 		t.Errorf("selection linked: %+v", f.ContentItems())
 	}
-	// Nothing selected, no link: the address is inserted as a link.
 	f.SetCursors([]Cursor{At(len(f.flatten().runes))})
 	answer = "http://end"
 	n := len(f.flatten().runes)
@@ -169,7 +163,6 @@ func TestLinkCommands(t *testing.T) {
 	if got := f.EditText(); !strings.HasSuffix(got, "http://end") || linkOf(n) != "http://end" {
 		t.Errorf("address inserted: %q", got)
 	}
-	// Open and remove.
 	f.SetCursors([]Cursor{At(5)})
 	st.HandleChord("Mod+Alt+O")
 	if len(*opened) != 1 || (*opened)[0] != "http://new" {
@@ -187,7 +180,6 @@ func TestLinkCommands(t *testing.T) {
 	if st.HandleChord("Mod+Alt+K") || st.HandleChord("Mod+Alt+O") {
 		t.Error("no link at the caret now")
 	}
-	// An empty address removes a link; with no link and nothing selected there is nothing to do.
 	answer = ""
 	f.SetCursors([]Cursor{At(1)}) // in "see"
 	st.HandleChord("Mod+K")
@@ -225,7 +217,6 @@ func TestLinkMarkdown(t *testing.T) {
 	}
 }
 
-// A theme's link colour replaces the default for links that name none; a link that names its own keeps it.
 func TestThemeLinkColour(t *testing.T) {
 	f, _, _ := linkFlow(t)
 	f.SetMode(ModeView)

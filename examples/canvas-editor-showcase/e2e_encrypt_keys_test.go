@@ -16,8 +16,6 @@ import (
 	"testing"
 )
 
-// turnOn opens the Save tab and turns encryption on with a passkey and a recovery key (and an SSH
-// public key when given), confirming the recovery key's secret first. It returns that secret.
 func turnOn(t *testing.T, d *e2etest.Tab, sshPub string) string {
 	t.Helper()
 	d.Click(`button[data-tab="save"]`)
@@ -37,7 +35,6 @@ func turnOn(t *testing.T, d *e2etest.Tab, sshPub string) string {
 	return secret
 }
 
-// saveConfidential saves the document in the editor under name and makes it confidential.
 func saveConfidential(d *e2etest.Tab, name string) {
 	d.Fill(".gj-saver-name", name)
 	d.Click(".gj-saver-save")
@@ -47,9 +44,6 @@ func saveConfidential(d *e2etest.Tab, name string) {
 	d.WaitFor("confidential", "document.querySelector('.gj-doclist-item .gj-doc-confidential')")
 }
 
-// Lock closes the document that is open: it is cleared from the editor with its name, the status
-// line and the revealed names; with changes that are not saved it asks first (Save and lock), and
-// the answer Save keeps them.
 func TestLockClosesTheOpenDocumentAndAsksAboutUnsavedEdits(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -61,7 +55,6 @@ func TestLockClosesTheOpenDocumentAndAsksAboutUnsavedEdits(t *testing.T) {
 	d.WaitFor("opened", `document.querySelector('.gj-saver-status').textContent.includes('Lockme plan opened')`)
 	d.OK(strings.Contains(d.State().Str("text"), "Everything on this canvas"), "the document is in the editor")
 
-	// An edit that is not saved: Lock asks.
 	d.ToggleMode()
 	d.CanvasClick(240, 164)
 	d.Type("UNSAVEDWORDS ")
@@ -83,7 +76,6 @@ func TestLockClosesTheOpenDocumentAndAsksAboutUnsavedEdits(t *testing.T) {
 	d.OK(!strings.Contains(d.Str(`document.body.innerHTML`), "Lockme plan"), "the real name is nowhere on the page")
 	d.WaitFor("the placeholder", `document.querySelector('.gj-doclist-item .gj-doc-name').textContent.startsWith('Confidential document')`)
 
-	// The edit was saved before locking: unlocking and opening shows it.
 	d.Click("#enc-unlock-passkey")
 	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.WaitFor("the name revealed", `document.querySelector('.gj-doclist-item .gj-doc-name').textContent.includes('Lockme plan')`)
@@ -92,8 +84,6 @@ func TestLockClosesTheOpenDocumentAndAsksAboutUnsavedEdits(t *testing.T) {
 	d.NoErrors()
 }
 
-// With no key left, the encrypted store can be erased: two questions, the word typed, and only this
-// store's documents go.
 func TestEraseTheEncryptedStore(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -122,15 +112,12 @@ func TestEraseTheEncryptedStore(t *testing.T) {
 	d.OK(d.Str(`localStorage.getItem('some-other-app:note')`) == "keep me", "nothing else in the storage was touched")
 	d.OK(!strings.Contains(storedText(d), "Doomed"), "the document is gone")
 
-	// A fresh start: encryption can be turned on again.
 	d.WaitSelector("#enc-switch-box")
 	d.Click("#enc-switch-box .gj-switch-track")
 	d.WaitSelector("#enc-enable")
 	d.NoErrors()
 }
 
-// Keys can be removed and a passkey replaced: everything is encrypted again, the lists a removed key
-// signed are signed by another, and the other keys still unlock.
 func TestRemoveAKeyAndReplaceThePasskey(t *testing.T) {
 	pub, _ := sshKeyPair(t, "me@laptop")
 	site := e2etest.NewSite(t)
@@ -148,26 +135,21 @@ func TestRemoveAKeyAndReplaceThePasskey(t *testing.T) {
 	passkeyFP, recoveryFP, sshFP := rowOf("passkey-prf"), rowOf("age-x25519"), rowOf("ssh-ed25519")
 	d.OK(passkeyFP != "" && recoveryFP != "" && sshFP != "", "the three keys are listed")
 	btnOf := func(fp, class string) string { return `.gj-recip-owner[data-fingerprint="` + fp + `"] .` + class }
-	// Unlocked with the passkey alone: it cannot be the one removed; the reason is shown.
 	d.OK(d.Disabled(btnOf(passkeyFP, "gj-recip-remove-owner")) && strings.Contains(d.Text(".gj-recip-remove-blocked"), "different key"), "the key you are unlocked with cannot be removed: "+d.Text(".gj-recip-remove-blocked"))
 	d.OK(!d.Disabled(btnOf(sshFP, "gj-recip-remove-owner")) && !d.Disabled(btnOf(recoveryFP, "gj-recip-remove-owner")), "the others can")
 
-	// Remove the SSH key, after asking.
 	d.Click(btnOf(sshFP, "gj-recip-remove-owner"))
 	question := confirmDialog(d)
 	d.OK(strings.Contains(question, "encrypted again without it") && strings.Contains(question, "keeps what they already read"), "the question says what it does and does not do: "+question)
 	d.WaitFor("two owner keys", `document.querySelectorAll('.gj-recip-owner').length === 2`)
 	d.WaitFor("the notice", `(document.querySelector('.gj-recip-notice') || {textContent: ''}).textContent.includes('encrypted again without it')`)
-	// With the SSH key gone, removing the recovery key would leave only a passkey: refused, shown.
 	d.OK(d.Disabled(btnOf(recoveryFP, "gj-recip-remove-owner")), "the recovery key is kept: a passkey cannot be the only key")
 
-	// Replace the passkey with a new one (the virtual authenticator makes it).
 	d.Click(".gj-recip-replace")
 	confirmDialog(d)
 	d.WaitFor("replaced", `(document.querySelector('.gj-recip-notice') || {textContent: ''}).textContent.includes('was replaced')`)
 	d.OK(rowOf("passkey-prf") != "" && rowOf("passkey-prf") != passkeyFP, "the passkey is another key now")
 
-	// After the changes: lock, unlock with the new passkey and with the recovery key; the document opens.
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-lock")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
@@ -185,8 +167,6 @@ func TestRemoveAKeyAndReplaceThePasskey(t *testing.T) {
 	d.NoErrors()
 }
 
-// A key list that someone else changed (a key of theirs added) is refused at unlock, with a message
-// that says so.
 func TestAChangedKeyListIsRefusedAtUnlock(t *testing.T) {
 	attacker, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
@@ -200,7 +180,6 @@ func TestAChangedKeyListIsRefusedAtUnlock(t *testing.T) {
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)
 	d.WaitFor("locked after a reload", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
-	// Someone who can write the storage adds their key to the list.
 	d.Eval(`(() => {
 		const c = JSON.parse(localStorage.getItem('showcase-enc:config'));
 		const o = Object.assign({}, c.owners[1]);
@@ -224,8 +203,6 @@ func TestAChangedKeyListIsRefusedAtUnlock(t *testing.T) {
 	d.NoErrors()
 }
 
-// A change cut short (the browser stops writing in the middle of turning encryption on) leaves a
-// journal: the next load says so, keeps the store read-only and finishes the change from the panel.
 func TestAnInterruptedEnableIsFinishedAfterAReload(t *testing.T) {
 	pub, priv := sshKeyPair(t, "me@laptop")
 	site := e2etest.NewSite(t)
@@ -242,7 +219,6 @@ func TestAnInterruptedEnableIsFinishedAfterAReload(t *testing.T) {
 	d.SetChecked("#enc-opt-passkey input", false)
 	d.SetChecked("#enc-opt-recovery input", false)
 	d.Fill("#enc-ssh", pub)
-	// The browser fails every write to the store after the first one: a crash as far as the page can tell.
 	d.Eval(`(() => {
 		const orig = Storage.prototype.setItem;
 		let n = 0;
@@ -262,14 +238,11 @@ func TestAnInterruptedEnableIsFinishedAfterAReload(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#enc-interrupted-text"), "did not finish") && d.State().Bool("encryption.interrupted"), "the next load knows: "+d.Text("#enc-interrupted-text"))
 	d.OK(d.Has("#enc-finish") && d.Has("#enc-undo"), "finish and undo are offered")
 	d.OK(strings.Contains(d.Text("#enc-interrupted-text"), "SHA256:"), "the journal's keys are shown with their fingerprints: "+d.Text("#enc-interrupted-text"))
-	// Finishing asks first, naming the keys it would make the store's.
 	d.Click("#enc-finish")
 	d.WaitSelector(`[role="alertdialog"]`)
 	d.OK(strings.Contains(d.Text(`[role="alertdialog"]`), "SHA256:") && strings.Contains(d.Text(`[role="alertdialog"]`), "me@laptop"), "the question names the keys: "+d.Text(`[role="alertdialog"]`))
 	d.Click(`[role="alertdialog"] .gj-dialog-actions button:first-child`) // cancel
 	d.OK(d.Has("#enc-interrupted"), "cancelling leaves it as it was")
-	// Some files are encrypted already, and nothing signed the journal (an SSH key cannot sign at
-	// setup): without the key that opens them, nothing vouches for it.
 	d.Click("#enc-finish")
 	confirmDialog(d)
 	d.WaitSelector("#enc-error")
@@ -290,8 +263,6 @@ func TestAnInterruptedEnableIsFinishedAfterAReload(t *testing.T) {
 	d.NoErrors()
 }
 
-// When the browser's storage runs out part way, nothing is half encrypted: everything is put back and
-// the page says why.
 func TestAStorageQuotaFailureLeavesTheStoreAsItWas(t *testing.T) {
 	pub, _ := sshKeyPair(t, "me@laptop")
 	site := e2etest.NewSite(t)
@@ -309,7 +280,6 @@ func TestAStorageQuotaFailureLeavesTheStoreAsItWas(t *testing.T) {
 	d.SetChecked("#enc-opt-passkey input", false)
 	d.SetChecked("#enc-opt-recovery input", false)
 	d.Fill("#enc-ssh", pub)
-	// The quota: room for the journal and a little more, not for every file with its age header.
 	d.Eval(`(() => {
 		const orig = Storage.prototype.setItem;
 		const size = () => Object.keys(localStorage).reduce((n, k) => n + k.length + localStorage.getItem(k).length, 0);
@@ -333,8 +303,6 @@ func TestAStorageQuotaFailureLeavesTheStoreAsItWas(t *testing.T) {
 	d.NoErrors()
 }
 
-// The People tab finds people in a docstore server's key directory (the verified mark is the
-// server's answer) and publishes the owner's keys there. A server with no directory says so.
 func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -345,7 +313,6 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	site.Handle("/auth/", srv.Mux)
 	site.Handle("/directory/", srv.Mux)
 	site.Handle("/demo/", srv.Mux)
-	// Bo, signed in with a provider that verified bo@example.com, has published a key.
 	boPub, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
 		t.Fatal(err)
@@ -367,8 +334,6 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	turnOn(t, d, "")
 	saveConfidential(d, "For Bo")
 	d.Click(`button[data-tab="people"]`)
-	// A link only OFFERS a directory: nothing is used, saved as confirmed or sent until the person
-	// confirms it in a dialog that names the host.
 	dirHost := strings.TrimPrefix(site.URL, "http://")
 	d.WaitSelector("#dir-offer")
 	d.OK(d.State().Str("encryption.dir.url") == "" && d.State().Str("encryption.dir.offer") == site.URL && !d.Has(".gj-recip-dir-email"), "a link sets no directory: "+d.Text("#dir-status"))
@@ -397,7 +362,6 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	d.WaitFor("Bo in the list", `document.querySelectorAll('.gj-recip-item:not(.gj-recip-owner):not(.gj-recip-dir-row)').length === 1`)
 	d.OK(d.Has(`.gj-recip-item:not(.gj-recip-owner):not(.gj-recip-dir-row) .gj-recip-verified`), "his row keeps the verified mark")
 
-	// Publish my keys: a passkey's key (never the recovery key) goes to the directory.
 	d.Click(".gj-recip-publish")
 	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.Fill(".gj-recip-dir-email", "ana@example.com")
@@ -405,14 +369,12 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	d.Click(".gj-recip-dir-find")
 	d.WaitFor("my own key found", `document.querySelectorAll('.gj-recip-dir-row').length === 1`)
 	d.OK(d.Has(".gj-recip-dir-row .gj-recip-verified"), "what I published is listed as verified")
-	// the page opened the server's challenge with the passkey's key: the entry says it was held
 	lookup := httptest.NewRequest("GET", "/directory/lookup?email=ana@example.com", nil)
 	lookup.Header.Set("Authorization", "Bearer "+tok)
 	lrec := httptest.NewRecorder()
 	srv.Mux.ServeHTTP(lrec, lookup)
 	d.OK(lrec.Code == http.StatusOK && strings.Contains(lrec.Body.String(), `"held":true`), "the published key carries the proof of possession: "+lrec.Body.String())
 
-	// A server with no key directory: a clear message, no crash.
 	d.Fill("#dir-url", site.URL+"/nodir")
 	d.Click("#dir-save")
 	confirmDialog(d) // a new address is confirmed again
@@ -424,9 +386,6 @@ func TestPeopleTabUsesTheKeyDirectory(t *testing.T) {
 	d.NoErrors()
 }
 
-// A passkey that was made and then not used (the prompt for its key was closed) is not lost track
-// of: the page says what happened (not silence), offers to try it again without making another one,
-// and keeps the recovery key's secret on screen; nothing was committed.
 func TestAClosedPasskeyPromptIsExplainedAndRetriedWithoutAnotherPasskey(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -439,7 +398,6 @@ func TestAClosedPasskeyPromptIsExplainedAndRetriedWithoutAnotherPasskey(t *testi
 	d.WaitSelector("#enc-recovery-secret")
 	d.SetChecked("#enc-recovery-ack input", true)
 	d.WaitFor("the commit button", `!document.querySelector('#enc-recovery-commit').disabled`)
-	// The second prompt (the one that derives the key) is closed once.
 	d.Eval(`(() => {
 		const get = navigator.credentials.get.bind(navigator.credentials);
 		let n = 0;
@@ -461,8 +419,6 @@ func TestAClosedPasskeyPromptIsExplainedAndRetriedWithoutAnotherPasskey(t *testi
 	d.NoErrors()
 }
 
-// The placeholder of a hidden name is stored in English and drawn in the interface's language; the
-// status is a live region and the off-state hint says what the catalog leaves readable.
 func TestHiddenNamesAreDrawnTranslatedAndStoredInEnglish(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -477,7 +433,6 @@ func TestHiddenNamesAreDrawnTranslatedAndStoredInEnglish(t *testing.T) {
 	d.Click("#enc-lock")
 	d.WaitSelector("#enc-unlock-passkey")
 	d.WaitFor("the placeholder in Spanish", `document.querySelector('.gj-doclist-item .gj-doc-name').textContent.startsWith('Documento confidencial')`)
-	// The errors of encstore are in the interface's language too: a recovery key of someone else.
 	_, stranger, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
 		t.Fatal(err)
@@ -494,8 +449,6 @@ func TestHiddenNamesAreDrawnTranslatedAndStoredInEnglish(t *testing.T) {
 	d.NoErrors()
 }
 
-// axe-core over the encryption panels and the key directory: the owner key, its backup, the pinned
-// log keys and the list of owner keys to confirm.
 func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -506,7 +459,6 @@ func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
 	site.Handle("/auth/", srv.Mux)
 	site.Handle("/directory/", srv.Mux)
 	site.Handle("/demo/", srv.Mux)
-	// Bo's entries are signed by an owner key nobody here confirmed, so "Owner keys to confirm" shows.
 	boTok, err := srv.Login("bo@example.com")
 	if err != nil {
 		t.Fatal(err)
@@ -564,8 +516,6 @@ func TestNoAccessibilityViolationsAxeInTheKeyDirectory(t *testing.T) {
 	check("after watching")
 }
 
-// Where the browser cannot sign with Ed25519 through WebCrypto the owner key is kept as text, and the
-// panel says what that means; a backup can then be shown at any time, and the key still signs.
 func TestOwnerKeyFallsBackToTextWhereWebCryptoHasNoEd25519(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -579,7 +529,6 @@ func TestOwnerKeyFallsBackToTextWhereWebCryptoHasNoEd25519(t *testing.T) {
 
 	d := site.OpenURL(t, "/index.html?docstore="+url.QueryEscape(site.URL))
 	d.VirtualAuthenticator()
-	// a browser without Ed25519: importing the key is refused
 	d.Eval(`(crypto.subtle.importKey = () => Promise.reject(new DOMException('no Ed25519', 'NotSupportedError')), 1)`, nil)
 	turnOn(t, d, "")
 	d.Click(`button[data-tab="people"]`)
@@ -592,20 +541,15 @@ func TestOwnerKeyFallsBackToTextWhereWebCryptoHasNoEd25519(t *testing.T) {
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:owner:' + '`+site.URL+`') || ''`) != "", "kept as text")
 	d.OK(strings.Contains(d.Text("#dir-owner-storage"), "cannot keep the owner key out of reach"), "and the panel says so: "+d.Text("#dir-owner-storage"))
 	d.OK(d.Str(storedOwnerKeyProbe(site.URL)) == "none", "nothing in IndexedDB")
-	// the backup can be hidden and shown again
 	d.Click("#dir-owner-hide")
 	d.WaitFor("hidden", `!document.querySelector('#dir-owner-backup-box')`)
 	d.Click("#dir-owner-backup")
 	d.WaitSelector("#dir-owner-secret")
-	// and the key signs
 	d.Click(".gj-recip-publish")
 	d.WaitFor("published", `(document.querySelector('.gj-recip-publish-notice') || {textContent: ''}).textContent.includes('published for your address')`)
 	d.NoErrors()
 }
 
-// With "do not count a key as verified when its address has no owner key" on, the picker still lists
-// the keys of an address that never enrolled one, but without the verified mark and with a note to confirm
-// the fingerprint another way; with it off the mark is there.
 func TestRequireOwnerSettingWithholdsTheVerifiedMark(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()

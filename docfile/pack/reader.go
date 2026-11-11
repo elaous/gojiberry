@@ -11,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Reader reads a pack from any io.ReaderAt (a file, a range-readable URL). Opening it
-// reads the header, the footer and the index and nothing else.
 type Reader struct {
 	r         io.ReaderAt
 	size      int64
@@ -27,7 +25,6 @@ type Reader struct {
 	sig       *Signature
 }
 
-// readFrame reads and checks the record at off, which must end before end.
 func readFrame(r io.ReaderAt, off, end int64) (kind, flags byte, data []byte, err error) {
 	if off < 0 || off%8 != 0 || off+frameHead > end {
 		return 0, 0, nil, fmt.Errorf("%w: a record outside the file", ErrFormat)
@@ -54,7 +51,6 @@ func readFrame(r io.ReaderAt, off, end int64) (kind, flags byte, data []byte, er
 	return head[8], head[9], data, nil
 }
 
-// readHeaderV reads the header of a pack: its meta, the header bytes and the version.
 func readHeaderV(r io.ReaderAt, size int64) (Meta, []byte, uint32, error) {
 	if size < headerFixed+footerSize {
 		return Meta{}, nil, 0, fmt.Errorf("%w: too short", ErrFormat)
@@ -92,7 +88,6 @@ func readHeaderV(r io.ReaderAt, size int64) (Meta, []byte, uint32, error) {
 	return m, hdr, binary.LittleEndian.Uint32(fixed[8:]), err
 }
 
-// Open opens the pack of the given size: the footer and index are read and checked.
 func Open(r io.ReaderAt, size int64) (*Reader, error) {
 	meta, hdr, ver, err := readHeaderV(r, size)
 	if err != nil {
@@ -158,9 +153,6 @@ func Open(r io.ReaderAt, size int64) (*Reader, error) {
 	return rd, nil
 }
 
-// validate checks an index against the area [lo, hi) records may be in: IDs are
-// document IDs and unique, records lie inside the area and do not overlap, tags and names
-// are within their caps, and every folder an entry or folder names exists.
 func (x Index) validate(lo, hi int64) error {
 	ids := make(map[string]bool, len(x.Entries))
 	for _, e := range x.Entries {
@@ -178,7 +170,6 @@ func (x Index) validate(lo, hi int64) error {
 			}
 		}
 	}
-	// No two records overlap: sorted by offset, each ends before the next begins.
 	type span struct {
 		off, length uint64
 		name        string
@@ -231,11 +222,8 @@ func (x Index) validate(lo, hi int64) error {
 	return nil
 }
 
-// Version is the pack's format version: 1, or 2 for a pack that may hold attachments.
 func (r *Reader) Version() int { return int(r.version) }
 
-// Attachment returns the bytes with the given SHA-256 and their MIME type, checked against the record's checksums and the
-// hash; ErrNotFound if the pack has no such attachment.
 func (r *Reader) Attachment(sum [32]byte) ([]byte, string, error) {
 	i, ok := r.byHash[sum]
 	if !ok {
@@ -261,9 +249,6 @@ func (r *Reader) Meta() Meta { return r.meta }
 // Index lists the documents and folders.
 func (r *Reader) Index() Index { return r.index }
 
-// Signature returns the pack's signature record and whether it is a valid signature of
-// this pack by the key it carries (whether to trust that key is the caller's to decide).
-// The record is nil for an unsigned pack.
 func (r *Reader) Signature() (sig *Signature, valid bool) {
 	if r.sig == nil {
 		return nil, false
@@ -271,8 +256,6 @@ func (r *Reader) Signature() (sig *Signature, valid bool) {
 	return r.sig, r.sig.valid(r.header, r.foot.indexSum)
 }
 
-// Signers lists everyone who signed the pack, the first signer first, each with whether the signature is valid for
-// this pack. It is empty for an unsigned pack.
 func (r *Reader) Signers() []Signer {
 	if r.sig == nil {
 		return nil
@@ -284,9 +267,6 @@ func (r *Reader) Signers() []Signer {
 	return out
 }
 
-// ReadRaw returns the stored bytes of a document, checked against its record's checksums
-// and the index's hash: a .open message, or for an Encrypted entry the envelope as stored
-// (no key is involved).
 func (r *Reader) ReadRaw(id string) ([]byte, error) {
 	i, ok := r.byID[id]
 	if !ok {
@@ -312,16 +292,11 @@ func (r *Reader) ReadRaw(id string) ([]byte, error) {
 	return data, nil
 }
 
-// Read returns a document, or ErrEncrypted for one whose record is an envelope.
 func (r *Reader) Read(id string) (docfile.Document, error) {
 	return r.ReadWith(id, nil)
 }
 
-// ReadWith returns a document, passing an encrypted record's envelope through open (which
-// decrypts it and returns the .open message). The pack holds no keys and imports no
-// cryptography: open is the caller's. With a nil open an encrypted record is ErrEncrypted.
-// An error from open is returned wrapped, and a record the pack's checks reject is an
-// error before open is called. A plain record never goes through open.
+// the pack holds no keys and imports no cryptography
 func (r *Reader) ReadWith(id string, open func(envelope []byte) ([]byte, error)) (docfile.Document, error) {
 	data, err := r.ReadRaw(id)
 	if err != nil {
@@ -353,18 +328,11 @@ type Problem struct {
 
 // Report is what Verify found.
 type Report struct {
-	// Checked is how many documents were read and compared with their hashes.
 	Checked int
 	// Bad are the documents that failed, the others being fine.
-	Bad []Problem
-	// Unindexed counts records in the file that the index does not list: an append that
-	// did not finish, or documents deleted since the pack was last compacted.
-	Unindexed int
-	// Gap is set when the records do not follow one another exactly up to the index.
-	Gap bool
-	// Signed says there is a signature record; SignatureOK that it is valid for this
-	// pack; Signer is the key it carries.
-	// With co-signers SignatureOK says every signature is valid; Signers lists them.
+	Bad                 []Problem
+	Unindexed           int
+	Gap                 bool
 	Signed, SignatureOK bool
 	Signer              []byte
 	Signers             []Signer
@@ -373,8 +341,6 @@ type Report struct {
 // OK says whether everything checked out.
 func (rep Report) OK() bool { return len(rep.Bad) == 0 && !rep.Gap && (!rep.Signed || rep.SignatureOK) }
 
-// Verify reads every document and checks it, finds records the index does not list, and
-// checks the signature.
 func (r *Reader) Verify() Report {
 	var rep Report
 	for _, e := range r.index.Entries {
@@ -383,7 +349,6 @@ func (r *Reader) Verify() Report {
 			rep.Bad = append(rep.Bad, Problem{ID: e.ID, Name: e.Name, Err: err})
 		}
 	}
-	// No two records overlap.
 	byOffset := append([]Entry(nil), r.index.Entries...)
 	sort.Slice(byOffset, func(i, j int) bool { return byOffset[i].Offset < byOffset[j].Offset })
 	for i := 1; i < len(byOffset); i++ {
@@ -391,7 +356,6 @@ func (r *Reader) Verify() Report {
 			rep.Bad = append(rep.Bad, Problem{ID: byOffset[i].ID, Name: byOffset[i].Name, Err: fmt.Errorf("%w: overlaps another record", ErrFormat)})
 		}
 	}
-	// Walk the records: those not in the index are reported.
 	indexed := map[uint64]bool{}
 	for _, e := range r.index.Entries {
 		indexed[e.Offset] = true

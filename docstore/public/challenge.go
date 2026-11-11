@@ -15,17 +15,13 @@ import (
 	"github.com/elaous/gojiberry/docstore/public/pow"
 )
 
-// ChallengeHeader carries a challenge the server wants solved (on the 403 that asks for it) and
-// ChallengeAnswerHeader the solution (on the retry).
+// ChallengeHeader carries a challenge the server wants answered.
 const (
 	ChallengeHeader       = pow.Header
 	ChallengeAnswerHeader = pow.AnswerHeader
 )
 
-// ChallengeIssuer is a Challenger that can say what it wants: Challenge returns the text to solve and
-// the difficulty, or "" when nothing is asked of this request. The service sends it in ChallengeHeader on
-// the 403 that refuses an unsolved request, so a client can solve it and retry once (the client package
-// does).
+// ChallengeIssuer is a Challenger that can issue challenges.
 type ChallengeIssuer interface {
 	Challenger
 	Challenge(r *http.Request) (challenge string, difficulty int)
@@ -40,13 +36,6 @@ func (s *Service) refuseChallenge(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusForbidden)
 }
 
-// ProofOfWork is a Challenger that asks a client for a small computation before it takes a session or
-// a document, only while Busy says the offer is under load (nil: always). The challenge is stateless
-// (a time slot and its keyed hash), valid for Window; the answer is a nonce such that
-// SHA-256(challenge ":" nonce) starts with Difficulty zero bits. Each answer is accepted once. It
-// raises the cost of making many sessions or documents from one machine; it does not stop an attacker
-// with many machines, and a person with a slow phone pays too, so the difficulty is for the operator to
-// set (20 bits is about a second on a laptop).
 type ProofOfWork struct {
 	Secret     []byte        // keys the challenges; at least 16 bytes
 	Difficulty int           // leading zero bits, 1 to 32
@@ -92,7 +81,6 @@ func (p *ProofOfWork) Challenge(*http.Request) (string, int) {
 	return strconv.FormatInt(slot, 10) + "." + p.mac(slot), min(p.Difficulty, 32)
 }
 
-// ErrChallengeNeeded is what Verify returns for a request that has not solved the challenge.
 var ErrChallengeNeeded = errors.New("this server is busy: solve the challenge and try again")
 
 // Verify implements Challenger.
@@ -114,7 +102,7 @@ func (p *ProofOfWork) Verify(r *http.Request) error {
 		return ErrChallengeNeeded
 	}
 	win := int64(p.window().Seconds())
-	if cur := p.now().Unix() / win; slot > cur || cur-slot > 1 { // this slot or the one before it
+	if cur := p.now().Unix() / win; slot > cur || cur-slot > 1 {
 		return ErrChallengeNeeded
 	}
 	if !pow.Solves(ch, nonce, min(p.Difficulty, 32)) {
@@ -138,11 +126,9 @@ func (p *ProofOfWork) Verify(r *http.Request) error {
 	return nil
 }
 
-// BusyThreshold is the share of the byte budget past which Busy says the offer is under load.
 const BusyThreshold = 0.7
 
-// Busy reports whether the offer is filling up (the live bytes are past BusyThreshold of the budget). It is the
-// usual Busy of a ProofOfWork: the challenge is asked for only while there is a reason to.
+// Busy reports whether the offer is filling up.
 func (s *Service) Busy() bool {
 	used, _ := s.bytes.get()
 	return s.cfg.MaxTotalBytes > 0 && float64(used) >= BusyThreshold*float64(s.cfg.MaxTotalBytes)

@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// ownerEnv is a directory with a test clock and helpers that act as the owner of ana@x.io.
 type ownerEnv struct {
 	t     *testing.T
 	d     *AdapterDirectory
@@ -46,9 +45,8 @@ func (e *ownerEnv) pos() string {
 	return FormatLogPosition(h.Seq, h.Hash)
 }
 
-// sign is the owner's signature of an operation on ana's address, naming the log head now.
 func (e *ownerEnv) sign(priv ed25519.PrivateKey, op, fp string) *docstore.DirectoryOwnerSig {
-	if op == OpPublish { // a publication is signed over its label too (version 2); these keys have none
+	if op == OpPublish {
 		s := SignOwnerPublish(priv, "ana@x.io", fp, "", e.clk.Now(), e.pos())
 		return &s
 	}
@@ -56,8 +54,6 @@ func (e *ownerEnv) sign(priv ed25519.PrivateKey, op, fp string) *docstore.Direct
 	return &s
 }
 
-// enroll makes the call a client makes: a challenge, then the signed request. old is the current
-// owner key for a rotation.
 func (e *ownerEnv) enroll(mode string, priv, old ed25519.PrivateKey) (docstore.DirectoryEnrollment, error) {
 	e.t.Helper()
 	ch, err := e.d.EnrollChallenge(context.Background(), ana)
@@ -143,7 +139,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 	age1, _ := ageKey(t)
 	ssh, _, _ := edSSHKey(t)
 	_ = ssh
-	// The session alone no longer publishes.
 	if _, err := e.publish(nil, age1); !errors.Is(err, ErrOwnerRequired) {
 		t.Fatalf("no signature: %v", err)
 	}
@@ -151,7 +146,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 	if _, err := e.publish(other, age1); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("another key's signature: %v", err)
 	}
-	// A signature of another operation, of another key, or for another address, does not carry over.
 	wrong := e.sign(priv, OpRevoke, age1.Fingerprint)
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: wrong}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("a revoke signature used to publish: %v", err)
@@ -164,7 +158,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &forAddr}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("a signature for another address: %v", err)
 	}
-	// Stale, future, and a log position that does not exist.
 	stale := SignOwnerPublish(priv, "ana@x.io", age1.Fingerprint, "", e.clk.Now().Add(-11*time.Minute), e.pos())
 	if _, err := e.d.PublishWith(ctx, ana, age1, PublishOptions{Owner: &stale}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("stale: %v", err)
@@ -181,8 +174,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 		t.Fatalf("refused publishes left records: %+v", got)
 	}
 
-	// With the owner's signature it publishes, and the mark is the strongest one, for an age key
-	// (which cannot attest itself) as for an ssh one.
 	k, err := e.publish(priv, age1)
 	if err != nil || !k.Verified || !k.OwnerSigned || !k.OwnerEnrolled || k.Owner == nil || k.Attested {
 		t.Fatalf("%+v %v", k, err)
@@ -203,7 +194,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 		t.Error("and for this fingerprint only")
 	}
 
-	// Revoking needs the signature too.
 	if _, err := e.d.Revoke(ctx, ana, age1.Fingerprint, nil); !errors.Is(err, ErrOwnerRequired) {
 		t.Errorf("revoke without: %v", err)
 	}
@@ -217,7 +207,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 		t.Errorf("the tombstone is owner-signed: %+v", row)
 	}
 
-	// Everything in the log passes the audit of an enrolled address.
 	a := e.audit(AuditOptions{})
 	if !a.Enrolled || len(a.Violations) != 0 || len(a.Entries) != 3 || len(a.OwnerKeys) != 1 {
 		t.Errorf("%+v", a)
@@ -233,8 +222,6 @@ func TestAServerWithTheDirectoryKeyCannotPublishForAnEnrolledAddress(t *testing.
 	if _, err := e.publish(priv, good); err != nil {
 		t.Fatal(err)
 	}
-	// A server that holds the directory key writes a record and a log entry itself, without the
-	// owner (the same thing PublishWith does, minus the owner check), for a key it holds.
 	rogue := newRecovery(t)
 	now := e.clk.Now()
 	fake := func(owner *docstore.DirectoryOwnerSig) {
@@ -255,12 +242,9 @@ func TestAServerWithTheDirectoryKeyCannotPublishForAnEnrolledAddress(t *testing.
 			t.Fatal(err)
 		}
 	}
-	// The directory's own publish route refuses it.
 	if _, err := e.d.PublishWith(ctx, ana, rogue, PublishOptions{}); !errors.Is(err, ErrOwnerRequired) {
 		t.Fatalf("PublishWith: %v", err)
 	}
-	// Written behind its back: with no owner signature, or with a signature of the server's own
-	// making, the key is not Verified, and the log audit names the entry.
 	fake(nil)
 	if k := e.lookup()[rogue.Fingerprint]; k.Verified || k.OwnerSigned || !k.OwnerEnrolled {
 		t.Errorf("a forged record on an enrolled address is verified: %+v", k)
@@ -281,7 +265,6 @@ func TestAServerWithTheDirectoryKeyCannotPublishForAnEnrolledAddress(t *testing.
 	if !strings.Contains(a.Violations[0].Why, "no owner signature") || !strings.Contains(a.Violations[1].Why, "does not verify") {
 		t.Errorf("%+v", a.Violations)
 	}
-	// It cannot take over the enrollment either: an enroll entry on an enrolled address is a violation.
 	sPub, sPriv := ownerKey(t)
 	pos := e.pos()
 	sig := SignOwnerOp(sPriv, OpEnroll, "ana@x.io", OwnerFingerprint(sPub), now, pos)
@@ -292,7 +275,6 @@ func TestAServerWithTheDirectoryKeyCannotPublishForAnEnrolledAddress(t *testing.
 	if len(a.Violations) != 3 || !strings.Contains(a.Violations[2].Why, "already has an owner key") || len(a.OwnerKeys) != 1 {
 		t.Errorf("%+v", a)
 	}
-	// And through the directory: a second enrollment is refused, and the key stays the owner's.
 	if _, err := e.enroll(OpEnroll, sPriv, nil); !errors.Is(err, ErrEnrolled) {
 		t.Errorf("enroll over an owner key: %v", err)
 	}
@@ -331,7 +313,6 @@ func TestOwnerSignaturesCannotBeReplayedLater(t *testing.T) {
 	if _, err := e.d.Revoke(ctx, ana, k.Fingerprint, e.sign(priv, OpRevoke, k.Fingerprint)); err != nil {
 		t.Fatal(err)
 	}
-	// Once the revoke window is over, the server replays the old publish signature: too old.
 	e.clk.Add(DefaultRevokeWindow + time.Minute)
 	if _, err := e.d.PublishWith(ctx, ana, k, PublishOptions{Owner: sig}); !errors.Is(err, ErrBadOwnerSig) {
 		t.Fatalf("a replayed signature: %v", err)
@@ -354,7 +335,6 @@ func TestOwnerKeyRotationIsSignedByTheOldKeyAndKeepsEarlierPublicationsOwnerSign
 	if _, err := e.publish(priv1, k1); err != nil {
 		t.Fatal(err)
 	}
-	// The new key cannot take over by itself, nor with a signature of the wrong key.
 	_, stranger := ownerKey(t)
 	if _, err := e.enroll(OpRotate, priv2, stranger); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("rotation not signed by the current key: %v", err)
@@ -372,7 +352,6 @@ func TestOwnerKeyRotationIsSignedByTheOldKeyAndKeepsEarlierPublicationsOwnerSign
 	if err != nil || len(view.Keys) != 2 || view.Keys[0].Until != view.Keys[1].Seq || view.Keys[1].Pub != FormatOwnerPub(pub2) || view.Keys[0].Pub != FormatOwnerPub(pub1) {
 		t.Fatalf("%+v %v", view, err)
 	}
-	// The old key is out; the new one publishes; the earlier publication still counts.
 	k2 := newRecovery(t)
 	if _, err := e.publish(priv1, k2); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("the retired owner key signs: %v", err)
@@ -412,7 +391,6 @@ func TestOwnerKeyResetWaitsAndTheOwnerCanCancelIt(t *testing.T) {
 	if n := len(logOps(t, e.d)); n != 2 {
 		t.Errorf("asking again is not logged twice: %d entries", n)
 	}
-	// The row says a reset is pending.
 	k := newRecovery(t)
 	if _, err := e.publish(priv1, k); err != nil {
 		t.Fatal(err)
@@ -424,7 +402,6 @@ func TestOwnerKeyResetWaitsAndTheOwnerCanCancelIt(t *testing.T) {
 	if _, err := e.enroll(OpReset, priv2, nil); !errors.Is(err, ErrResetWait) {
 		t.Errorf("a reset before the wait is over: %v", err)
 	}
-	// The owner cancels with their own key; a session alone cannot.
 	if _, err := e.d.CancelReset(ctx, ana, nil); !errors.Is(err, ErrOwnerRequired) {
 		t.Errorf("cancel by the session alone: %v", err)
 	}
@@ -443,7 +420,6 @@ func TestOwnerKeyResetWaitsAndTheOwnerCanCancelIt(t *testing.T) {
 		t.Errorf("a cancelled reset does not complete: %v", err)
 	}
 
-	// A reset that nobody cancels takes effect after the wait; the old key is out.
 	if _, err := e.d.RequestReset(ctx, ana); err != nil {
 		t.Fatal(err)
 	}
@@ -462,7 +438,6 @@ func TestOwnerKeyResetWaitsAndTheOwnerCanCancelIt(t *testing.T) {
 	if len(a.Violations) != 0 || len(a.OwnerKeys) != 2 || a.ResetSince != 0 {
 		t.Errorf("%+v", a)
 	}
-	// An auditor holds the server to 24 hours: a server configured with a shorter wait is caught.
 	e2 := newOwnerEnv(t)
 	e2.d.ResetWait = time.Hour
 	e2.mustEnroll(priv1)
@@ -514,7 +489,6 @@ func TestEnrollChallengeIsSingleUseBoundToTheUserAndCurrentKeyOnly(t *testing.T)
 	if _, err := dOld.Enroll(ctx, ana, req); err != nil {
 		t.Fatal(err)
 	}
-	// The token is used up: the same request does not enroll a second key or repeat.
 	if _, err := dOld.Enroll(ctx, ana, req); !errors.Is(err, ErrEnrolled) && !errors.Is(err, ErrBadProof) {
 		t.Errorf("replayed enrollment: %v", err)
 	}
@@ -531,14 +505,12 @@ func TestEnrollChallengeIsSingleUseBoundToTheUserAndCurrentKeyOnly(t *testing.T)
 	if view, _ := dOld.Enrollment(ctx, "ana@x.io"); len(view.Keys) != 2 {
 		t.Errorf("%+v", view)
 	}
-	// A mode that is not one.
 	ch3, _ := dOld.EnrollChallenge(ctx, ana)
 	weird := e.enrollRequest(ch3, OpEnroll, priv2, nil)
 	weird.Mode = "delete"
 	if _, err := dOld.Enroll(ctx, ana, weird); !errors.Is(err, ErrBadOwnerSig) {
 		t.Errorf("mode: %v", err)
 	}
-	// A passkey user cannot enroll an address.
 	if _, err := dOld.EnrollChallenge(ctx, auth.User{ID: "passkey:z", Email: "ana@x.io", VerifiedEmail: true}); !errors.Is(err, ErrNotPublishable) {
 		t.Errorf("passkey: %v", err)
 	}
@@ -560,14 +532,12 @@ func TestDamagedEnrollmentFailsClosed(t *testing.T) {
 	if _, err := e.d.LookupWith(ctx, "ana@x.io", LookupOptions{}); !errors.Is(err, errEnrollmentCorrupt) {
 		t.Errorf("lookup: %v", err)
 	}
-	// A record the directory did not sign is as good as damaged.
 	rec := enrollRecord{V: 1, Kid: e.d.Signer.KeyID(), Email: "ana@x.io", Sig: base64.StdEncoding.EncodeToString(make([]byte, 64))}
 	data, _ := json.Marshal(rec)
 	_ = e.store.Save(ctx, id, data)
 	if _, err := e.d.Enrollment(ctx, "ana@x.io"); !errors.Is(err, errEnrollmentCorrupt) {
 		t.Errorf("unsigned: %v", err)
 	}
-	// Deleting it is un-enrolling: the log still says the address is enrolled.
 	_ = e.store.Delete(ctx, id)
 	if a := e.audit(AuditOptions{}); !a.Enrolled {
 		t.Error("the log still shows the enrollment")
@@ -601,7 +571,6 @@ func TestResignMovesEnrollmentsAndKeepsOwnerSignedRecords(t *testing.T) {
 	if _, err := store.Load(ctx, d1.enrollNames("ana@x.io")[0]); !errors.Is(err, docstore.ErrNotFound) {
 		t.Errorf("the old enrollment record is still there: %v", err)
 	}
-	// It all works under the new key alone.
 	d3 := &AdapterDirectory{Store: store, Signer: mustSigner(t, []byte(strings.Repeat("\x02", 32))), Now: clk.Now}
 	e.d = d3
 	if rows := e.lookup(); !rows[k.Fingerprint].OwnerSigned {
@@ -637,19 +606,15 @@ func TestAuditAddressContinuesFromAnEarlierRun(t *testing.T) {
 	if len(second.Violations) != 0 || len(second.OwnerKeys) != 2 || len(second.Entries) != 2 {
 		t.Errorf("%+v", second)
 	}
-	// Without the earlier state the second run alone cannot tell, and flags the publication.
 	alone := AuditAddress("ana@x.io", addrs, l2.Entries, AuditOptions{})
 	if len(alone.Violations) == 0 {
 		t.Error("a run that starts mid-history has no enrollment to check against: the rotation is flagged")
 	}
-	// Entries of other addresses are skipped.
 	if other := AuditAddress("bo@x.io", e.d.LogAddressesFor("bo@x.io"), l1.Entries, AuditOptions{}); len(other.Entries) != 0 || other.Enrolled {
 		t.Errorf("%+v", other)
 	}
 }
 
-// A retired owner key cannot sign after its replacement: a record or entry that carries its
-// signature and comes after the rotation is not the owner's.
 func TestARetiredOwnerKeyCannotSignAfterItsRotation(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -659,7 +624,6 @@ func TestARetiredOwnerKeyCannotSignAfterItsRotation(t *testing.T) {
 	if _, err := e.enroll(OpRotate, priv2, priv1); err != nil {
 		t.Fatal(err)
 	}
-	// Written behind the directory's back (a server with its key, and the leaked old owner key).
 	rogue := newRecovery(t)
 	now := e.clk.Now()
 	sig := e.sign(priv1, OpPublish, rogue.Fingerprint)
@@ -688,12 +652,10 @@ func TestAuditNotesASmallClockSkewAndFlagsALargeOne(t *testing.T) {
 	e.mustEnroll(priv)
 	at := e.clk.Now()
 
-	// The entry is 3 minutes ahead of the auditor: a note with the measured difference, no violation.
 	got := e.audit(AuditOptions{Now: at.Add(-3 * time.Minute)})
 	if len(got.Violations) != 0 || len(got.Notes) != 1 || got.Notes[0].Ahead < 2*time.Minute || got.Notes[0].Ahead > 4*time.Minute {
 		t.Fatalf("small skew: %+v", got)
 	}
-	// Within the minute nothing is said; past the tolerance it is a violation that names the difference.
 	if got := e.audit(AuditOptions{Now: at.Add(-30 * time.Second)}); len(got.Notes) != 0 || len(got.Violations) != 0 {
 		t.Errorf("within a minute: %+v", got)
 	}
@@ -703,7 +665,6 @@ func TestAuditNotesASmallClockSkewAndFlagsALargeOne(t *testing.T) {
 	}
 }
 
-// A date so far ahead that its gap would overflow a time.Duration is still a violation.
 func TestAuditFlagsADateBeyondWhatADurationHolds(t *testing.T) {
 	e := newOwnerEnv(t)
 	_, priv := ownerKey(t)
@@ -714,8 +675,6 @@ func TestAuditFlagsADateBeyondWhatADurationHolds(t *testing.T) {
 	}
 }
 
-// With RequireEnrollment an address publishes only after it enrolled an owner key; enrolling itself
-// is still open on the session, and a publication after it carries the owner's signature as ever.
 func TestRequireEnrollmentRefusesPublicationsForAnUnenrolledAddress(t *testing.T) {
 	e := newOwnerEnv(t)
 	e.d.RequireEnrollment = true
@@ -736,7 +695,6 @@ func TestRequireEnrollmentRefusesPublicationsForAnUnenrolledAddress(t *testing.T
 	if _, err := e.publish(priv, age1); err != nil {
 		t.Errorf("enrolled and signed: %v", err)
 	}
-	// another address is unenrolled: refused with the option, as before without it
 	bo := auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}
 	if err := e.d.Publish(context.Background(), bo, age1); !errors.Is(err, ErrEnrollmentRequired) {
 		t.Errorf("another unenrolled address: %v", err)

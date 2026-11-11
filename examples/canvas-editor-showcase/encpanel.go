@@ -19,62 +19,41 @@ import (
 	"time"
 )
 
-// The "Encrypt this store" switch of the Save tab and the key controls of the People tab: the
-// browser target (localStorage) wrapped in encrypt.Adapter by the encstore package, with the
-// owner's keys set up here, in the page. A static page has no server for a passkey to sign in
-// to, so the passkey is a local one (client.CreateLocal / DeriveKey): the browser's
-// authenticator derives the encryption key, nothing is sent anywhere. Encryption is OFF unless
-// the person turns it on; the keys' public halves are kept on this device (encConfigKey), the
-// private side is in memory only, while unlocked.
-//
-// Every change to the keys is a transaction in encstore (a journal, each file read back, the old
-// state put back on failure); this file is the screens around it: a recovery key's secret is
-// shown and confirmed BEFORE anything is committed, a passkey alone needs an explicit
-// acknowledgement, a change that was cut short is finished or undone from the panel, and a store
-// whose keys are all lost can be erased.
-
 const browserLabel = "This browser (localStorage)"
 
-// prepared is a recovery key that was made and whose secret is on screen: it is not an owner key
-// until the person has said they saved the secret and confirmed.
 type prepared struct {
 	key    encstore.NewKey
 	secret string
 	acked  bool
 }
 
-// encUI is the encryption state of the page.
 type encUI struct {
 	store   *encstore.Store
-	browser docstore.Adapter // where the store lives: this browser's storage or a server (see encscope.go)
+	browser docstore.Adapter
 	pending *components.Pending
 	render  func()
 
 	setup                    bool // the switch was turned on and the form is open
 	wantPasskey, wantRecover bool
 	sshPub                   string
-	passkeyAck               bool      // the person accepted that a passkey alone puts every document at risk
-	prep                     *prepared // setup: the recovery key waiting for its secret to be confirmed
-	pendingCred              string    // a passkey that was made and could not be used yet: retry or forget it
-	noPRF                    bool      // the authenticator made a passkey that cannot encrypt: the person has to delete it
+	passkeyAck               bool
+	prep                     *prepared
+	pendingCred              string
+	noPRF                    bool
 	unlockRecovery           string
 	notice                   string
 
 	eraseTyping bool // the first question was answered: the word is asked
 	eraseWord   string
 
-	// broken is why the key configuration cannot be trusted (encstore.ErrConfigMissing: it is gone
-	// over encrypted files; encstore.ErrConfigCorrupt: it cannot be read): the store is read-only
-	// and the panel offers a restore or Erase, never "encryption off".
 	broken                error
-	restoreRecover        string                  // the recovery key typed to restore with
-	firstUse              *encstore.FirstUseError // an SSH unlock that waits for the person to confirm the key list's fingerprint
-	rekeyDone, rekeyTotal int                     // while a change re-encrypts the store: documents done and to do (0 total: none)
-	checkRecovery         string                  // the recovery key typed to be checked (never kept past the check)
-	checkMsg              string                  // the answer to the last check
+	restoreRecover        string // the recovery key typed to restore with
+	firstUse              *encstore.FirstUseError
+	rekeyDone, rekeyTotal int
+	checkRecovery         string // never kept past the check
+	checkMsg              string // the answer to the last check
 	checkOK               bool
 
-	// the People tab: the current document's keys
 	sharedFor       string
 	docConfidential bool
 	shared          []components.RecipientRow
@@ -87,19 +66,12 @@ type encUI struct {
 
 	keyListDraft string // a key list pasted from another device, not yet used
 
-	// deviceUses are the records of when each key last unlocked a store kept on a server, from all the
-	// devices that share it; usesLoaded says they were asked for since the store was unlocked.
 	deviceUses map[string]encrypt.DeviceUse
 	usesLoaded bool
 
-	// swap makes the saver use the store's adapter as it stands now (set by the page): called after
-	// every change, so a change that left the store interrupted, or one that finished, is followed.
 	swap func()
 }
 
-// readEncConfig reads the key configuration. Nothing stored is an empty Config and no error;
-// something stored that cannot be read is an error (a corrupt configuration is not "encryption
-// off").
 func readEncConfig() (cfg encstore.Config, err error) {
 	defer func() {
 		if recover() != nil {
@@ -134,9 +106,6 @@ func writeEncConfig(cfg encstore.Config) (err error) {
 	return nil
 }
 
-// reloadEncConfig is what the store compares its own Config with before every write: whatever is
-// stored now, or an empty Config when it cannot be read (the store that started with a configuration
-// it could not read has an empty one too).
 func reloadEncConfig() (encstore.Config, error) {
 	c, _ := readEncConfig()
 	return c, nil
@@ -153,8 +122,6 @@ func newEncStore(browser docstore.Adapter, cfg encstore.Config) (*encstore.Store
 	if err != nil {
 		return nil, err
 	}
-	// Capacity is counted in the characters localStorage keeps (some browsers count 2 bytes each):
-	// 5 Mi characters is the least any of them gives.
 	st.Persist, st.Reload = writeEncConfig, reloadEncConfig
 	if encTarget == "browser" {
 		st.Capacity = 5 << 20 // a server has no such limit
@@ -162,8 +129,6 @@ func newEncStore(browser docstore.Adapter, cfg encstore.Config) (*encstore.Store
 	return st, nil
 }
 
-// newEncOff is the page with encryption off after the key list could not be read: why is the
-// notice the Save tab shows. (Kept for a configuration that parses but cannot be used.)
 func newEncOff(browser docstore.Adapter, render func(), why error) (*encUI, error) {
 	st, err := newEncStore(browser, encstore.Config{})
 	if err != nil {
@@ -183,7 +148,7 @@ func newEnc(browser docstore.Adapter, render func()) (*encUI, error) {
 		why = encstore.ErrConfigMissing // set once, and the configuration is gone: not "off"
 	}
 	if why != nil {
-		cfg = encstore.Config{} // nothing is trusted: the store stays read-only until restored or erased
+		cfg = encstore.Config{}
 	}
 	st, err := newEncStore(browser, cfg)
 	if err != nil {
@@ -196,7 +161,6 @@ func newEnc(browser docstore.Adapter, render func()) (*encUI, error) {
 	return e, nil
 }
 
-// target is the browser target as it stands: the encrypted adapter when encryption is on.
 func (e *encUI) target() saver.Target {
 	if e.broken != nil {
 		return saver.Target{Name: encTarget, Label: encLabel(T("enc.browserLabelBroken", "This browser (read-only: key configuration lost)"), "%s (read-only: key configuration lost)"), Adapter: encstore.ReadOnly(e.browser, e.broken), Capacity: encCapacity()}
@@ -207,7 +171,6 @@ func (e *encUI) target() saver.Target {
 	return saver.Target{Name: encTarget, Label: encLabel(browserLabel, "%s"), Adapter: e.browser, Capacity: encCapacity()}
 }
 
-// state is what #state says about it, for the e2e test.
 func (e *encUI) state() map[string]any {
 	kinds := []string{}
 	for _, o := range e.store.Owners() {
@@ -219,7 +182,6 @@ func (e *encUI) state() map[string]any {
 		"dir": map[string]any{"url": e.dir.url, "offer": e.dir.offer, "host": e.dir.host(), "tokenSet": e.dir.token != "", "refused": e.dir.refused}}
 }
 
-// brokenKind names why the configuration cannot be trusted for the e2e test: "", "missing" or "corrupt".
 func (e *encUI) brokenKind() string {
 	switch {
 	case errors.Is(e.broken, encstore.ErrConfigMissing):
@@ -256,9 +218,6 @@ func para(id string, text string, alert bool) xango.Node {
 	return xango.El("p", attrs, xango.Text(text))
 }
 
-// secretBox shows a recovery key before it is committed: the secret, Copy and Download, a
-// confirmation that it was saved, and the button that adds the key. The key is not an owner key
-// until that button is pressed, which needs the confirmation.
 func (u *ui) secretBox(prefix string, p *prepared, commitLabel string, commit, cancel func()) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("id", prefix+"-box"), xango.A("style", "border:1px solid #d97706;border-radius:6px;padding:8px;margin:8px 0")},
 		para(prefix+"-warning", T("enc.recoveryWarning", "This is your recovery key. It is shown only now. Keep it offline (print it or store it in a password manager). We cannot recover it: if you lose it and your passkey, what you made confidential is lost."), true),
@@ -276,7 +235,6 @@ func (u *ui) secretBox(prefix string, p *prepared, commitLabel string, commit, c
 			btn(prefix+"-cancel", T("enc.cancelKey", "Cancel: do not add it"), cancel, u.enc.pending.Busy())))
 }
 
-// encPanel is the "Encrypt this store" control above the save form.
 func (u *ui) encPanel() xango.Node {
 	e := u.enc
 	if e.broken != nil {
@@ -329,16 +287,12 @@ func (u *ui) encPanel() xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("id", "enc-panel"), xango.A("style", "margin-bottom:1em")}, kids...)
 }
 
-// stalePanel is shown by a tab whose key configuration was changed elsewhere: it is locked and
-// refuses every change until the page is reloaded.
 func (u *ui) stalePanel() []xango.Node {
 	return []xango.Node{
 		para("enc-stale", T("enc.stale", "The keys of this store were changed in another tab or window since this page loaded. This tab is locked so it cannot overwrite that change: reload the page."), true),
 		btn("enc-reload", T("enc.reload", "Reload the page"), func() { js.Global().Get("location").Call("reload") }, false)}
 }
 
-// watchEncConfig locks this tab when another one changes the key configuration (the browser's
-// storage event, which fires in the other tabs of the origin, not in the one that wrote).
 func (u *ui) watchEncConfig() {
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) == 0 {
@@ -353,8 +307,6 @@ func (u *ui) watchEncConfig() {
 	js.Global().Call("addEventListener", "storage", cb) // kept for the life of the page
 }
 
-// encConfigChanged is the storage event's work: the store checks whether the stored configuration is
-// still its own and, if not, locks; the editor is cleared like on any lock.
 func (u *ui) encConfigChanged() {
 	e := u.enc
 	e.store.ConfigChangedElsewhere()
@@ -365,7 +317,6 @@ func (u *ui) encConfigChanged() {
 	}
 }
 
-// orphanPasskey explains a passkey that was made and is not in use: retry it, or forget it.
 func (u *ui) orphanPasskey() []xango.Node {
 	e := u.enc
 	if e.pendingCred == "" {
@@ -377,7 +328,7 @@ func (u *ui) orphanPasskey() []xango.Node {
 		xango.El("div", []xango.Attr{xango.A("style", "display:flex;gap:6px")},
 			btn("enc-orphan-retry", T("enc.orphanRetry", "Try the passkey again"), func() {
 				if e.store.Enabled() {
-					u.rerender() // the retry is the action that needed it: Add my passkey (People tab)
+					u.rerender()
 					return
 				}
 				u.encCommit()
@@ -385,9 +336,6 @@ func (u *ui) orphanPasskey() []xango.Node {
 			btn("enc-orphan-forget", T("enc.orphanForget", "Forget it"), e.forgetPasskey, e.pending.Busy()))}
 }
 
-// encBrokenPanel is what the Save tab shows when the key configuration is gone (over encrypted
-// files) or cannot be read: not "encryption off", but a read-only store with the ways out, which
-// are a restore from a key that opens the files, or Erase.
 func (u *ui) encBrokenPanel() xango.Node {
 	e := u.enc
 	title := T("enc.missingTitle", "Configuration missing: encrypted files found")
@@ -438,8 +386,6 @@ func (u *ui) encBrokenPanel() xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("id", "enc-panel"), xango.A("style", "margin-bottom:1em")}, kids...)
 }
 
-// encRestore rebuilds the configuration from the key make returns (encstore.Store.Restore), leaves
-// the store unlocked with it and shows the names it opens.
 func (u *ui) encRestore(make func(ctx context.Context) (encstore.NewKey, error)) {
 	e := u.enc
 	e.run(func(ctx context.Context) error {
@@ -457,8 +403,6 @@ func (u *ui) encRestore(make func(ctx context.Context) (encstore.NewKey, error))
 	})
 }
 
-// encErasePanel is "Erase the encrypted store": the way out when every key is lost. Two questions:
-// a confirmation that says what it does, and the word typed.
 func (u *ui) encErasePanel() []xango.Node {
 	e := u.enc
 	word := T("enc.eraseWord", "ERASE")
@@ -487,7 +431,6 @@ func (u *ui) encErasePanel() []xango.Node {
 
 func (u *ui) rerender() { u.enc.render() }
 
-// encSetup is the form that chooses the owner's keys.
 func (u *ui) encSetup() []xango.Node {
 	e := u.enc
 	supported := client.Supported()
@@ -520,7 +463,6 @@ func (u *ui) encSetup() []xango.Node {
 	return rows
 }
 
-// encStatus is the state of an encrypted store: locked or not, and how to change that.
 func (u *ui) encStatus(unlocked bool) []xango.Node {
 	e := u.enc
 	var rows []xango.Node
@@ -577,9 +519,6 @@ func (u *ui) encStatus(unlocked bool) []xango.Node {
 	return rows
 }
 
-// interruptedPanel is the banner of a change that was cut short. The journal is data in the browser's
-// storage, which another script or person may have written: so it shows what it would make the
-// store's keys, with fingerprints, and Finish and Undo ask for an explicit confirmation naming them.
 func (u *ui) interruptedPanel(p *encstore.Pending) []xango.Node {
 	e := u.enc
 	list := T("enc.interruptedOff", "turning encryption off")
@@ -595,7 +534,6 @@ func (u *ui) interruptedPanel(p *encstore.Pending) []xango.Node {
 				btn("enc-undo", T("enc.undo", "Undo the change"), func() { u.askRecover(false, p) }, e.pending.Busy())))}
 }
 
-// askRecover asks before a journal is finished or undone, naming the keys it concerns.
 func (u *ui) askRecover(finish bool, p *encstore.Pending) {
 	e := u.enc
 	if finish {
@@ -618,9 +556,6 @@ func (u *ui) askRecover(finish bool, p *encstore.Pending) {
 	u.rerender()
 }
 
-// recoveryAdvice is what the panel says about losing the keys: the limit in plain words, a nudge while
-// only one key is enrolled, and a way to check that a recovery key still works without using it to unlock
-// anything.
 func (u *ui) recoveryAdvice() []xango.Node {
 	e := u.enc
 	rows := []xango.Node{para("enc-limit", T("enc.limitPlain", "If you lose every key of this store, nobody can open its documents, including us. There is no way back."), false)}
@@ -656,8 +591,6 @@ func checkStyle(ok bool) string {
 	return "margin:4px 0;color:var(--gj-danger)"
 }
 
-// encCheckRecovery checks the typed recovery key against the store's list. Nothing is unlocked or written, and
-// the typed secret is cleared at once.
 func (u *ui) encCheckRecovery() {
 	e := u.enc
 	err := e.store.CheckRecoveryKey(e.checkRecovery)
@@ -677,8 +610,6 @@ func (u *ui) encCheckRecovery() {
 	u.rerender()
 }
 
-// recoveryCheckDue says whether to remind the person to check their recovery key, and whether they
-// never have in this browser.
 func recoveryCheckDue() (due, never bool) {
 	at := func(key string) time.Time {
 		t, _ := time.Parse(time.RFC3339, lsGet(key))

@@ -17,11 +17,10 @@ type Geocoder interface {
 	Search(ctx context.Context, query string) ([]Place, error)
 }
 
-// Nominatim asks a Nominatim server (the public one by default, which is for light use; see the package doc).
 type Nominatim struct {
-	Base      string       // "" is https://nominatim.openstreetmap.org; a relative address is read as it is (a mirror, a test)
+	Base      string
 	Client    *http.Client // nil is http.DefaultClient
-	UserAgent string       // sent as User-Agent; a browser does not let it change, and sends the page's address as the referrer
+	UserAgent string       // a browser cannot change it; the page is the referrer
 }
 
 const maxAnswer = 1 << 20

@@ -2,7 +2,6 @@ package canvas
 
 import "testing"
 
-// CaretRects answers for many offsets what CaretRect answers for one, from a single layout.
 func TestCaretRectsMatchCaretRect(t *testing.T) {
 	f, _ := editFlow(t, 0, Chars{Text: "alpha beta gamma\ndelta epsilon zeta\neta theta iota kappa lambda mu nu xi omicron pi rho"})
 	offsets := []int{0, 3, 16, 17, 30, 36, 50, 200}

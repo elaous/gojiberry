@@ -11,27 +11,24 @@ import (
 	"github.com/elaous/gojiberry/auth"
 )
 
-// stubDirectory is a DirectoryService that answers from fields; the routes' own work (method,
-// sign-in, limits, bodies, the mapping of errors to statuses) is what these tests are about. The
-// service's real behaviour is tested where it lives, in docstore/encrypt.
 type stubDirectory struct {
-	DirectoryService // the methods a test does not use
-	err              error
-	keys             []DirectoryKey
-	published        DirectoryPublish
-	revoked          string
-	revokedOwner     *DirectoryOwnerSig
-	includeRevoked   bool
-	asked            string
-	enrollment       DirectoryEnrollment
-	log              DirectoryLog
-	logAddress       DirectoryLogAddress
-	head             DirectoryHead
-	filteredFor      []string
-	resetPseudonym   string
-	unmapped         DirectoryUnmapped
-	cancelOwner      *DirectoryOwnerSig
-	enrolled         DirectoryEnroll
+	DirectoryService
+	err            error
+	keys           []DirectoryKey
+	published      DirectoryPublish
+	revoked        string
+	revokedOwner   *DirectoryOwnerSig
+	includeRevoked bool
+	asked          string
+	enrollment     DirectoryEnrollment
+	log            DirectoryLog
+	logAddress     DirectoryLogAddress
+	head           DirectoryHead
+	filteredFor    []string
+	resetPseudonym string
+	unmapped       DirectoryUnmapped
+	cancelOwner    *DirectoryOwnerSig
+	enrolled       DirectoryEnroll
 }
 
 func (d *stubDirectory) Enrollment(_ context.Context, email string) (DirectoryEnrollment, error) {
@@ -63,7 +60,6 @@ func (d *stubDirectory) LogAddress(context.Context, auth.User) (DirectoryLogAddr
 	return d.logAddress, d.err
 }
 
-// filteringDirectory also lets a caller read the entries about their own address only.
 type filteringDirectory struct{ *stubDirectory }
 
 func (d filteringDirectory) LogFor(_ context.Context, addresses []string, _ int64, _, _ int) (DirectoryLog, error) {
@@ -71,7 +67,6 @@ func (d filteringDirectory) LogFor(_ context.Context, addresses []string, _ int6
 	return DirectoryLog{Entries: nil}, d.err
 }
 
-// operatorDirectory also has the operator's routes.
 type operatorDirectory struct{ *stubDirectory }
 
 func (d operatorDirectory) OperatorResetEnrollment(_ context.Context, pseudonym string) (DirectoryEnrollment, error) {
@@ -115,7 +110,6 @@ func newDirRoutes(t *testing.T, opt func(*Server)) *dirRoutes {
 	return newDirRoutesWith(t, nil, opt)
 }
 
-// newDirRoutesWith is newDirRoutes with the stub wrapped (to give it more of the optional interfaces).
 func newDirRoutesWith(t *testing.T, wrap func(*stubDirectory) DirectoryService, opt func(*Server)) *dirRoutes {
 	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://x.test"})
@@ -164,7 +158,6 @@ func TestDirectoryRoutesNeedTheRightSession(t *testing.T) {
 			t.Errorf("%s %s signed out: %d", rt.method, rt.path, rec.Code)
 		}
 	}
-	// a passkey account's address was typed by whoever made it: it can neither publish nor read
 	for _, rt := range []struct{ method, path, body string }{
 		{"POST", "/directory/challenge", `{"key":"k"}`}, {"POST", "/directory/publish", `{"key":"k"}`},
 		{"DELETE", "/directory/keys/SHA256-x", ""}, {"GET", "/directory/lookup?email=bo@corp.example", ""},
@@ -224,7 +217,7 @@ func TestDirectoryErrorsBecomeStatuses(t *testing.T) {
 		ErrDirectoryBadOwnerSig: 403, ErrDirectoryEnrolled: 409, ErrDirectoryNotEnrolled: 409, ErrDirectoryResetWait: 409,
 		ErrDirectoryNotFound: 404, ErrDirectoryRevoked: 409, ErrDirectoryBusy: 503, errors.New("disk on fire"): 500,
 	} {
-		d := newDirRoutes(t, nil) // one each: the publish budget is per user
+		d := newDirRoutes(t, nil)
 		d.dir.err = err
 		rec := d.do("POST", "/directory/publish", &ana, `{"key":"k"}`)
 		if rec.Code != want {
@@ -293,7 +286,6 @@ func TestDirectoryLookupPolicyAndBudgets(t *testing.T) {
 	if rec := d.do("GET", "/directory/lookup?email=bo@corp.example", &ana, ""); rec.Code != http.StatusOK {
 		t.Errorf("the own domain: %d", rec.Code)
 	}
-	// a user's own lookup budget runs out with 429 and a Retry-After
 	limited := 0
 	for i := 0; i < lookupsPerMinute+5; i++ {
 		rec := d.do("GET", "/directory/lookup?email=bo@corp.example", &ana, "")
@@ -307,7 +299,6 @@ func TestDirectoryLookupPolicyAndBudgets(t *testing.T) {
 	if limited == 0 {
 		t.Error("the lookup budget never ran out")
 	}
-	// publishes have their own, smaller budget
 	d = newDirRoutes(t, nil)
 	hit := false
 	for i := 0; i < publishesPerMinute+5; i++ {
@@ -389,7 +380,6 @@ func TestDirectoryEnrollmentRoutes(t *testing.T) {
 }
 
 func TestDirectoryLogRoutes(t *testing.T) {
-	// a service without a filter: only the operator and an enrolled owner read the whole log
 	d := newDirRoutes(t, nil)
 	if rec := d.do("GET", "/directory/log?since=abc", &ana, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("a since that is not a number: %d", rec.Code)
@@ -418,7 +408,6 @@ func TestDirectoryLogRoutes(t *testing.T) {
 		t.Errorf("POST: %d", rec.Code)
 	}
 
-	// the operator reads the whole log without an owner key
 	op := newDirRoutes(t, func(s *Server) {
 		s.WithDirectoryAdmin(func(r *http.Request) bool { return r.Header.Get("X-Admin") == "yes" })
 	})
@@ -432,7 +421,6 @@ func TestDirectoryLogRoutes(t *testing.T) {
 		t.Errorf("the operator: %d %s", rec.Code, rec.Body.String())
 	}
 
-	// a service with a filter gives everybody else the entries about their own address
 	f := newDirRoutesWith(t, func(s *stubDirectory) DirectoryService { return filteringDirectory{s} }, nil)
 	f.dir.logAddress = DirectoryLogAddress{Address: "p1", Previous: []string{"p0"}}
 	if rec := f.do("GET", "/directory/log", &ana, ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"filtered":true`) || !strings.Contains(rec.Body.String(), `"entries":[]`) {
@@ -524,7 +512,6 @@ func TestDirectoryOperatorRoutes(t *testing.T) {
 	if rec := call("GET", "/admin/directory/unmapped", true); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("a failing unmapped read: %d", rec.Code)
 	}
-	// without the credential: 403, and after enough failures from one client, 429
 	denied, limited := 0, 0
 	for i := 0; i < adminFailuresPerMinute+3; i++ {
 		switch call("POST", reset, false).Code {
@@ -541,7 +528,6 @@ func TestDirectoryOperatorRoutes(t *testing.T) {
 		t.Errorf("the failure budget is shared by the admin routes: %d", rec.Code)
 	}
 
-	// a service without the operator's interfaces answers 404 to the operator
 	plain := newDirRoutes(t, func(s *Server) { s.WithDirectoryAdmin(admin) })
 	for _, rt := range []struct{ method, path string }{{"POST", reset}, {"GET", "/admin/directory/unmapped"}} {
 		req := httptest.NewRequest(rt.method, rt.path, nil)

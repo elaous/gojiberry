@@ -22,9 +22,6 @@ import (
 
 const target = "browser"
 
-// faultyRaw is the storage under the store, with failures on demand: the nth write fails (or, with
-// failFrom, every write from the nth on, which is a crash as far as the store can tell), the nth
-// write is silently truncated (a store that lies), and a byte quota like the browser's.
 type faultyRaw struct {
 	inner docstore.Adapter
 
@@ -46,7 +43,6 @@ func (f *faultyRaw) used() int {
 	return n
 }
 
-// write counts one write and says what to do with it: fail it, truncate it, or let it through.
 func (f *faultyRaw) write(id string, data []byte) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -112,13 +108,11 @@ func (f *faultyRaw) heal() {
 }
 
 type rig struct {
-	raw     *faultyRaw
-	st      *Store
-	saved   Config
-	persist int
-	// history is every Config that was persisted, in order (the first of a change is its journal).
-	history []Config
-	// failPersist, when set, is asked at each Persist (1 is the first since persist was reset).
+	raw         *faultyRaw
+	st          *Store
+	saved       Config
+	persist     int
+	history     []Config
 	failPersist func(n int) error
 	secret      []byte // the passkey's PRF output
 	saver       *saver.Saver
@@ -127,7 +121,6 @@ type rig struct {
 
 func newRig(t *testing.T) *rig { return newRigOver(t, docstore.NewMemoryAdapter()) }
 
-// newRigOver is newRig over the given storage.
 func newRigOver(t *testing.T, inner docstore.Adapter) *rig {
 	t.Helper()
 	r := &rig{raw: &faultyRaw{inner: inner}, secret: bytes.Repeat([]byte{5}, 32)}
@@ -135,7 +128,6 @@ func newRigOver(t *testing.T, inner docstore.Adapter) *rig {
 	return r
 }
 
-// open is a page load: a Store over the same storage with the config that was persisted.
 func (r *rig) open(t *testing.T, cfg Config) {
 	t.Helper()
 	st, err := New(r.raw, target, cfg)
@@ -171,7 +163,6 @@ func doc(name, text string) docfile.Document {
 	return d
 }
 
-// everything the storage holds, as one string: what a thief of the browser's storage reads.
 func (r *rig) stored(t *testing.T) string {
 	t.Helper()
 	var all strings.Builder
@@ -181,7 +172,6 @@ func (r *rig) stored(t *testing.T) string {
 	return all.String()
 }
 
-// snapshot is every stored item, by id.
 func (r *rig) snapshot(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -226,7 +216,6 @@ func passkeyFrom(t *testing.T, secret []byte, label string) NewKey {
 	return k
 }
 
-// recovery makes a recovery key whose secret was shown and saved, and that is not kept unlocked.
 func recovery(t *testing.T) (NewKey, string) {
 	t.Helper()
 	k, secret, err := NewRecoveryKey("Recovery key")
@@ -249,7 +238,6 @@ var onlyPasskeys = Options{AcceptPasskeyOnly: true}
 func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
-	// A document saved in the clear before encryption is on.
 	e, err := r.saver.Save(ctx, target, docfile.Open, doc("Old plan", "ancient clear text"))
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +248,7 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if err := r.st.Enable(ctx, onlyPasskeys, passkey(t, r)); err != nil {
 		t.Fatal(err)
 	}
-	r.open(t, r.saved) // the page now uses the encrypted adapter
+	r.open(t, r.saved)
 	r.unlockPasskey(t)
 	if strings.Contains(r.stored(t), "ancient clear text") {
 		t.Fatal("what was saved before is still in the clear")
@@ -268,7 +256,6 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if _, _, err := r.saver.LoadChecked(ctx, target, e.ID); err != nil {
 		t.Fatalf("the migrated document opens: %v", err)
 	}
-	// New documents are encrypted at rest too.
 	n, err := r.saver.Save(ctx, target, docfile.Open, doc("Salary", "salary text 123"))
 	if err != nil {
 		t.Fatal(err)
@@ -276,12 +263,10 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if strings.Contains(r.stored(t), "salary text 123") {
 		t.Fatal("a new document is in the clear")
 	}
-	// A passkey alone: refused, with the rule's own words.
 	err = r.saver.SetProtection(ctx, target, n.ID, saver.ProtectionE2EE)
 	if !errors.Is(err, encrypt.ErrNeedSecondRecipient) {
 		t.Fatalf("passkey alone: %v", err)
 	}
-	// A recovery key as a second owner key: allowed, and now every document opens with it alone.
 	rk, secret := recovery(t)
 	if err := r.st.AddOwner(ctx, rk); err != nil {
 		t.Fatal(err)
@@ -298,7 +283,6 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 		t.Fatalf("%+v", got)
 	}
 
-	// Lock: nothing opens, the list shows the placeholder, saving says it is locked.
 	r.st.Lock()
 	if _, _, err := r.saver.Reveal(ctx, target, n.ID); !errors.Is(err, docstore.ErrLocked) {
 		t.Fatalf("locked reveal: %v", err)
@@ -310,7 +294,6 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 		t.Fatal("opened while locked")
 	}
 
-	// A reload: the page has the persisted keys (public) and starts locked. The wrong key is refused.
 	r.open(t, r.saved)
 	if !r.st.Enabled() || r.st.Unlocked() {
 		t.Fatal("a fresh page should be locked")
@@ -321,14 +304,12 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if err := r.st.UnlockRecovery("AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ"); err == nil {
 		t.Fatal("a nonsense key unlocked it")
 	}
-	// The recovery key alone opens everything, including the confidential name.
 	if err := r.st.UnlockRecovery(secret); err != nil {
 		t.Fatal(err)
 	}
 	if name, _, err := r.saver.Reveal(ctx, target, n.ID); err != nil || name != "Salary" {
 		t.Fatalf("%q %v", name, err)
 	}
-	// Making it not confidential again moves the name back out.
 	if err := r.saver.SetProtection(ctx, target, n.ID, saver.ProtectionServer); err != nil {
 		t.Fatal(err)
 	}
@@ -346,8 +327,6 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	rk, _ := recovery(t)
-	// Only the recovery key and the SSH public key are known: nothing carries a private side, so
-	// the store starts locked, and the private key file unlocks it.
 	if _, err := r.saver.Save(ctx, target, docfile.Open, doc("Before", "text from before")); err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +344,6 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The SSH key is not a passkey, so it is enough for the rule.
 	if err := r.saver.SetProtection(ctx, target, e.ID, saver.ProtectionE2EE); err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +358,6 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if n, _, err := r.saver.Reveal(ctx, target, e.ID); err != nil || n != "Contract" {
 		t.Fatalf("%q %v", n, err)
 	}
-	// The unlocked key's private side opens a challenge (proof of possession); locked, none is given.
 	if id, ok := r.st.IdentityFor(k.Recipient.Text); !ok || id == nil {
 		t.Fatal("the unlocked SSH key has no identity")
 	}
@@ -394,7 +371,6 @@ func TestSSHKeyOwnsAndUnlocksTheStore(t *testing.T) {
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatal(err)
 	}
-	// An RSA public key cannot be an owner here (it cannot sign the lists).
 	if _, err := NewSSHKey("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7 x"); err == nil {
 		t.Fatal("an unparsable key was accepted")
 	}
@@ -432,7 +408,6 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 		t.Fatalf("%q", st)
 	}
 	sealed := bytes.Clone(file)
-	// Locked: the same document is left out and counted.
 	r.st.Lock()
 	if err := r.session.DownloadPack(ctx, ""); err != nil {
 		t.Fatal(err)
@@ -440,10 +415,8 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 	if st := r.session.Props().Status; !strings.Contains(st, "1 confidential documents left out") {
 		t.Fatalf("%q", st)
 	}
-	// Delete everything, then import the sealed pack with the store unlocked.
 	_ = r.st.UnlockRecovery(secret)
 	if err := r.saver.Purge(ctx, target, e.ID); err != nil {
-		// not trashed yet
 		if err := r.saver.Trash(ctx, target, e.ID); err != nil {
 			t.Fatal(err)
 		}
@@ -470,8 +443,6 @@ func TestPackSealedForTheOwnerKeysAndOpenedAgain(t *testing.T) {
 	}
 }
 
-// A pack sealed for another store's keys, imported while this store is unlocked, says it was
-// sealed for another key: unlocking again would not help, so the message must not say it would.
 func TestPackSealedForAnotherKeySaysSo(t *testing.T) {
 	ctx := context.Background()
 	mk := func(seed byte) (*rig, string) {
@@ -528,7 +499,6 @@ func TestDisableDecryptsEverythingBack(t *testing.T) {
 	if r.st.Enabled() || len(r.saved.Owners) != 0 {
 		t.Fatalf("still on: %+v", r.saved)
 	}
-	// The store is a plain one again, opened with no key.
 	r.open(t, r.saved)
 	if _, _, err := r.saver.LoadChecked(ctx, target, e.ID); err != nil {
 		t.Fatalf("%v", err)
@@ -536,14 +506,11 @@ func TestDisableDecryptsEverythingBack(t *testing.T) {
 	if !strings.Contains(r.stored(t), "plain after disable") {
 		t.Error("the document was not written back in the clear")
 	}
-	// A store with encryption off says so.
 	if err := r.st.Disable(ctx); !errors.Is(err, ErrDisabled) {
 		t.Fatalf("%v", err)
 	}
 }
 
-// Disable refuses while a document is still confidential (the doc says the caller checks; the
-// store enforces it too, so its error cannot be skipped by a caller that forgets).
 func TestDisableRefusesWhileSomethingIsConfidential(t *testing.T) {
 	ctx := context.Background()
 	r, secret := encryptedRig(t)
@@ -608,8 +575,6 @@ func sshKeyPair(t *testing.T, comment string) (pub string, priv []byte) {
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sp))) + " " + comment, pem.EncodeToMemory(blk)
 }
 
-// encryptedRig is a store that is on, with a passkey and a recovery key, unlocked with the passkey
-// (after a reload, as a page would be), and the recovery key's secret.
 func encryptedRig(t *testing.T) (*rig, string) {
 	t.Helper()
 	r := newRig(t)
@@ -622,8 +587,6 @@ func encryptedRig(t *testing.T) (*rig, string) {
 	return r, secret
 }
 
-// withPlainDocs saves three documents in the clear (one in a folder's versions too) before
-// encryption.
 func withPlainDocs(t *testing.T, r *rig) {
 	t.Helper()
 	ctx := context.Background()
@@ -640,8 +603,6 @@ func withPlainDocs(t *testing.T, r *rig) {
 	}
 }
 
-// CheckRecoveryKey tells the right recovery key from another key and from rubbish, without unlocking
-// the store or keeping the secret.
 func TestCheckRecoveryKey(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
@@ -667,10 +628,6 @@ func TestCheckRecoveryKey(t *testing.T) {
 	}
 }
 
-// With ConfirmFirstUse the first unlock with an SSH key of a list nothing on this device sealed stops and
-// shows the list's fingerprint; once the person confirmed it (TrustList) the unlock goes through, and a
-// different list is a different fingerprint. A key that opened the list through the chain of seals needs
-// no confirmation for the SSH key afterwards.
 func TestFirstUnlockWithAnSSHKeyAsksForTheListsFingerprint(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
@@ -700,15 +657,12 @@ func TestFirstUnlockWithAnSSHKeyAsksForTheListsFingerprint(t *testing.T) {
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Fatalf("after confirming: %v", err)
 	}
-	// the key is sealed now: no question again, even on a fresh page load
 	r.open(t, r.saved)
 	r.st.ConfirmFirstUse = true
 	if err := r.st.UnlockSSH(bytes.Clone(priv)); err != nil {
 		t.Errorf("a sealed key is not asked again: %v", err)
 	}
 
-	// unlocking with the recovery key (which proves the list through the seals) trusts the list for the
-	// SSH key too
 	r2 := newRig(t)
 	pub2, priv2 := sshKeyPair(t, "me@desk")
 	k2, _ := NewSSHKey(pub2)

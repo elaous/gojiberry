@@ -15,14 +15,6 @@ import (
 	"time"
 )
 
-// Contributing recordings to research is optional, explicit and per sitting. Nothing leaves the device
-// unless the person has been shown the exact package, confirmed that package, and the operator has
-// configured an endpoint (there is none by default, and never a third party's). The package carries
-// no name, account, address, device or time: each recording gets a new random ID, dates are fixed, and
-// the request has no cookie, sign-in token or referrer. One random token per contribution lets the
-// operator delete it if the person asks (Revoke sends that request; once sent, only the operator's
-// honouring it can take the data back, and the interface says so before the person confirms).
-
 // MaxContributionBytes limits one package.
 const MaxContributionBytes = 64 << 20
 
@@ -35,8 +27,6 @@ var (
 	ErrTooLarge     = errors.New("speechcoach: the package is too large")
 )
 
-// CheckEndpoint validates an operator-configured endpoint: https, or http to the local machine for
-// development. No credentials in the URL, no fragment. It returns the cleaned URL.
 func CheckEndpoint(raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", ErrNoEndpoint
@@ -56,7 +46,6 @@ func CheckEndpoint(raw string) (string, error) {
 	return strings.TrimRight(u.String(), "/"), nil
 }
 
-// PlanItem is one recording in a package, as it will be sent.
 type PlanItem struct {
 	ID         string  `json:"id"` // random, new for this package
 	Prompt     string  `json:"prompt"`
@@ -78,11 +67,9 @@ type Plan struct {
 	body     []byte
 }
 
-// Body is the exact request body (a zip in the export format).
 func (p *Plan) Body() []byte { return p.body }
 
-// Prepare builds the package for the entries chosen. Audio and the person's transcripts are the content;
-// everything else that could identify is removed or replaced.
+// Prepare builds the package for the entries chosen.
 func Prepare(endpoint string, entries []Entry) (*Plan, error) {
 	ep, err := CheckEndpoint(endpoint)
 	if err != nil {
@@ -134,14 +121,11 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// Doer sends a request: *http.Client, or a wrapper that adds what the platform needs (in the browser,
-// the header that omits credentials).
 type Doer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// Contribution is the consent of one sitting. It is in memory only: closing the page ends it, and the
-// next sitting starts without consent.
+// Contribution is the consent of one sitting.
 type Contribution struct {
 	confirmed string // digest of the plan the person confirmed
 	endpoint  string
@@ -149,13 +133,10 @@ type Contribution struct {
 	sent      []string // tokens of the packages sent
 }
 
-// Confirm records that the person saw this plan and agrees to send exactly it. A later plan, or a
-// plan to another address, needs its own confirmation.
 func (c *Contribution) Confirm(p *Plan) {
 	c.confirmed, c.endpoint, c.revoked = p.Digest, p.Endpoint, false
 }
 
-// Confirmed says the plan is the one confirmed in this sitting and consent was not withdrawn.
 func (c *Contribution) Confirmed(p *Plan) bool {
 	return !c.revoked && c.confirmed != "" && p != nil && c.confirmed == p.Digest && c.endpoint == p.Endpoint
 }
@@ -163,8 +144,6 @@ func (c *Contribution) Confirmed(p *Plan) bool {
 // Sent is the number of packages sent in this sitting.
 func (c *Contribution) Sent() int { return len(c.sent) }
 
-// Send posts the plan, only when it is the confirmed one. The request carries the body, its type and the
-// token, and nothing else; a redirect is not followed to another address.
 func (c *Contribution) Send(ctx context.Context, d Doer, p *Plan) error {
 	if c.revoked {
 		return ErrRevoked
@@ -194,10 +173,6 @@ func (c *Contribution) Send(ctx context.Context, d Doer, p *Plan) error {
 	return nil
 }
 
-// Revoke withdraws consent: nothing more is sent, and a deletion request (DELETE <endpoint>/<token>) goes
-// out for each package sent in this sitting. It returns how many the server confirmed deleted (a 2xx or
-// 404, the latter meaning it no longer holds it) and the first error. Withdrawing works even when a
-// request fails: consent is withdrawn either way.
 func (c *Contribution) Revoke(ctx context.Context, d Doer) (deleted int, err error) {
 	c.revoked, c.confirmed = true, ""
 	var rest []string

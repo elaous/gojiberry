@@ -46,7 +46,6 @@ func TestFlowFindAndReplacePreserveFormatting(t *testing.T) {
 	if got := f.EditText(); got != "one three one three" {
 		t.Fatalf("text %q", got)
 	}
-	// The bold word stays bold after its replacement.
 	bold := ""
 	for _, it := range f.ContentItems() {
 		if c, ok := it.(Chars); ok && c.Format.FontWeight == 700 {
@@ -56,15 +55,12 @@ func TestFlowFindAndReplacePreserveFormatting(t *testing.T) {
 	if bold != "three" {
 		t.Errorf("bold text %q", bold)
 	}
-	// Regex groups.
 	n, err = f.ReplaceAll(FindOptions{Query: `(\w+) one`, Regex: true, MatchCase: true}, "$1 1")
 	if err != nil || n != 1 || f.EditText() != "one three 1 three" {
 		t.Errorf("regex replace: %d %v %q", n, err, f.EditText())
 	}
 }
 
-// A pattern that looks around (\B here) means what it meant in Find when its
-// replacement is worked out: the match is not re-run on its own text.
 func TestRegexReplacementKnowsTheContext(t *testing.T) {
 	f := NewTextFlow("cat at", 0, 0, 400, 200)
 	n, err := f.ReplaceAll(FindOptions{Query: `\Bat`, Regex: true, MatchCase: true}, "[$0]")
@@ -99,7 +95,6 @@ func TestSearchHighlightsAreDrawn(t *testing.T) {
 func TestRegexReplacementWithNonASCIIAndWholeWord(t *testing.T) {
 	f := NewTextFlow("é café cafés ça", 0, 0, 400, 200)
 	n, err := f.ReplaceAll(FindOptions{Query: `\b(caf)é\b`, Regex: true, MatchCase: true}, "${1}E")
-	// Go's \b is ASCII: it falls between é and s, not between é and a space.
 	if err != nil || n != 1 || f.EditText() != "é café cafEs ça" {
 		t.Fatalf("%d %v %q", n, err, f.EditText())
 	}

@@ -15,7 +15,6 @@ func TestValidLang(t *testing.T) {
 	}
 }
 
-// SetLanguage tags the selected text only, and a tag that is not valid is refused.
 func TestSetLanguageTagsTheSelection(t *testing.T) {
 	f, _ := newFlow("hello monde", 400, 100)
 	f.SetSelection(6, 11)

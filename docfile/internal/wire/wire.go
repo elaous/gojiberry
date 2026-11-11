@@ -1,11 +1,3 @@
-// Package wire is the small part of the protobuf wire format that docfile needs: varints,
-// fixed-width numbers, length-prefixed bytes, tags, and skipping a field it does not know.
-// It follows the semantics of google.golang.org/protobuf/encoding/protowire, so documents
-// written with either read the same, but it is a few hundred lines instead of a module
-// (and its transitive weight in a browser build).
-//
-// The Consume functions return the number of bytes used, or a negative error code (see
-// ParseError). They never read past the end of the slice they are given and never panic.
 package wire
 
 import (
@@ -33,10 +25,10 @@ const (
 	Fixed32Type    Type = 5
 )
 
-// MaxDepth is how deeply groups may nest when skipping an unknown field.
+// MaxDepth is the deepest allowed group nesting.
 const MaxDepth = 10000
 
-// Error codes returned (negated) by the Consume functions.
+// Error codes returned, negated, by the consume functions.
 const (
 	_ = -iota
 	errCodeTruncated
@@ -56,7 +48,7 @@ var (
 	errParse       = errors.New("parse error")
 )
 
-// ParseError turns the negative code n of a Consume function into an error (nil if n >= 0).
+// ParseError turns a negative code into an error.
 func ParseError(n int) error {
 	if n >= 0 {
 		return nil
@@ -78,8 +70,7 @@ func ParseError(n int) error {
 	return errParse
 }
 
-// AppendVarint appends v as a varint (1 to 10 bytes). A negative int64 passed as
-// uint64(v) takes 10 bytes.
+// AppendVarint appends v as a varint.
 func AppendVarint(b []byte, v uint64) []byte {
 	for v >= 0x80 {
 		b = append(b, byte(v)|0x80)
@@ -134,17 +125,17 @@ func ConsumeFixed64(b []byte) (v uint64, n int) {
 		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56, 8
 }
 
-// AppendBytes appends v with its length as a varint in front.
+// AppendBytes appends v with its length prefix.
 func AppendBytes(b []byte, v []byte) []byte {
 	return append(AppendVarint(b, uint64(len(v))), v...)
 }
 
-// AppendString appends s with its length as a varint in front.
+// AppendString appends s with its length prefix.
 func AppendString(b []byte, s string) []byte {
 	return append(AppendVarint(b, uint64(len(s))), s...)
 }
 
-// ConsumeBytes reads a length-prefixed value; v aliases b.
+// ConsumeBytes reads a length-prefixed byte slice.
 func ConsumeBytes(b []byte) (v []byte, n int) {
 	l, n := ConsumeVarint(b)
 	if n < 0 {
@@ -156,18 +147,18 @@ func ConsumeBytes(b []byte) (v []byte, n int) {
 	return b[n : n+int(l)], n + int(l)
 }
 
-// ConsumeString reads a length-prefixed value as a string (copied).
+// ConsumeString reads a length-prefixed string.
 func ConsumeString(b []byte) (s string, n int) {
 	v, n := ConsumeBytes(b)
 	return string(v), n
 }
 
-// EncodeTag packs a field number and a wire type.
+// EncodeTag packs a field number and wire type.
 func EncodeTag(num Number, typ Type) uint64 {
 	return uint64(num)<<3 | uint64(typ&7)
 }
 
-// DecodeTag unpacks a tag; a number too large for int32 comes back as -1.
+// DecodeTag unpacks a tag into number and type.
 func DecodeTag(x uint64) (Number, Type) {
 	if x>>3 > 1<<31-1 {
 		return -1, 0
@@ -180,7 +171,7 @@ func AppendTag(b []byte, num Number, typ Type) []byte {
 	return AppendVarint(b, EncodeTag(num, typ))
 }
 
-// ConsumeTag reads a tag; field number 0 (or one out of range) is an error.
+// ConsumeTag reads a tag.
 func ConsumeTag(b []byte) (Number, Type, int) {
 	v, n := ConsumeVarint(b)
 	if n < 0 {
@@ -193,10 +184,7 @@ func ConsumeTag(b []byte) (Number, Type, int) {
 	return num, typ, n
 }
 
-// ConsumeFieldValue skips the value of a field whose tag (num, typ) was just read, and
-// returns its length. A group is skipped through its matching end marker; groups nested
-// deeper than MaxDepth, an end marker that does not match, and the reserved wire types 6
-// and 7 are errors.
+// ConsumeFieldValue skips the value of a field.
 func ConsumeFieldValue(num Number, typ Type, b []byte) int {
 	return consumeFieldValue(num, typ, b, MaxDepth)
 }

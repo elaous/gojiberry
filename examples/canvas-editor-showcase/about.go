@@ -6,8 +6,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The project's address: the source link the AGPL asks a network service to offer (its section 13), the credit its notice
-// requires, and the licence texts.
 const (
 	projectRepo     = "https://github.com/elaous/gojiberry"
 	projectLicence  = projectRepo + "/blob/main/LICENSE"
@@ -19,7 +17,6 @@ func aboutLink(id, href, text string) xango.Node {
 	return xango.El("li", nil, xango.El("a", []xango.Attr{xango.A("id", id), xango.A("href", href), xango.A("target", "_blank"), xango.A("rel", "noopener noreferrer")}, xango.Text(text)))
 }
 
-// aboutPanel is the About tab: what this is, the licence, the credit to keep and where the source is.
 func aboutPanel() xango.Node {
 	return xango.Frag(
 		xango.El("h4", []xango.Attr{xango.A("class", "gj-doc-title")}, xango.Text(T("about.title", "About Gojiberry"))),

@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// The files in testdata were written by the protobuf library's own encoders (from
-// fillDoc): the codecs here must write the same bytes and read them back.
-
 func TestBinaryMatchesProtobufLibrary(t *testing.T) {
 	want, err := os.ReadFile("testdata/rich.pb")
 	if err != nil {
@@ -82,7 +79,6 @@ func TestCorruptBinaryIsAnErrorNeverAPanic(t *testing.T) {
 }
 
 func TestBinaryUnknownFieldsAndUnpackedListsAreRead(t *testing.T) {
-	// field 99 (unknown, a varint), then columns (2 of an item) with unpacked widths.
 	raw := []byte{0x98, 0x06, 0x07}
 	d, err := ProtoBinary.Unmarshal(raw)
 	if err != nil || !reflect.DeepEqual(d, Document{}) {

@@ -7,18 +7,13 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// ToolbarItem is one button of an IconToolbar, or a gap between groups.
 type ToolbarItem struct {
 	// ID names the button for tests and styling (data-cmd).
-	ID string
-	// Label is the button's name for a screen reader and for the tooltip ("Bold"). The icon alone carries no
-	// name, so an item without a label draws nothing.
+	ID    string
 	Label string
 	// Icon is the Material Symbols name (see Material).
-	Icon string
-	// Shortcut is the key chord the same command has ("Ctrl+B"): added to the tooltip and announced.
-	Shortcut string
-	// Toggle makes the button a switch that is on or off (aria-pressed), for bold and the like; Pressed says which.
+	Icon            string
+	Shortcut        string
 	Toggle, Pressed bool
 	Disabled        bool
 	// Separator draws a gap between groups instead of a button.
@@ -35,17 +30,11 @@ type IconToolbarProps struct {
 	Items []ToolbarItem
 }
 
-// IconToolbar is a toolbar of icon buttons for the commands a person uses most (the formatting ones), in the
-// pattern the WAI-ARIA authoring practices give: one stop in the tab order, then the arrow keys, Home and End move
-// between the buttons (a button that is disabled is skipped), and Tab leaves the toolbar. Each button has its
-// name as an aria-label and a tooltip that adds the shortcut; a toggle says whether it is on with aria-pressed,
-// not by colour alone.
 func IconToolbar(p IconToolbarProps) xango.Node {
 	id := p.ID
 	if id == "" {
 		id = "gj-icontoolbar"
 	}
-	// the way in: the first button that can be pressed, or the one that is on
 	entry := -1
 	for i, it := range p.Items {
 		if it.Separator || it.Label == "" || it.Disabled {
@@ -95,11 +84,6 @@ func IconToolbar(p IconToolbarProps) xango.Node {
 		xango.A("aria-orientation", "horizontal"), gridKeys("#"+id, "#"+id+" button:not(:disabled)")}, kids...)
 }
 
-// CommandToolbarItems makes the items of an IconToolbar from editing commands, in groups (a gap between groups). The
-// name, the icon and the shortcut of each are the ones the Edit menu shows for the command (CommandMenu): the title
-// from the registry, translated as "cmd.<name>", the icon of CommandMaterial and the first chord of the keymap, so
-// the button, the menu and the key cannot disagree. A command the registry lacks is left out (a feature that was
-// not installed). state says, for a command, whether it is a toggle and on, and whether it is unavailable now.
 func CommandToolbarItems(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, groups [][]canvas.Command,
 	state func(canvas.Command) (toggle, pressed, disabled bool), run func(canvas.Command)) []ToolbarItem {
 	title := map[canvas.Command]string{}

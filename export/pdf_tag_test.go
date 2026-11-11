@@ -50,10 +50,8 @@ func TestPDFExportIsTagged(t *testing.T) {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
 	if bytes.Contains(data, []byte("7777.00")) {
-		// The markers are compressed in the content; check the text of the structure instead.
 		t.Log("markers are inside compressed streams")
 	}
-	// The text is still readable, so tagging did not damage the page content.
 	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatal(err)
@@ -105,8 +103,6 @@ func TestTaggingSpansPages(t *testing.T) {
 	}
 }
 
-// shapeOf writes the structure tree under v as nested type names: "P(Link(OBJR) Span[fr])". Marked content
-// references are left out, an /OBJR shows as OBJR, and a /Lang follows the type in brackets.
 func shapeOf(v pdf.Value) string {
 	switch v.Kind() {
 	case pdf.Array:
@@ -179,7 +175,6 @@ func TestLinkAnnotationsAreInTheStructureTree(t *testing.T) {
 	if got, err := pdfua.Check(data); err != nil || len(got) != 0 {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
-	// Each token of a link has its own annotation: "the docs" is the words and the space between them.
 	if got, want := structureShape(t, data), "Document(P(Link(OBJR) Link(OBJR) Link(OBJR) Link(OBJR)))"; got != want {
 		t.Errorf("structure = %s, want %s", got, want)
 	}
@@ -265,7 +260,6 @@ func TestNestedListsNestInTheStructureTree(t *testing.T) {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
 	li := "LI(Lbl LBody)"
-	// A nested list is inside the body of the item before it (ISO 14289-1 7.6).
 	want := "Document(L(LI(Lbl LBody(L(LI(Lbl LBody(L(" + li + "))) " + li + "))) " + li + ") P L(" + li + ") L(" + li + "))"
 	if got := structureShape(t, data); got != want {
 		t.Errorf("structure =\n%s\nwant\n%s", got, want)
@@ -276,7 +270,6 @@ func TestRunLanguagesAreTaggedAsSpans(t *testing.T) {
 	run := func(s, lang string) Segment { return Segment{Text: s, Format: Format{Lang: lang}} }
 	snap := textSnapshot(
 		Block{Kind: Paragraph, Segments: []Segment{{Text: "He said "}, run("bonjour tout le monde", "fr"), {Text: " and then "}, run("guten Tag", "de-CH")}},
-		// Not a language tag: no span, and the export still passes the checker.
 		Block{Kind: Paragraph, Segments: []Segment{{Text: "plain "}, run("odd", "12")}},
 		Block{Kind: Paragraph, Segments: []Segment{{Text: "see "}, {Text: "ici", Format: Format{Href: "https://example.org", Lang: "fr"}}}},
 	)
@@ -357,8 +350,6 @@ func TestPopplerReadsTheTaggedFile(t *testing.T) {
 	}
 }
 
-// veraPDF (the PDF/UA-1 reference validator) is run when it is installed (on the PATH or named by
-// GOJIBERRY_VERAPDF); GOJIBERRY_REQUIRE_VERAPDF=1 makes its absence a failure.
 func TestVeraPDFAcceptsTheTaggedFiles(t *testing.T) {
 	bin := os.Getenv("GOJIBERRY_VERAPDF")
 	if bin == "" {

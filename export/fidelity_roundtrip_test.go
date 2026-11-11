@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// charsWith finds the first run of d whose text contains word.
 func charsWith(d docfile.Document, word string) *docfile.Chars {
 	for _, it := range d.Content {
 		if it.Chars != nil && strings.Contains(it.Chars.Text, word) {
@@ -35,7 +34,6 @@ func hasItem(d docfile.Document, ok func(docfile.Item) bool) bool {
 	return slices.ContainsFunc(d.Content, ok)
 }
 
-// survives says whether a feature of the paired fixtures is in a document read back from a file.
 func survives(f Feature, d docfile.Document) bool {
 	marked := charsWith(d, "marked")
 	inline := func(ok func(docfile.Format) bool) bool { return marked != nil && ok(marked.Format) }
@@ -173,8 +171,6 @@ func importBack(t *testing.T, r *transfer.Registry, format string, data []byte) 
 	return d
 }
 
-// notReadBack is what a format writes but its importer does not read: a loss on the way in, recorded here so a
-// new one fails the round-trip test. (ImportFidelity says so for a file that holds such things.)
 var notReadBack = map[string]map[Feature]string{
 	"docx": {
 		FeatPageHeader: "headers and footers are not read (docximport.Inspect counts them)",
@@ -184,10 +180,6 @@ var notReadBack = map[string]map[Feature]string{
 	},
 }
 
-// TestRoundTripReadsBackWhatTheTableSaysIsKept exports each paired document, imports the file again and checks
-// the feature against the table: what a format keeps (Kept) must come back, what it drops must not appear out of
-// nowhere, and what is folded into another construct (a check box into a character) comes back as that construct,
-// not as the feature. The formats that can be read again are Word, Markdown and plain text; PDF is below.
 func TestRoundTripReadsBackWhatTheTableSaysIsKept(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()
@@ -221,7 +213,6 @@ func TestRoundTripReadsBackWhatTheTableSaysIsKept(t *testing.T) {
 	}
 }
 
-// PDF import reads text and nothing else: not even a bold run or a heading comes back, and ImportFidelity says so.
 func TestPDFRoundTripKeepsTheTextAndNothingElse(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()
@@ -254,8 +245,6 @@ func TestPDFRoundTripKeepsTheTextAndNothingElse(t *testing.T) {
 	}
 }
 
-// What Word files hold that the importer leaves out is reported from the file, and a file this editor wrote
-// reports nothing: the round trip of an exported document loses nothing the table did not already say.
 func TestImportFidelityOfWordFiles(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()
@@ -268,7 +257,6 @@ func TestImportFidelityOfWordFiles(t *testing.T) {
 		t.Errorf("a file exported by the editor reports losses on the way in: %+v", rep)
 	}
 
-	// The same file with a comments part and a header added reports both.
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatal(err)

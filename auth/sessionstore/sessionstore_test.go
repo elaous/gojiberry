@@ -16,10 +16,8 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
-// conditionalOnly hides DeleteIf, so TakeState must consume with the SaveIf used marker.
 type conditionalOnly struct{ docstore.ConditionalAdapter }
 
-// plainAdapter exposes only the Adapter methods.
 type plainAdapter struct{ a docstore.Adapter }
 
 func (p plainAdapter) Save(c context.Context, id string, d []byte) error { return p.a.Save(c, id, d) }
@@ -29,7 +27,6 @@ func (p plainAdapter) Load(c context.Context, id string) (docstore.Document, err
 func (p plainAdapter) List(c context.Context) ([]docstore.Meta, error) { return p.a.List(c) }
 func (p plainAdapter) Delete(c context.Context, id string) error       { return p.a.Delete(c, id) }
 
-// both runs a test on a store with DeleteIf and on one with only SaveIf.
 func both(t *testing.T, f func(t *testing.T, wrap func(*docstore.MemoryAdapter) docstore.Adapter)) {
 	t.Helper()
 	for name, wrap := range map[string]func(*docstore.MemoryAdapter) docstore.Adapter{
@@ -74,13 +71,11 @@ func TestSessionIsSharedByReplicasAndNeverStoresTheToken(t *testing.T) {
 	if docstore.IsDocumentKey(metas[0].ID) {
 		t.Fatal("a session record must not be a document key")
 	}
-	// What a reader of the store holds (the name, the body) is not a token.
 	for _, forged := range []string{metas[0].ID, strings.TrimPrefix(metas[0].ID, SessionPrefix), "", ".", "x.", ".5", secret, secret + ".-1", secret + ".01", secret + ".9999999999"} {
 		if _, ok, err := b.GetSession(ctx, forged); ok || err != nil {
 			t.Fatalf("forged %q: %v %v", forged, ok, err)
 		}
 	}
-	// A real secret with another bucket is another name.
 	i := strings.LastIndexByte(tok, '.')
 	if _, ok, _ := b.GetSession(ctx, tok[:i]+".1"); ok {
 		t.Fatal("a token with a changed bucket must not match")
@@ -133,7 +128,6 @@ func TestSessionExpiresAndDoesNotSlide(t *testing.T) {
 	if _, ok, _ := b.GetSession(ctx, tok); !ok {
 		t.Fatal("alive at 29 minutes")
 	}
-	// A read at 29 minutes did not extend it.
 	clock.Store(now.Add(30*time.Minute + time.Second).UnixNano())
 	if _, ok, _ := b.GetSession(ctx, tok); ok {
 		t.Fatal("expired at 30 minutes: the stored Expires is checked on read, even before the sweep")
@@ -192,7 +186,6 @@ func TestStateExpiredIsRefusedAndConsumed(t *testing.T) {
 	})
 }
 
-// Of many concurrent takes, on many replicas, exactly one wins.
 func TestConcurrentTakeHasExactlyOneWinner(t *testing.T) {
 	both(t, func(t *testing.T, wrap func(*docstore.MemoryAdapter) docstore.Adapter) {
 		mem := docstore.NewMemoryAdapter()
@@ -250,7 +243,6 @@ func TestFloodIsBoundedAndNeverEvictsLiveRecords(t *testing.T) {
 	if _, err := s.PutSession(ctx, ana, time.Hour); !errors.Is(err, auth.ErrStoreFull) {
 		t.Fatalf("over the bound: %v", err)
 	}
-	// A flood of logins does not take the sessions' room, nor the other way round.
 	var states []string
 	for i := 0; i < 3; i++ {
 		tok, err := s.PutState(ctx, auth.LoginState{}, time.Minute)
@@ -267,7 +259,6 @@ func TestFloodIsBoundedAndNeverEvictsLiveRecords(t *testing.T) {
 			t.Fatal("a live session was evicted")
 		}
 	}
-	// Room comes back with a logout and with a take.
 	_ = s.DeleteSession(ctx, toks[0])
 	if _, err := s.PutSession(ctx, ana, time.Hour); err != nil {
 		t.Fatalf("after a logout: %v", err)
@@ -278,13 +269,11 @@ func TestFloodIsBoundedAndNeverEvictsLiveRecords(t *testing.T) {
 	if _, err := s.PutState(ctx, auth.LoginState{}, time.Minute); err != nil {
 		t.Fatalf("after a take: %v", err)
 	}
-	// A failing Put (a full store) wrote nothing.
 	if metas, _ := mem.List(ctx); len(metas) != 5+3 {
 		t.Fatalf("%d records, want 8", len(metas))
 	}
 }
 
-// A restarted replica learns the count from its first sweep.
 func TestSweepSetsTheCountFromTheStore(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	a, _ := New(mem)
@@ -320,17 +309,13 @@ func TestSweepDeletesOnlyTheExpired(t *testing.T) {
 		deadHour := sessionKind.bucketOf(now.Add(time.Second))
 		liveState, _ := s.PutState(ctx, auth.LoginState{Provider: "p"}, 9*time.Minute)
 		deadState, _ := s.PutState(ctx, auth.LoginState{Provider: "p"}, time.Second)
-		// A used marker whose delete failed, and records that are not ours.
 		marker, _ := jsonMarshal(stateRecord{V: 1, Used: true, Expires: now})
 		_ = mem.Save(ctx, LoginStatePrefix+"1/"+strings.Repeat("ab", 32), marker)
-		// Names that look like ours but are not (a short hash, a non-canonical number) are left alone.
 		_ = mem.Save(ctx, LoginStatePrefix+"1/abc", marker)
 		_ = mem.Save(ctx, LoginStatePrefix+"01/"+strings.Repeat("ab", 32), marker)
 		_ = mem.Save(ctx, SessionPrefix+"junk", []byte("x"))
 		_ = mem.Save(ctx, "doc1", []byte("a document"))
 
-		// 12:45: the states (dead at 12:30:01 and 12:39) are past their minute and go, with the old
-		// marker; the sessions have expired (12:30:01, 12:40) but their hour has not ended: kept.
 		clock.Store(now.Add(15 * time.Minute).UnixNano())
 		if n, err := s.Sweep(ctx); err != nil || n != 3 {
 			t.Fatalf("sweep at 12:45 = %d, %v (want the old marker and two states)", n, err)
@@ -338,7 +323,6 @@ func TestSweepDeletesOnlyTheExpired(t *testing.T) {
 		if _, ok, _ := s.GetSession(ctx, dead); ok {
 			t.Fatal("the expired session is refused on read even though the sweep has not come to it")
 		}
-		// 13:01:30: the hour of 12:40 and 12:30:01 is over (plus the grace).
 		clock.Store(time.Date(2030, 1, 1, 13, 1, 30, 0, time.UTC).UnixNano())
 		if deadHour == 0 {
 			t.Fatal("test setup")
@@ -362,7 +346,6 @@ func TestSweepDeletesOnlyTheExpired(t *testing.T) {
 	})
 }
 
-// A sweep that runs while a session lives in the same hour as dead ones keeps it.
 func TestSweepKeepsALiveSessionInTheBucketOfADeadOne(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	now := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -417,7 +400,6 @@ func TestEncryptedStoreKeepsRecordsSecretAndWorks(t *testing.T) {
 				t.Fatalf("%s is readable in the store: %q", m.ID, d.Data)
 			}
 		}
-		// Single use through the encrypting adapter (it has no DeleteIf for an encrypted id).
 		var wins atomic.Int32
 		var wg sync.WaitGroup
 		for g := 0; g < 16; g++ {
@@ -443,7 +425,6 @@ func TestEncryptedStoreKeepsRecordsSecretAndWorks(t *testing.T) {
 		if n, err := a.Sweep(ctx); err != nil || n != 0 {
 			t.Fatalf("sweep = %d, %v", n, err)
 		}
-		// The records are not in DefaultSkip: they are encrypted, and a repair pass does not choke.
 		for _, k := range []string{SessionPrefix + "5/x", LoginStatePrefix + "5/x"} {
 			if encrypt.DefaultSkip(k) {
 				t.Fatalf("%s must not be in DefaultSkip: it holds names and e-mail addresses", k)
@@ -452,7 +433,6 @@ func TestEncryptedStoreKeepsRecordsSecretAndWorks(t *testing.T) {
 	})
 }
 
-// failing makes every read fail.
 type failing struct {
 	docstore.ConditionalAdapter
 	fail atomic.Bool

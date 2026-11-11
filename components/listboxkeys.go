@@ -2,21 +2,13 @@ package components
 
 import "github.com/elaous/gojiberry/xango"
 
-// The keyboard model of a list of options opened from a button (Dropdown, FontSelector): the button
-// opens it with Down or Up and the focus goes to an option; Up, Down, Home and End move among the
-// options, Enter or Space chooses one, Escape closes the list and gives the focus back to the button,
-// and Tab closes it and leaves. The options are focusable (tabindex -1) so that Tab does not walk
-// through a long list. A key with Ctrl, Alt or Meta is left alone.
-
-// listbox names the parts of one such widget, as selectors from the widget's root element.
 type listbox struct {
 	root    string // the widget's class selector
 	control string // the button, as ":scope > ..."
 	options string // the options, as ":scope ..."
-	first   string // what the focus goes to when the list opens ("" for the first option)
+	first   string
 }
 
-// controlKey is the keydown handler of the button.
 func (l listbox) controlKey(open bool, setOpen func(bool)) xango.Attr {
 	return xango.On("keydown", func(e xango.Event) {
 		k, ok := e.Value.(xango.KeyData)
@@ -48,8 +40,6 @@ func (l listbox) controlKey(open bool, setOpen func(bool)) xango.Attr {
 	})
 }
 
-// optionKey is the keydown handler of an option; choose runs for Enter and Space, and closeAfter says
-// the list closes with the choice (the focus then goes to the button first).
 func (l listbox) optionKey(choose func(), closeAfter bool, setOpen func(bool)) xango.Attr {
 	return xango.On("keydown", func(e xango.Event) {
 		k, ok := e.Value.(xango.KeyData)
@@ -85,7 +75,6 @@ func (l listbox) optionKey(choose func(), closeAfter bool, setOpen func(bool)) x
 				setOpen(false)
 			}
 		case "Tab":
-			// the focus leaves, and the list goes with it
 			if setOpen != nil {
 				setOpen(false)
 			}
@@ -93,8 +82,6 @@ func (l listbox) optionKey(choose func(), closeAfter bool, setOpen func(bool)) x
 	})
 }
 
-// searchKey is the keydown handler of a search field above the options: Down goes to the first option,
-// Escape closes the list with the focus back on the button.
 func (l listbox) searchKey(setOpen func(bool)) xango.Attr {
 	return xango.On("keydown", func(e xango.Event) {
 		k, ok := e.Value.(xango.KeyData)

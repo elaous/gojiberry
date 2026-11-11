@@ -4,8 +4,6 @@ import "sync"
 
 // StyleSheet is a stylesheet registered with RegisterStyle.
 type StyleSheet struct {
-	// ID identifies the sheet: the import path of the .css file
-	// ("github.com/me/app/components/button.css").
 	ID  string
 	CSS string
 }
@@ -16,16 +14,7 @@ var (
 	styleIDs = map[string]bool{}
 )
 
-// RegisterStyle adds a stylesheet to the program's set. xgc generates a
-// call to it from a blank CSS import,
-//
-//	import _ "github.com/me/app/components/button.css"
-//
-// the way a blank import of a Go package runs its init: whoever imports
-// the package gets its styles. Registering an ID twice is a no-op, so a
-// sheet imported by several files appears once. Sheets keep their
-// registration order, which is package initialisation order: a package's
-// dependencies come before it.
+// RegisterStyle adds a stylesheet to the program's set.
 func RegisterStyle(id, css string) {
 	stylesMu.Lock()
 	defer stylesMu.Unlock()
@@ -43,10 +32,6 @@ func RegisteredStyles() []StyleSheet {
 	return append([]StyleSheet(nil), styles...)
 }
 
-// Styles returns one <style> element per registered stylesheet (each
-// tagged data-xango-style with its ID), for a page's <head>; Document puts
-// them there itself. It is a Fragment with no children when nothing was
-// registered.
 func Styles() Node {
 	var out []Node
 	for _, s := range RegisteredStyles() {

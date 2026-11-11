@@ -15,27 +15,20 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The key behind a lock. A lock on a form field is sealed with a key (package formseal): the field says which key locked
-// it and whether it is still as it was locked, and only that key unlocks it. The key is the person's owner key when they
-// have enrolled one (the encrypted store's directory), else a key of this browser for locks, made on request from the
-// Forms tab: a non-extractable one where the browser can, kept for this site only. Locking without a key asks for one.
-
 const (
-	formKeyID   = "form-lock:local"       // where the browser's key is kept (the same store as the owner keys)
-	formKeyText = "showcase:formlock-key" // the key as text, where the browser cannot keep it any other way
+	formKeyID   = "form-lock:local"
+	formKeyText = "showcase:formlock-key"
 )
 
-// formKey is the browser's key for locks.
 var formKey struct {
 	signer  crypto.Signer
 	plain   bool
 	loaded  bool
-	secret  string // the backup text of a key just made, shown until hidden
+	secret  string
 	restore string
 	open    bool // the restore field is open
 }
 
-// loadFormKey looks for the browser's key (once); the panel is drawn again when it is there.
 func loadFormKey(renderUI func()) {
 	if formKey.loaded {
 		return
@@ -55,7 +48,6 @@ func loadFormKey(renderUI func()) {
 	}()
 }
 
-// lockSigner is the key a lock is made with now: the owner key if the person has one, else the browser's, else nil.
 func (u *ui) lockSigner() crypto.Signer {
 	if u.enc != nil && u.enc.dir.owner.key != nil {
 		return u.enc.dir.owner.key
@@ -63,7 +55,6 @@ func (u *ui) lockSigner() crypto.Signer {
 	return formKey.signer
 }
 
-// keepFormKey keeps a key made or restored from k.
 func keepFormKey(k dirclient.OwnerKey, made bool) {
 	signer, plain := signerFor(k)
 	if w, ok := signer.(*webKey); ok && !plain && webOwnerSave(formKeyID, "", w) != nil {
@@ -81,9 +72,8 @@ func keepFormKey(k dirclient.OwnerKey, made bool) {
 	formKey.signer, formKey.plain = signer, plain
 }
 
-// createFormKey makes the browser's key.
 func (u *ui) createFormKey(renderUI func()) {
-	go func() { // the browser's key is made by promises, which cannot be waited for on the event's own thread
+	go func() { // the browser's key comes from promises: not waitable on the event thread
 		k, err := dirclient.GenerateOwnerKey()
 		if err != nil {
 			u.forms.msg = err.Error()
@@ -101,7 +91,6 @@ func sealProps(ff *canvas.FormFieldObject) formseal.Props {
 	return formseal.Props{Kind: string(ff.Kind), Name: ff.Name, Label: ff.Label, Placeholder: ff.Placeholder, Pattern: ff.Pattern, Required: ff.Required, Options: ff.Options}
 }
 
-// lockField locks a field with the key, or says a key is needed.
 func (u *ui) lockField(fl *canvas.TextFlow, ff *canvas.FormFieldObject, redraw, renderUI func()) {
 	signer := u.lockSigner()
 	if signer == nil {
@@ -127,8 +116,6 @@ func (u *ui) lockField(fl *canvas.TextFlow, ff *canvas.FormFieldObject, redraw, 
 	}()
 }
 
-// unlockField takes a lock off when the key that made it is held; a lock without a seal (made before keys) comes off
-// for the owner.
 func (u *ui) unlockField(fl *canvas.TextFlow, ff *canvas.FormFieldObject, redraw, renderUI func()) {
 	if ff.LockKey != "" && !formseal.Holds(u.lockSigner(), formseal.Seal{Key: ff.LockKey, Sig: ff.LockSig}) {
 		u.forms.msg = fmt.Sprintf(T("forms.wrongKey", "This field was locked with another key (%s). Only that key takes the lock off."), formseal.Fingerprint(ff.LockKey))
@@ -142,7 +129,6 @@ func (u *ui) unlockField(fl *canvas.TextFlow, ff *canvas.FormFieldObject, redraw
 	renderUI()
 }
 
-// signerFingerprint is the short form of a signer's public key.
 func signerFingerprint(s crypto.Signer) string {
 	pub, ok := s.Public().(ed25519.PublicKey)
 	if !ok {
@@ -151,7 +137,6 @@ func signerFingerprint(s crypto.Signer) string {
 	return formseal.Fingerprint(base64.StdEncoding.EncodeToString(pub))
 }
 
-// sealNote says in words who locked a field and whether it still is as it was locked ("" for a field without a seal).
 func sealNote(ff *canvas.FormFieldObject) (text string, broken bool) {
 	if ff.LockKey == "" {
 		return "", false
@@ -163,8 +148,6 @@ func sealNote(ff *canvas.FormFieldObject) (text string, broken bool) {
 	return fmt.Sprintf(T("forms.sealed", "Locked with key %s; the field is as it was locked."), fp), false
 }
 
-// formKeyPanel is the part of the Forms tab about the key: what locks are made with, a button to make one, a backup shown
-// once, and a way to restore one.
 func (u *ui) formKeyPanel(renderUI func()) []xango.Node {
 	var nodes []xango.Node
 	if s := u.lockSigner(); s != nil {

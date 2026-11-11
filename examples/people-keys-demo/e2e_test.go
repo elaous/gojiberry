@@ -19,9 +19,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestPeopleKeysInARealBrowser runs the People tab's key controls in headless Chrome with a
-// virtual authenticator that does PRF: the second-key rule, a recovery key shown once, "add my
-// passkey" with no typing, and the verified mark, which comes from the server's directory only.
 func TestPeopleKeysInARealBrowser(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()
@@ -33,7 +30,6 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	site.Handle("/directory/", srv.Mux)
 	site.Handle("/demo/", srv.Mux)
 
-	// Bo, signed in with a provider that verified bo@example.com, publishes a key.
 	publish := func(email, key string) int {
 		t.Helper()
 		tok, err := srv.Login(email)
@@ -53,7 +49,6 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	if code := publish("bo@example.com", boPub); code != http.StatusOK {
 		t.Fatalf("publish = %d", code)
 	}
-	// A passkey session cannot publish or look up, even with an address typed at registration.
 	pkTok, err := srv.Auth.StartSession(auth.User{ID: "passkey:x", Email: "bo@example.com", VerifiedEmail: true})
 	if err != nil {
 		t.Fatal(err)
@@ -81,12 +76,10 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	d.Click("#make-passkey")
 	d.WaitFor("a passkey account", `document.getElementById('status').textContent === 'signed in'`)
 
-	// Second-key rule: no key but a passkey would be left, so the page says so and the button is off.
 	d.WaitSelector(".gj-recip-need-second")
 	d.OK(strings.Contains(d.Text(".gj-recip-need-second"), "a passkey cannot be the only key"), "the second-key message: "+d.Text(".gj-recip-need-second"))
 	d.OK(d.Disabled(".gj-recip-add-mine"), "add my passkey waits for a recovery key")
 
-	// A recovery key: shown once, with its warning, and gone after "I have saved it".
 	d.Click(".gj-recip-recovery")
 	d.WaitSelector(".gj-recip-secret")
 	secret := d.Value(".gj-recip-secret")
@@ -101,7 +94,6 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	d.OK(!strings.Contains(d.Str(`document.body.innerHTML`), secret), "the secret is nowhere in the page once saved")
 	d.OK(d.Count(".gj-recip-owner") == 1, "the recovery key is listed as an owner key")
 
-	// Add my passkey: no fingerprint is typed.
 	d.OK(!d.Disabled(".gj-recip-add-mine"), "the button is on")
 	d.Click(".gj-recip-add-mine")
 	d.WaitSelector(".gj-recip-my-fingerprint")
@@ -109,12 +101,10 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	d.OK(strings.HasPrefix(fp, "SHA256:"), "the passkey's key was added: "+fp)
 	d.OK(d.Count(".gj-recip-owner") == 2 && strings.Contains(strings.Join(d.Texts(".gj-recip-owner .gj-recip-type"), ","), "passkey-prf"), "it is listed as an owner key")
 
-	// A pasted key is label only, whatever its text says.
 	d.Fill(".gj-recip-key", strangerPub)
 	d.WaitSelector(".gj-recip-parsed-fingerprint")
 	d.OK(d.Has(".gj-recip-label-only") && !d.Has(".gj-recip-verified"), "a pasted key is label only")
 
-	// A directory lookup: Bo's key is verified because the server says so.
 	d.Fill(".gj-recip-dir-email", "bo@example.com")
 	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
 	d.Click(".gj-recip-dir-find")
@@ -129,7 +119,6 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	d.WaitFor("Bo in the list", `document.querySelectorAll('.gj-recip-item:not(.gj-recip-owner):not(.gj-recip-dir-row)').length === 1`)
 	d.OK(d.Has(`.gj-recip-item:not(.gj-recip-owner):not(.gj-recip-dir-row) .gj-recip-verified`), "Bo's row keeps the verified mark")
 
-	// Someone with no published key finds nothing.
 	d.Fill(".gj-recip-dir-email", "nobody@example.com")
 	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
 	d.Click(".gj-recip-dir-find")
@@ -137,7 +126,6 @@ func TestPeopleKeysInARealBrowser(t *testing.T) {
 	d.NoErrors()
 }
 
-// lookupAs is a lookup for address, made through the demo's routes by a provider user.
 func lookupAs(t *testing.T, srv *demoserver.Server, asEmail, address string) []docstore.DirectoryKey {
 	t.Helper()
 	tok, err := srv.Login(asEmail)
@@ -157,7 +145,6 @@ func lookupAs(t *testing.T, srv *demoserver.Server, asEmail, address string) []d
 	return out.Keys
 }
 
-// eventually polls cond (the page acts on its own goroutine) until it holds.
 func eventually(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	for range 100 {
@@ -169,11 +156,6 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// TestMyDirectoryEntryInARealBrowser runs the owner-held identity in headless Chrome with a
-// virtual authenticator that does PRF: the passkey's key is published with proof of possession
-// made by the passkey itself, an owner key is made and kept in the browser, every later publish is
-// signed by it (the mark a lookup shows is checked by the client), and the watcher reports an
-// entry for my address that the page did not make, and a forged one that the owner rules expose.
 func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	site := e2etest.NewSite(t, "../../components/base.css", "../../components/button.css", "../../components/documents.css")
 	site.UseLocalhost()
@@ -190,7 +172,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	d.WaitSelector("#make-passkey")
 	d.Click("#make-passkey")
 	d.WaitFor("a passkey account", `document.getElementById('status').textContent === 'signed in'`)
-	// A passkey cannot be the only key: a recovery key first, then my passkey.
 	d.Click(".gj-recip-recovery")
 	d.WaitSelector(".gj-recip-secret")
 	d.SetChecked(".gj-recip-recovery-ack input", true)
@@ -200,7 +181,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	d.Click(".gj-recip-add-mine")
 	d.WaitSelector(".gj-recip-my-fingerprint")
 
-	// Publish my passkey's key: the page answers the challenge with the passkey's PRF identity.
 	d.Click("#dir-publish")
 	d.WaitFor("the publication", `document.getElementById('dir-status').textContent.startsWith('published')`)
 	keys := lookupAs(t, srv, "bo@example.com", "ana@example.com")
@@ -208,7 +188,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 		t.Fatalf("published key: %+v", keys)
 	}
 
-	// Somebody else, with a session of my address, publishes a key for it: the watcher says so.
 	strangerPub, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +205,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#dir-alerts .dir-alert"), "someone published a key for your address"), "the alert: "+d.Text("#dir-alerts .dir-alert"))
 	d.OK(strings.Contains(d.Text("#dir-status"), "log checked"), "status: "+d.Text("#dir-status"))
 
-	// Enroll an owner key (made in the browser); the next publish is signed by it.
 	d.Click("#dir-enroll")
 	d.WaitFor("the enrollment", `document.getElementById('dir-owner').textContent.indexOf('owner key held') === 0`)
 	d.OK(d.Str(`localStorage.getItem('gj-owner-key') || ''`) != "", "the owner key is kept by the page, not the server")
@@ -239,7 +217,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 		}
 		return false
 	})
-	// The session alone, from another device, can no longer publish for the address.
 	req = httptest.NewRequest("POST", "/directory/publish", strings.NewReader(`{"key":"`+strangerPub+`"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
 	rec = httptest.NewRecorder()
@@ -248,7 +225,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 		t.Fatalf("publish without the owner key: %d", rec.Code)
 	}
 
-	// The picker shows the strongest mark, because the client checked the signature.
 	d.Fill(".gj-recip-dir-email", "ana@example.com")
 	d.WaitFor("the find button", `!document.querySelector('.gj-recip-dir-find').disabled`)
 	d.Click(".gj-recip-dir-find")
@@ -256,8 +232,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	d.OK(d.Has(".gj-recip-dir-row .gj-recip-owner-signed"), "an owner-signed key shows the owner mark")
 	d.OK(strings.Contains(d.Text(".gj-recip-dir-row .gj-recip-owner-signed"), "signed by its owner"), "the mark's text: "+d.Text(".gj-recip-dir-row .gj-recip-owner-signed"))
 
-	// A server that holds the directory key writes an entry for my address with no owner
-	// signature: the watcher shows that the owner rules were broken.
 	ctx := context.Background()
 	head, err := srv.Dir.Head(ctx)
 	if err != nil {
@@ -272,7 +246,6 @@ func TestMyDirectoryEntryInARealBrowser(t *testing.T) {
 	d.Click("#dir-watch")
 	d.WaitFor("the violation", `Array.from(document.querySelectorAll('#dir-alerts .dir-alert')).some(e => e.textContent.indexOf('breaks the owner rules') >= 0)`)
 
-	// Revoke it, signed by the owner key.
 	d.Click("#dir-revoke")
 	eventually(t, "the revocation", func() bool {
 		for _, k := range lookupAs(t, srv, "bo@example.com", "ana@example.com") {

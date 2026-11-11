@@ -10,24 +10,6 @@ import (
 
 const xangoImportPath = "github.com/elaous/gojiberry/xango"
 
-// loadCSS handles .css imports, written like a Go package import with a
-// module-qualified path:
-//
-//	import (
-//		_ "github.com/me/app/components/button.css"
-//		theme "github.com/me/app/theme/dark.css"
-//	)
-//
-// A blank import registers the stylesheet with the program, the way a
-// blank import of a Go package runs its init: the generated file gets
-//
-//	func init() { xango.RegisterStyle("github.com/me/app/components/button.css", "...") }
-//
-// so whoever imports the package gets the styles -- xango.Document puts
-// every registered sheet in the page's head, and domrt.Mount installs
-// them in the browser's. A named import only binds the file's content to
-// a constant (`const theme = "..."`), for code that wants to place it
-// itself.
 func loadCSS(in LoaderInput) (LoaderResult, error) {
 	if !in.AliasGiven {
 		return LoaderResult{}, fmt.Errorf("xango: CSS import %q in %s needs a name or _ in front: `import _ %q` registers the stylesheet, `import name %q` binds its text", in.Path, in.SourceFile, in.Path, in.Path)
@@ -49,9 +31,6 @@ func loadCSS(in LoaderInput) (LoaderResult, error) {
 	}, nil
 }
 
-// styleID is the stable name a registered sheet goes by: its
-// module-qualified path, whether it was written that way or relative to
-// the .xg file.
 func styleID(in LoaderInput, abs string) string {
 	root, modPath, err := findModuleRoot(in.BaseDir)
 	if err == nil {

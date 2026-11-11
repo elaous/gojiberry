@@ -23,8 +23,6 @@ func docxParts(t *testing.T, parts map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// What Import leaves out of a file is counted, so the person is told: a file with comments, a header, a text
-// box, a chart, an equation, an endnote, fields, bookmarks, columns and indented paragraphs reports each.
 func TestInspectCountsWhatImportLeavesOut(t *testing.T) {
 	body := `<w:p><w:pPr><w:ind w:left="720"/></w:pPr><w:bookmarkStart w:id="1" w:name="intro"/><w:r><w:t>Kept text</w:t></w:r></w:p>` +
 		`<w:p><w:bookmarkStart w:id="2" w:name="_GoBack"/><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:t>3</w:t></w:r></w:p>` +
@@ -50,7 +48,6 @@ func TestInspectCountsWhatImportLeavesOut(t *testing.T) {
 	if got.Total() != 9 {
 		t.Errorf("Total = %d, want 9", got.Total())
 	}
-	// The same file imports, and what is in the body is read.
 	doc, err := Import(data)
 	if err != nil {
 		t.Fatal(err)

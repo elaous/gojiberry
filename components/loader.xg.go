@@ -19,8 +19,6 @@ type LoaderProps struct {
 	Label string     // accessible label; defaults to "Loading"
 }
 
-// Loader renders a spinning indicator for an in-progress operation
-// with no known completion percentage -- see Progress for one that has one.
 func Loader(props LoaderProps) xango.Node {
 	size := props.Size
 	if size == "" {

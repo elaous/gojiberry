@@ -5,10 +5,7 @@ import (
 	"testing"
 )
 
-// Box at (100, 100), 200x100, padding 8: text starts at (108, 108);
-// 8px runes, 22px lines; 184px is 23 runes per line. Toolbar (y 72..94):
-// Move x100-144, B 148-176, I 180-208, A- 212-244, A+ 248-280, Wrap 284-332.
-
+// 8px runes, 22px lines, padding 8, toolbar x 100..332
 func newFloat(text string) (*FloatingText, *fakePainter) {
 	p := &fakePainter{}
 	ft := NewFloatingText(text, 100, 100, 200, 100)
@@ -17,7 +14,6 @@ func newFloat(text string) (*FloatingText, *fakePainter) {
 	return ft, p
 }
 
-// click focuses the box with the caret at rune offset i of a one-line text.
 func click(ft *FloatingText, i int) {
 	ft.MouseDown(108+float64(i)*8, 112)
 	ft.MouseUp(0, 0)
@@ -379,14 +375,12 @@ func TestFloatingWrapAroundText(t *testing.T) {
 	if overlaps(flow.Layout(), 22, 292, 408, 2, 62) {
 		t.Fatal("text should wrap around the floating box")
 	}
-	// Dragging it re-wraps.
 	ft.SetMode(ModeEdit)
 	ft.MouseDown(310, 5) // the Move button (toolbar clamped to y 0..22)
 	ft.MouseMove(310-200, 5)
 	if ft.X != 100 || overlaps(flow.Layout(), 22, 92, 208, 2, 62) {
 		t.Fatalf("X = %g: text must avoid the moved box", ft.X)
 	}
-	// Toolbar Wrap button.
 	ft.MouseUp(0, 0)
 	ft.MouseDown(ft.X+284-100+5, max(ft.Y-17, 5))
 	if ft.Wrap {

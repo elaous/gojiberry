@@ -16,35 +16,19 @@ import (
 
 // PrecompressOptions tune Precompress.
 type PrecompressOptions struct {
-	// MinSize is the size under which a file is left alone (compressing it saves little and costs a
-	// request's worth of headers). 0 means 1024 bytes.
 	MinSize int64
-	// Brotli is the path of the brotli command line tool (or just "brotli", found on the PATH). Empty
-	// writes no .br files: the Go standard library has no brotli encoder, and the tool is the usual
-	// way to get one. It is called as `brotli -q 11 -f -o <out> <in>`.
-	Brotli string
+	Brotli  string
 }
 
 // Compressed is one precompressed file Precompress wrote, kept, or removed.
 type Compressed struct {
-	// Name is the file the compressed form belongs to, relative to the directory, with slashes.
 	Name string
 	// Encoding is "gzip" (written as Name+".gz") or "br" (Name+".br").
-	Encoding string
-	// Original and Size are the bytes of the file and of its compressed form.
+	Encoding       string
 	Original, Size int64
-	// Action is "wrote" (made or refreshed), "kept" (an up-to-date sibling was already there) or
-	// "removed" (a sibling that did not save anything, or that outlived a file that is now too
-	// small or no longer compressible).
-	Action string
+	Action         string
 }
 
-// Precompress writes a .gz (and, with PrecompressOptions.Brotli, a .br) next to every compressible file
-// of dir (wasm, scripts, styles, pages, JSON, SVG: the types Handler compresses on the fly) that is at
-// least MinSize bytes and shrinks by it. The compressed files are what Handler, nginx's gzip_static and
-// brotli_static, or Caddy's precompressed option send, so the server does no compression per request
-// and a wasm of tens of megabytes is compressed once, at the strongest level. A sibling at least as
-// new as its file is kept. Files that already end in .gz or .br are not touched.
 func Precompress(dir string, opt PrecompressOptions) ([]Compressed, error) {
 	if opt.MinSize == 0 {
 		opt.MinSize = 1024
@@ -111,8 +95,7 @@ func Precompress(dir string, opt PrecompressOptions) ([]Compressed, error) {
 	return out, err
 }
 
-// writeCompressed writes the compressed form of src to dst through a temporary file, so a stop in
-// the middle never leaves half a file that a server would send as the whole, and returns its size.
+// temp file then rename: a stop never leaves half a file
 func writeCompressed(src, dst, enc, brotli string) (int64, error) {
 	tmp := dst + ".tmp"
 	defer func() { _ = os.Remove(tmp) }()
@@ -144,7 +127,7 @@ func writeCompressed(src, dst, enc, brotli string) (int64, error) {
 	if err := os.Rename(tmp, dst); err != nil {
 		return 0, err
 	}
-	// The sibling must not look older than the file it was made from, whatever the clock did.
+	// the sibling must not look older than its source
 	now := time.Now()
 	if err := os.Chtimes(dst, now, now); err != nil {
 		return 0, err
@@ -152,7 +135,6 @@ func writeCompressed(src, dst, enc, brotli string) (int64, error) {
 	return st.Size(), nil
 }
 
-// gzipLevel is the compression level the handler uses for what it compresses itself.
 func (o Options) gzipLevel() int {
 	if o.GzipLevel == 0 {
 		return gzip.BestCompression

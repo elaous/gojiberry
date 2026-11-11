@@ -12,9 +12,6 @@ import (
 	"github.com/elaous/gojiberry/script"
 )
 
-// flowDoc is the document as the get/set requests of a script reach it (package script, getset.go): Markdown, the
-// selection, the format of text, paragraph styles, pictures and the title and language. What changes the document needs
-// edit mode and a person who may edit, and goes through the flow's own calls, so the undo history has it.
 type flowDoc struct {
 	u      *ui
 	flow   func() *canvas.TextFlow

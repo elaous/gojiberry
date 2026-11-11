@@ -1,7 +1,5 @@
 package components
 
-// defaultSymbols is the built-in symbol set: a few hundred of the characters
-// people look for in a word processor.
 var defaultSymbols = []Symbol{
 	{"…", "ellipsis", "Punctuation"},
 	{"—", "em dash", "Punctuation"},

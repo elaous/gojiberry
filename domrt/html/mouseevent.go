@@ -4,17 +4,7 @@ package html
 
 import "syscall/js"
 
-// MouseEvent wraps a mousedown/mousemove/mouseup DOM event with its
-// position relative to the viewport (clientX/clientY), which button
-// (0 = left/primary, 1 = middle, 2 = right, matching the DOM's own
-// MouseEvent.button -- mousedown/mouseup fire for every button, not
-// just the primary one, so check this before treating one as a plain
-// click) and modifier keys -- xango.Event carries neither at all (see
-// its doc comment), so,
-// like DragEvent and KeyEvent, this is a typed escape hatch for
-// building anything that needs a real click/drag position or a
-// modifier-qualified click: canvas hit-testing, custom selection,
-// image cropping, Alt+Click to add a multi-cursor caret, and so on.
+// MouseEvent wraps a mouse DOM event with its position.
 type MouseEvent struct {
 	Value                              js.Value
 	X, Y                               float64
@@ -23,12 +13,6 @@ type MouseEvent struct {
 	CtrlKey, ShiftKey, AltKey, MetaKey bool
 }
 
-// Detail is the DOM's own UIEvent.detail: for mousedown/mouseup/click
-// it's the browser's own click count (1 = single, 2 = double, 3 =
-// triple, ...), already computed using the OS/browser's own multi-
-// click timing and movement thresholds -- consumers that care about
-// double/triple-click (word/sentence selection, say) should read this
-// rather than hand-rolling their own click-timer state machine.
 func newMouseEvent(v js.Value) MouseEvent {
 	return MouseEvent{
 		Value:    v,
@@ -43,13 +27,7 @@ func newMouseEvent(v js.Value) MouseEvent {
 	}
 }
 
-// PreventDefault suppresses the browser's default handling of the
-// event. This matters more here than it might seem: clicking a
-// non-focusable element (a plain <canvas>, say) makes the browser
-// clear focus from whatever was focused once every mousedown handler
-// returns -- calling a different element's Focus() from inside your
-// own mousedown handler gets silently undone right after unless you
-// call PreventDefault first.
+// PreventDefault suppresses the browser's default mouse handling.
 func (e MouseEvent) PreventDefault() { e.Value.Call("preventDefault") }
 
 // StopPropagation stops the event from bubbling further.

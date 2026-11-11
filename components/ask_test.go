@@ -20,7 +20,6 @@ func TestAskerConfirmsBeforeADestructiveAction(t *testing.T) {
 	}
 	html := render(t, ask.Dialog())
 	mustContain(t, html, "Delete a forever?", `role="alertdialog"`, "Are you sure?")
-	// Cancel (the backdrop or the button) does nothing; Delete does it, once.
 	n := ask.Dialog()
 	clicks := findHandlers(n, "click")
 	clicks[0](xango.Event{})
@@ -58,7 +57,6 @@ func TestDeletesAskFirstWhenThereIsAnAsker(t *testing.T) {
 	if len(deleted) != 3 {
 		t.Errorf("deleted %v after confirming", deleted)
 	}
-	// Without an asker it happens at once.
 	deleted = nil
 	for _, h := range findHandlers(Trash(TrashProps{Docs: []Doc{{ID: "a", Name: "A"}}, Delete: del, Pending: p}), "click") {
 		h(xango.Event{})
@@ -66,7 +64,6 @@ func TestDeletesAskFirstWhenThereIsAnAsker(t *testing.T) {
 	if len(deleted) != 2 {
 		t.Errorf("no asker: %v", deleted)
 	}
-	// DocList's Delete and People's Remove ask too.
 	asked = nil
 	docs := DocList(DocListProps{Docs: []Doc{{ID: "a", Name: "Alpha"}}, Delete: func(context.Context, string) error { return nil }, Pending: p, Confirm: ask})
 	findHandlers(docs, "click")[0](xango.Event{})

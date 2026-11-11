@@ -22,7 +22,6 @@ func mergedView() (*TableView, *fakePainter) {
 	return v, p
 }
 
-// Columns are 80 wide (10/90/170/250) and rows 32 tall (10/42/74/106).
 func TestMergedCellIsOneCellForHitsAndDrawing(t *testing.T) {
 	v, p := mergedView()
 	v.Table.MergeRange(0, 0, 1, 1)
@@ -30,11 +29,9 @@ func TestMergedCellIsOneCellForHitsAndDrawing(t *testing.T) {
 		t.Errorf("a click on a covered cell lands on its owner: %+v", got)
 	}
 	v.Draw()
-	// The owner covers 2x2 cells: one fill of 160 x 64 at (10,10).
 	if !has(p, "fillRect 10 10 160 64") {
 		t.Errorf("no 160x64 fill; calls: %v", p.calls)
 	}
-	// And the covered cells are not drawn on their own.
 	if has(p, "fillRect 90 10 80 32") || has(p, "fillRect 10 42 80 32") {
 		t.Error("a covered cell was drawn")
 	}
@@ -185,7 +182,6 @@ func TestTableStylesDressAWholeTableAndAreRecognised(t *testing.T) {
 	if !tb.StyleAt(2, 0).Bold || tb.StyleAt(2, 1).Bold {
 		t.Fatal("first column bold in the body only")
 	}
-	// A merged block is dressed through its owner, never its covered cells.
 	m := NewTableFrom([][]string{{"H1", "H2"}, {"x", ""}, {"y", "z"}})
 	m.MergeRange(1, 0, 1, 1)
 	m.ApplyScheme(s)

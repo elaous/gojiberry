@@ -28,8 +28,6 @@ func newExpiringStore(clk *clock) (*docstore.ExpiringAdapter, docstore.Adapter) 
 	return ea, inner
 }
 
-// A document that is only edited live through the hub stays alive for 24 hours after the last
-// edit, not after the last direct save; and when it does die, its hub state goes with it.
 func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -43,9 +41,8 @@ func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c1", "typed through the hub at t=23h")); s != 204 {
 		t.Fatalf("hub edit: %d", s)
 	}
-	_ = h.Flush() // saves collab:doc and waits for the renewal
+	_ = h.Flush()
 
-	// The hub's state is not a document and has no deadline of its own.
 	if _, ok, _ := ea.Expiry(ctx, "collab:doc"); ok {
 		t.Fatal("collab:doc got a deadline")
 	}
@@ -77,7 +74,6 @@ func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 		}
 	}
 
-	// A dead document is not revived by a late edit.
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c2", "too late")); s != 204 {
 		t.Fatalf("late edit: %d", s)
 	}
@@ -87,7 +83,6 @@ func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 	}
 }
 
-// Without hub edits the same document dies 24h after its save, hub state or not.
 func TestEndToEndViewingAndCommentingDoNotKeepADocumentAlive(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -109,7 +104,6 @@ func TestEndToEndViewingAndCommentingDoNotKeepADocumentAlive(t *testing.T) {
 	}
 }
 
-// Over a WebSocket an acknowledged edit renews, the same as over POST.
 func TestEndToEndWebSocketEditRenews(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -138,8 +132,6 @@ func TestEndToEndWebSocketEditRenews(t *testing.T) {
 	}
 }
 
-// A hub in another process renews through the docstore server's POST /docs/{id}/renew, with
-// the credentials of the editor, and a refusal there never fails the edit.
 func TestEndToEndHubRenewsThroughTheDocstoreServer(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -156,7 +148,7 @@ func TestEndToEndHubRenewsThroughTheDocstoreServer(t *testing.T) {
 	remote := docstore.NewHTTPAdapter(dsrv.URL, nil)
 	remote.Header.Set("X-Gojiberry-Token", "svc")
 
-	h, e := newRenewHub(t, Config{Renewer: remote, Now: clk.Now}) // the hub has its own store (none here)
+	h, e := newRenewHub(t, Config{Renewer: remote, Now: clk.Now})
 	_ = ea.Save(ctx, "doc", []byte("x"))
 	clk.Add(23 * time.Hour)
 	if s := e.post(t, "doc", "editor", "ana", "r", textOps(t, "c", "hi")); s != 204 {
@@ -170,7 +162,6 @@ func TestEndToEndHubRenewsThroughTheDocstoreServer(t *testing.T) {
 		t.Fatalf("the docstore saw Authorization=%q token=%q", sawAuth, sawToken)
 	}
 
-	// A document that is gone there: the edit is still accepted, nothing is revived.
 	clk.Add(2 * day)
 	if s := e.post(t, "doc", "editor", "ana", "r", textOps(t, "c2", "late")); s != 204 {
 		t.Fatalf("late edit: %d", s)

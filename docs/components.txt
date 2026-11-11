@@ -1,13 +1,5 @@
 package components // import "github.com/elaous/gojiberry/components"
 
-Package components is a small library of ready-made xango components:
-plain Go functions taking a typed props struct and returning a xango.Node,
-the same shape as any other component in this framework (see the root README's
-"Components" section). None of them import domrt or syscall/js directly --
-interactive ones take the current state and On* event handlers as props (the
-same controlled-component pattern the wasm-counter example uses), so a single
-component works unchanged for SSR-only pages and for a WASM page driving it with
-domrt.Mount/Update.
 
 CONSTANTS
 
@@ -26,9 +18,9 @@ const (
     Comment filters for CommentListProps.Filter.
 
 const (
-	FolderNone      = "none"      // no folder chosen
-	FolderReady     = "ready"     // chosen, and the browser lets the page write it
-	FolderReconnect = "reconnect" // chosen earlier, the browser wants a click to allow it again
+	FolderNone      = "none"  // no folder chosen
+	FolderReady     = "ready" // chosen, and the browser lets the page write it
+	FolderReconnect = "reconnect"
 )
     Folder states, for FolderPickerProps.State.
 
@@ -36,8 +28,8 @@ const (
 	SyncSynced     = "synced"     // connected, and everything typed has been sent
 	SyncSending    = "sending"    // connected, with changes still on their way
 	SyncConnecting = "connecting" // trying to reach the server
-	SyncOffline    = "offline"    // not connected: changes wait here and go when the connection returns
-	SyncProblem    = "problem"    // sharing is not working (the server refused something, the content cannot be shared)
+	SyncOffline    = "offline"
+	SyncProblem    = "problem"
 )
     Sync states of a shared document, as SyncStatus names them.
 
@@ -49,22 +41,13 @@ const (
     The levels of TypingAnnouncer.Level.
 
 const CapacityFullAt = 95
-    CapacityFullAt is the percentage from which a store counts as full or
-    nearly: the advice is the urgent one, and the warning is an alert.
-
 const CapacityWarnAt = 80
-    CapacityWarnAt is the percentage of a store from which Capacity warns,
-    and the Session's status line adds a note after a save.
-
 const CustomPaper = "custom"
-    CustomPaper is the name of the paper whose size the person gives.
-
 
 VARIABLES
 
 var CopyText func(text string)
-    CopyText puts text on the clipboard. The host sets it; while it is nil the
-    details have no Copy button (the text stays selectable).
+    CopyText puts text on the clipboard.
 
 var FormatTime = func(t time.Time, seconds bool) string {
 	if seconds {
@@ -72,13 +55,6 @@ var FormatTime = func(t time.Time, seconds bool) string {
 	}
 	return t.Format("2006-01-02 15:04")
 }
-    FormatTime is how the components write the time something happened (a
-    version, a comment, a suggestion, a document's last change). It gives
-    "2006-01-02 15:04" (with ":05" when seconds is true) until an app sets it,
-    which is where the viewer's language and time zone belong:
-
-        components.FormatTime = func(t time.Time, seconds bool) string { return i18n.DateTime(lang, t.Local()) }
-
 var Papers = []Paper{
 	{"a4", "A4", 595, 842},
 	{"a3", "A3", 842, 1191},
@@ -90,12 +66,7 @@ var Papers = []Paper{
     Papers are the paper sizes offered, A4 first.
 
 var Translate = func(id, def string) string { return def }
-    Translate is how the components say their words: it returns the text for a
-    message id ("saver.save"), or def, the English the component has, when it
-    has none. It is the identity until an app sets it, once, before the first
-    render (package i18n has a catalog that does the lookup):
-
-        components.Translate = func(id, def string) string { return cat.Text(lang, id, def) }
+    identity until an app sets it, before first render
 
 var TranslatePlural = func(id, one, other string, n int) string {
 	m := other
@@ -104,305 +75,61 @@ var TranslatePlural = func(id, one, other string, n int) string {
 	}
 	return fmt.Sprintf(m, n)
 }
-    TranslatePlural is how the components say a message that depends on a
-    number: the text for the id in the plural form of n, with n put in. one and
-    other are the English the component has. It is English's rule until an app
-    sets it (package i18n has Catalog.Plural):
-
-        components.TranslatePlural = func(id, one, other string, n int) string { return cat.Plural(lang, id, one, other, n) }
-
 
 FUNCTIONS
 
 func A11yBlockAt(blocks []A11yBlock, offset int) int
-    A11yBlockAt returns the index of the mapped block that holds the stream
-    offset (the caret), -1 if none does (the offset is on a paragraph break that
-    belongs to no block, or the blocks are not mapped). The end of a block's
-    text is still in it.
-
 func AccessibleText(p AccessibleTextProps) xango.Node
-    AccessibleText is the document's text for assistive technology: one element
-    per block, in order, with real heading, list, quote and table markup.
-    The links are real links, the first row of a table holds column headers
-    (th scope="col"), the headings are listed in a navigation landmark (the
-    outline), commented text and suggested changes are marked, and the comments
-    follow in a region of their own.
-
 func Accordion(props AccordionProps) xango.Node
     Accordion renders a vertical stack of collapsible sections.
 
 func AddCaption(track string, d CaptionDraft) (string, string)
-    AddCaption adds the drafted caption to a track and returns the new track,
-    or the track unchanged and what is wrong in words (the times unreadable,
-    the end not after the start, the text empty).
-
 func Alert(props AlertProps) xango.Node
-    Alert is a Dialog preset for a single acknowledgment, rendered with
-    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
-    instead of Dialog's default role="dialog".
-
 func Announcer(message string) xango.Node
-    Announcer is a live region: when its message changes, a screen reader says
-    it (politely, after what it is already saying). Keep it in the page and
-    change the message; "" says nothing.
-
 func Avatar(props AvatarProps) xango.Node
-    Avatar renders a profile picture, or a colored circle of Initials when Src
-    is empty (e.g. the user hasn't uploaded one).
-
 func BookmarkList(props BookmarksProps) xango.Node
-    BookmarkList renders the bookmarks with the text each is on; clicking one
-    goes there and, for an editor, Remove takes it off. The link form "#name" is
-    shown, to type into a link.
-
 func Box(props BoxProps) xango.Node
-    Box is a layout container, normally full height, split into however many
-    sub-boxes Divisions describes -- each independently sized by percentage,
-    a fixed unit value, or left flexible to fill whatever height its siblings
-    don't claim. Built on CSS Grid's grid-template-rows, which already handles
-    exactly this mix of units in one declaration.
-
 func Breadcrumbs(props BreadcrumbsProps) xango.Node
-    Breadcrumbs renders a trail of links with the last item marked as the
-    current page (aria-current, and rendered as plain text even if it has an
-    Href -- you're already there).
-
 func Button(props ButtonProps) xango.Node
     Button renders a styled <button>.
 
 func Capacity(p CapacityProps) xango.Node
-    Capacity shows how full a store is: a meter with the percentage, how much
-    is used of how much was allocated, and how much is left. A meter above 90%
-    is marked, and one over 100% too. From CapacityWarnAt percent a notice says
-    what to do so that no work is lost.
-
 func CapacityAdvice(pct float64) string
-    CapacityAdvice is what to do when a store is filling up, in words for the
-    person.
-
 func CaptionEditor(p CaptionEditorProps) xango.Node
-    CaptionEditor edits a caption track: the track's text (WebVTT), the captions
-    it holds as a list with their times, what is wrong with it in words,
-    and a form to add a caption. The list is for reading and checking; the text
-    is what is edited.
-
 func Carousel(props CarouselProps) xango.Node
-    Carousel renders a single active slide, prev/next arrows, and a dot per
-    slide for direct navigation. All slides are rendered (the inactive ones
-    aria-hidden) so this works before any client-side hydration runs, with CSS
-    choosing which one shows.
-
 func CheckPanel(p CheckPanelProps) xango.Node
-    CheckPanel lists the findings of a document accessibility check, each
-    with its fix and a button that goes to it. The summary is a live status,
-    so a reader hears the result of pressing Check.
-
 func Checkbox(props CheckboxProps) xango.Node
-    Checkbox renders a single labeled checkbox, the label wrapping the input so
-    clicking the text toggles it too (same zero-JS trick FileUploader's dropzone
-    label uses).
-
 func CheckboxGroup(props CheckboxGroupProps) xango.Node
-    CheckboxGroup renders a set of independent checkboxes -- unlike RadioGroup,
-    any number (including all or none) may be checked at once.
-
 func Chip(props ChipProps) xango.Node
-    Chip renders a small labeled pill, optionally with a leading icon and a
-    remove button.
-
 func ChordFromKey(k xango.KeyData) (chord string, ok bool)
-    ChordFromKey builds the chord string (canvas.Chord) for a key press,
-    reading letters and digits from the physical key the way the canvas does.
-    ok is false for a press of a modifier on its own, and for one with no Ctrl,
-    Cmd or Alt (the canvas only runs shortcuts that have one).
-
 func Collab(props CollabProps) xango.Node
-    Collab wraps a shared document's content and, based on Role's capabilities,
-    gates what the current collaborator can see and do with it: viewers get
-    read-only Content plus a "View only" badge and nothing else; editors
-    also get Actions and Comments; owners also get Delete/Share. Collab has
-    no networking or persistence of its own -- it's a pure permission gate,
-    the same "current state + On* callbacks" pattern every interactive component
-    in this package already uses. Pair it with your own real-time sync (e.g.
-    domrt/browser.Socket) to make Content/Comments actually collaborative;
-    see examples/collab-editor-app for one way to wire that up.
-
-    Collab only gates the affordances *around* Content -- Actions/
-    Delete/Share/Comments -- since Content is an opaque []xango.Node it
-    can't reach into. The gj-collab-readonly class it adds when !CanEdit
-    is purely cosmetic (a slight opacity change); if Content includes a
-    real input/textarea, making it genuinely non-interactive for a viewer
-    (not just visually muted) is the caller's job, e.g. Textarea's own
-    Disabled field driven off the same CapabilitiesForRole(Role) call.
-    examples/collab-editor-app does exactly this.
-
 func ColorPicker(props ColorPickerProps) xango.Node
-    ColorPicker renders a styled native color input, letting the browser handle
-    the actual color-picker UI.
-
 func CommandMaterial(command string) string
-    CommandMaterial is the symbol name for an editing command (its
-    canvas.Command string, "bold", "para.align-left"...), or "" for none.
-
 func CommentCard(props CommentCardProps) xango.Node
-    CommentCard renders one comment: author and time, the commented text,
-    the Markdown body with mentions highlighted, its replies and, for an editor,
-    Resolve/Reopen, Delete and a reply box.
-
 func CommentList(props CommentListProps) xango.Node
-    CommentList renders the comments as cards, filtered by status (open,
-    resolved or all) with a count on each choice.
-
 func Confirm(props ConfirmProps) xango.Node
-    Confirm is a Dialog preset for a yes/no decision, rendered with
-    role="alertdialog" (per ARIA, for a dialog demanding an immediate response)
-    instead of Dialog's default role="dialog".
-
 func ConsolePanel(p ConsoleProps) xango.Node
-    ConsolePanel is the console in the editor: a log that screen readers
-    announce as it grows, a line to type a command on (Enter runs it, Up and
-    Down walk the commands already run), a question with Yes and No buttons when
-    a command needs one, and a button to add the files import reads.
-
 func ContextMenu(props ContextMenuProps) xango.Node
-    ContextMenu renders a positioned menu (typically opened from a right-click
-    -- see html.Element.OnContextMenu) plus a full-viewport backdrop that closes
-    it on an outside click. Renders nothing when !Open.
-
 func ContextProvider(parent context.Context, key *ContextKey, value any, render func(ctx context.Context) xango.Node) xango.Node
-    ContextProvider is gojiberry's answer to the open design question
-    docs/ROADMAP.md (task #129) posed for a Context API: unlike a component
-    library built on a stateful class-component tree (React et al.), every
-    component in this package is a plain, stateless function of its own props
-    (see the root README's own "A ready-made component library" section) --
-    there is no implicit, ambient scope a deeply-nested component could read a
-    value out of without it having been passed somehow, in *either* rendering
-    mode. A xango.Node tree is built eagerly, one plain Go function call at a
-    time, entirely before xango.Render/domrt.Mount ever walks it -- so by the
-    time either renderer sees the tree, there's no "current context" left to
-    consult; whatever a descendant needed had to already be resolved during that
-    eager build, the same constraint that makes keyed fragments need dedicated
-    .xg syntax rather than a runtime trick (see xango's own Frag/WithKey doc
-    comments).
-
-    The answer here is the same one stdlib's own context.Context is designed
-    for: an explicit, ordinary Go value threaded through an explicit call chain,
-    never a hidden global (which also wouldn't be safe under concurrent SSR
-    requests rendering different pages in separate goroutines at once).
-    render receives ctx with value already attached under key, and returns
-    whatever subtree that lets it build -- typically by reading it back with
-    ContextValue and handing it down as an ordinary prop to whatever actually
-    needs it, or by wrapping a further nested ContextProvider of its own.
-    This is deliberately *not* fully transparent the way React's Context is:
-    an intermediate component between the Provider and the real consumer still
-    has to accept and forward ctx itself (or the extracted value) to reach a
-    descendant several layers down. What it does buy over plain prop-drilling is
-    that the intermediate layers only ever thread one generic context.Context
-    parameter, rather than growing a bespoke, unrelated prop of their own for
-    every distinct value a deeper descendant happens to need.
-
 func ContextValue[T any](ctx context.Context, key *ContextKey) (T, bool)
-    ContextValue reads key back out of ctx -- ok is false if key was never
-    attached anywhere up ctx's own chain, or if the value stored under it isn't
-    a T.
-
 func DataTable(props DataTableProps) xango.Node
-    DataTable renders a sortable, optionally-selectable, optionally-
-    searchable/paginated table -- see components/datatable.css.
-
 func DatePicker(props DatePickerProps) xango.Node
-    DatePicker renders a styled native date input, letting the browser handle
-    the actual calendar UI/locale formatting/keyboard input.
-
 func Dialog(props DialogProps) xango.Node
     Dialog is Modal with the common title/body/footer-actions shape.
 
 func DocList(p DocListProps) xango.Node
-    DocList lists documents, each with the operations the host plugs in: Open,
-    Duplicate, Trash, Delete and a tag editor, and above them a filter by tag.
-
 func DocumentView(props DocumentViewProps) xango.Node
-    DocumentView lays out a word-processor window around a canvas editor,
-    the way Google Docs does: the title and a menu bar across the top, a toolbar
-    under them, the document on a grey desk in the middle with an optional
-    sidebar beside it, and a status line at the bottom. It is plain structure
-    -- header, toolbar, main (desk and sidebar), footer -- with a stylesheet
-    (documentview.css); everything inside is yours.
-
 func Dropdown(props DropdownProps) xango.Node
-    Dropdown renders a closed control button and, when Open, a listbox of
-    options below it (the ARIA listbox pattern). Keyboard: Down or Up on the
-    button opens the list and goes to its first or last option; Up, Down,
-    Home and End move among the options, Enter or Space chooses one, Escape
-    closes the list with the focus back on the button, Tab closes it and leaves
-    (see listboxkeys.go).
-
 func ErrorView(id string, err error) xango.Node
-    ErrorView draws err for a person: the message (an alert, so a screen reader
-    says it at once) and, under a native Details disclosure, the technical text
-    with a Copy button when CopyText is set. The id is the element that holds
-    both.
-
 func FidelityPanel(p FidelityPanelProps) xango.Node
-    FidelityPanel shows what a file format changes in the document before it
-    is exported, and what the last file imported left out: each feature the
-    document uses that the format drops or simplifies, with how it is written.
-    The summary is a live status, so a reader hears it when the format is
-    chosen. Nothing here blocks an export; it tells the person what the file
-    will not hold.
-
 func FileUploader(props FileUploaderProps) xango.Node
-    FileUploader renders a dropzone that's also a native file-input label
-    (clicking anywhere on it opens the file browser, no JS needed for that part)
-    plus an optional progress bar.
-
 func FindReplace(p FindReplaceProps) xango.Node
-    FindReplace is the find and replace bar: a query box with the match count
-    and previous and next buttons, toggles for case, whole word and regular
-    expression, and a replacement box with Replace and Replace all.
-
 func Floating(props FloatingProps) xango.Node
-    Floating makes Children float above the surrounding content at a fixed
-    corner/edge position -- a formalized version of the "wrap one or more Toasts
-    in your own position:fixed container" idiom Toast's own doc comment already
-    describes, generalized to any content: a floating action button, a badge,
-    a persistent status widget, or a Toast stack.
-
 func FolderPicker(p FolderPickerProps) xango.Node
-    FolderPicker is the control for saving to a folder on the person's computer:
-    Choose folder, and once one is chosen its name with Forget, or, when the
-    browser has withdrawn permission after a restart, "Reconnect folder" (the
-    saves to it wait until then).
-
 func FontSelector(props FontSelectorProps) xango.Node
-    FontSelector renders a closed control showing the chosen family in its own
-    typeface and, when Open, a panel with a search box, source filter chips and
-    a list of fonts each previewed in itself. It is controlled: the caller owns
-    Open, Query and Source (see the root README's controlled-component notes)
-    and loads the fonts it lists (for fonts with URLs, add fonts.FontFaceCSS to
-    the page).
-
-    Like Dropdown it implements the ARIA listbox pattern's attributes only;
-    it has no keyboard navigation of its own.
-
 func FootnoteList(props FootnoteListProps) xango.Node
-    FootnoteList renders the numbered footnotes, their text as Markdown;
-    clicking a number goes to its mark and an editor gets Edit and Delete.
-
 func FormatChord(chord string, mac bool) string
-    FormatChord writes a key chord ("Mod+Alt+Shift+K") for people: "Ctrl+
-    Alt+Shift+K", or on a Mac "⌃⌥⇧K" with ⌘ for Mod.
-
 func Grid(props GridProps) xango.Node
-    Grid is a plain CSS Grid layout container: arranges Children into a grid,
-    normally filling its parent's own width, with Columns/Gap controlling
-    track sizing and the spacing between cells -- Box's own sibling for a
-    two-dimensional layout instead of Box's single-axis stacked divisions. This
-    is a layout primitive, not a data-display component: it has no notion of
-    rows, selection, sorting, or pagination at all -- reach for DataTable when
-    what's actually being browsed is tabular data, Grid when the job is just
-    arranging an arbitrary set of already-built children into a responsive grid.
-
 func HasMaterial(name string) bool
     HasMaterial says whether Material knows the name.
 
@@ -410,410 +137,91 @@ func HeadingBreadcrumb(entries []canvas.OutlineEntry, index int) string
     HeadingBreadcrumb is HeadingPath as one line, "Chapter › Section".
 
 func HeadingPath(entries []canvas.OutlineEntry, index int) []string
-    HeadingPath is the headings the caret is under, from the top one down: the
-    heading at index (OutlineIndexAt) and the nearest shallower one before it,
-    and so on up. It is empty when index is -1.
-
 func Icon(props IconProps) xango.Node
-    Icon renders a small inline glyph, sized and colored via CSS. It's
-    deliberately text (a Unicode character), not an inline <svg>: domrt's
-    client-side Mount/Update create elements with plain createElement, which
-    builds the wrong (HTML, not SVG) namespace element for <svg>/ <path>/etc.,
-    so any such tree silently fails to render once mounted client-side even
-    though it looks fine in server-rendered HTML (see Progress's circle variant,
-    and domrt/svg's own doc comment, for the same constraint solved the same
-    way elsewhere in this package). For a real vector icon that must render
-    client-side, build it yourself with domrt/svg.CreateElement and pass it
-    through one of this package's existing Icon *xango.Node slots (Chip,
-    Dropdown, ContextMenu) instead.
-
 func IconToolbar(p IconToolbarProps) xango.Node
-    IconToolbar is a toolbar of icon buttons for the commands a person uses most
-    (the formatting ones), in the pattern the WAI-ARIA authoring practices give:
-    one stop in the tab order, then the arrow keys, Home and End move between
-    the buttons (a button that is disabled is skipped), and Tab leaves the
-    toolbar. Each button has its name as an aria-label and a tooltip that adds
-    the shortcut; a toggle says whether it is on with aria-pressed, not by
-    colour alone.
-
 func ImageZoom(props ImageZoomProps) xango.Node
-    ImageZoom renders a thumbnail that, when Zoomed, also shows a full-viewport
-    overlay with the same image enlarged -- a Modal-style backdrop (see Modal's
-    doc comment for why backdrop and content are DOM siblings, not nested:
-    so a click on the enlarged image itself can't be mistaken for a click on the
-    backdrop behind it).
-
 func KeyBindings(props KeyBindingsProps) xango.Node
-    KeyBindings renders the key bindings editor: every command with its
-    shortcut, a search box, and per row Change (press the new keys),
-    Clear and Reset. It is controlled: the caller owns Recording and applies
-    OnBind/OnClear/OnReset to the Stage (canvas.Stage.Rebind) and says what
-    happened in Message. A modifier-only press is ignored and Escape cancels.
-
 func LanguagePanel(p LanguagePanelProps) xango.Node
-    LanguagePanel shows the detected language, a translator for the selection
-    and the grammar issues with the fix for each.
-
 func Link(props LinkProps) xango.Node
-    Link renders a styled <a>. A disabled link renders as a non-interactive
-    <span> instead of an <a> without an href, since an anchor's disabled-looking
-    states aren't real disabled controls to assistive tech the way a <button
-    disabled> is.
+    Link renders a styled <a>.
 
 func LinkHost(raw string) string
-    LinkHost returns the host part of a URL for display ("example.com"),
-    or the URL itself if it does not parse.
-
 func LinkPreview(props LinkPreviewProps) xango.Node
-    LinkPreview renders a small card for a link: its image, title, description
-    and site. With only a URL it shows the host; renders nothing without one.
-    The card is itself a link to the URL.
-
 func List[T any](props ListProps[T]) xango.Node
-    List renders a ul/ol with one li per item, each produced by the Item render
-    prop. It is the smallest generic component: it shows how a component can
-    take typed data and a function that turns an item into markup.
-
 func Loader(props LoaderProps) xango.Node
-    Loader renders a spinning indicator for an in-progress operation with no
-    known completion percentage -- see Progress for one that has one.
-
 func MarkdownText(text string) xango.Node
-    MarkdownText renders Markdown for a comment: paragraphs, bullet and
-    numbered lists, quotes, headings (as bold lines), and the inline forms of
-    inlineNodes, with @username and e-mail mentions highlighted. Raw HTML is
-    shown as text, and only http, https and mailto links are live.
-
 func Material(name string) xango.Node
-    Material draws a Material Symbols icon (outlined) by its name
-    ("format_bold", "delete", "link"): an element that takes the text colour
-    and a size of 1.25em, hidden from assistive technology because the button or
-    menu entry around it carries the name. The names are the ones opendocs uses,
-    so a button moves between the two unchanged. An unknown name draws nothing.
-    (Icon is the small built-in set of text glyphs; Material is the full-size
-    drawn icons.)
-
-    It is a plain <span> whose shape is a CSS mask made from the icon's path,
-    not an inline <svg>: the DOM runtime creates elements without the SVG
-    namespace, so an <svg> built client-side would not draw. The glyphs are
-    Apache-2.0 licensed (see material_data.go) and are in the binary as path
-    data, not as a font: only the names in MaterialNames are included.
-
 func MaterialNames() []string
     MaterialNames lists the symbols available, sorted.
 
 func Menu(props MenuProps) xango.Node
-    Menu renders a clean, lightweight menu: a list of entries with optional
-    shortcuts, check marks, separators and nested submenus. It holds no state --
-    submenus open with CSS (:hover, :focus-within) -- and has no position of its
-    own: put it in whatever popup or panel you like, or use MenuBar for a bar of
-    them. It is built from plain <ul>/ <li> with ARIA menu roles; its stylesheet
-    is menu.css.
-
 func MenuBar(props MenuBarProps) xango.Node
-    MenuBar renders a row of menus (File, Edit, ...), at most one open at a
-    time. It is controlled: the caller owns Open. A click anywhere outside
-    closes it.
-
 func Migrate(p MigrateProps) xango.Node
-    Migrate is the panel for moving documents in from another platform (Google
-    Docs, Microsoft Word on OneDrive) or from Word files on this computer:
-    choose the platform, sign in with a token, browse its folders, tick what
-    to bring and start; progress and a report of what could not be migrated are
-    shown.
-
 func Modal(props ModalProps) xango.Node
-    Modal renders a full-viewport backdrop plus a centered content box. Renders
-    nothing when !Open. This is the base Dialog (and, through it, Confirm and
-    Alert) builds on; use it directly for fully custom modal content.
+    Modal renders a full-viewport backdrop plus a centered content box.
 
 func ModalKeys(onClose func()) xango.Attr
-    ModalKeys is the keydown handler of a modal box: Tab and Shift+Tab
-    move the focus round the focusable elements inside it, wrapping at
-    the ends (and from the box itself, which has the focus when it opens,
-    to the first or the last), so the focus cannot leave it for the page behind;
-    Escape calls onClose, if there is one (the same as a click on the backdrop).
-    Keys with Ctrl, Alt or Meta are left alone.
-
 func NoteCounter(used, max int) string
-    NoteCounter is the words of the counter: how many characters are used of the
-    limit.
-
 func OTPInput(props OTPInputProps) xango.Node
-    OTPInput renders Length single-character text boxes for entering a
-    one-time-passcode/verification code.
-
 func OpenDownloadDialog(d OpenDownload) xango.Node
-    OpenDownloadDialog is the dialog of an OpenDownload: the size of the current
-    version and of the history, a checkbox to drop the history, and what the
-    file will weigh.
-
 func Outline(props OutlineProps) xango.Node
-    Outline renders the document's headings as an indented list, the current
-    one marked; clicking one reports it (go there with TextFlow.GotoOffset and
-    ScrollView.RevealPending). It is controlled.
-
 func OutlineDown(es []canvas.OutlineEntry, i int) int
-    OutlineDown is the heading to put section i in front of to move it down one
-    place among its siblings (len(es) for the end), or -1 when it is the last of
-    them.
-
 func OutlineUp(es []canvas.OutlineEntry, i int) int
-    OutlineUp is the heading to put section i in front of to move it up one
-    place among its siblings, or -1 when it is the first of them.
-
 func PageSetupPanel(props PageSetupProps) xango.Node
-    PageSetupPanel edits a PageSetup: paper, orientation, margin presets and
-    each margin. It is controlled: it shows Setup and reports changes through
-    OnChange.
-
 func Pagination(props PaginationProps) xango.Node
-    Pagination renders Prev/Next buttons plus page-number buttons, with an
-    ellipsis collapsing the middle of a long run so it stays a constant width
-    regardless of TotalPages. Renders nothing when TotalPages < 1.
-
 func ParseCaptionTime(s string) (float64, bool)
-    ParseCaptionTime reads a time typed in the caption form: seconds ("12.5"),
-    "mm:ss" or "hh:mm:ss", with a fraction on the last part.
-
 func Passkey(p PasskeyProps) xango.Node
-    Passkey is the sign-in and passkey-management control: "Sign in with a
-    passkey" and "Create an account with a passkey" when nobody is signed in,
-    and the person's passkeys with Add and Remove when someone is. A passkey
-    is two factors in itself (the device, and the fingerprint, face or PIN that
-    unlocks it), so there is no separate code to type; the control says so.
-
 func People(p PeopleProps) xango.Node
-    People lists who can open a document, each with a role to change and a
-    Remove, and a form to invite someone. Like the other document components
-    it knows nothing about where access is kept: a docstore ACL, an HTTP API,
-    a test double.
-
 func Popover(props PopoverProps) xango.Node
-    Popover renders Trigger, and, when Open, a panel of Content anchored
-    to it plus a full-viewport backdrop that closes it on an outside click.
-    Unlike Tooltip (pure CSS hover), Popover is click-triggered and can hold
-    interactive content of its own.
-
 func Presence(props PresenceProps) xango.Node
-    Presence shows who else is in the document -- a round avatar per person in
-    their cursor color, with their name and role as the tip -- the state of
-    the connection, and, for a viewer, a "View only" badge. It is controlled;
-    feed it from collab.Session.
-
 func Progress(props ProgressProps) xango.Node
-    Progress renders a linear bar or a circular ring showing Value percent
-    complete, or an indeterminate animation when the actual completion isn't
-    known yet. The circle variant is drawn with a CSS conic-gradient rather
-    than an <svg>: domrt's client-side Mount/Update creates elements with plain
-    createElement, which produces the wrong (HTML, not SVG) element for an
-    <svg>/<circle> tag, so an SVG-based ring would silently fail to render once
-    mounted (server-rendered HTML wouldn't show the bug -- the browser's HTML
-    parser switches namespace for a parsed <svg> tag on its own).
-
 func ProposalPanel(p ProposalPanelProps) xango.Node
-    ProposalPanel lists the suggested changes of a document with buttons to
-    accept or reject each (and all), and a switch for suggestion mode. Each
-    suggestion is a sentence ("Ana replaced 'brown' with 'red'"), so the list
-    reads well without colors, and each button names the suggestion it is for.
-
 func ProposalSentence(p canvas.Proposal) string
-    ProposalSentence says a suggested change in a sentence: "Ana replaced
-    'brown' with 'red'", "Ana added 'X'" or "Ana removed 'brown'". Long text is
-    cut short.
-
 func RadioGroup(props RadioGroupProps) xango.Node
     RadioGroup renders a set of mutually exclusive radio buttons.
 
 func Recipients(p RecipientsProps) xango.Node
-    Recipients lists the keys a document is encrypted to and shares it with one
-    more. Adding a key shows its type, label and fingerprint and asks the owner
-    to type the fingerprint, which they should have checked with the person (a
-    pasted key for the wrong person is not added by a click alone). Removing one
-    says what it does and does not do.
-
 func RegisterErrorGroups(g ...ErrorGroup)
-    RegisterErrorGroups adds groups that ExplainError tries before its own,
-    in the order given (the most specific first). Call it once, before the first
-    render. It exists so that a package can teach ExplainError the errors of a
-    layer these components do not import (package components/encerr does it for
-    the encrypting adapter).
+    call once before first render; most specific group first
 
 func RemovedNotice(files int) string
-    RemovedNotice is the line that says what a Remove did: how many stored files
-    were encrypted again without the key.
-
 func Saver(props SaverProps) xango.Node
-    Saver renders the save form: pick a target and a format, name the document
-    and save it, and below it the documents already saved there, each to open or
-    delete. It is controlled (see the root README's controlled-component notes);
-    saver.Session keeps its state and does the saving.
-
 func Search(props SearchProps) xango.Node
-    Search renders a text input plus, when Open, a listbox of Suggestions below
-    it -- a basic implementation of the ARIA combobox pattern (role/aria-*
-    attributes only, no keyboard navigation of its own, the same scope
-    RadioGroup/Dropdown/etc. keep to elsewhere in this package).
-
 func SizeText(n int64) string
-    SizeText writes a size as the nearest whole KiB, MiB or GiB, with the exact
-    bytes: "340 KiB (348,160 bytes)". Under 1 KiB it is just the bytes.
-
 func Slider(props SliderProps) xango.Node
     Slider renders a styled native range input.
 
 func SpellPanel(p SpellPanelProps) xango.Node
-    SpellPanel lists the misspelled words with their suggestions, and an
-    "Ignore" and "Add to dictionary" for each.
-
 func StatusBar(props StatusBarProps) xango.Node
-    StatusBar is the line at the bottom of a document window: items side by side
-    (page setup, page count, save state, where the caret is in the headings,
-    word count...). An item with no text is left out.
-
 func StyleEditor(props StyleEditorProps) xango.Node
-    StyleEditor renders controls for a canvas.Format -- font, size, weight,
-    bold, italic, underline, strikethrough, superscript, subscript, text and
-    highlight colors -- and a live preview of the result. It is controlled:
-    it shows props.Format and reports edits through OnChange. Superscript and
-    subscript exclude each other; "clear" buttons (and an empty size) put a
-    field back to inheriting from Base.
-
 func StylePicker(props StylePickerProps) xango.Node
-    StylePicker renders a gallery of named styles, each previewed in its own
-    formatting -- paragraph styles first, then character styles -- the way a
-    word processor's style list does. It is controlled: the caller applies
-    the pick (see canvas.Styles for the commands, or TextFlow.ApplyParagraph /
-    ApplyFormat with a Style).
-
 func Suggestions(p SuggestionsProps) xango.Node
-    Suggestions renders the popup list; nothing when the state is closed.
-
 func SuggestionsControl(id string, s SuggestState) []xango.Attr
-    SuggestionsControl is the attributes the editing element carries while it
-    has the popup: role combobox, expanded, controlling the list, and naming the
-    highlighted option.
-
 func Switch(props SwitchProps) xango.Node
-    Switch renders a toggle switch: a native checkbox (visually hidden but still
-    keyboard/screen-reader accessible) styled as a sliding track and thumb via
-    the CSS :checked sibling selector, the same "real control, custom look"
-    approach FileUploader's hidden file input uses.
-
 func SymbolCategories(symbols []Symbol) []string
     SymbolCategories lists the categories of symbols, in first-seen order.
 
 func SymbolPicker(props SymbolPickerProps) xango.Node
-    SymbolPicker renders a searchable grid of symbols to insert -- a search
-    box, category chips, the recently used ones and the matching symbols,
-    each a button titled with its name. It is controlled (Query, Category); the
-    caller inserts the picked character where it belongs (for a canvas editor,
-    FloatingText.InsertText or TextFlow.InsertText).
-
 func TabIndex(selected bool) xango.Attr
-    TabIndex is the tabindex of a tab: 0 for the selected one, -1 for the
-    others.
-
 func TabKeys(index, count int, onSelect func(index int)) xango.Attr
-    TabKeys is the keydown handler of the tab at index among count: it moves the
-    focus along the tablist and calls onSelect with the index of the tab that
-    has it now. Keys with a modifier are left alone.
-
 func Tabs(props TabsProps) xango.Node
-    Tabs renders a tab strip plus the active tab's content. The caller owns
-    which tab is active (see OnSelect), the same controlled-component pattern
-    every interactive component in this package uses.
+    Tabs renders a tab strip plus the active tab's content.
 
 func TagFilter(p TagFilterProps) xango.Node
-    TagFilter is a row of chips, All and one for each tag, that picks which tag
-    a list is narrowed to.
-
 func Textarea(props TextareaProps) xango.Node
-    Textarea renders a styled native <textarea>. Value is set via a "value"
-    attribute rather than child text content, the same controlled-input
-    convention Slider/DatePicker/ColorPicker already use: domrt patches
-    "value" as a real DOM property (see its propAttrs), which is what keeps
-    a <textarea> genuinely controlled on the client. A "value" attribute has
-    no meaning in the HTML spec for <textarea> though (initial content there
-    only ever comes from child text) -- harmless for domrt-mounted pages,
-    but if you render this with xango.Render for pure static HTML with no client
-    hydration, the initial content won't show up; use xango.El("textarea", ...,
-    xango.Text(props.Value)) directly for that case instead.
+    Textarea renders a styled native <textarea>.
 
 func Theme(props ThemeProps) xango.Node
-    Theme scopes which --gj-* design-token palette applies to its own
-    Children -- requires components/base.css, which carries both palettes
-    (:root/.gj-theme-light's own light values, .gj-theme-dark's own dark
-    overrides). This needs no Go-level context machinery of its own the way
-    ContextProvider's own open design question describes: it's a plain wrapping
-    <div> carrying a class (or inline custom-property overrides), and CSS
-    custom properties already cascade to every descendant element regardless
-    of DOM depth -- exactly the same body.dark class-toggle idea OnDesign's own
-    applyConfig uses (see that repo's editor/index.html), just scoped to this
-    wrapper instead of body, so it composes: a Theme nested inside another Theme
-    re-scopes from that point down.
-
 func ThemeEditor(p ThemeEditorProps) xango.Node
-    ThemeEditor edits a design-token set (package tokens): the colours as text
-    fields with a swatch, the type scale and the spacing as lists of numbers.
-    It checks the set as it is typed: what is wrong is listed under the
-    fields in plain words (a text colour under the contrast of 4.5:1, a body
-    size under 16px), the field that has the problem says so (aria-invalid,
-    described by the list), and a sample shows how the colours read together.
-    Nothing is applied here; the caller applies a set that has no problems.
-
 func Toast(props ToastProps) xango.Node
-    Toast renders a single transient notification -- unlike Modal/Dialog,
-    it has no backdrop and doesn't block interaction with the rest of the page.
-    It has no opinion on where it sits on screen (no fixed positioning of its
-    own); wrap one or more in your own position:fixed container to stack them.
-    Auto-dismissal, if wanted, is the caller's job too (e.g. Window.SetTimeout),
-    the same way FileUploader leaves progress tracking to the caller.
-
 func Tooltip(props TooltipProps) xango.Node
-    Tooltip wraps Children with a bubble that shows Content on hover or keyboard
-    focus. Pure CSS (:hover/:focus-within) -- no JS, no positioning logic to
-    keep in sync with anything.
-
 func Transfer(props TransferProps) xango.Node
-    Transfer renders "Import" and "Export" button groups, one button per format.
-    It is controlled and does no I/O itself: the callbacks choose the file and
-    write it.
-
 func Trash(p TrashProps) xango.Node
-    Trash shows the documents in the trash, each to Restore or Delete forever,
-    and Empty trash to delete them all; Children (the live list) come first.
-    With nothing in the trash only the Children are drawn.
-
 func TypingLive(message string, n int) xango.Node
-    TypingLive is the live region TypingAnnouncer's sentences go to: polite,
-    so it waits for what the reader is saying, and separate from Announcer,
-    whose messages (the mode, the number of matches) must not be replaced by
-    a typed word. n counts the sentences said: a sentence said twice in a row
-    ("a", "a") is still a change of the region, so the reader says it again.
-
 func VersionDiff(p VersionDiffProps) xango.Node
-    VersionDiff shows the difference between two versions of a document
-    as a list, one item per changed block. It is not coloured text alone:
-    each item starts with words a screen reader says ("Inserted paragraph",
-    "Deleted heading 2", "Edited paragraph"), added words are <ins> and removed
-    words are <del>, and the list opens with a count ("3 changes: 1 inserted,
-    1 deleted, 1 edited").
-
 func Versions(p VersionsProps) xango.Node
-    Versions lists a document's snapshots, newest first, to open or delete,
-    with a button to save a new one.
-
 func WhereSentence(name, text string, anchor, caret int, has bool) string
-    WhereSentence says where name's cursor is in text: the paragraph (the lines
-    of text, counted from 1, empty ones too), and the few words before the
-    caret, or that text is selected. has is false when the person has no cursor
-    in the document (a viewer who has not clicked, someone who left the page).
-
 func Wizard(props WizardProps) xango.Node
-    Wizard renders a multi-step form flow: a step header strip, the active
-    step's content, and Back/Next actions.
-
 
 TYPES
 
@@ -822,52 +230,25 @@ type A11yBlock struct {
 	Level   int
 	Ordered bool
 	Text    string
-	// Runs, when set, are the text again as pieces with their own language: a piece with a Lang is
-	// written as a span with a lang attribute, so a screen reader switches voice for it. Their
-	// texts, joined, are Text.
-	Runs []A11yRun
-	// Cells are a table row's cells (Kind A11yTableRow); a table is the
-	// consecutive rows, the first of them the header.
-	Cells []string
-	// Mapped says Start is known: where the block's first rune falls in the editor's text stream. A
-	// mapped block carries it as data-gj-start, so the page can turn a position in the copy into a caret
-	// in the editor and back (Lead is a prefix of the text that is not in the stream, such as the box of
-	// a check-list item). Object is true for a block that stands for one inline object (a picture, a
-	// table): the whole of it is that one rune.
-	Mapped bool
-	Start  int
-	Lead   int
-	Object bool
-	// Caret says the editor's caret is in this block: it is marked aria-current="location".
-	Caret bool
+	Runs    []A11yRun
+	Cells   []string
+	Mapped  bool
+	Start   int
+	Lead    int
+	Object  bool
+	Caret   bool
 }
     A11yBlock is one block of the document, as text.
 
 func MarkCaret(blocks []A11yBlock, offset int) []A11yBlock
-    MarkCaret returns the blocks with Caret set on the one that holds the stream
-    offset and on no other (the argument is not changed).
 
 func (b A11yBlock) OffsetInBlock(offset int) int
-    OffsetInBlock is the reverse of StreamOffset: how many runes of the block's
-    text in the copy come before the stream offset (what a host needs to put the
-    reader's cursor where the caret is).
 
 func (b A11yBlock) StreamLen() int
-    StreamLen is how many runes the block takes in the editor's text stream:
-    its text, whatever pieces it is made of (a suggested removal is still in
-    the stream), less the Lead that is only in the copy; an object (a picture,
-    a table) is one rune.
 
 func (b A11yBlock) StreamOffset(before string) int
-    StreamOffset is the stream offset of the position in a mapped block after
-    `before` (the text of the block that comes before the position, as the copy
-    has it, without the words only a reader hears). Inside an object it is the
-    object itself.
 
 func (b A11yBlock) StreamOffsetRunes(before int) int
-    StreamOffsetRunes is StreamOffset for a host that has counted the stream
-    runes before the position itself (the pieces with a Stream count as that
-    many, not as their text), the Lead included.
 
 type A11yComment struct {
 	ID       string
@@ -877,9 +258,6 @@ type A11yComment struct {
 	Resolved bool
 	Replies  []A11yReply
 }
-    A11yComment is a comment of the document, written out for a reader:
-    who wrote it, the text it is on, what it says, the replies, and whether it
-    is resolved.
 
 type A11yKind int
     A11yKind is what kind of block an A11yBlock is.
@@ -896,46 +274,25 @@ type A11yReply struct{ Author, Text string }
     A11yReply is a reply to an A11yComment.
 
 type A11yRun struct {
-	Text string
-	Lang string
-	// Change is "ins" for text suggested to be added and "del" for text suggested to be removed, "" for
-	// text as it is; Author is who suggested it. A reader hears them as insertions and deletions, with the
-	// words "Suggested addition by Ana:" / "Suggested removal by Ana:" before.
-	Change string
-	Author string
-	// Href, when it is a safe address, makes the piece a link (a real <a>, opening in a new tab).
-	Href string
-	// Comments are the IDs (comma separated) of the comments on this piece: the piece is marked and
-	// points (aria-details) to the comment's own entry in the list of comments.
+	Text     string
+	Lang     string
+	Change   string
+	Author   string
+	Href     string
 	Comments string
-	// Stream, when it is above 0, is how many runes the piece takes in the editor's text stream, whatever
-	// its text is: the mark of a footnote is one rune there and "12" in the copy. The piece is written with
-	// a data-gj-stream attribute so that a host mapping a position in the copy to the stream counts it so.
-	Stream int
+	Stream   int
 }
-    A11yRun is a piece of a block's text; Lang is its language tag, "" for the
-    document's own.
 
 type AccessibleTextProps struct {
 	// ID is the element's id, for aria-describedby ("a11y-text" if empty).
 	ID string
 	// Label names the region ("Document text" if empty, translated).
-	Label  string
-	Blocks []A11yBlock
-	// Lang is the language of the document's text as a BCP 47 tag, "" for the page's own: the region is
-	// tagged with it, so a screen reader reads the text in that voice.
-	Lang string
-	// Selection is the selected text, "" for none, announced as part of the
-	// region so a reader finds what is selected.
+	Label     string
+	Blocks    []A11yBlock
+	Lang      string
 	Selection string
-	// Comments are the document's comments, listed after the text as a region of their own; the text
-	// they are on points to them.
-	Comments []A11yComment
-	// OnGoto, when set, is called when an entry of the outline is activated, with the heading's element id
-	// and, if the block is mapped, its stream position, and the link's own jump is not made (a page with a
-	// <base> element would take "#id" for another address). The host focuses the heading (it can take
-	// focus) and moves the editor's caret there.
-	OnGoto func(headingID string, start int, mapped bool)
+	Comments  []A11yComment
+	OnGoto    func(headingID string, start int, mapped bool)
 }
     AccessibleTextProps configures AccessibleText.
 
@@ -947,10 +304,7 @@ type AccordionItem struct {
 
 type AccordionProps struct {
 	Items []AccordionItem
-	// Open holds which item indices are currently expanded. To allow
-	// only one open at a time, clear the others in OnToggle before
-	// setting the clicked index -- Accordion itself just renders
-	// whatever Open says.
+	// Open holds which item indices are currently expanded.
 	Open     map[int]bool
 	OnToggle func(index int) // called when an item's header is clicked
 }
@@ -966,39 +320,20 @@ type AlertProps struct {
     AlertProps configures Alert.
 
 type Asker struct {
-
-	// Title, ConfirmLabel and CancelLabel are the dialog's words; defaults are
-	// "Are you sure?", "Delete" and "Cancel", translated through Translate.
 	Title, ConfirmLabel, CancelLabel string
 	// Has unexported fields.
 }
-    Asker puts a yes/no question to the user before something that cannot be
-    undone, using Confirm. The document components take its Ask as their Confirm
-    prop: with one, "Delete forever" asks first; without, it just happens.
-    The host renders Dialog once, anywhere in its tree.
-
-        ask := components.NewAsker(rerender)
-        components.Trash(components.TrashProps{..., Confirm: ask.Ask})
-        // and somewhere in the page: ask.Dialog()
 
 func NewAsker(onChange func()) *Asker
-    NewAsker makes an Asker that calls onChange whenever a question is put or
-    answered, so the host renders again.
 
 func (a *Asker) Ask(message string, do func())
-    Ask shows the question; do runs if the user confirms it. A question already
-    open is replaced.
 
 func (a *Asker) AskWith(label, message string, do func())
-    AskWith is Ask with the words of the confirm button for this question ("Make
-    confidential" rather than the default "Delete"); "" keeps the default.
 
 func (a *Asker) Asking() bool
     Asking reports whether a question is open.
 
 func (a *Asker) Dialog() xango.Node
-    Dialog is the Confirm dialog for the open question, closed when there is
-    none.
 
 type AvatarProps struct {
 	Src      string // image URL; "" falls back to rendering Initials instead
@@ -1028,23 +363,13 @@ type BookmarksProps struct {
     BookmarksProps configures BookmarkList.
 
 type BoxDivision struct {
-	// Height sizes this division: a percentage ("30%"), a fixed unit
-	// value ("200px", "10rem", ...), or "" to make it flexible --
-	// stretching to fill whatever height the other divisions don't
-	// claim (like CSS Grid's fr unit, which is exactly what it
-	// compiles to). Divisions can mix all three: e.g. a "48px" header,
-	// a "" flexible body, and a "30%" footer.
 	Height  string
 	Content []xango.Node
 }
     BoxDivision is one of Box's sub-boxes.
 
 type BoxProps struct {
-	// Height sizes the box itself; "" defaults to "100%" (fill the
-	// parent), per Box's purpose as a full-height layout container.
-	Height string
-	// Divisions splits Box into len(Divisions) stacked sub-boxes, top
-	// to bottom, each sized by its own Height.
+	Height    string
 	Divisions []BoxDivision
 }
     BoxProps configures Box.
@@ -1053,10 +378,6 @@ type BreadcrumbItem struct {
 	Label string
 	Href  string // "" renders a plain (non-link) span instead of an <a>
 
-	// OnClick fires alongside a real navigation to Href -- e.g. to
-	// drive client-side routing (see domrt/browser.Router) instead of
-	// a full page load. Call e.PreventDefault() in it to suppress the
-	// browser's own navigation.
 	OnClick xango.EventHandler
 }
     BreadcrumbItem is one entry in a Breadcrumbs trail.
@@ -1067,11 +388,7 @@ type BreadcrumbsProps struct {
     BreadcrumbsProps configures Breadcrumbs.
 
 type ButtonProps struct {
-	Label string
-	// Content overrides Label with arbitrary child nodes (e.g. an icon
-	// beside the text) when set -- the same "override the plain-text
-	// default with real markup" shape DialogProps' own Body/Actions
-	// already take.
+	Label    string
 	Content  []xango.Node
 	Variant  ButtonVariant // defaults to ButtonPrimary
 	Type     string        // "button" (default), "submit", or "reset"
@@ -1090,31 +407,21 @@ const (
 	ButtonDanger    ButtonVariant = "danger"
 )
 type CapacityProps struct {
-	// Used and Total are bytes; Total 0 means the allocated space is not known,
-	// and only Used is shown. Label names what is measured ("Storage").
-	Used, Total int64
-	Label       string
-	// ShowCounts adds how many documents there are (and how many of them are in the
-	// trash) to the meter.
+	Used, Total        int64
+	Label              string
 	ShowCounts         bool
 	Documents, Trashed int
 }
     CapacityProps configures Capacity.
 
 type CaptionDraft struct {
-	// Start and End are the times as typed (seconds, mm:ss or hh:mm:ss, with a fraction if wanted).
 	Start, End, Text string
 }
-    CaptionDraft is the caption being typed in the form under the track.
 
 type CaptionEditorProps struct {
-	// ID is a prefix for the ids of the fields ("cap-0" gives cap-0-track, cap-0-start ...), so a page can have
-	// several editors and a test can find the fields.
-	ID string
-	// Track is the caption track as WebVTT text; OnTrack is called with the new text when it is edited.
+	ID      string
 	Track   string
 	OnTrack func(string)
-	// Draft is the caption being typed in the form; OnDraft keeps it; OnAdd adds it to the track when it is valid.
 	Draft   CaptionDraft
 	OnDraft func(CaptionDraft)
 	OnAdd   func()
@@ -1135,37 +442,22 @@ type CarouselProps struct {
     CarouselProps configures Carousel.
 
 type CheckFinding struct {
-	// Rule names the check ("image-alt"); Severity is "error" or "warning" and is written as a word,
-	// not only shown by colour.
-	Rule, Severity string
-	// Message says what is wrong, Fix what to do; Text is a few words of what it concerns.
+	Rule, Severity     string
 	Message, Fix, Text string
-	// FixLabel, if set, is the text of a button that does the fix for the person ("Make it level 2");
-	// "" shows no button, because nothing is safe to do for them.
-	FixLabel string
+	FixLabel           string
 }
-    CheckFinding is one problem a document check found, as the panel lists it.
 
 type CheckPanelProps struct {
-	Findings []CheckFinding
-	// Checked says a check has run (an empty list then means "nothing found", not "not run").
-	Checked bool
-	// OnCheck runs the check; OnGo moves to finding i in the document.
-	OnCheck func()
-	OnGo    func(i int)
-	// OnFix does the fix of finding i; the host checks again afterwards.
-	OnFix func(i int)
-	// Gate is what exporting does about errors: "" (nothing), "warn" or "block"; OnGate sets it. Gate is
-	// shown only when OnGate is set. Overridden says the next export is allowed anyway, and OnOverride
-	// allows it (shown while Gate is "block").
+	Findings   []CheckFinding
+	Checked    bool
+	OnCheck    func()
+	OnGo       func(i int)
+	OnFix      func(i int)
 	Gate       string
 	OnGate     func(mode string)
 	Overridden bool
 	OnOverride func()
-	// GateFloor is the least strict gate the operator allows ("" for none, "warn" or "block"). A choice
-	// below it is shown but cannot be pressed, a note says why, and with "block" there is no override
-	// either. The host must also hold Gate at or above it.
-	GateFloor string
+	GateFloor  string
 }
     CheckPanelProps configures CheckPanel.
 
@@ -1199,60 +491,27 @@ type ChipProps struct {
     ChipProps configures Chip.
 
 type CollabAnnouncer struct {
-	// Level is how much is said: CollabOff nothing, CollabImportant the connection and problems, CollabAll
-	// that and the people who come and go (the default, "").
 	Level string
-	// Every is the least time between two sentences (2 seconds if 0). Changes that come sooner are held and
-	// said together at the next Update after it.
 	Every time.Duration
 
 	// Has unexported fields.
 }
-    Collaboration cues are visual (a coloured cursor, an avatar that appears).
-    CollabAnnouncer turns what changed in a shared session into short sentences
-    for a live region (Announcer): people joining and leaving, the connection
-    dropping and coming back, a sharing problem. Changes are grouped ("Ana and
-    Bo joined") and spaced (at most one sentence per Every), so a busy session
-    does not talk over the person.
 
 func (a *CollabAnnouncer) NoteComment(author string)
-    NoteComment records that someone else added a comment; it is said, with the
-    next sentence, at level CollabAll ("Bo commented." or "3 new comments.").
 
 func (a *CollabAnnouncer) NoteConflict(names []string)
-    NoteConflict records that other people changed a paragraph the person was
-    editing (their names; "" for someone not known). Both changes were kept,
-    and the sentence says so: "Bo changed the paragraph you were editing.
-    Both changes were kept." It is said at CollabImportant and CollabAll.
 
 func (a *CollabAnnouncer) NoteMerged(n int)
-    NoteMerged records that n changes made while offline met the shared document
-    when the connection came back ("3 changes were merged."). It is said at the
-    levels CollabImportant and CollabAll: it says that work was kept, which the
-    person needs to know whoever else is there.
 
 func (a *CollabAnnouncer) NoteRejected(n int)
-    NoteRejected records that n of the person's changes could not be applied
-    (the server refused them: "A change could not be applied."). Said at
-    CollabImportant and CollabAll.
 
 func (a *CollabAnnouncer) NoteReply(author string)
-    NoteReply records that someone else replied to a comment; it is said at
-    level CollabAll ("Bo replied." or "3 new replies.").
 
 func (a *CollabAnnouncer) NoteResolved()
-    NoteResolved records that someone else resolved a comment thread ("A comment
-    thread was resolved." or "3 comment threads were resolved."), said at level
-    CollabAll.
 
 func (a *CollabAnnouncer) Pending() bool
-    Pending reports whether something has changed that has not been said yet
-    (held by the spacing), so a host can call Update again a little later.
 
 func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, problem string) string
-    Update takes the session as it is now (online or not, the names of the other
-    people, the problem if sharing is not working) and returns the sentence to
-    say now, or "". The first call only remembers the state.
 
 type CollabCapabilities struct {
 	CanEdit    bool
@@ -1262,27 +521,17 @@ type CollabCapabilities struct {
 	CanComment bool
 }
     CollabCapabilities is the set of things a collaborator may do.
-    CapabilitiesForRole gives each CollabRole's default set; pass a custom
-    CollabCapabilities via CollabProps.Capabilities for anything finer-grained.
 
 func CapabilitiesForRole(role CollabRole) CollabCapabilities
-    CapabilitiesForRole returns the default capabilities for role: owner can
-    edit/view/delete/share/comment; editor can edit/view/ comment; viewer can
-    only view/comment. An unrecognized role gets no capabilities at all (fails
-    closed, not open).
 
 type CollabProps struct {
-	Role CollabRole
-	// Capabilities overrides CapabilitiesForRole(Role) when set, for a
-	// custom permission set beyond the three built-in roles.
+	Role         CollabRole
 	Capabilities *CollabCapabilities
 
 	Content []xango.Node // the document itself; shown whenever CanView
 
 	Actions []xango.Node // edit controls (a toolbar, a save button, ...); shown only when CanEdit
 
-	// OnDelete/OnShare, if set, each render as a button gated on
-	// CanDelete/CanShare respectively.
 	OnDelete func()
 	OnShare  func()
 
@@ -1301,7 +550,6 @@ const (
 type ColorPickerProps struct {
 	Value    string // "#rrggbb"
 	Disabled bool
-	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
 	Label    string
 	OnChange func(value string)
 }
@@ -1312,15 +560,11 @@ type CommentCardProps struct {
 	// Excerpt is the commented text, shown as a quote.
 	Excerpt  string
 	Selected bool
-	// CanEdit lets the viewer resolve and delete the comment; CanReply lets
-	// them reply (a viewer role may reply but not resolve or delete).
-	CanEdit bool
-	// CanReply shows the reply box; it is also shown when CanEdit is set.
+	CanEdit  bool
 	CanReply bool
 	// ReplyDraft is the text in the reply box.
 	ReplyDraft string
-	// ReplyNote is a line under the reply box, for what is wrong with the draft (a mention that cannot be saved).
-	ReplyNote string
+	ReplyNote  string
 
 	OnSelect     func(id string)
 	OnResolve    func(id string)
@@ -1332,15 +576,13 @@ type CommentCardProps struct {
 
 type CommentListProps struct {
 	Comments []canvas.Comment
-	// Excerpts maps a comment ID to the text it is on.
 	Excerpts map[string]string
 	// Filter is CommentsOpen (the default when empty), CommentsResolved or CommentsAll.
-	Filter   string
-	Selected string
-	CanEdit  bool
-	CanReply bool
-	Drafts   map[string]string
-	// ReplyNotes maps a comment ID to the line shown under its reply box.
+	Filter     string
+	Selected   string
+	CanEdit    bool
+	CanReply   bool
+	Drafts     map[string]string
 	ReplyNotes map[string]string
 
 	OnSelect     func(id string)
@@ -1348,8 +590,7 @@ type CommentListProps struct {
 	OnDelete     func(id string)
 	OnReplyDraft func(id, text string)
 	OnReply      func(id, text string)
-	// OnFilter is called with the filter the person picked; nil hides the choice.
-	OnFilter func(filter string)
+	OnFilter     func(filter string)
 }
     CommentListProps configures CommentList.
 
@@ -1368,48 +609,31 @@ type ConsoleLine struct {
 	Text string
 	Kind string
 }
-    ConsoleLine is one line of the console's log: what was typed (Kind "cmd"),
-    what came back ("out") or an error ("err").
 
 type ConsoleProps struct {
-	// Lines is the log, oldest first; Prompt precedes the input ("Work/Reports>").
-	Lines  []ConsoleLine
-	Prompt string
-	// Input is the text being typed; OnInput reports each change; OnSubmit runs it. OnHistory is told
-	// -1 (the key Up: an older command) or +1 (Down: a newer one) and puts that command in Input.
+	Lines     []ConsoleLine
+	Prompt    string
 	Input     string
 	OnInput   func(text string)
 	OnSubmit  func()
 	OnHistory func(dir int)
 	// OnClear empties the log.
-	OnClear func()
-	// OnAddFiles opens the chooser for files that import and unpack can read; Inbox are the files
-	// added so far, by name.
+	OnClear    func()
 	OnAddFiles func()
 	Inbox      []string
-	// Question, when set, is a command waiting for a yes or no (purge, rebuild); OnAnswer gives it.
-	Question string
-	OnAnswer func(yes bool)
+	Question   string
+	OnAnswer   func(yes bool)
 	// Busy is set while a command runs.
 	Busy bool
 }
-    ConsoleProps configures ConsolePanel, the command line inside the editor
-    (console.Session fills it in). Every operation is a plain callback: a nil
-    one leaves its control out.
 
 type ContextKey struct {
 	// Has unexported fields.
 }
-    ContextKey is an opaque, unforgeable key created by NewContextKey -- see
-    that function's own doc comment for why a plain string key would collide
-    across independent packages/callers the way stdlib's own context.Context is
-    documented to warn against.
 
 func NewContextKey(name string) *ContextKey
     NewContextKey returns a fresh key for use with ContextProvider/
-    ContextValue. name is only for readability in a debug print -- identity is
-    the pointer itself, not the string, so two keys created with the same name
-    are still distinct from each other.
+    ContextValue.
 
 type ContextMenuItem struct {
 	Label    string
@@ -1424,9 +648,6 @@ type ContextMenuProps struct {
 	Open  bool
 	X, Y  float64 // viewport position to render at -- see html.Element.OnContextMenu
 
-	// OnClose is called after an item is selected, and when the
-	// full-viewport backdrop behind the menu is clicked (a click
-	// anywhere outside it).
 	OnClose func()
 }
     ContextMenuProps configures ContextMenu.
@@ -1442,45 +663,22 @@ type DataTableProps struct {
 	Columns []DataTableColumn
 	Rows    []DataTableRow
 
-	// Selectable shows a checkbox column -- one per row plus a
-	// select-all checkbox in the header -- reusing the same plain
-	// checkbox markup Checkbox/CheckboxGroup already render rather
-	// than a new selection primitive.
 	Selectable     bool
 	Selected       []string // currently-checked Rows' own IDs
 	OnSelectChange func(id string, checked bool)
 	OnSelectAll    func(checked bool)
 
-	// SortKey/SortDesc/OnSort: DataTable only shows which column (if
-	// any) is currently sorted and which direction, and fires OnSort
-	// with the clicked column's own Key -- actually reordering Rows
-	// (and deciding whether clicking an already-sorted column flips
-	// SortDesc or clears it) is the caller's job, the same
-	// caller-drives-it split every controlled component in this
-	// package already takes.
 	SortKey  string
 	SortDesc bool
 	OnSort   func(key string)
 
-	// Search, if non-nil, renders a Search bar above the table --
-	// filtering Rows against its own Value is, again, the caller's job.
 	Search *SearchProps
 
-	// RowActions, given a row's own ID, returns its own per-row action
-	// buttons (edit/delete/...) as one trailing column -- present only
-	// when RowActions is non-nil.
 	RowActions func(id string) []xango.Node
 
-	// Pagination, if non-nil, renders Pagination (already exists)
-	// below the table. Infinite scroll instead is the caller's own
-	// job: an IntersectionObserver has no xango.Event of its own to
-	// declare here (the same "needs a real DOM reference" split
-	// OTPInput/FileUploader/ContextMenu already take), so DataTable
-	// only ever wires the page-number variant directly.
+	// Pagination, if non-nil, renders Pagination (already exists) below the table.
 	Pagination *PaginationProps
 
-	// Empty replaces the table body with a single full-width message
-	// when Rows is empty -- "No data" is used if nil.
 	Empty *xango.Node
 }
     DataTableProps configures DataTable.
@@ -1489,15 +687,7 @@ type DataTableRow struct {
 	ID    string
 	Cells []xango.Node
 }
-    DataTableRow is one already-rendered row. DataTable has no notion of the
-    caller's own row type -- there's no way to write a generic component's own
-    type parameter into the .xg tag syntax every other component here is invoked
-    through (`<DataTable columns=... />`), so (like Tabs' own Tab.Content,
-    DropdownOption's own Icon) the caller turns each real row into one of these
-    instead: ID is this row's own stable identity (selection tracking, and the
-    keyed <tr> reconciliation DataTable's own render gives each row for free),
-    Cells is the row's own already-rendered content, one per Columns entry,
-    in the same order.
+    DataTableRow is one already-rendered row.
 
 type DataView[T any] struct {
 	Page     int
@@ -1512,70 +702,30 @@ type DataView[T any] struct {
 	Err        error
 	// Has unexported fields.
 }
-    DataView owns the paginated/filtered/sorted query state for a dataset
-    fetched from some backend, and hands DataTable/Grid already-loaded data as
-    plain props -- the same "component is a pure function of props, networking
-    is the caller's job" split Collab's own doc comment already describes for
-    that component, just for a data-*source* rather than a permissions gate.
-    It renders nothing of its own -- docs/ROADMAP.md's own task #129 entry left
-    "does DataView end up a real third visual component, or just a documented
-    pattern" as part of the design work; a plain state-owning generic type
-    turned out to need no rendering of its own at all, since DataTable/Grid
-    already take already-rendered Rows/Items as plain props.
-
-    Typical use: construct with NewDataView, call Load once, then wire
-    DataTableProps (or GridProps)'s own Search/Pagination fields to
-    SearchProps()/PaginationProps(), and Rows/Items to a mapping over Items
-    built with each T's own real fields -- SetPage/SetSearch/ SetSort (called by
-    those wired callbacks) each reload and update Items/Total/TotalPages/Err in
-    place, ready for the next re-render.
 
 func NewDataView[T any](props DataViewProps[T]) *DataView[T]
-    NewDataView constructs a DataView starting on page 1 with no search/sort --
-    call Load once to populate Items.
 
 func (v *DataView[T]) Load() error
-    Load calls Fetch with the current Page/Search/SortKey/SortDesc and
-    updates Items/Total/TotalPages/Err. Loading is only ever true for the
-    duration of this call itself, from this type's own point of view --
-    running it off the main goroutine and re-rendering once it returns (so
-    Loading ever has a chance to actually paint) is the caller's job, the same
-    async-caller-drives-it split FileUploader/ Search already take for their own
-    async work.
+    Load calls Fetch with the current Page/Search/SortKey/SortDesc and updates
+    Items/Total/TotalPages/Err.
 
 func (v *DataView[T]) PaginationProps() PaginationProps
-    PaginationProps returns a ready-to-use Pagination configuration bound to
-    this DataView's own current Page/TotalPages, calling SetPage on change.
 
 func (v *DataView[T]) SearchProps() SearchProps
-    SearchProps returns a ready-to-use Search configuration bound to this
-    DataView's own current Search, calling SetSearch on change. Suggestions/Open
-    are left zero: DataView's own Search is a plain server-side filter,
-    not Search's own autocomplete-suggestions half.
 
 func (v *DataView[T]) SetPage(page int) error
     SetPage sets Page (clamped to at least 1) and reloads.
 
 func (v *DataView[T]) SetSearch(search string) error
-    SetSearch sets Search, resets Page to 1 (a new search invalidates whatever
-    page the old result set was on), and reloads.
 
 func (v *DataView[T]) SetSort(key string, desc bool) error
-    SetSort sets SortKey/SortDesc and reloads. DataTableProps.OnSort's own
-    callback receives exactly the clicked column's Key; a caller wiring this
-    up decides whether that means flipping SortDesc (same key clicked again)
-    or starting fresh ascending (a different key), the same "caller decides
-    asc/desc toggling" split DataTableProps. OnSort's own doc comment already
-    describes.
+    SetSort sets SortKey/SortDesc and reloads.
 
 type DataViewProps[T any] struct {
 	Fetch    func(DataViewQuery) (DataViewResult[T], error)
 	PageSize int // defaults to 20 if <= 0
 }
-    DataViewProps configures DataView. Fetch is the only required field:
-    the actual network/query logic a real backend needs; DataView itself owns
-    only the *state* (current page/search/sort) and when to call it, never the
-    wire format.
+    DataViewProps configures DataView.
 
 type DataViewQuery struct {
 	Page     int // 1-indexed
@@ -1584,32 +734,17 @@ type DataViewQuery struct {
 	SortKey  string
 	SortDesc bool
 }
-    DataViewQuery is one request DataView's own Load makes through Fetch --
-    deliberately abstract over which real pagination/filter/ sort protocol a
-    backend actually speaks (JSON:API, OData, a gojiberry-defined convention,
-    GraphQL, a plain bespoke REST endpoint, ...): docs/ROADMAP.md's own task
-    #129 entry left that choice open as a real design question, and different
-    apps reasonably want different ones, so a Fetch adapter translates this
-    generic shape into whatever real request its own backend needs rather than
-    DataView committing to one wire format.
 
 type DataViewResult[T any] struct {
 	Items      []T
 	Total      int
 	TotalPages int
 }
-    DataViewResult is what a Fetch adapter hands back: Items already
-    paginated/filtered/sorted server-side (DataView never repeats that
-    work client-side), plus how many exist in total at the current
-    PageSize/Search/Sort combination -- Total is a plain item count so a caller
-    showing "N results" doesn't need to multiply TotalPages back out by PageSize
-    to get it.
 
 type DatePickerProps struct {
 	Value    string // "YYYY-MM-DD"
 	Min, Max string // optional bounds, same format; "" for no bound
 	Disabled bool
-	// Label is the accessible name of the input (what a screen reader says; a visible <label> may do instead).
 	Label    string
 	OnChange func(value string)
 }
@@ -1630,37 +765,24 @@ type DirRow struct {
 	Verified                      bool
 	// VerifiedBy is the host of the directory that answered (RecipientRow.VerifiedBy).
 	VerifiedBy string
-	// Attested: Verified, and the key signed the binding to the address itself (see
-	// RecipientRow.Attested); the picker shows the stronger mark.
-	Attested bool
+	Attested   bool
 	// OwnerSigned and OwnerEnrolled: see RecipientRow; the strongest mark.
 	OwnerSigned, OwnerEnrolled bool
-	// Note is one more line about the row, shown after its marks ("the log number changed"); empty for none.
-	Note string
+	Note                       string
 }
-    DirRow is a key found in the store's directory for an e-mail address
-    (encrypt.PublishedKey), as the picker lists it. Key is the public key text
-    that fills the draft.
 
 type Doc struct {
-	ID, Name string
-	Format   string // the file format's label ("JSON")
-	Size     int
-	Updated  time.Time
-	// Trashed is when the document was moved to the trash; zero if it is not there.
-	Trashed time.Time
-	Tags    []string
-	// Confidential marks a document protected end to end: its real name and tags are inside the
-	// envelope, so a UI draws a lock. NameHidden says the name shown is the placeholder (the
-	// document has not been opened or revealed here, so its real name is not known): the list
-	// offers Reveal for it.
+	ID, Name                 string
+	Format                   string // the file format's label ("JSON")
+	Size                     int
+	Updated                  time.Time
+	Trashed                  time.Time
+	Tags                     []string
 	Confidential, NameHidden bool
 }
-    Doc is a document as the components list it. ID is a UUID that never
-    changes; Name is a label, and two documents may have the same one.
+    Doc is a document as the components list it.
 
 type DocAction func(ctx context.Context, id string) error
-    DocAction is an operation on one document (or version) by ID (or key).
 
 type DocCheck func(ctx context.Context) error
     DocCheck is the operation behind DocListProps.Check.
@@ -1673,89 +795,43 @@ type DocFolder struct {
 	Confidential     bool
 	NameHidden       bool
 }
-    DocFolder is a folder as the components list it: like a document,
-    an ID and a name that need not be unique; Parent is the folder it is in,
-    "" at the top.
-
-    Confidential marks a folder whose real name is kept inside the envelope:
-    Name is then the placeholder ("Confidential folder") until the host has
-    revealed it, so a UI can draw a lock.
-
-    NameHidden says the name is still the placeholder (not revealed here):
-    the list offers Reveal.
 
 type DocListProps struct {
-	// Docs are the documents to list (the ones not in the trash). Current is the
-	// ID of the one being edited, marked in the list.
-	Docs    []Doc
-	Current string
-	// The operations a document row offers; a nil one is left out.
+	Docs      []Doc
+	Current   string
 	Open      DocAction
 	Duplicate DocAction
 	Trash     DocsAction // moves to the trash: see Trash for getting them back
-	// Delete removes a document for good, with no trash in between.
-	Delete DocAction
+	Delete    DocAction
 	// Tag edits a document's tags.
-	Tag func(ctx context.Context, id string, tags []string) error
-	// TagFilter is the tag the list is narrowed to ("" for all), set by
-	// OnTagFilter.
+	Tag         func(ctx context.Context, id string, tags []string) error
 	TagFilter   string
 	OnTagFilter func(tag string)
-	// Title heads the list; Refresh, if set, adds a Refresh button.
-	Title   string
-	Refresh func()
-	// Check reads every document and compares it with its checksum, restoring damaged
-	// ones from their previous copy (saver.Session.Check); nil leaves the button out.
-	Check   DocCheck
-	Pending *Pending
-	// Confirm, if set, is asked before Delete (see Asker.Ask); nil deletes at once.
-	Confirm func(message string, do func())
-	// ConfirmAs, if set, asks the same question with the words of the confirm button (an Asker's
-	// AskWith): the protection switches use it so the dialog says "Make confidential", not
-	// "Delete". Without it they use Confirm, or act at once.
-	ConfirmAs func(label, message string, do func())
+	Title       string
+	Refresh     func()
+	Check       DocCheck
+	Pending     *Pending
+	Confirm     func(message string, do func())
+	ConfirmAs   func(label, message string, do func())
 
-	// Folders are the folders inside the one being shown, and Path the folders from
-	// the top down to it (empty at the top level), drawn as a breadcrumb.
-	// AllFolders, with their Parents, are where a document can be moved to.
 	Folders, Path, AllFolders []DocFolder
-	// OpenFolder goes into a folder ("" is the top level, the breadcrumb's first
-	// item); NewFolder makes one in the folder shown, named by FolderDraft (typed
-	// into a box that reports to OnFolderDraft); RenameFolder and DeleteFolder
-	// (which asks first) and Move (documents to a folder, "" the top level)
-	// complete it. A nil operation leaves its control out.
-	OpenFolder    DocAction
-	NewFolder     func(ctx context.Context, name string) error
-	FolderDraft   string
-	OnFolderDraft func(name string)
-	RenameFolder  func(ctx context.Context, id, name string) error
-	DeleteFolder  DocAction
-	Move          func(ctx context.Context, ids []string, folder string) error
+	OpenFolder                DocAction
+	NewFolder                 func(ctx context.Context, name string) error
+	FolderDraft               string
+	OnFolderDraft             func(name string)
+	RenameFolder              func(ctx context.Context, id, name string) error
+	DeleteFolder              DocAction
+	Move                      func(ctx context.Context, ids []string, folder string) error
 
-	// Link gives the address of a document and FolderLink of a folder; with
-	// CopyLink (which receives that address) they add a Link button to each row.
 	Link, FolderLink func(id string) string
 	CopyLink         func(url string)
-	// Download hands a document over in a format picked from DownloadFormats
-	// (none: one Download button, "" for the format); DownloadFolder hands over
-	// a folder's documents together.
-	// OpenDownload, if set, shows the dialog that asks whether to keep the version
-	// history in an opendocs download.
-	OpenDownload *OpenDownload
-	// DownloadPack hands over a folder ("" for everything) as one .opendoc pack, and
-	// ImportPack asks for a .opendoc file to bring in. Each shows its button when set.
-	DownloadPack    func(ctx context.Context, id string) error
-	ImportPack      func()
-	Download        func(ctx context.Context, id, format string) error
-	DownloadFolder  DocAction
-	DownloadFormats []DocChoice
+	OpenDownload     *OpenDownload
+	DownloadPack     func(ctx context.Context, id string) error
+	ImportPack       func()
+	Download         func(ctx context.Context, id, format string) error
+	DownloadFolder   DocAction
+	DownloadFormats  []DocChoice
 
-	// SetProtection makes a document confidential (true: its name and tags move inside the
-	// encrypted document) or not (false), and SetFolderProtection does the same for a folder's
-	// name. Each is offered as "Make confidential" / "Make not confidential" with a question
-	// first (Confirm) that says what changes; a nil operation leaves the control out. Reveal and
-	// RevealFolder read the real name of a confidential document or folder whose name is still
-	// hidden (Doc.NameHidden), which works once the host holds the key.
 	SetProtection       func(ctx context.Context, id string, confidential bool) error
 	SetFolderProtection func(ctx context.Context, id string, confidential bool) error
 	Reveal              DocAction
@@ -1764,11 +840,9 @@ type DocListProps struct {
     DocListProps configures DocList.
 
 type DocVersion struct {
-	Key  string // what the version operations take
-	Time time.Time
-	Size int
-	// Name is the name the person gave the version, Pinned says it is kept when older ones are dropped, and
-	// Author is who saved it.
+	Key    string // what the version operations take
+	Time   time.Time
+	Size   int
 	Name   string
 	Pinned bool
 	Author string
@@ -1776,29 +850,18 @@ type DocVersion struct {
     DocVersion is a snapshot of a document.
 
 type DocsAction func(ctx context.Context, ids []string) error
-    DocsAction is an operation on documents by ID, like Delete, Restore or
-    Trash. It may take a while (a server call): components run it in the
-    background, with Pending showing that it is running, and show its error if
-    it fails.
 
 type DocumentViewProps struct {
 	// Title is the document's name, shown at the top left.
 	Title string
 	// OnTitle, if set, makes the title an editable text box.
 	OnTitle func(title string)
-	// MenuBar is the row of menus (components.MenuBar), shown beside the
-	// title.
 	MenuBar xango.Node
 	// Toolbar is the formatting toolbar under it (buttons, selectors).
-	Toolbar xango.Node
-	// Canvas is the document itself: the <canvas> and its hidden input.
-	Canvas xango.Node
-	// Sidebar is an optional panel to the right (outline, key bindings,
-	// link preview...).
-	Sidebar *xango.Node
-	// Status is the line at the bottom ("Page 2 of 3 · 412 words").
-	Status string
-	// StatusBar, if set, replaces Status with the structured bar (see StatusBar).
+	Toolbar   xango.Node
+	Canvas    xango.Node
+	Sidebar   *xango.Node
+	Status    string
 	StatusBar *xango.Node
 }
     DocumentViewProps configures DocumentView.
@@ -1819,32 +882,22 @@ type DropdownProps struct {
 
 	OnToggleOpen func(open bool) // called when the control is clicked
 
-	// OnSelect is called when an option is clicked. For single-select,
-	// it should replace Selected and close the dropdown; for
-	// multi-select, it should add/remove value from Selected and
-	// typically leave it open.
+	// OnSelect is called when an option is clicked.
 	OnSelect func(value string)
 }
-    DropdownProps configures Dropdown. There's no native <select> equivalent
-    that supports per-option icons, so both single- and multi-select modes use
-    the same custom widget here (a native <select> is a better fit when icons
-    aren't needed).
+    DropdownProps configures Dropdown.
 
 type ErrorGroup struct {
-	Kind ErrorKind
-	// ID is the message id for Translate and Default its English text.
+	Kind        ErrorKind
 	ID, Default string
 	// Match says whether err belongs to the group.
 	Match func(err error) bool
-	// As, when set, files the group under that error's own message (ID and Default are not used).
-	As error
+	As    error
 }
-    ErrorGroup is a group of errors a host (or a package that knows more errors
-    than this one) adds.
 
 type ErrorInfo struct {
 	Kind ErrorKind
-	// Message is plain, translated and says what to do next. It names no Go value and no API call.
+	// Message is plain, translated and says what to do next.
 	Message string
 	// Details is the technical text, for support.
 	Details string
@@ -1852,29 +905,20 @@ type ErrorInfo struct {
     ErrorInfo is an error as a person reads it.
 
 func ExplainError(err error) ErrorInfo
-    ExplainError sorts err into a group with a translated message. The order
-    matters where one error wraps another: the most specific group is tried
-    first. A nil err gives the zero ErrorInfo.
+    ExplainError sorts err into a group with a translated message.
 
 type ErrorKind string
-    ErrorKind says in which user-facing group an error falls. A group is what
-    the person can do about it, not which Go value it was.
+    ErrorKind says in which user-facing group an error falls.
 
 const (
-	// ErrKindApp is an error the host already put into words (it has a UserMessage).
-	ErrKindApp ErrorKind = "app"
-	// ErrKindUnsigned is a file saved unsigned while a key change finished.
-	ErrKindUnsigned ErrorKind = "unsigned"
-	// ErrKindForged is a file that no owner of the document wrote.
-	ErrKindForged ErrorKind = "forged"
-	// ErrKindNoSigner is a save that needs the owner's signature, which this device cannot give.
-	ErrKindNoSigner ErrorKind = "nosigner"
-	// ErrKindRolledBack is a document or list older than one seen before.
+	ErrKindApp        ErrorKind = "app"
+	ErrKindUnsigned   ErrorKind = "unsigned"
+	ErrKindForged     ErrorKind = "forged"
+	ErrKindNoSigner   ErrorKind = "nosigner"
 	ErrKindRolledBack ErrorKind = "rolledback"
 	// ErrKindUnreadable is a stored file that cannot be opened here.
 	ErrKindUnreadable ErrorKind = "unreadable"
-	// ErrKindNoKey is a document that none of the unlocked keys opens.
-	ErrKindNoKey ErrorKind = "nokey"
+	ErrKindNoKey      ErrorKind = "nokey"
 	// ErrKindLocked is a store or document that is locked.
 	ErrKindLocked ErrorKind = "locked"
 	// ErrKindConflict is a document changed elsewhere since it was read.
@@ -1883,10 +927,8 @@ const (
 	ErrKindFloor ErrorKind = "floor"
 	// ErrKindStorageFull is a store with no room left.
 	ErrKindStorageFull ErrorKind = "storagefull"
-	// ErrKindRecovery is a key set that needs a recovery key or an SSH key too.
-	ErrKindRecovery ErrorKind = "recovery"
-	// ErrKindPasskey is a passkey ceremony that did not finish for a reason the person can act on.
-	ErrKindPasskey ErrorKind = "passkey"
+	ErrKindRecovery    ErrorKind = "recovery"
+	ErrKindPasskey     ErrorKind = "passkey"
 	// ErrKindOffline is a request that did not reach its server.
 	ErrKindOffline ErrorKind = "offline"
 	// ErrKindUnknown is everything else.
@@ -1898,42 +940,34 @@ type FidelityLoss struct {
 	Feature, Treatment, Note string
 	Count                    int
 }
-    FidelityLoss is one line of a fidelity report: a feature of the document,
-    what the format does with it ("dropped" or "simplified"), a note on how,
-    and in how many places the document uses it (0 when it is not a count).
 
 type FidelityPanelProps struct {
-	// Formats are the formats to export as, Format the one chosen; OnFormat chooses another.
 	Formats  []SaverChoice
 	Format   string
 	OnFormat func(name string)
 	// Export is what exporting the document as Format loses.
-	Export FidelityReport
-	// Import, if ImportName is set, is what the last file imported left out.
+	Export     FidelityReport
 	Import     FidelityReport
 	ImportName string
 }
     FidelityPanelProps configures FidelityPanel.
 
 type FidelityReport struct {
-	Losses []FidelityLoss
-	// Known says the host knows what the format writes (or reads); false makes the panel say so instead
-	// of "nothing is lost".
-	Known bool
-	// Pending says the report is still being worked out (the host does it elsewhere); the panel says so.
+	Losses  []FidelityLoss
+	Known   bool
 	Pending bool
 }
     FidelityReport is what a format loses of a document.
 
 type FileUploaderProps struct {
 	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
-	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+	InputID    string // hidden file input id, to read .Files()
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
 	Multiple bool
 	Disabled bool
 
-	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	ShowProgress  bool    // the variant without progress leaves this false
 	Progress      float64 // 0-100, ignored when Indeterminate
 	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
 
@@ -1941,40 +975,22 @@ type FileUploaderProps struct {
 }
     FileUploaderProps configures FileUploader.
 
-    xango.Event carries no file data (see xango.Event's doc comment: Value is
-    only ever a string/bool/similar simple payload), so reading the actual
-    selected/dropped files is the caller's job, done through domrt/html directly
-    on the client: look the input up by InputID and call its AsInput().Files(),
-    or attach domrt/html's own Element.OnDrop to the dropzone by DropzoneID
-    for real drag-and-drop file access (html.DragEvent.DataTransfer.Files()).
-    FileUploader itself only renders the widget and prevents the browser's
-    default drag-over/drop navigation.
-
 type FindReplaceProps struct {
 	Query, Replacement          string
 	MatchCase, WholeWord, Regex bool
-	// Count is how many matches there are, and Current which one is selected
-	// (from 1, 0 for none).
-	Count, Current int
-	// Error is shown instead of the count, for a query that cannot be used (a
-	// regular expression that does not compile).
-	Error string
+	Count, Current              int
+	Error                       string
 	// ReadOnly hides the replace row, for a viewer.
 	ReadOnly bool
 
-	OnQuery       func(string)
-	OnReplacement func(string)
-	// OnOptions is called with the three toggles when any is clicked.
+	OnQuery                                          func(string)
+	OnReplacement                                    func(string)
 	OnOptions                                        func(matchCase, wholeWord, regex bool)
 	OnNext, OnPrev, OnReplace, OnReplaceAll, OnClose func()
 }
-    FindReplaceProps configures FindReplace. It is controlled: the caller owns
-    the query and the results and feeds them back (canvas.TextFlow.Find and
-    ReplaceAll do the work).
+    FindReplaceProps configures FindReplace.
 
 type FloatingPosition string
-    FloatingPosition selects which corner/edge of the viewport (or nearest
-    positioned ancestor, see FloatingProps.Fixed) Floating's children stick to.
 
 const (
 	FloatingTopLeft      FloatingPosition = "top-left"
@@ -1987,52 +1003,32 @@ const (
 type FloatingProps struct {
 	Position FloatingPosition // defaults to FloatingBottomRight
 	Offset   int              // px gap from the chosen edge(s); 0 uses the CSS default (1em)
-	// Absolute positions relative to the nearest positioned ancestor
-	// (position:absolute) instead of the viewport, for floating within
-	// a scrolling container rather than over the whole page. Defaults
-	// to false (position:fixed, relative to the viewport), the more
-	// common "float over the whole page" case.
 	Absolute bool
 	Children []xango.Node
 }
     FloatingProps configures Floating.
 
 type FolderPickerProps struct {
-	// Supported says the browser can let the person choose a folder (the File System Access
-	// API: Chrome, Edge, Opera). Without it only the private storage is offered.
-	Supported bool
-	// State is FolderNone, FolderReady or FolderReconnect; Name is the folder's name.
-	State, Name string
-	// OnChoose opens the browser's folder picker; OnReconnect asks for the permission back;
-	// OnForget stops using the folder (its files stay). Each is left out when nil.
+	Supported                       bool
+	State, Name                     string
 	OnChoose, OnReconnect, OnForget func()
 	Disabled                        bool
 }
     FolderPickerProps configures FolderPicker.
 
 type FontSelectorProps struct {
-	// Fonts is the catalog to choose from (see the fonts package:
-	// fonts.Multi of web-safe, local and online repositories).
 	Fonts []fonts.Font
 	// Selected is the chosen family ("" for none).
 	Selected string
-	// Query is the text in the search box; the list shows the fonts
-	// whose family matches it (best matches first).
-	Query string
+	Query    string
 	// Source, if set, limits the list to one repository's fonts.
-	Source string
-	// Recent are families used lately, listed first while Query is empty.
-	Recent []string
-	// PreviewText is the sample shown in each font ("The quick brown fox"
-	// by default).
+	Source      string
+	Recent      []string
 	PreviewText string
 	Placeholder string
-	// Limit caps how many fonts are rendered at once (default 100): a
-	// catalog of thousands would bury the page. A note says how many more
-	// there are.
-	Limit    int
-	Open     bool
-	Disabled bool
+	Limit       int
+	Open        bool
+	Disabled    bool
 
 	OnToggleOpen func(open bool)
 	OnQuery      func(query string)
@@ -2042,10 +1038,8 @@ type FontSelectorProps struct {
     FontSelectorProps configures FontSelector.
 
 type FootnoteListProps struct {
-	// Entries are the notes whose marks are in the text (TextFlow.FootnoteList).
-	Entries []canvas.FootnoteEntry
-	CanEdit bool
-	// OnGoto is called when a note's number is clicked (go to its mark).
+	Entries  []canvas.FootnoteEntry
+	CanEdit  bool
 	OnGoto   func(e canvas.FootnoteEntry)
 	OnEdit   func(e canvas.FootnoteEntry)
 	OnDelete func(e canvas.FootnoteEntry)
@@ -2056,75 +1050,44 @@ type GhostAction int
     GhostAction is what a key did to the ghost text.
 
 const (
-	GhostNone    GhostAction = iota // the key is not for the ghost text; let it through
+	GhostNone    GhostAction = iota // the key is not for the ghost text: let it through
 	GhostAccept                     // insert Suffix at the caret
 	GhostDismiss                    // hide it
 )
 type GhostState struct {
-	// Word is the whole suggested word, Suffix the part the person has not typed yet.
 	Word, Suffix string
-	// Prefix is what had been typed when the suggestion was made.
-	Prefix string
-	// Caret is the caret offset (in runes) the suggestion belongs to; accepting at another caret is refused.
-	Caret int
+	Prefix       string
+	Caret        int
 
 	// Has unexported fields.
 }
     GhostState is the suggestion being shown, if any.
 
 func (g *GhostState) Accept(caret int) string
-    Accept returns the text to insert at the caret, "" when there is none or the
-    caret has moved.
 
 func (g *GhostState) Announcement() string
-    Announcement is the polite message for the suggestion now shown, "" when it
-    was announced already (typing another letter of the same word says nothing
-    again) or nothing is shown.
 
 func (g *GhostState) Clear()
     Clear hides the suggestion (the dismissal is kept).
 
 func (g *GhostState) Key(key string) GhostAction
-    Key applies a key (as KeyboardEvent.key, with no modifier held) and says
-    what it did: only Tab accepts and only Escape dismisses; every other key,
-    Enter and the arrows included, leaves the suggestion unaccepted.
 
 func (g *GhostState) Show(prefix, word string, caret int) bool
-    Show offers word for prefix at caret; it returns whether it is shown.
-    A word that does not continue the prefix, that is no longer than it, or that
-    was dismissed for this prefix is not shown.
 
 func (g *GhostState) Typed(prefix string)
-    Typed forgets a dismissal once the prefix is not the one it was made for.
 
 func (g *GhostState) Visible() bool
     Visible says whether there is a suggestion to show.
 
 func (g *GhostState) Width() int
-    Width is the number of characters of the suggestion, for sizing.
 
 type GrammarIssue struct {
-	// Text is the words concerned, Message what is wrong, Suggestion what to
-	// write instead ("" when the model offered none).
 	Text, Message, Suggestion string
 }
-    GrammarIssue is one thing the grammar check found, as LanguagePanel shows
-    it.
 
 type GridProps struct {
-	// Width sizes the grid itself; "" defaults to "100%" (fill the
-	// parent), the same default Box's own Height takes, for the same
-	// reason -- a layout container should fill its parent unless told
-	// otherwise.
-	Width string
-	// Columns is a CSS grid-template-columns value (e.g. "1fr 1fr 1fr",
-	// "repeat(3, 1fr)", "200px 1fr auto"); "" defaults to a responsive
-	// auto-fill of 200px-minimum tracks, so a Grid with no explicit
-	// Columns still lays out sensibly regardless of how many Children
-	// it gets.
-	Columns string
-	// Gap is the space between grid cells (e.g. "1rem", "16px"); ""
-	// means no gap at all, CSS's own default.
+	Width    string
+	Columns  string
 	Gap      string
 	Children []xango.Node
 }
@@ -2146,16 +1109,11 @@ const (
 	IconStar         IconName = "star"
 )
 type IconProps struct {
-	Name IconName // one of the built-in names above; ignored if Glyph is set
-	// Glyph overrides Name with any caller-supplied character (or short
-	// string) -- an easy escape hatch for a symbol not in the built-in
-	// set, styled the same way as a built-in one.
+	Name  IconName // one of the built-in names above; ignored if Glyph is set
 	Glyph string
 	Size  int    // px, defaults to 20
 	Color string // defaults to inheriting the surrounding text color
-	// Label is the icon's accessible name. "" marks it as decorative
-	// (aria-hidden) -- the right default when it sits next to text
-	// that already says the same thing, e.g. a Button's label.
+	// Label is the icon's accessible name.
 	Label string
 }
     IconProps configures Icon.
@@ -2170,32 +1128,20 @@ type IconToolbarProps struct {
     IconToolbarProps configures IconToolbar.
 
 type ImageZoomProps struct {
-	Src    string
-	Alt    string
-	Zoomed bool
-	// OnToggle is called with true when the thumbnail is clicked, and
-	// with false when the zoomed overlay (or its backdrop) is
-	// clicked, closing it.
+	Src      string
+	Alt      string
+	Zoomed   bool
 	OnToggle func(zoomed bool)
 }
     ImageZoomProps configures ImageZoom.
 
 type KeyBindingsProps struct {
-	// Commands are the commands to list (canvas.Registry.Commands, plus
-	// any built-in ones such as bold); their Title is shown.
-	Commands []canvas.CommandInfo
-	// Keymap is what is bound now (canvas.Stage.EffectiveKeymap) and
-	// Defaults what it started as (nil to hide the "modified" marks and
-	// reset buttons).
+	Commands         []canvas.CommandInfo
 	Keymap, Defaults canvas.Keymap
 	// Query filters the list by title, feature or chord.
-	Query string
-	// Recording is the command waiting for a key press ("" for none).
-	// While it is set the row shows a capture box that takes the next
-	// chord: the box reports it with OnBind.
+	Query     string
 	Recording canvas.Command
-	// Message is a line shown above the list (a conflict warning).
-	Message string
+	Message   string
 	// Mac shows chords the Mac way.
 	Mac bool
 
@@ -2209,31 +1155,20 @@ type KeyBindingsProps struct {
     KeyBindingsProps configures KeyBindings.
 
 type LanguagePanelProps struct {
-	// Detected is the name of the language the text seems to be in ("" if
-	// unknown).
-	Detected string
-	// OnUseDetected, when set, adds a button that makes the detected language the language of the document
-	// (UseDetectedDone says it already is, and the button is then off).
+	Detected        string
 	OnUseDetected   func()
 	UseDetectedDone bool
 
-	// Targets are the languages offered for translation; empty means no
-	// translation backend is set up, which is said instead of offering it.
 	Targets []LanguageTarget
-	// Target is the chosen one. Translation is the result for the selection (""
-	// until asked), and HasSelection whether anything is selected to translate.
+	// Target is the chosen one.
 	Target       string
 	Translation  string
 	HasSelection bool
 
-	// GrammarEnabled says a grammar backend is set up; Issues are what it found.
 	GrammarEnabled bool
 	Issues         []GrammarIssue
-	// Checked is true once a grammar check has run (so "no issues" can be told
-	// from "not run").
-	Checked bool
+	Checked        bool
 
-	// Busy is shown while a backend is working; Error is the last failure.
 	Busy  bool
 	Error string
 	// ReadOnly hides the buttons that change the text.
@@ -2246,26 +1181,18 @@ type LanguagePanelProps struct {
 	OnApplyIssue   func(index int)
 	OnGotoIssue    func(index int)
 }
-    LanguagePanelProps configures LanguagePanel. It is controlled: the caller
-    runs the backends (packages lang, translate and grammar) and feeds back what
-    they say.
+    LanguagePanelProps configures LanguagePanel.
 
 type LanguageTarget struct{ Code, Name string }
     LanguageTarget is a language the text can be translated into.
 
 type LinkPreviewProps struct {
 	// URL is the link's address.
-	URL string
-	// Title, Description, Image and SiteName are what the page at URL
-	// says about itself (Open Graph tags, say). A browser cannot read
-	// them from another site, so the app fetches them on a server and
-	// passes them in; anything left empty is simply not shown.
+	URL                                 string
 	Title, Description, Image, SiteName string
 	// Loading shows a placeholder while they are being fetched.
 	Loading bool
-	// OnOpen is called when the card is clicked (otherwise it is an
-	// ordinary link that opens in a new tab).
-	OnOpen func()
+	OnOpen  func()
 	// OnClose, if set, adds a close button.
 	OnClose func()
 }
@@ -2281,20 +1208,13 @@ type LinkProps struct {
 
 type ListProps[T any] struct {
 	Items []T
-	// Item renders one item (a "render prop": a function whose body may
-	// itself contain markup).
-	Item func(item T) xango.Node
-	// Key, if set, gives each item's <li> a reconciliation key so
-	// re-renders keep DOM identity as items move.
-	Key func(item T) string
-	// Empty is shown instead of the list when Items is empty.
+	Item  func(item T) xango.Node
+	Key   func(item T) string
 	Empty *xango.Node
 	// Ordered renders an <ol> instead of a <ul>.
 	Ordered bool
 }
-    ListProps configures List. T is the item type; write it as a type argument
-    in .xg: <List[Person] items={people} item={func(p Person) xango.Node {...}}
-    />.
+    ListProps configures List.
 
 type LoaderProps struct {
 	Size  LoaderSize // defaults to LoaderMedium
@@ -2318,41 +1238,27 @@ type MenuBarEntry struct {
 
 type MenuBarProps struct {
 	Entries []MenuBarEntry
-	// Open is the index of the entry whose menu is showing, or -1.
-	Open int
-	// OnOpen is called with the entry to open: a click toggles (-1
-	// closes), and moving onto another entry while one is open switches.
-	OnOpen func(index int)
+	Open    int
+	OnOpen  func(index int)
 }
     MenuBarProps configures MenuBar.
 
 type MenuItem struct {
 	Label string
-	// Icon is the name of a Material Symbols icon drawn before the label (see Material);
-	// "" for none.
-	Icon string
+	Icon  string
 	// Shortcut is shown at the right ("Ctrl+B"); see FormatChord.
-	Shortcut string
-	// Checked puts a check mark in front (a toggle that is on).
+	Shortcut  string
 	Checked   bool
 	Disabled  bool
 	Separator bool
 	OnSelect  func()
-	// Items makes this entry a submenu, opened when it is hovered or
-	// has the keyboard focus (pure CSS: no state to keep).
-	Items []MenuItem
+	Items     []MenuItem
 }
-    MenuItem is one entry of a Menu: a command, a separator, or (with Items) a
-    submenu.
 
 func CommandMenu(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, run func(canvas.Command)) []MenuItem
-    CommandMenu turns registered commands (canvas.Registry.Commands) into menu
-    entries, one submenu per feature, each entry showing its current shortcut
-    from keymap (Stage.EffectiveKeymap) and running via run.
 
 type MenuProps struct {
-	Items []MenuItem
-	// OnClose is called after an entry is chosen, so a popup can close.
+	Items   []MenuItem
 	OnClose func()
 	// Label names the menu for assistive technology.
 	Label string
@@ -2366,36 +1272,23 @@ type MigrateItem struct {
 	ID, Name string
 	Folder   bool
 	Selected bool
-	// Meta is the line under the name (when it changed, how big).
-	Meta string
+	Meta     string
 }
-    MigrateItem is a folder or a document at the platform being migrated from.
 
 type MigrateProps struct {
-	// Sources are the platforms to migrate from; Source is the one chosen ("" for
-	// none yet).
 	Sources  []DocChoice
 	Source   string
 	OnSource func(name string)
 
-	// Formats are the formats documents can be converted to while migrating;
-	// Format is the chosen one, reported to OnFormat. None leaves the choice out.
 	Formats  []DocChoice
 	Format   string
 	OnFormat func(name string)
 
-	// Token is the access token for the platform, typed into a box that reports to
-	// OnToken; OnConnect signs in with it and lists the top of the platform.
-	// Connected says that has been done.
 	Token     string
 	OnToken   func(token string)
 	OnConnect func()
 	Connected bool
 
-	// Path are the folders from the top down to the one listed; Items what is in
-	// it. OnOpenFolder goes into one ("" is the top, the breadcrumb's first item);
-	// OnToggle selects or unselects an item; OnSelectAll selects them all;
-	// OnStart migrates the selection (or everything listed when none is selected).
 	Path         []MigrateItem
 	Items        []MigrateItem
 	OnOpenFolder func(id string)
@@ -2403,179 +1296,111 @@ type MigrateProps struct {
 	OnSelectAll  func()
 	OnStart      func()
 
-	// OnAgain turns on bringing again what an earlier run already brought (Again says it is on); a
-	// file that is there and has not changed at the platform is left alone otherwise. nil leaves the
-	// choice out. OnHistory and History are the same for the version history of each document (the
-	// platform has one; HistoryMax is how many versions).
 	OnAgain    func(on bool)
 	Again      bool
 	OnHistory  func(on bool)
 	History    bool
 	HistoryMax int
 
-	// OnPickFiles opens the chooser for Word files on this computer, which are
-	// migrated at once.
 	OnPickFiles func()
 
-	// Busy is set while something runs. Done and Total, Current describe the file
-	// being migrated; Imported and Failed the outcome of the last run (Reported
-	// says there was one).
-	Busy        bool
-	Done, Total int
-	Current     string
-	Reported    bool
-	Imported    int
-	// Skipped were brought by an earlier run and had not changed; Versions came with their documents.
+	// Busy is set while something runs.
+	Busy              bool
+	Done, Total       int
+	Current           string
+	Reported          bool
+	Imported          int
 	Skipped, Versions int
 	Failed            []MigrateFailure
 	Truncated         bool
-	// Partial says the run was a pack that failed or was cancelled, so no pack was handed over.
-	Partial        bool
-	Error          string
-	ConfirmedLabel string // optional heading override
+	Partial           bool
+	Error             string
+	ConfirmedLabel    string // optional heading override
 }
-    MigrateProps configures Migrate. Every operation is a plain callback:
-    a nil one leaves its control out, and the host decides how it runs
-    (migrate.Session runs them in the background and sets Busy).
+    MigrateProps configures Migrate.
 
 type ModalProps struct {
-	Open bool
-	Role string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
-	// Label is used as the modal's aria-label (e.g. its title text).
+	Open    bool
+	Role    string // "dialog" (default) or "alertdialog" for a Confirm/Alert-style prompt demanding an immediate response
 	Label   string
 	Content []xango.Node
-	// OnClose is called when the backdrop is clicked; nil disables
-	// backdrop-click-to-close.
 	OnClose func()
 }
     ModalProps configures Modal.
 
 type NoteEditor struct {
-
-	// SaveLabel and CancelLabel are the buttons' words (translated defaults "Save" and "Cancel").
 	SaveLabel, CancelLabel string
 	// Has unexported fields.
 }
-    NoteEditor is the dialog a footnote is typed in: a text box and, under it,
-    a read-only counter of how much of the limit is used ("120 of 1000
-    characters"). The counter exists only while the dialog is open, that is only
-    while a note is being typed. The host puts Dialog in its tree once and gives
-    the canvas Stage.EditNote = ed.Edit.
-
-        ed := components.NewNoteEditor(rerender)
-        stage.EditNote = ed.Edit
-        // and somewhere in the page: ed.Dialog()
 
 func NewNoteEditor(onChange func()) *NoteEditor
-    NewNoteEditor makes a NoteEditor that calls onChange whenever it opens,
-    closes or its text changes.
 
 func (n *NoteEditor) Dialog() xango.Node
-    Dialog is the editor for the open note, closed when there is none.
 
 func (n *NoteEditor) Draft() string
     Draft is the text typed so far.
 
 func (n *NoteEditor) Edit(title, initial string, max int, done func(text string, ok bool))
-    Edit opens the dialog on initial. done is called once, with the text and
-    true when it is saved, or false when the person cancels. A dialog already
-    open is cancelled first. max is the limit of characters (0: none shown).
+    Edit opens the dialog on initial.
 
 func (n *NoteEditor) Open() bool
     Open reports whether the dialog is open.
 
 type OTPInputProps struct {
-	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
-	// FileUploaderProps.InputID, this exists so a caller can reach a
-	// specific box through domrt/html: xango.Event carries no reference
-	// to the input element itself, so advancing focus to the next box
-	// after a digit is typed (or back after a backspace on an empty
-	// one) is done by the consuming app, calling html.Element.Focus()
-	// on the box with the next/previous id from inside OnChange.
 	ID       string
 	Length   int
 	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
 	Disabled bool
-	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+	OnChange func(index int, value string) // called with box index and new value ("" after backspace)
 }
     OTPInputProps configures OTPInput.
 
 type OpenDownload struct {
 	// Name is the document's name.
-	Name string
-	// Current is the size in bytes of the current version in the file, History the size
-	// of all the versions together, and Versions how many there are.
+	Name             string
 	Current, History int64
 	Versions         int
-	// Drop is set when the history is to be left out of the file.
-	Drop bool
+	Drop             bool
 	// OnDrop sets Drop; OnConfirm downloads; OnCancel closes the dialog.
 	OnDrop    func(drop bool)
 	OnConfirm func()
 	OnCancel  func()
 }
-    OpenDownload is the question asked before a document is downloaded as an
-    opendocs (.open) file: whether to keep its version history in the file,
-    and how much of the file each part is.
 
 type OutlineProps struct {
 	// Entries are the headings (TextFlow.Outline).
 	Entries []canvas.OutlineEntry
-	// Current is the index of the heading the caret is under, or -1.
 	Current int
 	// OnSelect is called with the index of the clicked heading.
-	OnSelect func(index int, entry canvas.OutlineEntry)
-	// Collapsed lists the indexes of headings whose subsections are hidden; OnToggle is called with the index of a
-	// heading whose toggle was pressed (the caller adds it to or removes it from Collapsed). A heading with nothing
-	// under it has no toggle. With OnToggle nil there are no toggles and everything shows.
+	OnSelect  func(index int, entry canvas.OutlineEntry)
 	Collapsed []int
 	OnToggle  func(index int)
-	// OnMove, when set, lets a section be moved: each heading gets "Move section up" and "Move section down"
-	// buttons, and can be dragged onto another heading. It is called with the heading and the heading to put it in
-	// front of (len(Entries) for the end); pass them to TextFlow.MoveSection.
-	OnMove func(from, before int)
+	OnMove    func(from, before int)
 }
     OutlineProps configures Outline.
 
 type PageSetup struct {
-	Paper     string // a Papers name, or "custom" (CustomWidth by CustomHeight); "" or unknown is A4
-	Landscape bool
-	Margins   [4]float64
-	// CustomWidth and CustomHeight are the sheet of the "custom" paper in points, portrait; sizes outside 100 to
-	// 5000 points make it A4.
+	Paper                     string
+	Landscape                 bool
+	Margins                   [4]float64
 	CustomWidth, CustomHeight float64
 }
-    PageSetup is how the sheets of a document are laid out: the paper,
-    its orientation and the margins in points, in CSS order (top, right, bottom,
-    left).
 
 func DefaultPageSetup() PageSetup
     DefaultPageSetup is A4, portrait, with one inch all round.
 
 func PageSetupOf(w, h float64, margins [4]float64) (PageSetup, bool)
-    PageSetupOf is the setup whose sheet is w by h points (in either
-    orientation, to within two points) with the given margins, as a saved
-    document records them. A sheet that is none of the Papers is a custom paper,
-    unless it is outside 100 to 5000 points, which a PageSetup cannot describe
-    (false).
 
 func (p PageSetup) Label() string
-    Label is the setup in a few words for a status bar: "A4 / portrait".
 
 func (p PageSetup) MarginList() []float64
-    MarginList is the margins as a TextFlow's Margins prop wants them.
 
 func (p PageSetup) Normalized() PageSetup
-    Normalized fixes what cannot be laid out: the paper is a known one, a margin
-    is not negative, and the margins leave at least a quarter of each side for
-    text.
 
 func (p PageSetup) Size() (w, h float64)
-    Size is the sheet's width and height in points, turned by the orientation.
 
 type PageSetupProps struct {
-	Setup PageSetup
-	// OnChange receives the new setup (already Normalized) when something is changed.
+	Setup    PageSetup
 	OnChange func(PageSetup)
 }
     PageSetupProps configures PageSetupPanel.
@@ -2597,32 +1422,23 @@ type PasskeyProps struct {
 	// Supported says the browser can make and use passkeys here.
 	Supported bool
 	// SignedIn says someone is signed in; Rows are their passkeys.
-	SignedIn bool
-	Rows     []PasskeyRow
-	// Email and Label are what is typed: the address for a new account, the name of a passkey
-	// being added. OnDraft reports changes to either.
+	SignedIn     bool
+	Rows         []PasskeyRow
 	Email, Label string
 	OnDraft      func(email, label string)
-	// SignIn signs in with a passkey; Create makes an account with one (needs an e-mail address);
-	// Add adds a passkey to the signed-in account; Remove deletes one. A nil operation leaves its
-	// control out.
-	SignIn  func(ctx context.Context) error
-	Create  func(ctx context.Context, email, label string) error
-	Add     func(ctx context.Context, label string) error
-	Remove  func(ctx context.Context, id string) error
-	Pending *Pending
-	// Ask, if set, is asked before a passkey is removed (see Asker.Ask).
-	Ask func(message string, do func())
+	SignIn       func(ctx context.Context) error
+	Create       func(ctx context.Context, email, label string) error
+	Add          func(ctx context.Context, label string) error
+	Remove       func(ctx context.Context, id string) error
+	Pending      *Pending
+	Ask          func(message string, do func())
 }
     PasskeyProps configures Passkey.
 
 type PasskeyRow struct {
 	ID, Label, Created, LastUsed string
-	// Synced says the passkey is backed up by a password manager or the platform (it can be used on
-	// the person's other devices, and is not lost with this one).
-	Synced bool
+	Synced                       bool
 }
-    PasskeyRow is a passkey of the signed-in person, as the list shows it.
 
 type Pending struct {
 
@@ -2630,14 +1446,8 @@ type Pending struct {
 	Inline bool
 	// Has unexported fields.
 }
-    Pending is the Go side of a Promise: it runs an operation in the background
-    and remembers whether it is still running and how it ended, which the
-    components show. Make one with NewPending, whose onChange the host uses to
-    render again; one Pending may be shared by every component on a page.
 
 func NewPending(onChange func()) *Pending
-    NewPending makes a Pending that calls onChange whenever its state changes
-    (from whichever goroutine the operation ends on).
 
 func (p *Pending) Busy() bool
     Busy reports whether an operation is running.
@@ -2646,34 +1456,23 @@ func (p *Pending) Err() error
     Err is the error the last operation ended with.
 
 func (p *Pending) Run(f func(ctx context.Context) error)
-    Run starts f and returns at once; a nil Pending just runs it. While f runs
-    Busy is true; when it fails Err is its error until the next Run.
 
 type PeopleProps struct {
-	People []user.Person
-	// Roles are the roles that can be given, in the order offered ("editor",
-	// "viewer" if empty).
-	Roles []string
-	// Invite gives someone a role; SetRole changes one; Remove takes access away.
-	// A nil operation leaves its control out. The owner's row has none.
-	Invite  func(ctx context.Context, id, role string) error
-	SetRole func(ctx context.Context, id, role string) error
-	Remove  DocAction
-	// Draft is the address being typed to invite, and DraftRole the role chosen
-	// for them (the first of Roles if empty); OnDraft reports changes to either.
+	People           []user.Person
+	Roles            []string
+	Invite           func(ctx context.Context, id, role string) error
+	SetRole          func(ctx context.Context, id, role string) error
+	Remove           DocAction
 	Draft, DraftRole string
 	OnDraft          func(id, role string)
 	// Self is the signed-in user, who cannot remove themselves here.
 	Self    string
 	Pending *Pending
-	// Confirm, if set, is asked before access is removed (see Asker.Ask).
 	Confirm func(message string, do func())
 }
     PeopleProps configures People.
 
 type PopoverPlacement string
-    PopoverPlacement selects which side of the trigger Popover's panel appears
-    on.
 
 const (
 	PopoverBottom PopoverPlacement = "bottom"
@@ -2686,35 +1485,22 @@ type PopoverProps struct {
 	Placement PopoverPlacement // defaults to PopoverBottom
 
 	OnToggleOpen func(open bool) // called when Trigger is clicked
-	// OnClose is called when the full-viewport backdrop behind the
-	// panel is clicked -- a click anywhere outside it, the same
-	// backdrop trick ContextMenu uses.
-	OnClose func()
+	OnClose      func()
 }
     PopoverProps configures Popover.
 
 type PresencePeer struct {
-	// Name is shown (and its initials); Color is their cursor color; User
-	// is who the server says they are (an e-mail address); Role is what
-	// they may do ("owner", "editor", "viewer").
 	Name, Color, User, Role string
 }
     PresencePeer is one person at the document.
 
 type PresenceProps struct {
 	// Self is you; Peers are everyone else.
-	Self  PresencePeer
-	Peers []PresencePeer
-	// Status is the connection: "online", "connecting" or "offline" (""
-	// shows nothing about the connection).
-	Status string
-	// Pending is how many of your changes have not reached the server yet.
+	Self    PresencePeer
+	Peers   []PresencePeer
+	Status  string
 	Pending int
-	// Role is your own role, shown as a badge ("View only" for a viewer).
-	Role string
-	// OnWhere, if set, adds a "Where is <name>?" button for each of the other people; it is called with
-	// that person, and the host says where they are (WhereSentence) in the live region. The cursors are
-	// never announced as they move: the position is given only on request.
+	Role    string
 	OnWhere func(PresencePeer)
 }
     PresenceProps configures Presence.
@@ -2736,12 +1522,10 @@ const (
 )
 type ProposalPanelProps struct {
 	// ID is the list's id; "proposals" when empty.
-	ID        string
-	Proposals []canvas.Proposal
-	// Suggesting says whether suggestion mode is on; OnMode turns it on or off.
-	Suggesting bool
-	OnMode     func(on bool)
-	// OnAccept and OnReject settle one suggestion; OnAcceptAll and OnRejectAll settle all of them.
+	ID                       string
+	Proposals                []canvas.Proposal
+	Suggesting               bool
+	OnMode                   func(on bool)
 	OnAccept, OnReject       func(id string)
 	OnAcceptAll, OnRejectAll func()
 }
@@ -2763,181 +1547,87 @@ type RadioOption struct {
     RadioOption is one choice in a RadioGroup.
 
 type RecipientRow struct {
-	// Label says who the key is meant for (an e-mail, a name): a label, not what makes it
-	// trusted. Type is "ssh-ed25519", "ssh-rsa" or "age-x25519". Fingerprint is what the
-	// owner confirms.
-	Label, Type, Fingerprint string
-	// Detail is one more line about the key, shown after its fingerprint ("Last used in this
-	// browser: 2030-05-01"); empty for none.
-	Detail string
-	// Uses is how many documents the key can open (this one included); 0 means unknown.
-	Uses int
-	// Verified marks a key that the store's directory says was published by an account with a
-	// verified e-mail, while signed in (encrypt.PublishedKey.Verified). It proves the account
-	// and that the account published the key, not that the key is safe; without it the
-	// e-mail is only a label and the owner confirms the fingerprint.
-	Verified bool
-	// VerifiedBy is the host of the directory that said so ("verified by dir.example"): the mark
-	// is that directory's word, and a page whose directory address came from a link must not let
-	// it pass for more. Empty shows the plain mark.
-	VerifiedBy string
-	// Attested marks a Verified key that also signed the binding to the address itself
-	// (encrypt.PublishedKey.Attested; ssh-ed25519 keys): shown as a stronger mark, because the
-	// server alone could not have invented that binding. Set it from the directory's answer
-	// (and, to rest on nothing the server says, from encrypt.VerifyAttestation).
-	Attested bool
-	// OwnerSigned marks a Verified key that the owner of the address signed with the owner key
-	// they hold themselves (encrypt.PublishedKey.OwnerSigned): the strongest mark, because not even
-	// the server that runs the directory could have added the key. Set it from a client that
-	// checked the evidence itself (directoryclient.Key.OwnerSigned). OwnerEnrolled says the
-	// address has an owner key: a Verified key that is not OwnerSigned then gets a note.
+	Label, Type, Fingerprint   string
+	Detail                     string
+	Uses                       int
+	Verified                   bool
+	VerifiedBy                 string
+	Attested                   bool
 	OwnerSigned, OwnerEnrolled bool
-	// CanRemove and RemoveBlocked are for an owner key when RecipientsProps.RemoveOwner is set:
-	// whether the host would let the key be taken out, and, when not, why in words (the last key,
-	// the only way back, the store unlocked with this key alone).
-	CanRemove     bool
-	RemoveBlocked string
+	CanRemove                  bool
+	RemoveBlocked              string
 }
-    RecipientRow is a key a document is encrypted to, as the list shows it.
 
 type RecipientsProps struct {
-	// Owner are the owner's own keys (shown, never removed); Shared the keys the document is
-	// shared with.
+	// owner keys are shown, never removed
 	Owner, Shared []RecipientRow
-	// Draft is the public key being pasted. Parsed is what it parsed to, nil while it does not
-	// parse (ParseError says why, once something is typed). Confirm is the fingerprint typed to
-	// confirm it. OnDraft reports changes to either.
-	Draft, Confirm string
-	Parsed         *RecipientRow
-	ParseError     string
-	OnDraft        func(key, confirm string)
-	// Add shares the document with the draft key, given the fingerprint confirmed; Remove takes a
-	// key out and encrypts the document again without it, and returns how many files it
-	// encrypted again (Sharing.Remove). A nil operation leaves its control out.
-	Add    func(ctx context.Context, key, confirm string) error
-	Remove func(ctx context.Context, fingerprint string) (int, error)
-	// OnRemoved is called after a Remove that worked, with the count Remove returned; the
-	// host can keep it and pass RemovedNotice(n) as Notice on the next render.
-	OnRemoved func(fingerprint string, files int)
-	// RemoveEverywhere takes a key out of every document that uses it (each is decrypted and
-	// encrypted again without it). Offered next to Remove for a key with Uses above one.
+	// Draft is the public key being pasted.
+	Draft, Confirm   string
+	Parsed           *RecipientRow
+	ParseError       string
+	OnDraft          func(key, confirm string)
+	Add              func(ctx context.Context, key, confirm string) error
+	Remove           func(ctx context.Context, fingerprint string) (int, error)
+	OnRemoved        func(fingerprint string, files int)
 	RemoveEverywhere func(ctx context.Context, fingerprint string) error
-	// Notice is a status line shown under the list (for instance RemovedNotice).
-	Notice  string
-	Pending *Pending
-	// Ask, if set, is asked before a key is removed (see Asker.Ask).
-	Ask func(message string, do func())
+	Notice           string
+	Pending          *Pending
+	Ask              func(message string, do func())
 
-	// Directory looks up the keys published for an e-mail address (nil leaves the picker out).
-	// DirEmail is the address typed (OnDirEmail reports edits); after a lookup that worked,
-	// OnDirResults gets the address and rows, which the host keeps and passes back as
-	// DirResults with DirSearched true. Choosing a row calls OnPick; with no OnPick the row's
-	// key fills the draft (OnDraft). A host that handles OnPick sets Draft and Parsed, and
-	// Parsed.Verified from the row, never from what was pasted.
-	Directory    func(ctx context.Context, email string) ([]DirRow, error)
-	DirEmail     string
-	OnDirEmail   func(email string)
-	OnDirResults func(email string, rows []DirRow)
-	DirResults   []DirRow
-	DirSearched  bool
-	OnPick       func(row DirRow)
-	// TrustVerified lets a draft key that is Parsed.Verified be added without typing its
-	// fingerprint (it is still shown). Off by default: a verified mark proves the account, not
-	// the key's safety.
+	Directory     func(ctx context.Context, email string) ([]DirRow, error)
+	DirEmail      string
+	OnDirEmail    func(email string)
+	OnDirResults  func(email string, rows []DirRow)
+	DirResults    []DirRow
+	DirSearched   bool
+	OnPick        func(row DirRow)
 	TrustVerified bool
 
-	// My passkey as a key. AddMyPasskey derives the owner's own passkey key (client.DeriveKey,
-	// encrypt.PRFRecipient) and adds it (Sharing.Add); nil leaves the control out. The owner is
-	// deriving their own key, so no fingerprint is typed; MyPasskeyAdded (set by the host after
-	// it worked) shows the fingerprint that was added. PasskeySupported false shows a note
-	// instead of the button.
+	// My passkey as a key.
 	AddMyPasskey     func(ctx context.Context) error
 	PasskeySupported bool
 	MyPasskeyAdded   *RecipientRow
-	// Confidential says the document is end to end encrypted. Then, when none of Owner's
-	// keys is something other than a passkey (every Owner row has Type "passkey-prf", or there
-	// are none), another passkey cannot be added (encrypt.CheckRecoverableOwner): the control shows SecondKeyMessage (encrypt.ErrNeedSecondRecipient's text; a default
-	// is used when empty) and offers a recovery key.
-	Confidential     bool
-	SecondKeyMessage string
-	// CreateRecoveryKey makes a recovery key (encrypt.GenerateRecoveryKey), adds its public part as
-	// an owner key and returns the secret. The button is shown only when OnRecoveryKey is also
-	// set (a key whose secret cannot be shown must not become an owner key). The component hands
-	// the secret to OnRecoveryKey and keeps no copy; the host passes it back as RecoverySecret
-	// until the person has saved it and OnRecoveryDone is called, and must then drop it: it is
-	// shown once. What holds: the component does not keep the secret in the DOM after that
-	// ("I have saved it"); the host holds it in memory while it is shown. Go strings cannot be
-	// wiped, so a copy may stay in memory until it is collected. Copy and Download
-	// (nil leaves the button out) are the host's clipboard and file save.
-	CreateRecoveryKey func(ctx context.Context) (secret string, err error)
-	OnRecoveryKey     func(secret string)
-	RecoverySecret    string
-	OnRecoveryDone    func()
-	Copy              func(text string)
-	Download          func(name, text string)
-	// CommitRecoveryKey, when set, makes the recovery key transactional: CreateRecoveryKey only
-	// prepares the key (nothing is added to the store yet) and returns its secret, the secret is
-	// shown, and the key becomes an owner key only when the person acknowledges they saved it
-	// (RecoveryAcknowledged, set by the host from OnRecoveryAcknowledge) and presses the confirm
-	// button, which runs CommitRecoveryKey. A key whose secret was never seen is thereby never an
-	// owner key. CancelRecoveryKey (nil leaves the button out) drops the prepared key and secret
-	// without adding it. Without CommitRecoveryKey the key is already added when its secret is
-	// shown, and "I have saved it" only hides the secret (the older behavior).
+	// Confidential says the document is end to end encrypted.
+	Confidential          bool
+	SecondKeyMessage      string
+	CreateRecoveryKey     func(ctx context.Context) (secret string, err error)
+	OnRecoveryKey         func(secret string)
+	RecoverySecret        string
+	OnRecoveryDone        func()
+	Copy                  func(text string)
+	Download              func(name, text string)
 	CommitRecoveryKey     func(ctx context.Context) error
 	CancelRecoveryKey     func()
 	RecoveryAcknowledged  bool
 	OnRecoveryAcknowledge func(saved bool)
 
-	// RemoveOwner takes an owner key out of the store (each owner row gets "Remove this key",
-	// enabled by its row's CanRemove). ReplaceOwner swaps a passkey for a new one; it is offered
-	// on the rows of type "passkey-prf". Both ask first (Ask) and say what it does and does not do.
 	RemoveOwner  func(ctx context.Context, fingerprint string) error
 	ReplaceOwner func(ctx context.Context, fingerprint string) error
 
-	// Publish publishes the owner's keys in the store's key directory (the "Publish my keys"
-	// button, shown with the directory picker; nil leaves it out). PublishNotice is the line the
-	// host shows after it, or why it could not.
 	Publish       func(ctx context.Context) error
 	PublishNotice string
 }
     RecipientsProps configures Recipients.
 
 type SaverChoice struct{ Name, Label, Group string }
-    SaverChoice is one choice of a list: its name, what to show, and optionally
-    the group it is shown under (a heading in a menu).
 
 type SaverProps struct {
-	// Targets are the places to save to (Postgres, SQLite, S3, ...) and
-	// Formats the ways to write (JSON, protobuf text, protobuf binary).
-	Targets, Formats []SaverChoice
-	// Target, Format and Name are the current choices and the document
-	// name.
+	Targets, Formats     []SaverChoice
 	Target, Format, Name string
-	// Status is a message under the form ("Saved notes.json"); Failed
-	// makes it an error. Busy disables the buttons while a save or load
-	// runs.
-	Status string
-	Failed bool
-	Busy   bool
+	Status               string
+	Failed               bool
+	Busy                 bool
 
-	OnTarget func(name string)
-	OnFormat func(name string)
-	OnName   func(name string)
-	OnSave   func()
-	// OnSaveAsNew, if set, adds a button that saves the document as a new one
-	// instead of replacing the saved document being edited.
+	OnTarget    func(name string)
+	OnFormat    func(name string)
+	OnName      func(name string)
+	OnSave      func()
 	OnSaveAsNew func()
 
-	// Docs, Versions and Trash are the document components the form is
-	// composed with (see DocList, Versions and Trash, which can also be used on
-	// their own). Versions is shown when it names a document; Trash when
-	// something is in it.
 	Docs     DocListProps
 	Versions VersionsProps
 	Trash    TrashProps
-	// Asker, if set, is where Docs, Trash and People ask before destructive
-	// actions (give them its Ask as Confirm); the form draws its dialog.
-	Asker *Asker
+	Asker    *Asker
 	// Capacity, if set, shows how full the target is.
 	Capacity *CapacityProps
 }
@@ -2950,14 +1640,8 @@ type SearchProps struct {
 	Open        bool // whether the suggestion list is shown
 	Disabled    bool
 
-	// OnChange fires on every keystroke. Filtering Suggestions (and
-	// any debouncing of a remote lookup) is the caller's job -- Search
-	// itself has no fetch/timer logic of its own, the same
-	// "consumer drives the async part" split FileUploader uses for
-	// reading files.
+	// OnChange fires on every keystroke.
 	OnChange func(value string)
-	// OnSelect fires when a suggestion is clicked; the caller typically
-	// sets Value to it and closes the list (Open: false).
 	OnSelect func(suggestion string)
 }
     SearchProps configures Search.
@@ -2966,9 +1650,8 @@ type SliderProps struct {
 	Min, Max, Value float64
 	Step            float64 // 0 leaves the browser's default step (1)
 	Disabled        bool
-	// Label is the accessible name of the slider (what a screen reader says; a visible <label> may do instead).
-	Label    string
-	OnChange func(value float64) // called continuously while dragging
+	Label           string
+	OnChange        func(value float64) // called continuously while dragging
 }
     SliderProps configures Slider.
 
@@ -2981,9 +1664,6 @@ type SpellItem struct {
     SpellItem is one misspelled word in SpellPanel.
 
 type SpellPanelProps struct {
-	// Enabled turns the check on; Language names the dictionary in use
-	// ("English"), and Detected the language the text seems to be in ("" when
-	// unknown). A Detected different from Language is flagged.
 	Enabled            bool
 	Language, Detected string
 	Items              []SpellItem
@@ -2992,23 +1672,16 @@ type SpellPanelProps struct {
 
 	OnToggle func(enabled bool)
 	// OnPick replaces every occurrence of word with the suggestion.
-	OnPick func(word, suggestion string)
-	// OnIgnore leaves the word alone for now; OnAdd adds it to the user's own
-	// dictionary; OnGoto selects its first occurrence.
+	OnPick                  func(word, suggestion string)
 	OnIgnore, OnAdd, OnGoto func(word string)
 
-	// Dictionaries are the dictionaries to choose from (the English one built in, and those a server offers),
-	// Dictionary the one in use and OnDictionary the choice; fewer than two leave the choice out.
-	// DictionaryNote says what is going on ("Loading the German dictionary…") or why a load failed
-	// (DictionaryFailed), as a status line.
 	Dictionaries     []DocChoice
 	Dictionary       string
 	OnDictionary     func(name string)
 	DictionaryNote   string
 	DictionaryFailed bool
 }
-    SpellPanelProps configures SpellPanel. It is controlled: the caller checks
-    the text (package spell) and feeds the result back.
+    SpellPanelProps configures SpellPanel.
 
 type StatusBarProps struct {
 	Items []StatusItem
@@ -3019,57 +1692,29 @@ type StatusItem struct {
 	ID, Text, Title, State string
 	Live                   bool
 }
-    StatusItem is one thing the status bar says. ID names it (the item gets
-    data-item="ID"); Live makes screen readers announce changes to it (a save
-    state); Title is a longer hint; State, if set, goes in data-state for
-    styling ("failed" is drawn as an error).
+    StatusItem is one thing the status bar says.
 
 func SyncStatus(online, connecting bool, pending int, problem string) StatusItem
-    SyncStatus is the status bar item for a shared document: whether the
-    person's work has reached the others, in words, so that nobody has to
-    guess whether it is saved. online and connecting are the connection's state
-    (neither: offline), pending the number of changes made here and not yet
-    accepted by the server, problem why sharing is not working ("" if it is).
-    Only the states a person must hear about (offline, problem) are announced
-    to a screen reader as they happen; "sending" and "synced" come and go as one
-    types.
 
 type StyleEditorProps struct {
-	// Format is the formatting being edited: the overrides applied over
-	// Base (zero fields inherit from it).
 	Format canvas.Format
-	// Base is the style the format is applied over; it gives the values
-	// shown for fields the format leaves unset.
-	Base canvas.TextStyle
+	Base   canvas.TextStyle
 	// OnChange receives the edited format after every change.
 	OnChange func(canvas.Format)
 
-	// FontPicker, if set, adds a FontSelector for the family. The editor
-	// supplies Selected (from Format) and wraps OnSelect so a choice also
-	// updates the format; everything else -- Fonts, Open, Query, Source,
-	// the callbacks that keep them -- is yours, as it is for a plain
-	// FontSelector.
+	// FontPicker, if set, adds a FontSelector for the family.
 	FontPicker *FontSelectorProps
 
-	// PreviewText is the sample shown in the resulting style
-	// ("The quick brown fox jumps over the lazy dog" by default).
 	PreviewText string
 	Disabled    bool
 }
     StyleEditorProps configures StyleEditor.
 
 type StylePickerProps struct {
-	// Styles are the named styles to list (canvas.DefaultStyles, or the
-	// flow's own).
-	Styles []canvas.StyleDef
-	// Base is the text style the previews are drawn over (default 16px
-	// sans-serif).
-	Base canvas.TextStyle
-	// Current is the style at the caret, highlighted ("" for none).
+	Styles  []canvas.StyleDef
+	Base    canvas.TextStyle
 	Current string
-	// OnPick is called with the chosen style and whether it is a
-	// paragraph style.
-	OnPick func(name string, paragraph bool)
+	OnPick  func(name string, paragraph bool)
 }
     StylePickerProps configures StylePicker.
 
@@ -3091,33 +1736,22 @@ type SuggestState struct {
     SuggestState is the list and its highlight.
 
 func (s *SuggestState) Announcement(moved bool) string
-    Announcement is what a polite live region says when the list opens or the
-    highlight moves.
 
 func (s *SuggestState) Close()
     Close closes the list.
 
 func (s *SuggestState) Key(key string) SuggestAction
-    Key applies a key (as KeyboardEvent.key) and says what happened;
-    for SuggestAccept the word is Words[Active] (or the numbered row, which Key
-    moves the highlight to).
 
 func (s *SuggestState) Selected() string
-    Selected is the highlighted word, "" when the list is closed.
 
 func (s *SuggestState) Show(words []string)
-    Show opens the list with words, the first highlighted; no words closes it.
 
 type SuggestionsProps struct {
-	// ID is the list's id (the editing element's aria-controls); "suggestions" when empty.
 	ID string
 	// Label names the list; "Suggestions" translated when empty.
-	Label string
-	State SuggestState
-	// X and Y are the page position of the list's top left corner (fixed positioning), where the
-	// caret is.
-	X, Y float64
-	// OnPick is called with the index of the row clicked or tapped.
+	Label  string
+	State  SuggestState
+	X, Y   float64
 	OnPick func(i int)
 }
     SuggestionsProps configures Suggestions.
@@ -3138,21 +1772,15 @@ type Symbol struct {
     Symbol is a character in a SymbolPicker.
 
 func DefaultSymbols() []Symbol
-    DefaultSymbols returns the built-in symbols: punctuation, math, Greek,
-    arrows, currency, shapes and accented Latin letters.
 
 func FilterSymbols(symbols []Symbol, query, category string) []Symbol
-    FilterSymbols returns the symbols in category (all if empty) whose name,
-    category or character contains every word of query.
 
 type SymbolPickerProps struct {
 	// Symbols is the set to choose from (DefaultSymbols if nil).
 	Symbols []Symbol
 	// Query and Category filter the grid; the caller owns them.
 	Query, Category string
-	// Recent are characters picked lately, shown first while there is no
-	// query.
-	Recent []string
+	Recent          []string
 	// Columns is the grid width in characters (default 10).
 	Columns int
 	// OnPick is called with the chosen character.
@@ -3171,14 +1799,12 @@ type Tab struct {
 type TabsProps struct {
 	Tabs     []Tab
 	Active   int             // index into Tabs of the currently shown tab
-	OnSelect func(index int) // called when a tab is clicked, or reached with the arrow keys, Home or End
+	OnSelect func(index int) // called on click, arrow keys, Home or End
 }
     TabsProps configures Tabs.
 
 type TagFilterProps struct {
-	// Tags are the tags in use (repeats and case differences are folded).
-	Tags []string
-	// Selected is the tag the list is narrowed to, "" for All.
+	Tags     []string
 	Selected string
 	OnSelect func(tag string)
 }
@@ -3194,14 +1820,10 @@ type TextareaProps struct {
     TextareaProps configures Textarea.
 
 type ThemeEditorProps struct {
-	// Set is the theme being edited. The editor does not keep it: it shows Set, and calls OnChange with
-	// the edited copy (a copy, so the caller's own map is never changed under it).
-	Set tokens.Set
-	// OnChange is called as the person types, with the set whether or not it is valid; Problems of the
-	// set are shown at once, and the caller decides what to apply (only a set without problems).
+	// Set is the theme being edited.
+	Set      tokens.Set
 	OnChange func(tokens.Set)
-	// OnReset puts the default theme back; the button is left out when nil.
-	OnReset func()
+	OnReset  func()
 }
     ThemeEditorProps configures ThemeEditor.
 
@@ -3213,14 +1835,7 @@ const (
 	ThemeDark  ThemeMode = "dark"
 )
 type ThemeProps struct {
-	// Mode selects a built-in palette: "" or ThemeLight restates
-	// :root's own values (letting a Theme re-light a subtree nested
-	// inside a dark one), ThemeDark switches to components/base.css's
-	// own .gj-theme-dark overrides.
-	Mode ThemeMode
-	// Custom overrides individual --gj-* tokens on top of Mode's own
-	// palette, e.g. Custom: map[string]string{"--gj-accent": "#10b981"}
-	// for a single custom brand color without a whole new Mode.
+	Mode     ThemeMode
 	Custom   map[string]string
 	Children []xango.Node
 }
@@ -3245,37 +1860,22 @@ const (
 )
 type ToolbarItem struct {
 	// ID names the button for tests and styling (data-cmd).
-	ID string
-	// Label is the button's name for a screen reader and for the tooltip ("Bold"). The icon alone carries no
-	// name, so an item without a label draws nothing.
+	ID    string
 	Label string
 	// Icon is the Material Symbols name (see Material).
-	Icon string
-	// Shortcut is the key chord the same command has ("Ctrl+B"): added to the tooltip and announced.
-	Shortcut string
-	// Toggle makes the button a switch that is on or off (aria-pressed), for bold and the like; Pressed says which.
+	Icon            string
+	Shortcut        string
 	Toggle, Pressed bool
 	Disabled        bool
 	// Separator draws a gap between groups instead of a button.
 	Separator bool
 	OnClick   func()
 }
-    ToolbarItem is one button of an IconToolbar, or a gap between groups.
 
 func CommandToolbarItems(cmds []canvas.CommandInfo, keymap canvas.Keymap, mac bool, groups [][]canvas.Command,
 	state func(canvas.Command) (toggle, pressed, disabled bool), run func(canvas.Command)) []ToolbarItem
-    CommandToolbarItems makes the items of an IconToolbar from editing commands,
-    in groups (a gap between groups). The name, the icon and the shortcut
-    of each are the ones the Edit menu shows for the command (CommandMenu):
-    the title from the registry, translated as "cmd.<name>", the icon of
-    CommandMaterial and the first chord of the keymap, so the button, the menu
-    and the key cannot disagree. A command the registry lacks is left out (a
-    feature that was not installed). state says, for a command, whether it is a
-    toggle and on, and whether it is unavailable now.
 
 type TooltipPlacement string
-    TooltipPlacement selects which side of the trigger Tooltip's bubble appears
-    on.
 
 const (
 	TooltipTop    TooltipPlacement = "top"
@@ -3291,16 +1891,10 @@ type TooltipProps struct {
     TooltipProps configures Tooltip.
 
 type TransferProps struct {
-	// Imports and Exports are the formats on offer (see package
-	// transfer's Registry).
 	Imports, Exports []SaverChoice
 	Disabled         bool
-	// OnImport is called with the format's name when its button is
-	// clicked: open a file chooser there (transfer.PickFile) and read the
-	// document in. OnExport likewise writes and downloads one
-	// (transfer.Download).
-	OnImport func(format string)
-	OnExport func(format string)
+	OnImport         func(format string)
+	OnExport         func(format string)
 }
     TransferProps configures Transfer.
 
@@ -3309,27 +1903,18 @@ type TrashBackend interface {
 	// Purge deletes documents in the trash for good.
 	Purge(ctx context.Context, ids ...string) error
 }
-    TrashBackend is what a trash needs from a store; Use fills Restore and
-    Delete from one.
 
 type TrashProps struct {
 	// Docs are the documents in the trash.
 	Docs []Doc
-	// Restore puts documents back; Delete removes them for good. Either may be
-	// nil.
-	Restore DocsAction
-	Delete  DocsAction
-	// Selected are the IDs ticked in the trash; with OnSelect set, each row gets a
-	// checkbox and the buttons act on the ticked rows, else on the row itself.
+	// Restore puts documents back; Delete removes them for good.
+	Restore  DocsAction
+	Delete   DocsAction
 	Selected []string
 	OnSelect func(ids []string)
-	// Children are what goes with the trash: usually the list of documents that
-	// can be trashed. They are drawn above it.
 	Children []xango.Node
 	Pending  *Pending
-	// Confirm, if set, is asked before documents are deleted for good (see
-	// Asker.Ask); nil deletes at once.
-	Confirm func(message string, do func())
+	Confirm  func(message string, do func())
 }
     TrashProps configures Trash.
 
@@ -3337,104 +1922,54 @@ func (p TrashProps) Use(b TrashBackend) TrashProps
     Use makes p's Restore and Delete the backend's.
 
 type TypingAnnouncer struct {
-	// Level is what is said of typed text: TypingOff nothing (the default), TypingWords each word when it
-	// is finished (and a word left unfinished for Pause), TypingCharacters each character as it is typed.
-	Level string
-	// Formatting says changes of the formatting at the caret: "Bold on", "Bold off", and the paragraph
-	// style ("Heading 2") when the caret goes into another.
+	Level      string
 	Formatting bool
-	// Lines is reading as the caret moves: the line it goes to when it changes line (the arrow keys up and
-	// down, a click). Within a line, TypingCharacters says the character passed over, and either level
-	// the text passed over by a move of more than one character (Ctrl+Left or Ctrl+Right).
-	Lines bool
-	// Every is the least time between two sentences (500 ms if 0). What comes sooner is held and said
-	// together at the next Update after it.
-	Every time.Duration
-	// Pause is how long a word being typed may stand unfinished before it is said (1.5 s if 0).
-	Pause time.Duration
+	Lines      bool
+	Every      time.Duration
+	Pause      time.Duration
 
 	// Has unexported fields.
 }
-    A canvas gives a screen reader nothing to say when a person types, or moves
-    the caret: the keys go to a hidden input whose text is not the document.
-    TypingAnnouncer turns what changed in the document into short sentences
-    for a live region (TypingLive): the words as they are finished, or each
-    character; the line the caret has gone to; a formatting change at the caret
-    ("Bold on"). It is a pure state machine: the host gives it the document as
-    it is after each change (Update) and says what it returns. What it says is
-    spaced (at most one sentence per Every, the rest held and said together)
-    and bounded, so quick typing is not read as a queue that runs on after the
-    person has stopped.
-
-    Preferences: Level (off, words, characters), Formatting and Lines, each
-    on its own, because what a person wants differs, and a screen reader may
-    already echo what the hidden input receives.
 
 func (a *TypingAnnouncer) Pending() bool
-    Pending reports whether something is held (or a word is unfinished),
-    to be said by a later Update: the host calls Update again after Every.
 
 func (a *TypingAnnouncer) Reset()
-    Reset forgets the document and what is held: the next Update only remembers
-    (use it when the editing stops, or the document is replaced, so the whole
-    text is not taken for a paste).
 
 func (a *TypingAnnouncer) Update(now time.Time, cur TypingState) string
-    Update takes the document as it is now and returns the sentence to say now,
-    or "".
 
 type TypingState struct {
-	// Text is the editor's text and Caret the offset of the (first) caret in it, in runes.
-	Text  string
-	Caret int
-	// Line is the text of the line the caret is on (as drawn, so a wrapped line is the part on screen) and
-	// LineStart its offset in Text; two lines with the same text are told apart by the offset.
+	Text      string
+	Caret     int
 	Line      string
 	LineStart int
-	// Marks are the names of the formatting at the caret ("Bold", "Italic") and Block the name of the
-	// paragraph style ("Heading 2"; "" for plain text).
-	Marks []string
-	Block string
+	Marks     []string
+	Block     string
 }
-    TypingState is the document as the announcer needs it, after a change.
 
 type UserMessager interface{ UserMessage() string }
-    UserMessager is implemented by an error whose text is already the words to
-    show a person (in their language). ExplainError shows that text and keeps
-    the error's own text as the details.
 
 type VersionDiffProps struct {
 	// ID is the list's id; "version-diff" when empty.
-	ID string
-	// Label names the list; "Changes between the two versions" (translated) when empty.
-	Label   string
-	Changes []docdiff.Change
-	// ShowUnchanged lists the blocks that did not change too (as context); by default a run of them is
-	// one line saying how many there are.
+	ID            string
+	Label         string
+	Changes       []docdiff.Change
 	ShowUnchanged bool
 }
     VersionDiffProps configures VersionDiff.
 
 type VersionsProps struct {
-	// Name is the document the versions are of, for the heading.
 	Name     string
 	Versions []DocVersion
-	// Save snapshots the document being edited; Open puts a snapshot in the
-	// editor; Delete removes one. Each may be nil.
-	Save    func(ctx context.Context) error
-	Open    DocAction
-	Delete  DocAction
-	Pending *Pending
-	// Compare shows what changed between a snapshot and the document being edited; Diff is that
-	// comparison (nil before one was asked for) and DiffKey the snapshot it is for.
-	Compare DocAction
-	Diff    []docdiff.Change
-	DiffKey string
-	// Rename gives a snapshot a name and Pin keeps it (or lets it go); each may be nil.
-	Rename func(ctx context.Context, key, name string) error
-	Pin    func(ctx context.Context, key string, pinned bool) error
-	// Restore goes back to a snapshot, keeping the current text as a version first; may be nil.
-	Restore DocAction
+	Save     func(ctx context.Context) error
+	Open     DocAction
+	Delete   DocAction
+	Pending  *Pending
+	Compare  DocAction
+	Diff     []docdiff.Change
+	DiffKey  string
+	Rename   func(ctx context.Context, key, name string) error
+	Pin      func(ctx context.Context, key string, pinned bool) error
+	Restore  DocAction
 }
     VersionsProps configures Versions.
 
@@ -3442,9 +1977,9 @@ type WizardProps struct {
 	Steps  []WizardStep
 	Active int
 
-	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnBack func()          // never called for step 0; Back renders disabled
 	OnNext func()          // called when Next/Finish is clicked
-	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+	OnStep func(index int) // optional: jumps directly to the clicked step
 }
     WizardProps configures Wizard.
 

@@ -6,11 +6,6 @@ import (
 	"unicode"
 )
 
-// A reading copy of a data file is painted: keys, strings, numbers, words like true and null, comments, section headings
-// and, in a log, the level of each line, each in a colour that reads on the code block's light background. The colours
-// are character formatting, so every export carries them; the text itself is never changed (the pieces always add up to
-// the file).
-
 type class int
 
 const (
@@ -27,7 +22,6 @@ const (
 	quiet // DEBUG, timestamps
 )
 
-// colours of the classes, and whether it is bold; the normal text keeps the document's own colour.
 var classColour = map[class]string{
 	key: "#0b4f8a", str: "#116329", num: "#a35200", word: "#7b1fa2", comment: "#5c6370",
 	section: "#0b4f8a", good: "#116329", warn: "#a35200", bad: "#b3261e", quiet: "#5c6370",
@@ -40,7 +34,6 @@ type span struct {
 	c    class
 }
 
-// merge joins neighbouring pieces of one class.
 func merge(in []span) []span {
 	var out []span
 	for _, s := range in {
@@ -56,8 +49,6 @@ func merge(in []span) []span {
 	return out
 }
 
-// highlight paints src as the language ("json", "json5", "yaml", "toml", "ini") or, for kind Log, as a log. Other
-// languages are not painted: one piece of normal text.
 func highlight(lang, src string) []span {
 	var out []span
 	switch lang {
@@ -87,8 +78,6 @@ func lines(src string, f func(string) []span) []span {
 	}
 	return out
 }
-
-// ---- JSON and JSON5 ----
 
 func jsonSpans(s string, json5 bool) []span {
 	var out []span
@@ -175,8 +164,6 @@ func jsonSpans(s string, json5 bool) []span {
 	return out
 }
 
-// ---- YAML ----
-
 var (
 	yamlKey  = regexp.MustCompile(`^(\s*(?:-\s+)*)("[^"]*"|'[^']*'|[^\s#:'"][^#:]*?)(\s*:)(\s|$)`)
 	yamlWord = regexp.MustCompile(`^(true|false|yes|no|on|off|null|~|True|False|Null)$`)
@@ -206,7 +193,6 @@ func yamlLine(l string) []span {
 	return append(out, span{nl, normal})
 }
 
-// yamlValue paints what follows a key: a comment ends it; a quoted string, number or word is coloured.
 func yamlValue(v string) []span {
 	body, cmt := v, ""
 	if i := commentAt(v); i >= 0 {
@@ -229,7 +215,6 @@ func yamlValue(v string) []span {
 	return []span{{lead, normal}, {t, c}, {trail, normal}, {cmt, comment}}
 }
 
-// commentAt is where a # comment starts in the value of a line (a # at the start or after a space, outside quotes).
 func commentAt(v string) int {
 	var q rune
 	for i, r := range v {
@@ -246,8 +231,6 @@ func commentAt(v string) int {
 	}
 	return -1
 }
-
-// ---- TOML ----
 
 var (
 	tomlHeader = regexp.MustCompile(`^(\s*)(\[\[?[^\]]*\]\]?)(.*)$`)
@@ -296,8 +279,6 @@ func tomlValue(v string) []span {
 	return []span{{lead, normal}, {t, c}, {trail, normal}, {cmt, comment}}
 }
 
-// ---- INI ----
-
 var (
 	iniSection = regexp.MustCompile(`^(\s*)(\[[^\]]*\])(.*)$`)
 	iniKey     = regexp.MustCompile(`^(\s*)([^\s=:;#\[][^=:]*?)(\s*[=:]\s*)(.*)$`)
@@ -327,8 +308,6 @@ func iniLine(l string) []span {
 	}
 	return []span{{body, normal}, {nl, normal}}
 }
-
-// ---- XML ----
 
 func xmlSpans(s string) []span {
 	var out []span
@@ -374,7 +353,6 @@ func xmlSpans(s string) []span {
 	return out
 }
 
-// xmlTag paints one start or end tag with its attributes, and returns what follows it.
 func xmlTag(s string) ([]span, string) {
 	var out []span
 	n := 1
@@ -404,7 +382,7 @@ func xmlTag(s string) ([]span, string) {
 			}
 			out = append(out, span{s[:end], str})
 			s = s[end:]
-		case '<': // a tag that was never closed: the next one starts here
+		case '<': // a tag never closed: the next one starts here
 			return out, s
 		default:
 			j := 0
@@ -417,8 +395,6 @@ func xmlTag(s string) ([]span, string) {
 	}
 	return out, ""
 }
-
-// ---- logs ----
 
 var (
 	logTime  = regexp.MustCompile(`^(\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[-+]\d{2}:?\d{2})?\]?|\[?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\]?|\[?\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\]?)`)

@@ -11,22 +11,13 @@ import (
 	"time"
 )
 
-// goneMemory is how long the hub refuses a document whose room it closed as expired, so a stale
-// tab that reconnects does not start a new room and write the content back.
+// a stale tab reconnecting must not start a new room
 const goneMemory = time.Hour
 
-// maxGone bounds the table of closed documents.
 const maxGone = 4096
 
-// goneKey is the docstore key of the mark that outlives the in-process table: a document whose
-// room was closed as expired stays refused for goneMemory after a restart, after the table evicted
-// it at maxGone, and on the other replicas of a shared store. The value is {"until": unix seconds}.
-// A mark nobody asks about again is left behind (about 40 bytes); it is deleted when it is asked
-// about after it lapsed.
 func goneKey(id string) string { return "collab-gone:" + id }
 
-// storeTombstone says whether the store holds a mark that has not lapsed. A lapsed one is deleted.
-// A store that cannot be read answers false: the mark is a second line of defence.
 func (h *Hub) storeTombstone(ctx context.Context, id string) bool {
 	if h.cfg.Store == nil {
 		return false
@@ -54,8 +45,7 @@ func (h *Hub) clearStoreTombstone(id string) {
 	}
 }
 
-// renewDue says whether an accepted edit should now renew the document's expiry, and if so
-// starts the interval (rm.mu held).
+// rm.mu held
 func (h *Hub) renewDue(rm *room) bool {
 	if h.cfg.Renewer == nil {
 		return false
@@ -68,9 +58,6 @@ func (h *Hub) renewDue(rm *room) bool {
 	return true
 }
 
-// renew calls the Renewer for the room's document in the background; r is the request whose
-// edit caused it (its Authorization, or AuthFunc's answer for it, authorizes the renewal).
-// A panicking Renewer or AuthFunc is logged and recovered: it must not take the process down.
 func (h *Hub) renew(rm *room, r *http.Request) {
 	h.renewMu.Lock()
 	h.renewing++
@@ -94,9 +81,7 @@ func (h *Hub) renew(rm *room, r *http.Request) {
 		defer cancel()
 		err := h.cfg.Renewer.Renew(ctx, rm.id)
 		if errors.Is(err, docstore.ErrNotFound) && h.hadSuccess(rm) {
-			// One "gone" is not enough to kill a live room: a deploy, a failover or a
-			// recreated document can answer it once. Ask again after a short delay; only a
-			// second "gone" closes the room.
+			// one "gone" does not kill a live room: confirm after a delay
 			if !h.confirmWait() {
 				return
 			}
@@ -110,8 +95,6 @@ func (h *Hub) renew(rm *room, r *http.Request) {
 	}()
 }
 
-// renewCtx is the context of a renewal for the edit r: a deadline and the editor's
-// Authorization (AuthFunc's answer for it, if set).
 func (h *Hub) renewCtx(r *http.Request) (context.Context, context.CancelFunc) {
 	auth := r.Header.Get("Authorization")
 	if h.cfg.AuthFunc != nil {
@@ -130,7 +113,6 @@ func (h *Hub) hadSuccess(rm *room) bool {
 	return rm.renewedOnce
 }
 
-// confirmWait waits GoneConfirmDelay; it is false if the hub is stopping meanwhile.
 func (h *Hub) confirmWait() bool {
 	d := h.cfg.GoneConfirmDelay
 	if d == 0 {
@@ -149,9 +131,6 @@ func (h *Hub) confirmWait() bool {
 	}
 }
 
-// revived reports whether the document of a closed room is live in the store again, which
-// clears its tombstone: the Renewer, called with the editor's own credentials, succeeds only for
-// a live document it may write (a deleted and re-created document, a late renewal).
 func (h *Hub) revived(r *http.Request, id string) bool {
 	if h.cfg.Renewer == nil || h.closing.Load() {
 		return false
@@ -173,14 +152,6 @@ func (h *Hub) revived(r *http.Request, id string) bool {
 	return ok
 }
 
-// renewResult acts on the outcome of one renewal.
-//
-// ErrNotFound after an earlier success means the document expired and was swept while this room
-// stayed open in a stale tab: the room is closed (see closeDead). Before any success it means
-// nothing (a document that lives only in the hub was never saved to the store, so it is always
-// not found), and is only logged. A 401 or 403 is the store refusing this editor's credentials,
-// most often because the hub's role rule and the docstore's access rule disagree (see
-// Config.Renewer): it is counted and logged as a warning once per document.
 func (h *Hub) renewResult(rm *room, err error) {
 	switch {
 	case err == nil:
@@ -196,8 +167,6 @@ func (h *Hub) renewResult(rm *room, err error) {
 			h.closeDead(rm)
 			return
 		}
-		// A document that lives only in the hub: always "not found". Said once per room and
-		// counted once, then silence for as long as it is edited.
 		rm.mu.Lock()
 		first := !rm.notFoundLog
 		rm.notFoundLog = true
@@ -230,13 +199,8 @@ func (h *Hub) renewResult(rm *room, err error) {
 	}
 }
 
-// closeDead retires a room whose document expired in the store: it rejects further operations
-// with 410 Gone, stops saving, deletes the hub state "collab:<id>" (a save may have written it
-// after the sweeper removed it), ends its streams and removes it from the hub; the id is then
-// refused with 410 for a while (goneMemory) so a stale tab that reconnects cannot start a new
-// room that writes the content back.
 func (h *Hub) closeDead(rm *room) {
-	// Wait for a save in flight, so that the delete below is the last write.
+	// wait for a save in flight: the delete is the last write
 	rm.saveMu.Lock()
 	defer rm.saveMu.Unlock()
 	rm.mu.Lock()
@@ -299,7 +263,6 @@ func (h *Hub) isDead(rm *room) bool {
 	return rm.dead
 }
 
-// waitRenewals blocks until the renewals in flight have finished.
 func (h *Hub) waitRenewals() {
 	h.renewMu.Lock()
 	for h.renewing > 0 {

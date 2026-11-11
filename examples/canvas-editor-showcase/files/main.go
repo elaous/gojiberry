@@ -1,9 +1,5 @@
 //go:build js && wasm
 
-// Command files is the second wasm of the showcase: the file formats (Word, OpenDocument, PDF, RTF, EPUB and
-// HTML in and out, and the fidelity reports), run in a web worker (files-worker.js) when the page first needs
-// one. The page sends {id, op, format, data}; this answers {id, ok, data} or {id, ok: false, err}.
-// See package export/remote.
 package main
 
 import (
@@ -34,7 +30,6 @@ func main() {
 		js.Global().Call("postMessage", reply, []any{arr.Get("buffer")})
 		return nil
 	})
-	// The glue (files-worker.js) holds messages that arrive before this runs, and hands them over.
 	js.Global().Call("__filesStart", handle)
 	select {}
 }

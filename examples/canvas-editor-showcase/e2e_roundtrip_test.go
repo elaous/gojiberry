@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestCommentsAndFootnotesSurviveSaveAndOpen: a document saved with a comment and a
-// footnote opens with them, and opening another document does not leave the first
-// one's behind.
 func TestCommentsAndFootnotesSurviveSaveAndOpen(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.ToggleMode()
@@ -40,7 +37,6 @@ func TestCommentsAndFootnotesSurviveSaveAndOpen(t *testing.T) {
 	d.Fill(".gj-saver-name", "with notes")
 	d.Click(".gj-saver-save")
 	d.WaitSelector(".gj-doclist-item")
-	// A second, plain document, saved as new: it has neither.
 	d.Click(`button[data-tab="comments"]`)
 	d.Click(".gj-comment-delete")
 	d.Wait("s.comments === 0")
@@ -62,7 +58,6 @@ func TestCommentsAndFootnotesSurviveSaveAndOpen(t *testing.T) {
 	d.Wait("s.comments === 0 && s.footnotes.length === 0")
 }
 
-// addFootnote types a footnote at the caret in the dialog that Add footnote opens, and saves it.
 func addFootnote(d *e2etest.Tab, text string) {
 	d.Press("Control+Alt+f")
 	d.WaitSelector(".gj-note-text")

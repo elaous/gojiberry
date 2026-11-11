@@ -11,18 +11,13 @@ type IntersectionEntry struct {
 	IntersectionRatio float64
 }
 
-// IntersectionObserver wraps the browser's IntersectionObserver:
-// fires fn whenever an observed element's visibility relative to its
-// viewport/root crosses a threshold.
+// IntersectionObserver wraps the browser's IntersectionObserver.
 type IntersectionObserver struct {
 	Value    js.Value
 	callback js.Func
 }
 
-// NewIntersectionObserver constructs an observer that calls fn with
-// every batch of visibility changes. Call Observe to start watching
-// elements, and Disconnect (which also releases fn's callback) when
-// done with it.
+// NewIntersectionObserver constructs an observer that calls fn.
 func NewIntersectionObserver(fn func(entries []IntersectionEntry)) *IntersectionObserver {
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		jsEntries := args[0]
@@ -48,8 +43,7 @@ func (o *IntersectionObserver) Observe(el *Element) { o.Value.Call("observe", el
 // Unobserve stops watching el.
 func (o *IntersectionObserver) Unobserve(el *Element) { o.Value.Call("unobserve", el.Element) }
 
-// Disconnect stops observing every element and releases the callback
-// registered at construction.
+// Disconnect stops observing every element.
 func (o *IntersectionObserver) Disconnect() {
 	o.Value.Call("disconnect")
 	o.callback.Release()
@@ -61,16 +55,13 @@ type ResizeEntry struct {
 	Width, Height float64
 }
 
-// ResizeObserver wraps the browser's ResizeObserver: fires fn
-// whenever an observed element's size changes.
+// ResizeObserver wraps the browser's ResizeObserver.
 type ResizeObserver struct {
 	Value    js.Value
 	callback js.Func
 }
 
-// NewResizeObserver constructs an observer that calls fn with every
-// batch of size changes. Call Observe to start watching elements, and
-// Disconnect (which also releases fn's callback) when done with it.
+// NewResizeObserver constructs an observer that calls fn.
 func NewResizeObserver(fn func(entries []ResizeEntry)) *ResizeObserver {
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		jsEntries := args[0]
@@ -97,8 +88,7 @@ func (o *ResizeObserver) Observe(el *Element) { o.Value.Call("observe", el.Eleme
 // Unobserve stops watching el.
 func (o *ResizeObserver) Unobserve(el *Element) { o.Value.Call("unobserve", el.Element) }
 
-// Disconnect stops observing every element and releases the callback
-// registered at construction.
+// Disconnect stops observing every element.
 func (o *ResizeObserver) Disconnect() {
 	o.Value.Call("disconnect")
 	o.callback.Release()

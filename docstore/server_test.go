@@ -161,9 +161,6 @@ func TestServerQuotaNotAvailableWhenAdapterDoesNotImplementIt(t *testing.T) {
 	}
 }
 
-// fakeQuotaAdapter wraps MemoryAdapter, adding a QuotaReporter with a
-// fixed answer -- the smallest way to exercise handleQuota's own
-// "available" branch without needing a real LocalFSAdapter/disk.
 type fakeQuotaAdapter struct {
 	*MemoryAdapter
 	quota Quota
@@ -236,7 +233,6 @@ func serve(h http.Handler, method, path, body string, hdr ...string) *httptest.R
 	return rec
 }
 
-// CloseDocs answers 404 for the whole generic API, whatever the id; /health stays.
 func TestCloseDocsClosesTheGenericAPI(t *testing.T) {
 	mem := NewMemoryAdapter()
 	_ = mem.Save(context.Background(), "doc1", []byte("secret"))
@@ -277,7 +273,6 @@ func TestCloseDocsClosesTheGenericAPI(t *testing.T) {
 	}
 }
 
-// Hide matches without regard to case, so a backend that folds case cannot alias a hidden prefix.
 func TestHideIgnoresCase(t *testing.T) {
 	mem := NewMemoryAdapter()
 	_ = mem.Save(context.Background(), "pubdoc/a", []byte("x"))
@@ -301,7 +296,6 @@ func TestHideIgnoresCase(t *testing.T) {
 	}
 }
 
-// The document routes name the headers a browser script may read.
 func TestDocsRoutesExposeHeadersToCORS(t *testing.T) {
 	h := newTestServer().Handler()
 	for _, path := range []string{"/docs", "/docs/x", "/health"} {

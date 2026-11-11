@@ -42,7 +42,6 @@ func TestUsageTotalsSurviveARestartThroughTheAdapter(t *testing.T) {
 	}
 	doc := waitStored(t, mem)
 
-	// Bounded and without identifiers: the record is the totals and nothing else.
 	raw := string(doc.Data)
 	for _, leak := range []string{"203.0.113", "1000", "Mozilla", "Authorization"} {
 		if strings.Contains(raw, leak) {
@@ -53,7 +52,6 @@ func TestUsageTotalsSurviveARestartThroughTheAdapter(t *testing.T) {
 		t.Errorf("a single count is a %d byte record", len(doc.Data))
 	}
 
-	// A new process on the same store starts from them.
 	c2 := telemetry.NewCounters()
 	_ = NewServer(mem, "memory").WithTelemetry(c2)
 	if got := c2.Report(1); len(got) != 1 || got[0].N != 7 || got[0].Value != "find" {
@@ -137,7 +135,6 @@ func TestTheReportCanBeRoundedByTheOperator(t *testing.T) {
 	}
 }
 
-// Two servers on one conditional store add their counts: the admin report of either shows the sum.
 func TestTwoServersOnOneStoreCountTogether(t *testing.T) {
 	fastSave(t)
 	store := NewMemoryAdapter()
@@ -170,7 +167,7 @@ func TestTwoServersOnOneStoreCountTogether(t *testing.T) {
 		}
 		return 0
 	}
-	read(a) // each report first adds its own counts to the store, then reads the sum
+	read(a)
 	read(b)
 	if x, y := read(a), read(b); x != 13 || y != 13 {
 		t.Errorf("the two reports say %d and %d, want 13 on both", x, y)

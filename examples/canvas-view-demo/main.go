@@ -1,7 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-view-demo shows canvas/xango.View: a canvas of a canvas/xango tree inside an ordinary page, with a
-// text copy beside it, and a table whose "Done" column is drawn by a cell render prop (a bar instead of the number).
 package main
 
 import (

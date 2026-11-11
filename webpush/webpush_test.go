@@ -18,7 +18,6 @@ import (
 	"time"
 )
 
-// browser makes the keys a browser would: a subscription for an address and the private half.
 func browser(t *testing.T, endpoint string) (Subscription, *ecdh.PrivateKey, []byte) {
 	t.Helper()
 	priv, err := ecdh.P256().GenerateKey(rand.Reader)
@@ -51,14 +50,12 @@ func TestEncryptThenDecryptGivesTheMessageBack(t *testing.T) {
 	if bytes.Equal(a, b) {
 		t.Error("two messages must differ (fresh key and salt)")
 	}
-	// the header layout of RFC 8188: salt, record size, key id length, key id
 	if len(a) < 21+65 || a[20] != 65 || a[16] != 0 || a[17] != 0 || a[18] != 0x10 || a[19] != 0 {
 		t.Errorf("header: % x", a[:24])
 	}
 	if _, err := Encrypt(sub, make([]byte, MaxPayload+1)); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("too large: %v", err)
 	}
-	// somebody else's keys, and a changed byte, do not open it
 	_, other, _ := browser(t, "https://push.example/x")
 	if _, err := Decrypt(a, other, auth); err == nil {
 		t.Error("another key opened it")
@@ -187,7 +184,6 @@ func TestTheDefaultClientRefusesAPrivateAddress(t *testing.T) {
 	if err := s.Send(context.Background(), sub, []byte("x")); !errors.Is(err, ErrBadSubscription) {
 		t.Errorf("a loopback address: %v", err)
 	}
-	// the dialer itself refuses too (a name that resolves to a private address gets this far)
 	c := defaultClient(false)
 	req, _ := http.NewRequest("GET", srv.URL, nil)
 	if _, err := c.Do(req); err == nil || !strings.Contains(err.Error(), "private address") {
@@ -231,7 +227,6 @@ func TestHandlerKeySubscribeUnsubscribe(t *testing.T) {
 			t.Errorf("%s: %d", name, w.Code)
 		}
 	}
-	// the sixth subscription of a handle is refused
 	for i := 0; i < MaxPerHandle; i++ {
 		s, _, _ := browser(t, "https://push.example/n"+strings.Repeat("x", i+1))
 		e, _ := json.Marshal(map[string]any{"handle": "ana", "subscription": s})
@@ -240,7 +235,6 @@ func TestHandlerKeySubscribeUnsubscribe(t *testing.T) {
 	if w := do("POST", "/subscribe", mustJSON(t, map[string]any{"handle": "ana", "subscription": func() Subscription { s, _, _ := browser(t, "https://push.example/last"); return s }()})); w.Code != 429 {
 		t.Errorf("too many: %d", w.Code)
 	}
-	// unsubscribing: only for the handle's own subscription
 	un, _ := json.Marshal(map[string]any{"handle": "ana", "endpoint": sub.Endpoint})
 	if w := do("POST", "/unsubscribe", string(un)); w.Code != 204 {
 		t.Errorf("unsubscribe: %d", w.Code)

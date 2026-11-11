@@ -2,12 +2,6 @@
 
 //go:build js && wasm
 
-// typedelements_section.xg exercises domrt/html's typed element
-// subtypes (CanvasElement, AnchorElement, ButtonElement, SelectElement,
-// InputElement -- each obtained from a plain Element via its As* cast)
-// together with domrt/browser's File API, writing each result into its
-// own element so a real browser test can check every one actually
-// worked, not just that the code compiled.
 package main
 
 import (
@@ -38,8 +32,6 @@ func wireTypedElementsSection(document *html.Document) {
 	document.GetElementByID("typed-anchor-result").SetTextContent(
 		fmt.Sprintf("href=%s target=%s rel=%s download=%s", anchor.Href(), anchor.Target(), anchor.Rel(), anchor.Download()))
 
-	// ButtonElement: SetType/Disabled, and Click() firing a real listener
-	// -- once synthesized here, and once for real via a Playwright click.
 	button := document.GetElementByID("typed-btn").AsButton()
 	button.SetType("button")
 	clicks := 0
@@ -51,9 +43,6 @@ func wireTypedElementsSection(document *html.Document) {
 	}))
 	button.Click()
 
-	// Element's HTMLElement surface (Focus/Blur, Hidden, TabIndex,
-	// BoundingRect, ScrollIntoView, inline style get/set), exercised on
-	// the same button.
 	button.SetTabIndex(0)
 	button.SetTitle("a real title")
 	button.SetStyleProperty("background-color", "rgb(1, 2, 3)")
@@ -78,8 +67,6 @@ func wireTypedElementsSection(document *html.Document) {
 	document.GetElementByID("typed-checkbox-result").SetTextContent(
 		fmt.Sprintf("checked=%v type=%s disabled=%v", checkbox.Checked(), checkbox.Type(), checkbox.Disabled()))
 
-	// InputElement (file) + the File API: read the selected file's
-	// contents back and report its metadata, on a real "change" event.
 	fileInput := document.GetElementByID("typed-file").AsInput()
 	fileInput.AddEventListener("change", js.FuncOf(func(this js.Value, args []js.Value) any {
 		go func() {

@@ -15,17 +15,7 @@ type TextareaProps struct {
 	OnChange    func(value string)
 }
 
-// Textarea renders a styled native <textarea>. Value is set via a
-// "value" attribute rather than child text content, the same
-// controlled-input convention Slider/DatePicker/ColorPicker already
-// use: domrt patches "value" as a real DOM property (see its
-// propAttrs), which is what keeps a <textarea> genuinely controlled
-// on the client. A "value" attribute has no meaning in the HTML spec
-// for <textarea> though (initial content there only ever comes from
-// child text) -- harmless for domrt-mounted pages, but if you render
-// this with xango.Render for pure static HTML with no client hydration,
-// the initial content won't show up; use xango.El("textarea", ...,
-// xango.Text(props.Value)) directly for that case instead.
+// Textarea renders a styled native <textarea>.
 func Textarea(props TextareaProps) xango.Node {
 	attrs := []xango.Attr{xango.A("class", "gj-textarea"), xango.A("value", props.Value)}
 	if props.Placeholder != "" {

@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// budgetLimiter allows n requests per key, then refuses with a wait of 2.3s.
 type budgetLimiter struct {
 	mu   sync.Mutex
 	n    int
@@ -31,7 +30,6 @@ func (l *budgetLimiter) Allow(_ context.Context, key string) (bool, time.Duratio
 	return true, 0
 }
 
-// countingStates counts the login states written.
 type countingStates struct {
 	*MemorySessionStore
 	mu   sync.Mutex
@@ -83,12 +81,10 @@ func TestLoginLimiter(t *testing.T) {
 	if store.puts != 20 {
 		t.Fatalf("an over-budget login reached PutState: %d states, want 20", store.puts)
 	}
-	// A header from an untrusted peer does not change the key.
 	w = loginFrom(h, "198.51.100.1:50001", map[string]string{"X-Forwarded-For": "203.0.113.9"})
 	if w.Code != http.StatusTooManyRequests || store.puts != 20 {
 		t.Fatalf("X-Forwarded-For from an untrusted peer: status %d, states %d; want 429 and 20", w.Code, store.puts)
 	}
-	// Another address has its own budget.
 	if w := loginFrom(h, "198.51.100.2:4000", nil); w.Code != http.StatusFound {
 		t.Fatalf("second address: status %d, want 302", w.Code)
 	}
@@ -125,8 +121,6 @@ func TestLoginUnlimitedByDefault(t *testing.T) {
 	}
 }
 
-// A clientIP that cannot tell (it answers "") must not put every client in one budget: the
-// connection's address is used then.
 func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)
@@ -141,8 +135,6 @@ func TestLoginLimiterFallsBackToTheRemoteAddressWhenClientIPAnswersNothing(t *te
 	}
 }
 
-// Addresses inside one IPv6 /64 share a login budget (a subscriber holds a whole /64, so rotating through its
-// addresses buys nothing); another /64 and an IPv4 address have their own.
 func TestLoginLimiterGroupsAnIPv6SubscriberByItsSlash64(t *testing.T) {
 	f := newFakeOIDCProvider(t)
 	m := newTestManager(t, f.srv.URL)

@@ -8,11 +8,6 @@ import (
 	"sync"
 )
 
-// Variant is one weight/style cut of a Family, backed by a single font
-// file on disk. Path is relative to the Repo's root directory (never
-// absolute -- see Repo.Open, which is the only place a Variant's Path
-// is turned back into bytes, and which rejects anything that doesn't
-// match a path this same scan produced).
 type Variant struct {
 	Weight int    `json:"weight"` // CSS-style 100-900; see classifySubfamily
 	Italic bool   `json:"italic"`
@@ -26,37 +21,19 @@ type Family struct {
 	Variants []Variant `json:"variants"`
 }
 
-// Repo is a locally-run "font CDN": point it at a directory of
-// .ttf/.otf files and it scans them once, groups them by family, and
-// caches the result in memory -- the same read-and-cache role a real
-// CDN's origin-fetch-then-cache plays, just for a folder on disk
-// instead of a network origin. Scan again (Repo.Scan) whenever the
-// directory's contents change; nothing here watches the filesystem on
-// its own.
 type Repo struct {
 	dir string
 
 	mu       sync.RWMutex
 	families map[string]*Family // keyed by Family.Name
-	paths    map[string]bool    // every Variant.Path this Repo has ever produced, for Open's traversal check
+	paths    map[string]bool
 }
 
-// NewRepo creates a Repo rooted at dir. The directory need not exist
-// yet -- Scan reports that as zero families rather than an error, the
-// same "nothing here yet" shape ConfigFromEnv's other defaults use.
+// NewRepo creates a Repo rooted at dir.
 func NewRepo(dir string) *Repo {
 	return &Repo{dir: dir, families: map[string]*Family{}, paths: map[string]bool{}}
 }
 
-// Scan walks the Repo's directory for .ttf/.otf files (woff/woff2
-// wrap this same sfnt data in a compressed container we don't unpack,
-// so they're skipped, not errored -- a mixed directory still serves
-// everything it can read), parses each one's name table, and replaces
-// the cached family list atomically. A file that fails to parse (not
-// really an sfnt font, or a 'name' table we can't make sense of) is
-// skipped and does not fail the whole scan, the same tolerant
-// posture the toolbar's custom-page-size dialog takes toward bad
-// input.
 func (r *Repo) Scan() error {
 	families := map[string]*Family{}
 	paths := map[string]bool{}
@@ -119,8 +96,6 @@ func (r *Repo) Scan() error {
 	return nil
 }
 
-// Families returns every scanned family, sorted by name for a stable
-// response the font picker can render straight through.
 func (r *Repo) Families() []Family {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -132,14 +107,6 @@ func (r *Repo) Families() []Family {
 	return out
 }
 
-// VariantPath returns the file path (relative to r's own root, ready
-// for Open) of family's own "representative" variant -- the lightest-
-// weight, non-italic-preferred one Scan's own sort already puts first
-// (Variants[0]). For a symbol/dingbat font (which typically ships as
-// a single variant anyway) or a real text font (whose character
-// repertoire is normally identical across weights), that's a fine
-// single file to read a 'cmap' table from without needing every
-// variant's own copy.
 func (r *Repo) VariantPath(family string) (string, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -150,12 +117,7 @@ func (r *Repo) VariantPath(family string) (string, bool) {
 	return f.Variants[0].Path, true
 }
 
-// Open returns the raw bytes of the font file at rel, which must be
-// exactly one of the Paths Scan last produced -- not merely a path
-// that resolves inside r.dir. This is what stops a request like
-// /local/files/..%2f..%2f..%2fetc%2fpasswd from reading anything
-// outside the scanned font set, rather than relying on path-cleaning
-// alone to catch every traversal trick.
+// only paths Scan produced: traversal check
 func (r *Repo) Open(rel string) ([]byte, bool) {
 	r.mu.RLock()
 	ok := r.paths[rel]
@@ -170,13 +132,6 @@ func (r *Repo) Open(rel string) ([]byte, bool) {
 	return data, true
 }
 
-// classifySubfamily derives a CSS-style numeric weight (100-900) and
-// an italic flag from an sfnt subfamily name like "Bold Italic" or
-// "Semibold" -- fonts don't carry a structured weight field anywhere
-// as reliable as this name (OS/2.usWeightClass exists but is
-// routinely wrong or absent in the wild), and this is the same
-// name-driven convention Google Fonts' own "700italic"-style variant
-// keys use.
 func classifySubfamily(subfamily string) (weight int, italic bool) {
 	s := strings.ToLower(subfamily)
 	italic = strings.Contains(s, "italic") || strings.Contains(s, "oblique")

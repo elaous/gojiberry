@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// fakeTool writes a shell script that stands in for piper or whisper-cli.
 func fakeTool(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -22,7 +21,6 @@ func fakeTool(t *testing.T, body string) string {
 }
 
 func TestPiperRunsTheBinary(t *testing.T) {
-	// piper --output_file OUT [--model M]: text on stdin, a WAV in OUT
 	bin := fakeTool(t, `out=$2; model=""; [ "$3" = "--model" ] && model=$4
 printf 'RIFF[%s][%s]' "$(cat)" "$model" > "$out"`)
 	got, err := Piper(bin, "voice.onnx", "hello")

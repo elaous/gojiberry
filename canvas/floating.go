@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// FloatingStyle is the look of a FloatingText's box and edit chrome.
 type FloatingStyle struct {
 	Background   string // box fill; empty for transparent
 	BorderColor  string // drawn in view mode too; empty for none
@@ -36,21 +35,7 @@ type fRune struct {
 	f Format
 }
 
-// FloatingText is a text box anchored at (X, Y) with a Width x Height,
-// that text can wrap around like it does an Image -- but whose own text
-// is editable, with per-character formatting.
-//
-// In edit mode: click inside to place the caret and type; drag to
-// select; arrows, Home/End, Backspace, Delete and Enter work as in an
-// editor (Shift extends the selection). A toolbar above the box has
-// Move (press and drag the box; both axes, snapping to Snap), B and I
-// (toggle bold/italic on the selection, or on the text typed next), A-
-// and A+ (shrink/grow the selection's font size) and Wrap. A handle at
-// the bottom-right corner resizes the box. In view mode it just draws.
-//
-// Text beyond the box's height is not shown. Wrapping works like
-// Image's: with Wrap on and a Flow set (SetFlow) the box registers as an
-// Obstacle (the box plus WrapMargin) of that flow.
+// FloatingText is a text box that text can wrap around.
 type FloatingText struct {
 	X, Y, Width, Height float64
 	Padding             float64
@@ -60,39 +45,28 @@ type FloatingText struct {
 	BoundsW             float64   // if non-zero, keeps the box within x in [0, BoundsW]
 	Wrap                bool
 	WrapMargin          float64
-	// Opacity is 0..1 for the whole box, text and all; zero means opaque.
-	Opacity float64
-	// Anchor, if set, pins the box to a page: X, Y are derived from it
-	// (relative to that page's sheet) using Pages or, failing that, the
-	// Flow's pages. Moving the box re-anchors it to the page it ends up on.
-	Anchor *Anchor
-	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
-	Pages *PageSet
-	// AutoClose maps each opening character to its closer (NewFloatingText
-	// sets DefaultAutoClose: quotes, parentheses, brackets, braces).
-	// Typing an opener inserts both; typing the closer in front of one
-	// overtypes it; Backspace between a pair deletes both; typing an
-	// opener over a selection wraps it. Nil turns this off.
+	Opacity             float64
+	Anchor              *Anchor
+	Pages               *PageSet
+	// AutoClose maps each opening character to its closer.
 	AutoClose map[rune]rune
-	// Completer suggests completions for the word before the caret
-	// (nil means the words already in the text and in Vocabulary).
+	// Completer suggests completions for the word before the caret.
 	Completer Completer
 	// Vocabulary adds words the default completer may suggest.
 	Vocabulary []string
 
 	ChromeStyle FloatingStyle
 	Painter     ImagePainter
-	// OnChange is called after any change to the text, its formatting,
-	// or the box.
+	// OnChange runs after any change to text, format or box.
 	OnChange func(*FloatingText)
 
 	runes    []fRune
 	hist     snapshotHistory[boxSnap]
 	histKind string
 	caret    int
-	anchor   int      // the other end of the selection
-	extra    []Cursor // further cursors (multi-cursor); the caret and anchor are the primary one
-	pending  Format   // format for the next typed text when nothing is selected
+	anchor   int // the other end of the selection
+	extra    []Cursor
+	pending  Format // format for the next typed text when nothing is selected
 	editing  bool
 	caretOn  bool
 
@@ -117,8 +91,7 @@ type floatDrag struct {
 	boxW, boxH     float64
 }
 
-// NewFloatingText returns a box at (x, y) of w x h holding text, in
-// ModeView.
+// NewFloatingText returns a box holding text, in ModeView.
 func NewFloatingText(text string, x, y, w, h float64) *FloatingText {
 	ft := &FloatingText{
 		X: x, Y: y, Width: w, Height: h, Padding: 8, Style: DefaultTextStyle(),
@@ -130,7 +103,6 @@ func NewFloatingText(text string, x, y, w, h float64) *FloatingText {
 	return ft
 }
 
-// SetPainter implements PainterSetter.
 func (ft *FloatingText) SetPainter(p ImagePainter) { ft.Painter = p; ft.inner.Painter = p }
 
 func (ft *FloatingText) pageSet() *PageSet {
@@ -143,15 +115,12 @@ func (ft *FloatingText) pageSet() *PageSet {
 	return nil
 }
 
-// resolve updates X, Y from the Anchor.
 func (ft *FloatingText) resolve() {
 	if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
 		ft.X, ft.Y = ps.Resolve(*ft.Anchor)
 	}
 }
 
-// SetFlow sets the text flow to wrap around and registers the box as one
-// of its obstacles (removing it from any previous flow).
 func (ft *FloatingText) SetFlow(f *TextFlow) {
 	if ft.flow != nil {
 		ft.flow.RemoveObstacle(ft)
@@ -174,8 +143,6 @@ func (ft *FloatingText) Text() string {
 	return b.String()
 }
 
-// SetText replaces the content with unformatted text and puts the caret
-// at the end.
 func (ft *FloatingText) SetText(s string) {
 	ft.runes = ft.runes[:0]
 	for _, r := range s {
@@ -185,8 +152,6 @@ func (ft *FloatingText) SetText(s string) {
 	ft.hist.reset()
 }
 
-// Items returns the content as TextFlow items, one Chars per stretch of
-// equal formatting.
 func (ft *FloatingText) Items() []Item {
 	var items []Item
 	for i := 0; i < len(ft.runes); {
@@ -213,13 +178,11 @@ func (ft *FloatingText) FormatAt(i int) Format {
 // Caret returns the caret's offset in the text (in runes).
 func (ft *FloatingText) Caret() int { return ft.caret }
 
-// Selection returns the selected range [from, to); from == to means no
-// selection.
+// Selection returns the selected range [from, to); equal means none.
 func (ft *FloatingText) Selection() (from, to int) {
 	return min(ft.caret, ft.anchor), max(ft.caret, ft.anchor)
 }
 
-// Editing reports whether the caret is active (edit mode, clicked into).
 func (ft *FloatingText) Editing() bool { return ft.editing }
 
 // Box returns the box rectangle: x, y, w, h.
@@ -228,8 +191,6 @@ func (ft *FloatingText) Box() (x, y, w, h float64) {
 	return ft.X, ft.Y, ft.Width, ft.Height
 }
 
-// Exclusion implements Obstacle: while Wrap is on, the box plus
-// WrapMargin is off limits to text.
 func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	ft.resolve()
 	if !ft.Wrap || y1 <= ft.Y-ft.WrapMargin || y0 >= ft.Y+ft.Height+ft.WrapMargin {
@@ -238,8 +199,6 @@ func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	return ft.X - ft.WrapMargin, ft.X + ft.Width + ft.WrapMargin, true
 }
 
-// ContainsPoint implements Hitter: the box, and in edit mode its toolbar
-// and resize handle, so the text under it isn't selected through it.
 func (ft *FloatingText) ContainsPoint(x, y float64) bool {
 	ft.resolve()
 	if ft.inBox(x, y) {
@@ -254,8 +213,7 @@ func (ft *FloatingText) ContainsPoint(x, y float64) bool {
 // Mode returns the current mode.
 func (ft *FloatingText) Mode() Mode { return ft.mode }
 
-// SetMode switches mode; leaving edit mode stops editing and cancels any
-// drag. Returns true if a redraw is needed.
+// SetMode switches mode; leaving edit mode stops editing and drag.
 func (ft *FloatingText) SetMode(m Mode) bool {
 	if m == ft.mode {
 		return false
@@ -277,7 +235,6 @@ func (ft *FloatingText) changed() {
 	}
 }
 
-// sync pushes the content and geometry into the inner flow.
 func (ft *FloatingText) sync() {
 	ft.resolve()
 	f := ft.inner
@@ -286,8 +243,6 @@ func (ft *FloatingText) sync() {
 	f.Width, f.Height = ft.Width-2*ft.Padding, ft.Height-2*ft.Padding
 }
 
-// --- editing ---------------------------------------------------------
-
 func (ft *FloatingText) snap(v float64) float64 {
 	if ft.Snap <= 0 {
 		return v
@@ -295,16 +250,12 @@ func (ft *FloatingText) snap(v float64) float64 {
 	return math.Round(v/ft.Snap) * ft.Snap
 }
 
-// replace swaps the runes in [from, to) for ins and puts the caret
-// after them.
 func (ft *FloatingText) replace(from, to int, ins []fRune) {
 	ft.runes = slices.Replace(ft.runes, from, to, ins...)
 	ft.caret = from + len(ins)
 	ft.anchor = ft.caret
 }
 
-// typingFormat is the format new text takes: the pending one if set,
-// else that of the character before the caret (or after, at the start).
 func (ft *FloatingText) typingFormat() Format {
 	if !ft.pending.IsZero() {
 		return ft.pending
@@ -318,9 +269,6 @@ func (ft *FloatingText) typingFormat() Format {
 	return Format{}
 }
 
-// insertPlain inserts s at the caret, replacing any selection (edit mode,
-// while editing), with no auto-closing or completion. Carriage returns
-// are dropped.
 func (ft *FloatingText) insertPlain(s string) bool {
 	s = strings.ReplaceAll(s, "\r", "")
 	if ft.mode != ModeEdit || !ft.editing || s == "" {
@@ -339,7 +287,6 @@ func (ft *FloatingText) insertPlain(s string) bool {
 	return true
 }
 
-// lineOf returns the laid-out line containing offset o.
 func (ft *FloatingText) lineOf(o int) (Line, bool) {
 	lines := ft.inner.Layout().Lines
 	for _, ln := range lines {
@@ -353,8 +300,6 @@ func (ft *FloatingText) lineOf(o int) (Line, bool) {
 	return Line{}, false
 }
 
-// handleEditKey handles the editing keys; HandleKey wraps it with the
-// palette and completion popups.
 func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	if ft.mode != ModeEdit || !ft.editing {
 		return false
@@ -436,11 +381,6 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	return true
 }
 
-// --- formatting ------------------------------------------------------
-
-// ApplyFormat applies fn to the format of every selected character; with
-// no selection it changes the format of the text typed next. It reports
-// whether anything changed.
 func (ft *FloatingText) ApplyFormat(fn func(*Format)) bool {
 	from, to := ft.Selection()
 	if from == to {
@@ -467,8 +407,6 @@ func (ft *FloatingText) ApplyFormat(fn func(*Format)) bool {
 	return changed
 }
 
-// current returns the formats the selection (or caret) covers, resolved
-// against the base style.
 func (ft *FloatingText) current() []TextStyle {
 	from, to := ft.Selection()
 	if from == to {
@@ -481,8 +419,6 @@ func (ft *FloatingText) current() []TextStyle {
 	return out
 }
 
-// ToggleBold makes the selection (or the text typed next) bold, or --
-// if it all already is -- regular.
 func (ft *FloatingText) ToggleBold() bool {
 	all := true
 	for _, s := range ft.current() {
@@ -512,8 +448,7 @@ func (ft *FloatingText) ToggleItalic() bool {
 	})
 }
 
-// ChangeSize adds delta px to the font size of the selection (or the
-// text typed next), to a minimum of 6.
+// ChangeSize adds delta px to the font size, minimum 6.
 func (ft *FloatingText) ChangeSize(delta float64) bool {
 	base := ft.Style.FontSize
 	if base <= 0 {
@@ -527,8 +462,6 @@ func (ft *FloatingText) ChangeSize(delta float64) bool {
 		f.FontSize = max(size+delta, 6)
 	})
 }
-
-// --- toolbar ---------------------------------------------------------
 
 var floatButtons = [...]struct {
 	label string
@@ -552,8 +485,6 @@ func (ft *FloatingText) inBox(x, y float64) bool {
 	return inRect(x, y, [4]float64{ft.X, ft.Y, ft.Width, ft.Height})
 }
 
-// whatAt returns what a press at (x, y) grabs: "button:N", "resize",
-// "text" (inside the box) or "".
 func (ft *FloatingText) whatAt(x, y float64) string {
 	for i := range floatButtons {
 		if inRect(x, y, ft.buttonRect(i)) {
@@ -569,10 +500,7 @@ func (ft *FloatingText) whatAt(x, y float64) string {
 	return ""
 }
 
-// --- pointer ----------------------------------------------------------
-
-// MouseDown handles the toolbar, the resize handle, and placing the
-// caret (edit mode only). A press elsewhere stops editing.
+// MouseDown handles toolbar, resize handle and caret placement.
 func (ft *FloatingText) MouseDown(x, y float64) bool {
 	if ft.mode != ModeEdit {
 		return false
@@ -668,7 +596,7 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 	case "move":
 		nx, ny := max(ft.snap(d.boxX+dx), 0), max(ft.snap(d.boxY+dy), 0)
 		if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
-			// Re-anchor to the page the box is over, and snap relative to it.
+			// snap relative to the page the box is over
 			a := ps.AnchorAt(d.boxX+dx, d.boxY+dy)
 			a.X, a.Y = ft.snap(a.X), ft.snap(a.Y)
 			nx, ny = ps.Resolve(a)
@@ -710,23 +638,19 @@ func (ft *FloatingText) MouseLeave() bool {
 	return changed
 }
 
-// Dragging reports whether a drag (move, resize or text selection) is
-// in progress.
+// Dragging reports whether a move, resize or selection drag runs.
 func (ft *FloatingText) Dragging() bool { return ft.drag != nil }
 
-// WantsFocus implements Focuser.
 func (ft *FloatingText) WantsFocus() bool {
 	return ft.mode == ModeEdit && (ft.editing || ft.palOpen())
 }
 
-// SetCaretVisible implements Blinker.
 func (ft *FloatingText) SetCaretVisible(on bool) bool {
 	changed := ft.caretOn != on && ft.editing
 	ft.caretOn = on
 	return changed
 }
 
-// CSSCursor implements CursorProvider.
 func (ft *FloatingText) CSSCursor() string {
 	if ft.mode != ModeEdit {
 		return ""
@@ -743,10 +667,6 @@ func (ft *FloatingText) CSSCursor() string {
 	return ft.hover
 }
 
-// --- drawing ----------------------------------------------------------
-
-// Draw paints the box, its text and, in edit mode, the selection,
-// caret, outline, toolbar and resize handle.
 func (ft *FloatingText) Draw() {
 	p, cs := ft.Painter, ft.ChromeStyle
 	ft.sync()
@@ -813,7 +733,6 @@ func (ft *FloatingText) Draw() {
 	p.FillRect(h[0], h[1], h[2], h[3])
 }
 
-// drawSelection tints the selected text, line by line.
 func (ft *FloatingText) drawSelection() {
 	p := ft.Painter
 	p.SetFillStyle(ft.ChromeStyle.SelectColor)
@@ -837,8 +756,7 @@ var (
 	_ Obstacle  = (*FloatingText)(nil)
 )
 
-// CycleOpacity steps the box's opacity through 1, 0.75, 0.5 and 0.25
-// (the Fade button).
+// CycleOpacity steps opacity through 1, 0.75, 0.5, 0.25.
 func (ft *FloatingText) CycleOpacity() {
 	switch cur := ft.Opacity; {
 	case cur == 0 || cur >= 1:

@@ -65,7 +65,6 @@ func TestDraggingAGripResizesTheColumnOrRowInTheText(t *testing.T) {
 	lay := f.Layout()
 	ob := lay.Lines[0].Objects[0]
 	pad := o.pad
-	// the edge between the two columns, on the grips above them
 	x0, y0 := ob.X+pad+80, ob.Y+3
 	if !f.MouseDown(x0, y0) {
 		t.Fatal("a press on the edge of a column grip begins a resize")
@@ -75,7 +74,6 @@ func TestDraggingAGripResizesTheColumnOrRowInTheText(t *testing.T) {
 	if tb.ColumnWidth(0) != 120 {
 		t.Fatalf("column width %v", tb.ColumnWidth(0))
 	}
-	// the row grip: the edge under the first row
 	x1, y1 := ob.X+3, ob.Y+pad+32
 	f.MouseDown(x1, y1)
 	f.MouseMove(x1, y1+20)
@@ -83,7 +81,6 @@ func TestDraggingAGripResizesTheColumnOrRowInTheText(t *testing.T) {
 	if tb.RowHeightSet(0) != 52 {
 		t.Fatalf("row height %v", tb.RowHeightSet(0))
 	}
-	// not in edit mode: nothing is resized
 	f.SetMode(ModeView)
 	f.MouseDown(ob.X+pad+120, ob.Y+3)
 	f.MouseMove(ob.X+pad+160, ob.Y+3)
@@ -132,8 +129,6 @@ func TestPressingAGripSelectsAColumnARowOrTheTable(t *testing.T) {
 	}
 }
 
-// A host that shares the document can refuse a resize (the table is busy with somebody else): nothing is resized, neither
-// by dragging an edge nor by the double press that gives the size back.
 func TestAResizeTheHostRefusesDoesNotHappen(t *testing.T) {
 	tb := NewTableFrom([][]string{{"a", "b"}, {"c", "d"}})
 	o := NewTableObject(tb)
@@ -155,7 +150,6 @@ func TestAResizeTheHostRefusesDoesNotHappen(t *testing.T) {
 	if !o.DragStart(edgeX, 3) || o.resize == nil {
 		t.Fatal("allowed, the press begins a resize")
 	}
-	// a press that is not on an edge is not asked about
 	asked = 0
 	o.DragEnd()
 	o.DragStart(o.pad+40, o.pad+10)

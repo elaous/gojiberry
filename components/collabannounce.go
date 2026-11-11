@@ -6,16 +6,8 @@ import (
 	"time"
 )
 
-// Collaboration cues are visual (a coloured cursor, an avatar that appears). CollabAnnouncer turns what
-// changed in a shared session into short sentences for a live region (Announcer): people joining and
-// leaving, the connection dropping and coming back, a sharing problem. Changes are grouped ("Ana and Bo
-// joined") and spaced (at most one sentence per Every), so a busy session does not talk over the person.
 type CollabAnnouncer struct {
-	// Level is how much is said: CollabOff nothing, CollabImportant the connection and problems, CollabAll
-	// that and the people who come and go (the default, "").
 	Level string
-	// Every is the least time between two sentences (2 seconds if 0). Changes that come sooner are held and
-	// said together at the next Update after it.
 	Every time.Duration
 
 	started, wasOnline bool
@@ -23,12 +15,12 @@ type CollabAnnouncer struct {
 	online             bool
 	problem            string
 	joined, left       []string
-	comments           []string   // authors of comments others added, not yet said
-	replies            []string   // authors of replies others added, not yet said
-	resolved           int        // threads others resolved, not yet said
-	merged, rejected   int        // changes merged after being offline / refused by the server, not yet said
-	conflicts          [][]string // paragraphs others changed while they were edited here (who), not yet said
-	cause              string     // a held connection sentence: "online", "offline" or ""
+	comments           []string // authors of comments others added, not yet said
+	replies            []string // authors of replies others added, not yet said
+	resolved           int      // threads others resolved, not yet said
+	merged, rejected   int
+	conflicts          [][]string
+	cause              string // a held connection sentence: "online", "offline" or ""
 	problemSaid        string
 	last               time.Time
 }
@@ -40,58 +32,42 @@ const (
 	CollabOff       = "off"
 )
 
-// NoteComment records that someone else added a comment; it is said, with the next sentence, at level
-// CollabAll ("Bo commented." or "3 new comments.").
 func (a *CollabAnnouncer) NoteComment(author string) {
 	if a.Level == CollabAll {
 		a.comments = append(a.comments, author)
 	}
 }
 
-// NoteReply records that someone else replied to a comment; it is said at level CollabAll ("Bo replied."
-// or "3 new replies.").
 func (a *CollabAnnouncer) NoteReply(author string) {
 	if a.Level == CollabAll {
 		a.replies = append(a.replies, author)
 	}
 }
 
-// NoteResolved records that someone else resolved a comment thread ("A comment thread was resolved." or
-// "3 comment threads were resolved."), said at level CollabAll.
 func (a *CollabAnnouncer) NoteResolved() {
 	if a.Level == CollabAll {
 		a.resolved++
 	}
 }
 
-// NoteMerged records that n changes made while offline met the shared document when the connection came
-// back ("3 changes were merged."). It is said at the levels CollabImportant and CollabAll: it says that
-// work was kept, which the person needs to know whoever else is there.
 func (a *CollabAnnouncer) NoteMerged(n int) {
 	if a.Level != CollabOff && n > 0 {
 		a.merged += n
 	}
 }
 
-// NoteRejected records that n of the person's changes could not be applied (the server refused them: "A
-// change could not be applied."). Said at CollabImportant and CollabAll.
 func (a *CollabAnnouncer) NoteRejected(n int) {
 	if a.Level != CollabOff && n > 0 {
 		a.rejected += n
 	}
 }
 
-// NoteConflict records that other people changed a paragraph the person was editing (their names; "" for
-// someone not known). Both changes were kept, and the sentence says so: "Bo changed the paragraph you were
-// editing. Both changes were kept." It is said at CollabImportant and CollabAll.
 func (a *CollabAnnouncer) NoteConflict(names []string) {
 	if a.Level != CollabOff {
 		a.conflicts = append(a.conflicts, names)
 	}
 }
 
-// Update takes the session as it is now (online or not, the names of the other people, the problem if
-// sharing is not working) and returns the sentence to say now, or "". The first call only remembers the state.
 func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, problem string) string {
 	cur := map[string]int{}
 	for _, n := range people {
@@ -101,7 +77,6 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.started, a.people, a.online, a.wasOnline, a.problem = true, cur, online, online, problem
 		return ""
 	}
-	// what changed since the last call
 	for n, c := range cur {
 		for i := a.people[n]; i < c; i++ {
 			a.joined = append(a.joined, n)
@@ -115,7 +90,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	if online != a.online {
 		switch {
 		case online && !a.wasOnline:
-			// the first time it is connected is not news
+		// the first time it is connected is not news
 		case online:
 			a.cause = "online"
 		default:
@@ -206,13 +181,10 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	return strings.Join(parts, " ")
 }
 
-// Pending reports whether something has changed that has not been said yet (held by the spacing), so a
-// host can call Update again a little later.
 func (a *CollabAnnouncer) Pending() bool {
 	return a.Level != CollabOff && (a.cause != "" || a.merged+a.rejected+len(a.conflicts) > 0 || a.problem != a.problemSaid || (a.Level == CollabAll && len(a.joined)+len(a.left)+len(a.comments)+len(a.replies)+a.resolved > 0))
 }
 
-// conflictSentence says who changed what the person was editing; several at once are counted.
 func conflictSentence(all [][]string) string {
 	var names []string
 	for _, ns := range all {
@@ -234,7 +206,6 @@ func conflictSentence(all [][]string) string {
 	return trf("collab.conflictSome", "%d people changed the paragraph you were editing. All changes were kept.", max(len(names), 2))
 }
 
-// peopleSentence names up to three people, and counts more.
 func peopleSentence(names []string, one, oneDef, many, manyDef string) string {
 	slices.Sort(names)
 	if len(names) == 1 {

@@ -13,16 +13,7 @@ type DataTableColumn struct {
 	Sortable bool
 }
 
-// DataTableRow is one already-rendered row. DataTable has no notion
-// of the caller's own row type -- there's no way to write a generic
-// component's own type parameter into the .xg tag syntax every other
-// component here is invoked through (`<DataTable columns=... />`), so
-// (like Tabs' own Tab.Content, DropdownOption's own Icon) the caller
-// turns each real row into one of these instead: ID is this row's own
-// stable identity (selection tracking, and the keyed <tr> reconciliation
-// DataTable's own render gives each row for free), Cells is the row's
-// own already-rendered content, one per Columns entry, in the same
-// order.
+// DataTableRow is one already-rendered row.
 type DataTableRow struct {
 	ID    string
 	Cells []xango.Node
@@ -33,50 +24,25 @@ type DataTableProps struct {
 	Columns []DataTableColumn
 	Rows    []DataTableRow
 
-	// Selectable shows a checkbox column -- one per row plus a
-	// select-all checkbox in the header -- reusing the same plain
-	// checkbox markup Checkbox/CheckboxGroup already render rather
-	// than a new selection primitive.
 	Selectable     bool
 	Selected       []string // currently-checked Rows' own IDs
 	OnSelectChange func(id string, checked bool)
 	OnSelectAll    func(checked bool)
 
-	// SortKey/SortDesc/OnSort: DataTable only shows which column (if
-	// any) is currently sorted and which direction, and fires OnSort
-	// with the clicked column's own Key -- actually reordering Rows
-	// (and deciding whether clicking an already-sorted column flips
-	// SortDesc or clears it) is the caller's job, the same
-	// caller-drives-it split every controlled component in this
-	// package already takes.
 	SortKey  string
 	SortDesc bool
 	OnSort   func(key string)
 
-	// Search, if non-nil, renders a Search bar above the table --
-	// filtering Rows against its own Value is, again, the caller's job.
 	Search *SearchProps
 
-	// RowActions, given a row's own ID, returns its own per-row action
-	// buttons (edit/delete/...) as one trailing column -- present only
-	// when RowActions is non-nil.
 	RowActions func(id string) []xango.Node
 
-	// Pagination, if non-nil, renders Pagination (already exists)
-	// below the table. Infinite scroll instead is the caller's own
-	// job: an IntersectionObserver has no xango.Event of its own to
-	// declare here (the same "needs a real DOM reference" split
-	// OTPInput/FileUploader/ContextMenu already take), so DataTable
-	// only ever wires the page-number variant directly.
+	// Pagination, if non-nil, renders Pagination (already exists) below the table.
 	Pagination *PaginationProps
 
-	// Empty replaces the table body with a single full-width message
-	// when Rows is empty -- "No data" is used if nil.
 	Empty *xango.Node
 }
 
-// DataTable renders a sortable, optionally-selectable, optionally-
-// searchable/paginated table -- see components/datatable.css.
 func DataTable(props DataTableProps) xango.Node {
 	colCount := len(props.Columns)
 	if props.Selectable {
@@ -169,9 +135,6 @@ func DataTable(props DataTableProps) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-datatable-wrap")}, children...)
 }
 
-// dataTableHeaderCell renders one <th> -- a plain header for a
-// non-sortable column, or a clickable button carrying a triangle
-// indicator and aria-sort for a sortable one.
 func dataTableHeaderCell(col DataTableColumn, sortKey string, sortDesc bool, onSort func(key string)) xango.Node {
 	if !col.Sortable {
 		return xango.El("th", nil, xango.Text(col.Header))

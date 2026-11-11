@@ -11,10 +11,6 @@ import (
 	"github.com/elaous/gojiberry/internal/transpile"
 )
 
-// fakeTools puts executables named after the keys of tools on PATH (and only those, ahead of the real
-// ones), each a shell script running the body. The loaders shell out to protoc, capnp and friends; this tests
-// what xango does around them (the arguments it builds, the import path it reports, the errors it explains)
-// without the real compilers.
 func fakeTools(t *testing.T, tools map[string]string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -78,7 +74,6 @@ func TestLoadProtoRunsProtocWithTheModuleMapping(t *testing.T) {
 	if strings.Contains(string(args), "go-grpc") {
 		t.Error("no gRPC plugin on PATH: none asked for")
 	}
-	// with the gRPC plugin on PATH it is asked for too
 	fakeTools(t, map[string]string{"protoc": `printf '%s\n' "$@" > ` + shellQuote(argsFile), "protoc-gen-go": "exit 0", "protoc-gen-go-grpc": "exit 0"})
 	if _, err := LoadProto(loaderInput(dir, "books.proto", "books")); err != nil {
 		t.Fatal(err)
@@ -120,14 +115,12 @@ func TestLoadCapnProto(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args")
 	good := `printf '%s\n' "$@" > ` + shellQuote(argsFile) + `; : > ` + shellQuote(schema+".go")
 
-	// the compiler missing, or its Go plugin
 	fakeTools(t, map[string]string{"capnp": "exit 0"})
 	t.Setenv("PATH", filepath.Dir(mustLookPath(t, "capnp")))
 	if _, err := LoadCapnProto(loaderInput(dir, "books.capnp", "books")); err == nil || !strings.Contains(err.Error(), "capnpc-go") {
 		t.Fatalf("an error naming the plugin: %v", err)
 	}
 
-	// the schema must say where its Go code goes
 	noAnnotation := writeFile(t, dir, "plain.capnp", "@0xdbb9ad1f14bf0b37;\n")
 	_ = noAnnotation
 	fakeTools(t, map[string]string{"capnp": good, "capnpc-go": "exit 0"})
@@ -135,7 +128,6 @@ func TestLoadCapnProto(t *testing.T) {
 		t.Fatalf("no annotation: %v", err)
 	}
 
-	// the happy path reports the import path the schema declared, and passes the include directories on
 	t.Setenv("XANGO_CAPNP_INCLUDE", "/usr/share/capnp,/opt/capnp")
 	res, err := LoadCapnProto(loaderInput(dir, "books.capnp", "books"))
 	if err != nil {
@@ -151,7 +143,6 @@ func TestLoadCapnProto(t *testing.T) {
 		}
 	}
 
-	// a compiler that fails, and one that succeeds without writing the Go file
 	fakeTools(t, map[string]string{"capnp": `echo "books.capnp:2:1: bad" >&2; exit 1`, "capnpc-go": "exit 0"})
 	if _, err := LoadCapnProto(loaderInput(dir, "books.capnp", "books")); err == nil || !strings.Contains(err.Error(), "bad") {
 		t.Errorf("capnp's message is shown: %v", err)

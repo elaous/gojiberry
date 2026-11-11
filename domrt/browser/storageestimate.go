@@ -9,22 +9,13 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// StorageEstimate is navigator.storage.estimate()'s own {usage, quota}
-// result, in bytes -- a browser's own best estimate of how much of
-// this origin's storage quota (LocalStorage + IndexedDB + Cache
-// Storage combined, everything StorageManager covers) is used versus
-// available, not an exact accounting.
+// StorageEstimate is navigator.storage.estimate's result.
 type StorageEstimate struct {
 	Usage int64
 	Quota int64
 }
 
-// EstimateStorage wraps navigator.storage.estimate(), blocking until
-// the browser responds. Returns an error on older browsers with no
-// StorageManager API at all (navigator.storage itself undefined) --
-// checked directly rather than letting a bare .Call on an undefined
-// value panic, since unlike most of this package's own browser APIs,
-// this one has real gaps in the wild worth degrading from gracefully.
+// EstimateStorage wraps navigator.storage.estimate.
 func EstimateStorage() (StorageEstimate, error) {
 	storage := js.Global().Get("navigator").Get("storage")
 	if storage.IsUndefined() {

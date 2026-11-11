@@ -200,15 +200,6 @@ func TestSQLImportErrorsWithoutSqlcConfig(t *testing.T) {
 	}
 }
 
-// TestSQLImportInvokesSqlcAndImportsResult stubs `sqlc` on PATH rather
-// than requiring the real tool: this exercises xango's own logic
-// (finding sqlc.yaml, invoking `sqlc generate -f <config>`, deriving
-// the Go import path from gen.go.package/out) without depending on
-// sqlc's actual query-analysis/codegen correctness, which isn't xango's
-// to test. Since the test itself writes sqlc.yaml, it already knows
-// the output directory `sqlc generate` is supposed to populate, so the
-// fake script can just write a plausible generated file there
-// directly instead of needing xango to report anything back.
 func TestSQLImportInvokesSqlcAndImportsResult(t *testing.T) {
 	dir := setupModule(t)
 	moduleRoot := filepath.Dir(dir)
@@ -252,9 +243,6 @@ func main() {
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// installFakeSqlc puts a fake `sqlc` executable on PATH for the
-// duration of the test, running body (a shell snippet) whenever it's
-// invoked as `sqlc generate -f <config>`.
 func installFakeSqlc(t *testing.T, body string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

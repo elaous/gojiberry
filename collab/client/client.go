@@ -1,11 +1,3 @@
-// Package client is the Go client for collab/hub: it streams other people's
-// changes in, posts yours out, survives dropped connections, and works from
-// a WASM program (it needs only net/http).
-//
-// It does not touch a document itself. Events arrive on a channel; the
-// owner of the document (collab.Session) applies them on its own goroutine,
-// which keeps the canvas, which is not safe for concurrent use, single
-// threaded.
 package client
 
 import (
@@ -30,7 +22,7 @@ import (
 type Status int
 
 const (
-	// Connecting: trying to reach the server (also while reconnecting).
+	// Connecting: trying to reach the server.
 	Connecting Status = iota
 	// Online: the event stream is open.
 	Online
@@ -48,9 +40,9 @@ func (s Status) String() string {
 type Kind int
 
 const (
-	// Hello: the connection's Role (and the replica id the server saw).
+	// Hello: the connection's Role and replica id.
 	Hello Kind = iota
-	// Snapshot: every op the server holds; sent on each (re)connection.
+	// Snapshot: every op the server holds.
 	Snapshot
 	// Ops: changes by other people.
 	Ops
@@ -58,9 +50,7 @@ const (
 	PresenceEvent
 	// StatusEvent: the connection's Status changed.
 	StatusEvent
-	// Rejected: the server refused ops you sent (Err says why, Ops are the
-	// refused ones). The local replica now has changes the server does not;
-	// start over from a fresh snapshot with a new replica.
+	// Rejected: the server refused ops you sent.
 	Rejected
 )
 
@@ -72,46 +62,31 @@ type Event struct {
 	Presence wire.Presence
 	Status   Status
 	Err      error
-	// Waiting, on Hello, is how many ops were made since the last connection was up: while offline, or
-	// kept from an earlier visit by Options.Queue. They meet the server's copy now, whether or not they
-	// have already been posted.
+	// Waiting, on Hello, is how many ops were made offline.
 	Waiting int
 }
 
 // Options configures Dial.
 type Options struct {
-	// BaseURL is where the hub is mounted ("https://host" or "/api").
+	// BaseURL is where the hub is mounted.
 	BaseURL string
 	// Doc is the document id.
 	Doc string
-	// Replica identifies this copy; it must be unique per tab or device, and
-	// the same as the crdt.Doc's replica.
+	// Replica identifies this copy; it must be unique.
 	Replica string
-	// Header is sent with every request (Authorization: Bearer ...).
+	// Header is sent with every request.
 	Header http.Header
-	// Client is the HTTP client; nil means one without a timeout (the event
-	// stream is long-lived).
+	// Client is the HTTP client; nil means the default.
 	Client *http.Client
-	// Retry is the first reconnection delay, doubling to MaxRetry; the
-	// defaults are 500ms and 15s.
+	// Retry is the first reconnection delay, doubled each attempt.
 	Retry, MaxRetry time.Duration
-	// PresenceInterval is the least time between two cursor updates sent to
-	// the server: SetPresence calls that come faster are merged, and the
-	// latest goes out when the interval ends. 0 means 100ms; negative sends
-	// every update at once.
+	// PresenceInterval is the least time between presence sends.
 	PresenceInterval time.Duration
 	// OnError, if set, hears about connection errors.
 	OnError func(error)
-	// Queue, if set, keeps the ops that have not reached the server, so
-	// that they survive closing the tab or a crash: Dial sends what Load
-	// returns, and every change to the waiting ops is passed to Save.
-	Queue Queue
+	Queue   Queue
 }
 
-// Queue is a durable place for the ops waiting to be sent (browser
-// storage, a file). Save gets the whole list each time, which is empty
-// once everything was accepted; a resend after a crash is harmless as the
-// crdt ignores ops it has seen.
 type Queue interface {
 	Load() []crdt.Op
 	Save([]crdt.Op)
@@ -129,7 +104,7 @@ type Conn struct {
 	queue   []Event       // events not yet taken from the channel, in order
 	wake    chan struct{} // wakes the pump
 	pending []crdt.Op
-	offline int // ops made while the connection was not up, until the next Hello
+	offline int
 	status  Status
 	kick    chan struct{} // wakes the sender
 	done    sync.WaitGroup
@@ -139,7 +114,7 @@ type Conn struct {
 	presRunning bool
 }
 
-// Dial starts connecting and returns at once. Watch Events.
+// Dial starts connecting and returns at once.
 func Dial(opts Options) *Conn {
 	if opts.Retry <= 0 {
 		opts.Retry = 500 * time.Millisecond
@@ -170,8 +145,7 @@ func Dial(opts Options) *Conn {
 	return c
 }
 
-// Events delivers what happens, in order and without loss however slowly it
-// is read (events wait in a queue); it is closed after Close.
+// Events delivers what happens, in order.
 func (c *Conn) Events() <-chan Event { return c.events }
 
 // Status returns the current connection state.
@@ -181,7 +155,6 @@ func (c *Conn) Status() Status {
 	return c.status
 }
 
-// takeOffline returns how many ops were made while the connection was not up, and starts counting again.
 func (c *Conn) takeOffline() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -207,8 +180,7 @@ func (c *Conn) emit(e Event) {
 	}
 }
 
-// pump moves queued events to the channel, in order. Dropping an event
-// would lose operations for good, so the queue is unbounded.
+// unbounded queue: dropping an event would lose operations
 func (c *Conn) pump() {
 	for {
 		c.mu.Lock()
@@ -281,8 +253,7 @@ func (c *Conn) request(method, u string, body []byte) (*http.Request, error) {
 	return req, nil
 }
 
-// Send queues ops for delivery. They are kept until the server accepts them
-// (the crdt makes a resend harmless), so edits made offline are not lost.
+// Send queues ops for delivery; they are kept until sent.
 func (c *Conn) Send(ops []crdt.Op) {
 	if len(ops) == 0 {
 		return
@@ -300,10 +271,7 @@ func (c *Conn) Send(ops []crdt.Op) {
 	}
 }
 
-// SetPresence tells the others where this replica's cursor is. It is not
-// queued: a failure is ignored, the next update replaces it, and updates
-// made while one is in flight are collapsed into the latest (so they
-// arrive in order and a stalled server cannot pile up requests).
+// SetPresence tells the others where this replica's cursor is.
 func (c *Conn) SetPresence(p wire.Presence) {
 	p.Replica = c.opts.Replica
 	c.presMu.Lock()
@@ -335,8 +303,7 @@ func (c *Conn) presenceSender() {
 		if resp, err := c.client.Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
-		// Whatever SetPresence is called with meanwhile waits for the
-		// interval and goes out as one update.
+		// SetPresence calls meanwhile wait for the interval: one update goes out
 		if c.opts.PresenceInterval > 0 {
 			select {
 			case <-time.After(c.opts.PresenceInterval):
@@ -361,12 +328,6 @@ func (c *Conn) Close() {
 	close(c.events)
 }
 
-// sender posts pending ops, retrying with backoff while the server is
-// unreachable.
-// maxBatch is how many operations one request carries, so that a long
-// offline session does not exceed the server's body limit as one piece. (A
-// 401 is not a rejection: the token may be renewed, so the queue is kept
-// and retried.)
 const maxBatch = 200
 
 func (c *Conn) sender() {
@@ -413,7 +374,7 @@ func (c *Conn) dropSent(n int) {
 	c.mu.Unlock()
 }
 
-// persistLocked saves the waiting ops to the Queue; c.mu is held.
+// c.mu held
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
@@ -455,7 +416,6 @@ func (c *Conn) post(ops []crdt.Op) error {
 	return fmt.Errorf("client: the server said %s", resp.Status)
 }
 
-// stream keeps the event stream open, reconnecting with backoff.
 func (c *Conn) stream() {
 	delay := c.opts.Retry
 	for c.ctx.Err() == nil {
@@ -481,8 +441,6 @@ func (c *Conn) stream() {
 	}
 }
 
-// readEvents opens the stream and reads it until it ends; it returns the
-// reason.
 func (c *Conn) readEvents() error {
 	req, err := c.request(http.MethodGet, c.url("events", url.Values{"replica": {c.opts.Replica}}), nil)
 	if err != nil {
@@ -530,7 +488,6 @@ func (c *Conn) dispatch(name, data string) {
 		if json.Unmarshal([]byte(data), &h) == nil {
 			c.setStatus(Online)
 			c.emit(Event{Kind: Hello, Role: h.Role, Waiting: c.takeOffline()})
-			// Ops queued while offline go now.
 			select {
 			case c.kick <- struct{}{}:
 			default:

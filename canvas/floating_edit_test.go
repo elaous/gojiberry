@@ -5,15 +5,12 @@ import (
 	"testing"
 )
 
-// typeText types s one character at a time, as the browser delivers it.
 func typeText(ft *FloatingText, s string) {
 	for _, r := range s {
 		ft.InsertText(string(r))
 	}
 }
 
-// caretEnd puts the caret at the end of the text (a click only reaches
-// the end of a short line).
 func caretEnd(ft *FloatingText) { ft.caret, ft.anchor = len(ft.runes), len(ft.runes) }
 
 func editing(t *testing.T, text string) *FloatingText {
@@ -56,18 +53,15 @@ func TestAutoCloseQuotes(t *testing.T) {
 	if ft.Text() != `"hi"` || ft.Caret() != 4 {
 		t.Fatalf("a typed quote pair: text=%q caret=%d", ft.Text(), ft.Caret())
 	}
-	// An apostrophe after a letter is just an apostrophe.
 	ft = editing(t, "")
 	typeText(ft, "don't")
 	if ft.Text() != "don't" {
 		t.Fatalf("text = %q", ft.Text())
 	}
-	// A quote after a space opens a pair.
 	typeText(ft, " '")
 	if ft.Text() != "don't ''" || ft.Caret() != 7 {
 		t.Fatalf("text=%q caret=%d", ft.Text(), ft.Caret())
 	}
-	// Typing a third quote right after an empty pair doesn't nest.
 	ft = editing(t, "")
 	typeText(ft, `""`)
 	if ft.Text() != `""` || ft.Caret() != 2 {
@@ -86,7 +80,6 @@ func TestAutoCloseNotInFrontOfAWord(t *testing.T) {
 	if ft.Text() != "(word" {
 		t.Fatalf("an opener in front of a word doesn't auto-close: %q", ft.Text())
 	}
-	// But in front of a space or the end it does.
 	ft = editing(t, "a b")
 	click(ft, 1)
 	typeText(ft, "(")
@@ -112,7 +105,6 @@ func TestAutoCloseWrapsTheSelection(t *testing.T) {
 	if ft.Text() != "([hello]) world" {
 		t.Fatalf("text = %q", ft.Text())
 	}
-	// A non-opener replaces the selection as usual.
 	typeText(ft, "X")
 	if ft.Text() != "([X]) world" {
 		t.Fatalf("text = %q", ft.Text())
@@ -130,7 +122,6 @@ func TestBackspaceBetweenAPairDeletesBoth(t *testing.T) {
 	if ft.Text() != "" {
 		t.Fatalf("text = %q", ft.Text())
 	}
-	// Not between a pair: a normal backspace.
 	ft = editing(t, "(a)")
 	click(ft, 2)
 	ft.HandleKey("Backspace", false)
@@ -156,7 +147,6 @@ func TestAutoCloseOffCustomAndPaste(t *testing.T) {
 	if ft.Text() != "<(>" {
 		t.Fatalf("(is not in the custom map: %q", ft.Text())
 	}
-	// Pasting and multi-character input are inserted as is.
 	ft = editing(t, "")
 	ft.PasteText("(a")
 	ft.InsertText("[b")
@@ -177,8 +167,6 @@ func TestTypedPairsKeepTheTypingFormat(t *testing.T) {
 		t.Fatalf("both halves are bold: %+v %+v", ft.FormatAt(0), ft.FormatAt(1))
 	}
 }
-
-// --- completion ---
 
 func TestSuggestionsFromTheTextByFrequency(t *testing.T) {
 	ft := editing(t, "banana band banana bandana ")
@@ -243,7 +231,6 @@ func TestSuggestionNavigationAndDismiss(t *testing.T) {
 	if !ft.HandleKey("Escape", false) || len(ft.Suggestions()) != 0 || !ft.Editing() {
 		t.Fatal("Escape dismisses the popup but keeps editing")
 	}
-	// Other keys dismiss it too.
 	typeText(ft, "p")
 	if len(ft.Suggestions()) == 0 {
 		t.Fatal("typing reopens")
@@ -333,8 +320,6 @@ func TestSuggestionsStayInTheViewport(t *testing.T) {
 	}
 }
 
-// --- color palette ---
-
 func TestColorPaletteColorsTheSelection(t *testing.T) {
 	ft := editing(t, "hello world")
 	ft.HandleKey("Home", false)
@@ -350,7 +335,6 @@ func TestColorPaletteColorsTheSelection(t *testing.T) {
 	if labels[0] != "Black" || labels[len(labels)-1] != "Default color" {
 		t.Fatalf("labels = %v", labels)
 	}
-	// Pick "Red".
 	m := ft.pal
 	idx := 2
 	top := m.y + float64(idx)*28
@@ -419,13 +403,11 @@ func TestPaletteKeyboardTogglingAndClosing(t *testing.T) {
 	if ft.palOpen() {
 		t.Fatal("Escape closes")
 	}
-	// Switching palettes, then leaving edit mode, closes it.
 	ft.MouseDown(b[0]+3, b[1]+3)
 	ft.SetMode(ModeView)
 	if ft.palOpen() {
 		t.Fatal("view mode closes popups")
 	}
-	// Pressing elsewhere closes it and carries on.
 	ft.SetMode(ModeEdit)
 	ft.MouseDown(b[0]+3, b[1]+3)
 	ft.MouseDown(500, 500)
@@ -458,8 +440,6 @@ func TestOverlayDrawsPopups(t *testing.T) {
 	}
 }
 
-// --- commands, selection, clipboard ---
-
 func TestToggleDecorationsAndCommands(t *testing.T) {
 	ft := editing(t, "abcd")
 	ft.SelectAll()
@@ -490,7 +470,6 @@ func TestToggleDecorationsAndCommands(t *testing.T) {
 	if f := ft.FormatAt(0); f.FontWeight != 700 || f.FontStyle != StyleItalic {
 		t.Fatalf("%+v", f)
 	}
-	// Partly formatted text: the first toggle turns it on everywhere.
 	ft.SetText("abcd")
 	click(ft, 0)
 	ft.HandleKey("ArrowRight", true)
@@ -540,7 +519,6 @@ func TestSelectAllCommandAndCopyCut(t *testing.T) {
 func TestCopyFormatAndPasteFormat(t *testing.T) {
 	ft := editing(t, "abcdef")
 	st := NewStage(&fakePainter{}, 1, 1, ft)
-	// Make "abc" bold red underlined, then copy the format from "bc".
 	click(ft, 0)
 	for i := 0; i < 3; i++ {
 		ft.HandleKey("ArrowRight", true)
@@ -558,7 +536,6 @@ func TestCopyFormatAndPasteFormat(t *testing.T) {
 	if !ok || got != (Format{FontWeight: 700, Underline: true, Color: "#f00"}) {
 		t.Fatalf("copied %+v", got)
 	}
-	// Paste it onto "ef".
 	click(ft, 4)
 	ft.HandleKey("ArrowRight", true)
 	ft.HandleKey("ArrowRight", true)
@@ -568,10 +545,8 @@ func TestCopyFormatAndPasteFormat(t *testing.T) {
 	if ft.FormatAt(4) != got || ft.FormatAt(5) != got || ft.FormatAt(3) != (Format{}) {
 		t.Fatalf("formats: %+v %+v %+v", ft.FormatAt(3), ft.FormatAt(4), ft.FormatAt(5))
 	}
-	// The minimum common formatting of mixed text.
 	ft.SelectAll()
 	if c := ft.CommonFormat(); c != (Format{}) {
-		// "abc" and "ef" share bold/underline/red, "d" is plain: nothing is common.
 		t.Fatalf("common = %+v", c)
 	}
 	click(ft, 0)
@@ -581,14 +556,12 @@ func TestCopyFormatAndPasteFormat(t *testing.T) {
 	if c := ft.CommonFormat(); c != got {
 		t.Fatalf("common of 'abc' = %+v", c)
 	}
-	// Pasting a plain format clears formatting.
 	st.Formats.Set(Format{})
 	ft.SelectAll()
 	st.RunCommand(CmdPasteFormat)
 	if !ft.CommonFormat().IsZero() || !ft.FormatAt(0).IsZero() {
 		t.Fatal("plain format painted over everything")
 	}
-	// With no selection, the format applies to the next typed text.
 	st.Formats.Set(Format{FontStyle: StyleItalic})
 	click(ft, 6)
 	st.RunCommand(CmdPasteFormat)

@@ -33,7 +33,6 @@ func TestMenuRendersItemsSubmenusAndRunsOnSelect(t *testing.T) {
 			t.Errorf("menu html lacks %q:\n%s", want, html)
 		}
 	}
-	// 3 enabled leaf entries at the top level and below: Undo, Bold, Symbol, Leaf.
 	hs := findHandlers(n, "click")
 	if len(hs) != 4 {
 		t.Fatalf("click handlers = %d, want 4 (disabled and submenu parents have none)", len(hs))
@@ -78,10 +77,10 @@ func TestMenuBarOpensOneMenuAtATime(t *testing.T) {
 		!strings.Contains(html, "gj-menubar-backdrop") || !strings.Contains(html, `aria-expanded="true"`) {
 		t.Errorf("File open: %s", html)
 	}
-	hs := findHandlers(bar, "click") // File, New (an item), Edit, then the backdrop (after the bar, so the bar keeps its place and the focus)
-	hs[len(hs)-1](xango.Event{})     // the backdrop closes
-	hs[0](xango.Event{})             // File again toggles it closed
-	hs[1](xango.Event{})             // choosing an item closes
+	hs := findHandlers(bar, "click")
+	hs[len(hs)-1](xango.Event{}) // the backdrop closes
+	hs[0](xango.Event{})         // File again toggles it closed
+	hs[1](xango.Event{})         // choosing an item closes
 	if len(opened) != 3 || opened[0] != -1 || opened[1] != -1 || opened[2] != -1 {
 		t.Errorf("close calls = %v", opened)
 	}
@@ -268,7 +267,6 @@ func TestKeyBindings(t *testing.T) {
 		t.Error("nothing to clear on an unbound command")
 	}
 
-	// Search filters rows.
 	props.Query = "ctrl+d"
 	html = render(t, KeyBindings(props))
 	if strings.Contains(html, "Move line up") || !strings.Contains(html, "Add selection") {
@@ -276,7 +274,6 @@ func TestKeyBindings(t *testing.T) {
 	}
 	props.Query = ""
 
-	// Recording: the capture box takes the next chord.
 	props.Recording = canvas.CmdMoveLineUp
 	props.Message = "Ctrl+Shift+Y was used by X"
 	n = KeyBindings(props)
@@ -410,7 +407,6 @@ func TestSaverEmptyBusyAndFailed(t *testing.T) {
 	html := render(t, Saver(SaverProps{Busy: true, Status: "boom", Failed: true,
 		OnSave: func() {}, Docs: DocListProps{Pending: busy, Open: func(context.Context, string) error { return nil }}}))
 	mustContain(t, html, "gj-saver-failed", "Nothing saved yet", `disabled="disabled"`)
-	// No name: Save is disabled even when not busy; no operations: all inert.
 	n := Saver(SaverProps{OnSave: func() {}, Docs: DocListProps{Docs: []Doc{{ID: "a", Name: "a", Format: "JSON"}}}})
 	if got := len(findHandlers(n, "click")); got != 0 {
 		t.Fatalf("%d click handlers; Save needs a name and the rest have no operations", got)
@@ -468,7 +464,6 @@ func TestCommentCardAndList(t *testing.T) {
 	if got := strings.Join(log, " "); got != "draft:c1:typed select:c1 reply:c1:ok resolve:c1 delete:c1" {
 		t.Fatal(got)
 	}
-	// A viewer sees the comment but has no controls; resolved shows a badge and Reopen.
 	view := render(t, CommentCard(CommentCardProps{Comment: canvas.Comment{ID: "c2", Resolved: true, Text: "t"}}))
 	mustContain(t, view, "gj-comment-resolved", "Resolved", "Someone")
 	mustNotContain(t, view, "Reply", "Delete")
@@ -686,7 +681,6 @@ func TestAccessibleTextKeepsTheDocumentsStructure(t *testing.T) {
 	}
 }
 
-// A block with runs writes the pieces that have a language as spans with a lang attribute.
 func TestAccessibleTextMarksTheLanguageOfRuns(t *testing.T) {
 	html := render(t, AccessibleText(AccessibleTextProps{Blocks: []A11yBlock{
 		{Kind: A11yParagraph, Text: "He said bonjour twice.", Runs: []A11yRun{{Text: "He said "}, {Text: "bonjour", Lang: "fr"}, {Text: " twice."}}},
@@ -725,7 +719,6 @@ func TestOutlineCollapsesAndMovesSections(t *testing.T) {
 	html := render(t, n)
 	mustContain(t, html, `aria-expanded="false"`, `aria-label="Expand One"`, "Two", "Three")
 	mustNotContain(t, html, "One.a")
-	// Two sits after One and One.a is hidden; Two can move up (before One) and down (before the end past Three).
 	mustContain(t, html, `aria-label="Move section up: Two"`, `aria-label="Move section down: Two"`)
 	mustNotContain(t, html, `Move section up: One"`)     // the first of its siblings
 	mustNotContain(t, html, `Move section down: Three"`) // the last
@@ -733,7 +726,6 @@ func TestOutlineCollapsesAndMovesSections(t *testing.T) {
 	html = render(t, Outline(OutlineProps{Entries: es, Current: -1, OnToggle: func(int) {}}))
 	mustContain(t, html, "One.a.i", `aria-expanded="true"`, `aria-label="Collapse One"`, `aria-label="Collapse One.a"`)
 	mustNotContain(t, html, `Collapse One.a.i`) // nothing under it
-	// Without OnToggle everything shows and there are no toggles.
 	html = render(t, Outline(OutlineProps{Entries: es, Current: -1, Collapsed: []int{0}}))
 	mustContain(t, html, "One.a.i")
 	mustNotContain(t, html, "aria-expanded")
@@ -748,13 +740,11 @@ func TestOutlineCollapsesAndMovesSections(t *testing.T) {
 	for _, m := range moves {
 		got[m] = true
 	}
-	// Two (3) up: before One (0). Two down: before the end of Three's section (5). Three (4) up: before Two (3).
 	for _, want := range [][2]int{{3, 0}, {3, 5}, {4, 3}} {
 		if !got[want] {
 			t.Errorf("missing move %v in %v", want, moves)
 		}
 	}
-	// A drop onto another heading moves the dragged one in front of it.
 	moves = nil
 	lis := findHandlers(n, "dragstart")
 	drops := findHandlers(n, "drop")

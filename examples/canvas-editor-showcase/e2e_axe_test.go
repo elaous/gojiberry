@@ -10,14 +10,8 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// axeDisabled lists the rules the showcase does not enforce yet, each with why. A rule is added here
-// only with a roadmap entry that tracks fixing it.
 var axeDisabled = []string{}
 
-// TestNoAccessibilityViolationsAxe runs axe-core over the page in the states a person meets: the
-// document, every tab of the side panel, every menu open, and the find bar. A new violation fails
-// the build. axe finds what a tool can (roles, names, labels, contrast, landmarks, ids); it does not
-// replace using the page with a keyboard and a screen reader.
 func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	check := func(state string) {
@@ -50,8 +44,6 @@ func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	check("the find bar")
 }
 
-// The menus work from the keyboard: Enter on a focused entry chooses it, as a click does, and
-// closes the menu.
 func TestMenuEntryChosenWithTheKeyboard(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button.gj-menubar-button:has-text("File")`)
@@ -62,14 +54,11 @@ func TestMenuEntryChosenWithTheKeyboard(t *testing.T) {
 	d.OK(!d.Has(".gj-menubar-panel"), "choosing closes the menu")
 }
 
-// The arrow keys move through the menus: along the bar (taking an open menu along), into a menu and
-// among its entries, into a submenu and back out, and Escape puts the focus back on the menu's button.
 func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	active := func() string {
 		return d.Str(`(document.activeElement.textContent || '').trim().split('\n')[0].replace(/\s+/g, ' ').slice(0, 40)`)
 	}
-	// Down on a closed menu button opens the menu and lands on its first entry
 	d.Focus(`button.gj-menubar-button:has-text("File")`)
 	d.Press("ArrowDown")
 	d.WaitSelector(".gj-menubar-panel")
@@ -87,11 +76,9 @@ func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.Press("End")
 	d.OK(active() == last, "End: "+active())
 
-	// Escape closes the menu and puts the focus back on its button
 	d.Press("Escape")
 	d.OK(!d.Has(".gj-menubar-panel") && active() == "File", "Escape returns to the File button: "+active())
 
-	// Right and Left move along the bar; with a menu open they take it along
 	d.Press("ArrowDown")
 	d.WaitSelector(".gj-menubar-panel")
 	d.Focus(`button.gj-menubar-button:has-text("File")`)
@@ -102,7 +89,6 @@ func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.WaitFor("File open", `document.querySelector('.gj-menubar-entry-open > .gj-menubar-button').textContent.trim() === 'File'`)
 	d.Press("Escape")
 
-	// a submenu: Right goes in, Left comes back out
 	d.Click(`button.gj-menubar-button:has-text("View")`)
 	d.WaitSelector(".gj-menubar-panel")
 	d.Focus(`.gj-menubar-panel li.gj-menu-item-sub:has(.gj-menu-label:text-is("Interface language"))`)
@@ -112,8 +98,6 @@ func TestMenusAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.OK(strings.HasPrefix(active(), "Interface language"), "Left comes back to the entry: "+active())
 }
 
-// The side panel's tabs are a row for the keyboard: Tab enters it once (on the selected tab), the arrow
-// keys, Home and End move along it and open the tab they reach.
 func TestSidePanelTabsAreOperatedWithTheArrowKeys(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	tabOf := func() string { return d.Str(`document.activeElement.getAttribute('data-tab') || ''`) }
@@ -137,8 +121,6 @@ func TestSidePanelTabsAreOperatedWithTheArrowKeys(t *testing.T) {
 	d.OK(d.Int(`document.querySelectorAll('[role="tablist"] [role="tab"][tabindex="0"]').length`) == 1, "still only one in the Tab order")
 }
 
-// A dialog works from the keyboard: it takes the focus, Tab and Shift+Tab stay inside it, Escape closes it
-// and the focus goes back to what opened it.
 func TestDialogFocusIsTrappedAndReturned(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()

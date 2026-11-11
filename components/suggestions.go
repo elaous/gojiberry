@@ -6,14 +6,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Suggestions: a list of words offered for the one being typed, as the WAI-ARIA combobox with a
-// listbox popup. The list never takes the focus: the editing element keeps it and names the
-// highlighted option through aria-activedescendant (see SuggestionsControl), so typing goes on.
-//
-// The keys, handled by SuggestState.Key: Down and Up move (and wrap), Home and End go to the ends,
-// Tab or Enter accept the highlighted word, Escape closes, and the digits 1 to 9 accept the numbered
-// row when Numbers is set.
-
 // SuggestAction is what a key did to the list.
 type SuggestAction int
 
@@ -32,7 +24,6 @@ type SuggestState struct {
 	Numbers bool // the digits 1 to 9 accept a row
 }
 
-// Show opens the list with words, the first highlighted; no words closes it.
 func (s *SuggestState) Show(words []string) {
 	s.Words, s.Active, s.Open = words, 0, len(words) > 0
 }
@@ -40,8 +31,6 @@ func (s *SuggestState) Show(words []string) {
 // Close closes the list.
 func (s *SuggestState) Close() { s.Open, s.Words, s.Active = false, nil, 0 }
 
-// Key applies a key (as KeyboardEvent.key) and says what happened; for SuggestAccept the word is
-// Words[Active] (or the numbered row, which Key moves the highlight to).
 func (s *SuggestState) Key(key string) SuggestAction {
 	if !s.Open || len(s.Words) == 0 {
 		return SuggestNone
@@ -74,7 +63,6 @@ func (s *SuggestState) Key(key string) SuggestAction {
 	return SuggestNone
 }
 
-// Selected is the highlighted word, "" when the list is closed.
 func (s *SuggestState) Selected() string {
 	if !s.Open || s.Active < 0 || s.Active >= len(s.Words) {
 		return ""
@@ -82,7 +70,6 @@ func (s *SuggestState) Selected() string {
 	return s.Words[s.Active]
 }
 
-// Announcement is what a polite live region says when the list opens or the highlight moves.
 func (s *SuggestState) Announcement(moved bool) string {
 	if !s.Open || len(s.Words) == 0 {
 		return ""
@@ -95,8 +82,6 @@ func (s *SuggestState) Announcement(moved bool) string {
 	return trn("suggest.count", "%d suggestion.", "%d suggestions.", len(s.Words)) + " " + pos
 }
 
-// SuggestionsControl is the attributes the editing element carries while it has the popup: role
-// combobox, expanded, controlling the list, and naming the highlighted option.
 func SuggestionsControl(id string, s SuggestState) []xango.Attr {
 	attrs := []xango.Attr{
 		xango.A("role", "combobox"),
@@ -115,19 +100,14 @@ func suggestOptionID(id string, i int) string { return id + "-opt-" + strconv.It
 
 // SuggestionsProps configures Suggestions.
 type SuggestionsProps struct {
-	// ID is the list's id (the editing element's aria-controls); "suggestions" when empty.
 	ID string
 	// Label names the list; "Suggestions" translated when empty.
-	Label string
-	State SuggestState
-	// X and Y are the page position of the list's top left corner (fixed positioning), where the
-	// caret is.
-	X, Y float64
-	// OnPick is called with the index of the row clicked or tapped.
+	Label  string
+	State  SuggestState
+	X, Y   float64
 	OnPick func(i int)
 }
 
-// Suggestions renders the popup list; nothing when the state is closed.
 func Suggestions(p SuggestionsProps) xango.Node {
 	if !p.State.Open || len(p.State.Words) == 0 {
 		return xango.Frag()
@@ -152,7 +132,7 @@ func Suggestions(p SuggestionsProps) xango.Node {
 		attrs := []xango.Attr{
 			xango.A("class", class), xango.A("role", "option"), xango.A("id", suggestOptionID(id, i)),
 			xango.A("aria-selected", sel), xango.A("aria-setsize", strconv.Itoa(len(p.State.Words))), xango.A("aria-posinset", strconv.Itoa(i+1)),
-			// The editing element keeps the focus: pressing a row must not move it.
+			// editing element keeps focus: a row press must not move it
 			xango.On("mousedown", func(e xango.Event) { e.PreventDefault() }),
 			xango.On("click", func(xango.Event) {
 				if p.OnPick != nil {

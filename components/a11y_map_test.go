@@ -34,11 +34,9 @@ func TestCaretMapsToTheBlockThatHoldsItAndBack(t *testing.T) {
 		t.Error("MarkCaret must not change its argument")
 	}
 
-	// the heading: "Tit|le" is 3 into it
 	if got := blocks[0].StreamOffset("Tit"); got != 3 {
 		t.Errorf("heading offset %d", got)
 	}
-	// the check-list item: the box is read but is not in the stream, so after "☐ to" is 2 into the stream text
 	if got := blocks[1].StreamOffset("☐ to"); got != 6+2 {
 		t.Errorf("list item offset %d", got)
 	}
@@ -48,21 +46,18 @@ func TestCaretMapsToTheBlockThatHoldsItAndBack(t *testing.T) {
 	if got := blocks[1].OffsetInBlock(8); got != 4 {
 		t.Errorf("and back: %d runes of the copy come before offset 8, want 4 (the box and 2 letters)", got)
 	}
-	// a suggested removal is still in the stream
 	if got := blocks[2].StreamLen(); got != 5 {
 		t.Errorf("a block with a suggested removal takes %d runes, want 5", got)
 	}
 	if got := blocks[2].StreamOffset("ab c"); got != 11+4 {
 		t.Errorf("inside the struck text: %d", got)
 	}
-	// an object is one rune, wherever the reader's cursor is in its words
 	if got := blocks[3].StreamOffset("Image"); got != 17 {
 		t.Errorf("object offset %d", got)
 	}
 	if got := blocks[0].StreamOffset("a much longer text than the block"); got != 5 {
 		t.Errorf("a position past the end is the end: %d", got)
 	}
-	// every offset the reader's cursor can have inside the text maps back to the same place
 	for off := 0; off <= 5; off++ {
 		before := string([]rune("Title")[:blocks[0].OffsetInBlock(off)])
 		if got := blocks[0].StreamOffset(before); got != off {
@@ -71,7 +66,6 @@ func TestCaretMapsToTheBlockThatHoldsItAndBack(t *testing.T) {
 	}
 }
 
-// A piece with a Stream takes that many positions of the stream, whatever its text is.
 func TestStreamPieceCountsAsItsStream(t *testing.T) {
 	b := A11yBlock{Mapped: true, Start: 10, Runs: []A11yRun{{Text: "ab"}, {Text: "12", Stream: 1}, {Text: "cd"}}}
 	if got := b.StreamLen(); got != 5 {

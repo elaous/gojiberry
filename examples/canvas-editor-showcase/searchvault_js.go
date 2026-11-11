@@ -12,12 +12,6 @@ import (
 	"github.com/elaous/gojiberry/domrt/browser"
 )
 
-// The browser side of the sealed search index (searchkeep.go): the sealed bytes in IndexedDB (not in
-// localStorage, which the browser target's documents share with a small quota), and the per-device
-// secret as a non-extractable Ed25519 key in the same database. The secret is the key's signature of a
-// fixed statement: a script in the page can ask for it while the page is open, but nobody can take the
-// key away, and a copy of the stored index alone cannot be opened.
-
 const (
 	searchDBName     = "gojiberry-showcase-search"
 	searchSealedName = "sealed"
@@ -36,7 +30,6 @@ func openSearchDB() (*browser.Database, error) {
 	})
 }
 
-// idbVault is the sealedVault over IndexedDB.
 type idbVault struct{}
 
 func (idbVault) Get(name string) (data []byte, err error) {
@@ -110,9 +103,6 @@ func recoverTo(err *error) {
 	}
 }
 
-// deviceSecret is the per-device secret: made on the first call, from a non-extractable key kept in
-// IndexedDB. It fails where the browser has no Ed25519 in WebCrypto or no IndexedDB; the index is then not
-// kept.
 func deviceSecret() (secret []byte, err error) {
 	defer recoverTo(&err)
 	db, err := openSearchDB()

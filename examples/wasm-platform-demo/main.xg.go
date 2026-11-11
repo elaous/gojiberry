@@ -2,11 +2,6 @@
 
 //go:build js && wasm
 
-// Package main exercises domrt's newer platform wrappers together --
-// IndexedDB, MediaDevices, IntersectionObserver/ResizeObserver,
-// drag-and-drop, and the Clipboard API -- each writing its result into
-// its own element so a real browser test can check every one actually
-// worked, not just that the code compiled.
 package main
 
 import (
@@ -19,8 +14,6 @@ import (
 func main() {
 	document := browser.Document()
 
-	// IndexedDB: open, create a store on upgrade, put a record, read
-	// it back.
 	db, err := browser.OpenDatabase("platform-demo", 1, func(db *browser.Database) {
 		db.CreateObjectStore("kv", "id")
 	})
@@ -42,9 +35,6 @@ func main() {
 		}
 	}
 
-	// IntersectionObserver + ResizeObserver: both fire once with the
-	// element's current state as soon as they start observing it, no
-	// scroll/resize needed to get a first callback.
 	observed := document.GetElementByID("observed-el")
 	io := html.NewIntersectionObserver(func(entries []html.IntersectionEntry) {
 		for _, e := range entries {
@@ -62,8 +52,6 @@ func main() {
 	})
 	ro.Observe(observed)
 
-	// Drag-and-drop: dragstart on the source stores its text on the
-	// DataTransfer; drop on the target reads it back.
 	source := document.GetElementByID("drag-source")
 	source.SetDraggable(true)
 	source.OnDragStart(func(evt html.DragEvent) {
@@ -79,9 +67,6 @@ func main() {
 		document.GetElementByID("dnd-result").SetTextContent(evt.DataTransfer.GetData("text/plain"))
 	})
 
-	// MediaDevices + Clipboard both involve a real async round trip
-	// (permission + device/OS interaction), so run them without
-	// blocking the rest of main.
 	go func() {
 		stream, err := browser.GetUserMedia(browser.MediaStreamConstraints{Video: true})
 		if err != nil {

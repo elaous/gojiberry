@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestEndToEnd drives the demo in headless Chromium: wheel and scrollbar
-// scrolling, clipping to the viewport, the vertical/horizontal locks, and that a
-// table inside a scrolled view still receives correctly mapped clicks in edit mode.
 func TestEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	num := func(expr string) float64 {
@@ -29,7 +26,6 @@ func TestEndToEnd(t *testing.T) {
 	d.OK(alpha(vx+vw+8, vy+50) == 0 && alpha(vx+50, vy+vh+8) == 0, "content is clipped to the viewport (nothing painted outside it)")
 	d.OK(alpha(vx+100, vy+100) != 0, "content is painted inside it")
 
-	// Wheel scrolls both axes.
 	d.CanvasMove(inX, inY)
 	d.Wheel(0, 120)
 	d.OK(d.Is("s.scrollY === 120 && s.scrollX === 0"), fmt.Sprint("wheel scrolls vertically: ", num("s.scrollY")))
@@ -37,20 +33,17 @@ func TestEndToEnd(t *testing.T) {
 	d.OK(d.Is("s.scrollX === 90"), fmt.Sprint("wheel scrolls horizontally: ", num("s.scrollX")))
 	d.OK(d.Pixel(int(vx)+5, int(vy)+5)[3] != 0, "the scrolled content redraws")
 
-	// Wheel outside the viewport does nothing to it.
 	d.CanvasMove(vx+vw+30, vy+vh+15)
 	d.Wheel(0, 100)
 	d.OK(d.Is("s.scrollY === 120"), "wheel outside the viewport is ignored")
 	d.CanvasMove(inX, inY)
 
-	// Clamped at the end.
 	d.Wheel(0, 100000)
 	d.OK(d.Is("s.scrollY === s.content[1] - s.viewport[3]"), fmt.Sprint("vertical scroll clamps at the end: ", num("s.scrollY")))
 	d.Wheel(0, -100000)
 	d.Wheel(-100000, 0)
 	d.OK(d.Is("s.scrollX === 0 && s.scrollY === 0"), "and at the start")
 
-	// Locks.
 	d.SetChecked("#lockv", true)
 	d.CanvasMove(inX, inY)
 	d.Wheel(60, 60)
@@ -64,13 +57,11 @@ func TestEndToEnd(t *testing.T) {
 	d.CanvasMove(inX, inY)
 	d.Wheel(-1000, -1000)
 
-	// Drag the vertical scrollbar thumb (right edge, top of the track).
 	thumbX := vx + vw - 5
 	d.CanvasDrag(thumbX, vy+8, thumbX, vy+8+100)
 	d.OK(num("s.scrollY") > 100, fmt.Sprint("dragging the scrollbar thumb scrolls: ", num("s.scrollY")))
 	d.OK(d.Pixel(int(thumbX), int(vy)+8+100)[3] != 0, "the thumb is drawn")
 
-	// Edit mode inside a scrolled view: click a cell and check it maps correctly.
 	d.Wheel(-100000, -100000)
 	d.ToggleMode()
 	d.Wheel(0, 200)

@@ -77,7 +77,6 @@ func TestHTTPAdapterSavesTheAccessList(t *testing.T) {
 	if err != nil || again.RoleOf("friend@example.com") != "editor" || again.RoleOf("viewer@example.com") != "viewer" || len(again.Links) != 1 {
 		t.Fatalf("%v %+v", err, again)
 	}
-	// someone who does not own the document cannot change the list
 	stranger := NewHTTPAdapter(ts.URL, nil)
 	stranger.Header.Set("Authorization", "Bearer "+f.stranger)
 	if err := stranger.SaveACL(ctx, "doc1", acl); err == nil {

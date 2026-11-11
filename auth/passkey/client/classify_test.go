@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// The browser calls a closed prompt, a timeout and a refusal all NotAllowedError; the page must not
-// treat them as one silent "nothing happened".
 func TestRejectionsAreToldApart(t *testing.T) {
 	short := 2 * time.Second
 	long := PromptTimeout
@@ -36,7 +34,6 @@ func TestRejectionsAreToldApart(t *testing.T) {
 			}
 		}
 	}
-	// A timeout and a failed verification are still cancellations, for a caller that only knows that.
 	if !errors.Is(ErrTimedOut, ErrCancelled) || !errors.Is(ErrNotVerified, ErrCancelled) {
 		t.Error("the kinds are not ErrCancelled")
 	}
@@ -48,7 +45,6 @@ func TestRejectionsAreToldApart(t *testing.T) {
 	}
 }
 
-// The server's 409 "account_exists" is told from ErrLastPasskey's 409, and from a plain failure.
 func TestServerErrorTellsAlreadyCreatedApart(t *testing.T) {
 	e := serverError(409, []byte(`{"error":"x","code":"account_exists"}`))
 	if !errors.Is(e, ErrAlreadyCreated) {
@@ -59,8 +55,6 @@ func TestServerErrorTellsAlreadyCreatedApart(t *testing.T) {
 	}
 }
 
-// An answer of the server that carries its own sentence is shown as it is (UserMessage), not as "something went
-// wrong"; the account_exists answer is still ErrAlreadyCreated.
 func TestServerErrorKeepsTheServersSentenceForAPerson(t *testing.T) {
 	err := serverError(400, []byte(`{"error":"that e-mail address is taken"}`))
 	var um interface{ UserMessage() string }

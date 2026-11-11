@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// The tagged PDF is checked by pdfa11y (github.com/speedata/pdfa11y, MIT), a Go checker for the
-// machine-checkable part of PDF/UA (the Matterhorn protocol). It is a command, so it is run when it is
-// installed: `make pdfa11y-test` installs it and requires it (GOJIBERRY_REQUIRE_PDFA11Y=1). It does not
-// replace a veraPDF run, which is the reference validator.
 func TestPdfa11yPassesTheExports(t *testing.T) {
 	tool, err := exec.LookPath("pdfa11y")
 	if err != nil {

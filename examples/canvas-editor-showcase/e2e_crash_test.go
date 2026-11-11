@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Crash codes are their own choice: with it off a crash leaves nothing behind; with it on, an error in the page is
-// kept as two words, counted at the next visit, shown in the preview as exactly that, and nothing of the error's
-// message or address goes with it. The usage counts stay off throughout.
 func TestCrashCodesAreSeparateAndScrubbed(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.OK(true, "opened")
@@ -42,5 +39,4 @@ func TestCrashCodesAreSeparateAndScrubbed(t *testing.T) {
 	d.Click("#privacy-crash input") // off: what was counted goes
 	d.WaitFor("off", `localStorage.getItem('showcase:crash') !== 'on'`)
 	d.WaitFor("the preview empties", `!document.getElementById('privacy-preview').textContent.includes('page_error')`)
-	// (the page errors in this test are the ones it threw on purpose)
 }

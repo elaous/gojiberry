@@ -1,10 +1,3 @@
-// Package userconfig keeps a person's settings (preferences, styles, templates) in a docstore, so
-// they follow the person across devices. They can reveal a disability, so the rules are strict:
-// the keys hold a hash of the user, never the address; the package writes through whatever adapter it
-// is given, which for a real deployment is the encrypting adapter (docstore.ConfigPrefix is not in
-// its skip list, so the owner's keys protect every item); nothing here logs a name or a value;
-// and each item has a revision, so two devices that change the same item meet a conflict instead of
-// one silently overwriting the other.
 package userconfig
 
 import (
@@ -29,13 +22,9 @@ const (
 )
 
 var (
-	// ErrConflict means the item changed since it was read; Put returns it with the current item.
 	ErrConflict = errors.New("userconfig: the item changed since it was read")
-	// ErrQuota means the change would take the user over a limit.
-	ErrQuota = errors.New("userconfig: over the storage limit")
-	// ErrBadName means a name outside lower-case letters, digits, '.', '_' and '-' (1 to 64 long).
-	ErrBadName = errors.New("userconfig: a name is 1 to 64 of a-z, 0-9, '.', '_' and '-'")
-	// ErrNotFound is returned by Get and Delete for an item that is not there.
+	ErrQuota    = errors.New("userconfig: over the storage limit")
+	ErrBadName  = errors.New("userconfig: a name is 1 to 64 of a-z, 0-9, '.', '_' and '-'")
 	ErrNotFound = errors.New("userconfig: no such item")
 )
 
@@ -52,16 +41,12 @@ type Item struct {
 
 // Store is one user's configuration in an adapter.
 type Store struct {
-	A    docstore.Adapter
-	User string // any stable id of the user; only its hash reaches the keys
-	// MaxItem and MaxTotal are the size limits in bytes of one item and of all of the user's items;
-	// zero means the defaults. Fonts (names starting "font.", see fonts.go) have their own: MaxFont
-	// for one and MaxFonts for all of them, and do not count against the other two.
+	A                 docstore.Adapter
+	User              string
 	MaxItem, MaxTotal int
 	MaxFont, MaxFonts int
 }
 
-// envelope is what is stored: the revision travels inside the (encrypted) bytes.
 type envelope struct {
 	Rev     int    `json:"rev"`
 	Data    []byte `json:"data"`
@@ -91,7 +76,6 @@ func (s *Store) limits() (item, total int) {
 	return item, total
 }
 
-// limitsFor are the limits that apply to the item called name: the font ones or the ordinary ones.
 func (s *Store) limitsFor(name string) (item, total int) {
 	if !isFont(name) {
 		return s.limits()
@@ -112,7 +96,6 @@ func (s *Store) Get(ctx context.Context, name string) (Item, error) {
 	return it, err
 }
 
-// read returns the item and the raw stored bytes it came from (to condition a write on them).
 func (s *Store) read(ctx context.Context, name string) (Item, []byte, error) {
 	k, err := s.key(name)
 	if err != nil {
@@ -132,9 +115,7 @@ func (s *Store) read(ctx context.Context, name string) (Item, []byte, error) {
 	return Item{Name: name, Rev: e.Rev, Data: e.Data, Updated: time.Unix(0, e.Updated)}, d.Data, nil
 }
 
-// Put stores data as the next revision of the item. base is the revision the caller read (0 for an
-// item it expects not to exist); if the stored revision differs, nothing is written and the current
-// item comes back with ErrConflict so the caller can merge and try again (see Update).
+// Put stores data as the next revision of the item.
 func (s *Store) Put(ctx context.Context, name string, data []byte, base int) (Item, error) {
 	k, err := s.key(name)
 	if err != nil {
@@ -196,8 +177,6 @@ func (s *Store) Put(ctx context.Context, name string, data []byte, base int) (It
 	return next, nil
 }
 
-// used is the bytes the user's other items of the same class (fonts or not) take; the one being
-// written is replaced, not added.
 func (s *Store) used(ctx context.Context, except string, fonts bool) (int, error) {
 	metas, err := docstore.ListPrefix(ctx, s.A, s.prefix())
 	if err != nil {
@@ -212,8 +191,6 @@ func (s *Store) used(ctx context.Context, except string, fonts bool) (int, error
 	return n, nil
 }
 
-// Update reads the item, lets merge produce the new data from it (nil Item.Rev 0 when it does not
-// exist yet), and stores that, repeating when another device wrote in between (up to five times).
 func (s *Store) Update(ctx context.Context, name string, merge func(cur Item) ([]byte, error)) (Item, error) {
 	var last error
 	for range 5 {
@@ -264,7 +241,6 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	return err
 }
 
-// DeleteAll removes everything of the user (the right to be forgotten) and returns how many items.
 func (s *Store) DeleteAll(ctx context.Context) (int, error) {
 	names, err := s.List(ctx)
 	if err != nil {

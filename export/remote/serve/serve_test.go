@@ -19,7 +19,6 @@ func sample() docfile.Document {
 	}), Footnotes: []docfile.Footnote{{ID: "1", Text: "a note"}}}
 }
 
-// The formats the light side offers are those the heavy side registers, in the same order.
 func TestTheFormatTablesAreWhatExportRegisters(t *testing.T) {
 	direct := transfer.Default()
 	export.Register(direct)
@@ -47,7 +46,6 @@ func TestTheFormatTablesAreWhatExportRegisters(t *testing.T) {
 	}
 }
 
-// Through the protocol every format gives what the direct call gives.
 func TestEveryFormatThroughTheProtocolMatchesTheDirectCall(t *testing.T) {
 	direct := transfer.Default()
 	export.Register(direct)
@@ -76,7 +74,6 @@ func TestEveryFormatThroughTheProtocolMatchesTheDirectCall(t *testing.T) {
 			t.Errorf("%s: %d bytes through the protocol, %d direct", e.Name, len(got), len(want))
 		}
 	}
-	// Import: a file we wrote reads back the same either way.
 	for _, f := range []string{"docx", "html", "odt"} {
 		_, data, _, _ := via.Export(f, doc)
 		want, err := direct.Import(f, "", data)

@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A language whose pack is not in the program is fetched when it is asked for (?lang=, the preferences), and a
-// right-to-left one turns the page around.
 func TestLazyLanguagesAndRightToLeft(t *testing.T) {
 	site := e2etest.NewSite(t)
 	for _, c := range []struct{ lang, dir, find string }{
@@ -24,7 +22,6 @@ func TestLazyLanguagesAndRightToLeft(t *testing.T) {
 		d.WaitFor("the Find tab in "+c.lang, `[...document.querySelectorAll('button[data-tab="find"]')].some(b => b.textContent.includes('`+c.find+`'))`)
 		d.NoErrors()
 	}
-	// Chosen in the preferences, not only by the address.
 	d := site.Open(t, "?lang=en")
 	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({lang: 'he'}))`, nil)
 	d.Goto(site, "/?x=1") // no ?lang=: the language the person chose
@@ -32,8 +29,6 @@ func TestLazyLanguagesAndRightToLeft(t *testing.T) {
 	d.OK(strings.Contains(d.Text(`button[data-tab="find"]`), "חיפוש"), "the tab is in Hebrew: "+d.Text(`button[data-tab="find"]`))
 }
 
-// The interface in a right-to-left language passes axe, and the editor's own surface stays left to right
-// for the text (the document has its own direction).
 func TestRightToLeftInterfacePassesAxe(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=ar")
 	d.WaitFor("Arabic", `document.documentElement.lang === 'ar' && [...document.querySelectorAll('button[data-tab="find"]')].some(b => b.textContent.includes('بحث'))`)

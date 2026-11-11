@@ -2,16 +2,6 @@
 
 //go:build js && wasm
 
-// Package main is task #128's own rendering-benchmark harness: it
-// mounts a real domrt.Root and exposes window.runBench(scenario, n) to
-// JS, running n patch/patchChildren-exercising update cycles for one
-// of four scenarios and returning the elapsed wall time in
-// nanoseconds -- measured with Go's own time.Now/time.Since inside the
-// wasm program itself, not a second JS round trip, so per-call CDP/
-// subprocess overhead never pollutes the number. Driven by bench_test.go (chromedp)
-// the same way every other gojiberry example's own e2e test
-// drives its own app end to end (see bench_test.go), just reading back
-// one number instead of asserting DOM state.
 package main
 
 import (
@@ -24,11 +14,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// benchListSize is how many list-item children each scenario's list starts
-// (and, for every scenario but "append", stays) at -- large enough
-// that patchChildren's own bookkeeping (the oldByKey map, the used
-// set, the final DOM-order-fixup pass) isn't dwarfed by per-call
-// overhead, small enough that one iteration is still fast.
 const benchListSize = 100
 
 func keyedList(keys []string, labelFor func(key string) string) xango.Node {
@@ -55,8 +40,6 @@ func rotate(s []string, by int) {
 	copy(s[len(s)-by:], tmp)
 }
 
-// runBenchScenario mounts a fresh root, then runs n update cycles of
-// the named scenario against it, returning elapsed nanoseconds.
 func runBenchScenario(scenario string, n int) (float64, error) {
 	container := js.Global().Get("document").Call("getElementById", "root")
 	container.Set("innerHTML", "")
@@ -67,35 +50,23 @@ func runBenchScenario(scenario string, n int) (float64, error) {
 	start := time.Now()
 	switch scenario {
 	case "attrs-only":
-		// Same keys, same order, every cycle -- only the text content
-		// changes. patch's cheapest real path: no create/destroy/move.
 		for i := 0; i < n; i++ {
 			suffix := "-v" + strconv.Itoa(i)
 			root.Update(keyedList(keys, func(k string) string { return k + suffix }))
 		}
 	case "keyed-reorder":
-		// Same keys every cycle, rotated into a new order -- exercises
-		// patchChildren's key-match lookup plus its own DOM-order-fixup
-		// pass (every child ends up needing an insertBefore call, even
-		// though none are created or destroyed).
 		shuffled := append([]string(nil), keys...)
 		for i := 0; i < n; i++ {
 			rotate(shuffled, 1)
 			root.Update(keyedList(shuffled, func(k string) string { return k }))
 		}
 	case "append":
-		// Every prior key stays exactly where it was; one new keyed
-		// child appends at the end each cycle -- the "add one more
-		// item" interaction a real app actually hits most often.
 		grown := append([]string(nil), keys...)
 		for i := 0; i < n; i++ {
 			grown = append(grown, "new-"+strconv.Itoa(i))
 			root.Update(keyedList(grown, func(k string) string { return k }))
 		}
 	case "full-replace":
-		// A completely different key set every cycle -- patchChildren's
-		// worst case: nothing matches, every old child is torn down and
-		// every new one created fresh.
 		for i := 0; i < n; i++ {
 			fresh := make([]string, benchListSize)
 			for j := range fresh {

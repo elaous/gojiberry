@@ -13,12 +13,6 @@ import (
 	"github.com/elaous/gojiberry/fontserver"
 )
 
-// --- a directory of font files on disk -------------------------------
-
-// LocalRepository is a repository over a directory of .ttf/.otf files:
-// the local font repository. It scans the directory (with the same
-// sfnt name-table reader the fontserver uses) on first use, and again
-// whenever Rescan is called.
 type LocalRepository struct {
 	name   string
 	prefix string
@@ -28,11 +22,7 @@ type LocalRepository struct {
 	err  error
 }
 
-// Local returns a repository of the font files under dir. urlPrefix is
-// what each file's relative path is appended to for Variant.URL -- e.g.
-// "/fonts/" if you serve dir at that path, or fontserver's
-// "http://host/local/files/"; leave it empty to give the bare relative
-// path.
+// Local returns a repository of the font files under dir.
 func Local(dir, urlPrefix string) *LocalRepository {
 	return &LocalRepository{name: "Local fonts", prefix: urlPrefix, repo: fontserver.NewRepo(dir)}
 }
@@ -61,16 +51,12 @@ func (l *LocalRepository) Fonts(context.Context) ([]Font, error) {
 	return out, nil
 }
 
-// --- a gojiberry fontserver ------------------------------------------
-
 // ServerKind picks which of a fontserver's catalogs to read.
 type ServerKind int
 
 const (
 	// ServerLocal is the fonts in the server's own directory (/local/fonts).
 	ServerLocal ServerKind = iota
-	// ServerGoogle is the Google Fonts catalog the server proxies
-	// (/google/fonts); empty unless the server has an API key.
 	ServerGoogle
 )
 
@@ -80,8 +66,6 @@ type serverRepo struct {
 	client *http.Client
 }
 
-// Server returns a repository backed by a fontserver at baseURL (e.g.
-// "http://localhost:8091"). A nil client uses http.DefaultClient.
 func Server(baseURL string, kind ServerKind, client *http.Client) Repository {
 	if client == nil {
 		client = http.DefaultClient

@@ -25,7 +25,6 @@ func TestRecoverySheetHoldsTheKeyAsPlainEscapedText(t *testing.T) {
 			t.Errorf("sheet lacks %q", want)
 		}
 	}
-	// nothing is fetched from anywhere
 	for _, bad := range []string{"http://", "https://", "src=", "href=", "@import", "url("} {
 		if strings.Contains(page, bad) {
 			t.Errorf("the sheet refers outside itself: %q", bad)
@@ -57,7 +56,6 @@ func TestCheckDue(t *testing.T) {
 	}
 }
 
-// gridOf reads the squares of RecoveryQR's SVG back into a grid, so the drawing is checked against the code.
 func gridOf(t *testing.T, svg string, size int) [][]bool {
 	t.Helper()
 	i := strings.Index(svg, `<path d="`)

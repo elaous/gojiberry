@@ -2,11 +2,6 @@
 
 package components
 
-// The components' stylesheets, registered with the program by blank CSS
-// imports: xango.Document puts them in a page's head and domrt.Mount
-// installs them in the browser, so importing this package is enough --
-// no <link> tags or copying .css files around. base.css (the design
-// tokens and shared keyframes) comes first.
 import (
 	"github.com/elaous/gojiberry/xango"
 )

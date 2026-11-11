@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// a few bytes that start like each font file; the store checks the signature, not the glyphs
 func fakeFont(magic string, size int) []byte {
 	b := make([]byte, size)
 	copy(b, magic)
@@ -44,7 +43,6 @@ func TestFontsNeedALicenceAndARealFontFile(t *testing.T) {
 	if _, err := s.PutFont(ctx, "tiny", []byte("OTTO"), licence, 0); !errors.Is(err, ErrNotAFont) {
 		t.Fatalf("too short to be one: %v", err)
 	}
-	// the generic Put cannot sneak an unchecked blob in under a font name
 	for _, blob := range [][]byte{[]byte("plain bytes"), append([]byte("GJF1\x00\x00"), fakeFont("OTTO", 64)...), []byte("GJF1\x00\x03abc" + "not a font file at all")} {
 		if _, err := s.Put(ctx, "font.sneaky", blob, 0); err == nil {
 			t.Errorf("%q: stored", blob)
@@ -65,7 +63,6 @@ func TestFontsHaveTheirOwnLimits(t *testing.T) {
 	ctx := context.Background()
 	m := docstore.NewMemoryAdapter()
 	s := &Store{A: m, User: "u", MaxItem: 100, MaxTotal: 250, MaxFont: 1000, MaxFonts: 1500}
-	// a font far over the settings limit fits its own
 	if _, err := s.PutFont(ctx, "a", fakeFont("OTTO", 800), licence, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +72,6 @@ func TestFontsHaveTheirOwnLimits(t *testing.T) {
 	if _, err := s.PutFont(ctx, "b", fakeFont("OTTO", 800), licence, 0); !errors.Is(err, ErrQuota) {
 		t.Fatalf("over all fonts: %v", err)
 	}
-	// fonts take no room from the settings, nor settings from the fonts
 	if _, err := s.Put(ctx, "prefs", make([]byte, 60), 0); err != nil {
 		t.Fatalf("settings still fit: %v", err)
 	}
@@ -85,7 +81,6 @@ func TestFontsHaveTheirOwnLimits(t *testing.T) {
 	if _, err := s.Put(ctx, "prefs3", make([]byte, 60), 0); !errors.Is(err, ErrQuota) {
 		t.Fatalf("the settings total is still enforced: %v", err)
 	}
-	// defaults
 	d := &Store{A: m, User: "u2"}
 	if item, total := d.limitsFor("font.x"); item != DefaultMaxFont || total != DefaultMaxFonts {
 		t.Fatalf("%d %d", item, total)

@@ -42,7 +42,6 @@ func doc() docfile.Document {
 	return docfile.FromFlow("Notes", &canvas.TextFlow{Items: []canvas.Item{canvas.Chars{Text: "hello", Format: canvas.Format{FontWeight: 700}}}})
 }
 
-// named is the test document with a name for a document list.
 func named(name string) docfile.Document {
 	d := doc()
 	d.SetName(name)
@@ -54,7 +53,6 @@ func TestSaveLoadListDeleteEveryTargetAndFormat(t *testing.T) {
 	s := &Saver{Targets: targets(t)}
 	for _, tg := range s.Targets {
 		for _, c := range docfile.Formats() {
-			// One document per format, all with one name: as many IDs, as many files.
 			e, err := s.Save(ctx, tg.Name, c, named("notes"))
 			if err != nil || !docfile.ValidID(e.ID) || !strings.HasPrefix(e.Key, e.ID+"~") || !strings.HasSuffix(e.Key, c.Ext()) || e.Name != "notes" || e.Format != c {
 				t.Fatalf("%s/%s: %+v %v", tg.Name, c.Name(), e, err)
@@ -104,8 +102,6 @@ func TestSavingAgainReplacesTheSameDocumentEvenInAnotherFormat(t *testing.T) {
 	if err != nil || e2.ID != e.ID || e2.Name != "plan renamed" || !strings.HasPrefix(e2.Key, e.ID+"~") || !strings.HasSuffix(e2.Key, ".pb") {
 		t.Fatalf("%+v %v", e2, err)
 	}
-	// The file of the old format is now the previous copy; the save after this one
-	// drops it.
 	if _, err := mem.Load(ctx, e.Key); err != nil {
 		t.Errorf("the old format's file is the previous copy: %v", err)
 	}
@@ -152,7 +148,6 @@ func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	s := &Saver{Targets: []Target{{Name: "m", Adapter: mem}}}
 	a, _ := s.Save(ctx, "m", docfile.JSON, named("alpha"))
 	b, _ := s.Save(ctx, "m", docfile.ProtoBinary, named("beta"))
-	// Edits made through the catalog are kept in the documents too.
 	if err := s.SetTags(ctx, "m", a.ID, []string{"x"}); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +157,6 @@ func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	if err := s.Trash(ctx, "m", b.ID); err != nil {
 		t.Fatal(err)
 	}
-	// A saved document from before IDs, under its name, gets an ID and the key that goes with it.
 	data, _ := docfile.JSON.Marshal(doc())
 	_ = mem.Save(ctx, "legacy.json", data)
 	if err := mem.Delete(ctx, CatalogKey); err != nil {
@@ -190,14 +184,12 @@ func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	if err != nil || got.Title != "Notes" {
 		t.Errorf("%+v %v", got, err)
 	}
-	// It can be saved back and versioned like any other.
 	if _, err := s.Save(ctx, "m", docfile.JSON, got); err != nil {
 		t.Errorf("saving an adopted document: %v", err)
 	}
 	if _, err := s.SaveVersion(ctx, "m", docfile.JSON, got); err != nil {
 		t.Errorf("versioning an adopted document: %v", err)
 	}
-	// Two legacy files with one stem are two documents.
 	_ = mem.Save(ctx, "twin.json", data)
 	pb, _ := docfile.ProtoBinary.Marshal(doc())
 	_ = mem.Save(ctx, "twin.pb", pb)
@@ -207,7 +199,6 @@ func TestCatalogIsRebuiltFromTheDocuments(t *testing.T) {
 	if list, _ := s.List(ctx, "m"); len(list) != 4 {
 		t.Errorf("same-stem legacy files collided: %v", list)
 	}
-	// A damaged catalog is rebuilt too.
 	_ = mem.Save(ctx, CatalogKey, []byte("{not json"))
 	if list, _ := s.List(ctx, "m"); len(list) != 4 {
 		t.Fatalf("after damage: %v", list)
@@ -236,7 +227,6 @@ func TestErrors(t *testing.T) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
-	// Any other name is fine: slashes, dots, the same name twice.
 	for _, ok := range []string{"a/b", "..", "acl:x", `a\b`, "plan", "plan"} {
 		if _, err := s.Save(ctx, "m", docfile.JSON, named(ok)); err != nil {
 			t.Errorf("%q: %v", ok, err)
@@ -289,7 +279,6 @@ func TestFontLibraryOverEveryTarget(t *testing.T) {
 		if _, err := lib.Use(ctx, "Lato", 400, false); err != nil || len(got) != 1 || !got[0].Downloaded {
 			t.Fatalf("%s: %v %+v", tg.Name, err, got)
 		}
-		// A new library over the same store loads, not downloads.
 		got = nil
 		lib2 := &fonts.Library{Blobs: Blobs(tg.Adapter),
 			Fetch:   func(context.Context, string) ([]byte, error) { t.Fatalf("%s: fetched again", tg.Name); return nil, nil },
@@ -298,7 +287,6 @@ func TestFontLibraryOverEveryTarget(t *testing.T) {
 		if _, err := lib2.Use(ctx, "Lato", 400, false); err != nil || len(got) != 1 || got[0].Downloaded || string(got[0].Data) != "FONTDATA" {
 			t.Fatalf("%s: %v %+v", tg.Name, err, got)
 		}
-		// Saved documents don't list the font.
 		s := &Saver{Targets: []Target{tg}}
 		if list, _ := s.List(ctx, tg.Name); len(list) != 0 {
 			t.Fatalf("%s lists %v", tg.Name, list)

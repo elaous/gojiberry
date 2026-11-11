@@ -15,8 +15,6 @@ import (
 	"github.com/elaous/gojiberry/osmmap"
 )
 
-// A map is made from a Plus Code (nobody is asked who is there), then from an address (looked up); the picture has its
-// alt text and the credit as its legend, and the tiles came from the tile server the page was pointed at.
 func TestInsertAMapFromAPlusCodeAndFromAnAddress(t *testing.T) {
 	var searches, tiles atomic.Int32
 	site := e2etest.NewSite(t)
@@ -46,8 +44,6 @@ func TestInsertAMapFromAPlusCodeAndFromAnAddress(t *testing.T) {
 	if searches.Load() != 1 {
 		t.Fatalf("one search for the address: %d", searches.Load())
 	}
-	// A short Plus Code with the place it is near: the place is read from the answer already kept (no second search), and
-	// the code is completed nearest to it.
 	full := osmmap.EncodePlusCode(48.8584, 2.2945, 10)
 	tilesBefore := tiles.Load()
 	d.Fill("#map-query", full[4:]+" Eiffel Tower, Paris")

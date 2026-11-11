@@ -1,24 +1,15 @@
 package read
 
-// Player reads the pieces of a document one after the other over an Engine: it starts the next when one ends, marks
-// the piece and the word being said, and pauses, skips and stops at piece borders. It holds no engine of its own: the
-// page sets Engine (and may change it between readings).
 type Player struct {
 	Engine Engine
-	// Voice gives the ID of the voice to use for a language ("" for the engine's pick).
-	Voice func(lang string) string
+	Voice  func(lang string) string
 	// Rate gives the speed (1 normal).
-	Rate func() float64
-	// OnPiece is called when a piece starts; reveal says to scroll to it.
-	OnPiece func(c Chunk, reveal bool)
-	// OnWord is called with the stream range of the word being said.
-	OnWord func(c Chunk, from, to int)
-	// OnChange is called whenever what the Player shows changed (to draw the bar again).
+	Rate     func() float64
+	OnPiece  func(c Chunk, reveal bool)
+	OnWord   func(c Chunk, from, to int)
 	OnChange func()
-	// OnStop is called when reading ends, whether it ran out of pieces or was stopped.
-	OnStop func()
-	// OnError is called when a piece could not be said; reading stops.
-	OnError func(err error)
+	OnStop   func()
+	OnError  func(err error)
 
 	chunks  []Chunk
 	pos     int
@@ -29,7 +20,6 @@ type Player struct {
 	kind    string
 }
 
-// Start reads the pieces from the first, after stopping any reading.
 func (p *Player) Start(chunks []Chunk) {
 	p.Stop()
 	if len(chunks) == 0 || p.Engine == nil || !p.Engine.Available() {
@@ -53,7 +43,6 @@ func (p *Player) Current() (Chunk, bool) {
 	return p.chunks[p.pos], true
 }
 
-// Kind is what is speaking, as the engine told it (the Kind constants), "" when not known.
 func (p *Player) Kind() string { return p.kind }
 
 // Stop ends the reading.
@@ -72,7 +61,6 @@ func (p *Player) Stop() {
 	p.changed()
 }
 
-// Pause holds the reading, or continues it when it is held.
 func (p *Player) Pause() {
 	if !p.playing || p.cur == nil {
 		return

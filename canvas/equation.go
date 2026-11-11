@@ -2,26 +2,17 @@ package canvas
 
 import "strings"
 
-// EquationObject is a formula in the text. Formula is in the linear notation of package export (x^2 + y_1,
-// frac{a}{b}, sqrt{x}); Alt is its text alternative, what a person would read aloud ("x squared plus y sub 1"), which
-// every export writes and the checker requires. The editor typesets the formula (see mathtype.go): fractions over a
-// rule, roots, raised and lowered scripts, and so on; the exports write MathML or the text alternative.
-//
-// By default it is a block of its own (Inline {Block: true}); with Inline set it stands in the line of text like a
-// word, on the baseline of the line, at Size pixels (the size of the text round it).
 type EquationObject struct {
 	Formula string
 	Alt     string
 	// Inline makes the formula part of its line of text.
 	Inline bool
-	// Size is the font size of the formula in pixels; zero means 17 for a block and 16 inline.
-	Size float64
+	Size   float64
 
 	w, h    float64
 	descent float64
 }
 
-// equationPad is the space around the formula in its box.
 const equationPad = 8.0
 
 func (e *EquationObject) size() float64 {
@@ -59,11 +50,8 @@ func (e *EquationObject) Measure(p Painter, maxW, _ float64) (float64, float64) 
 	return e.w, e.h
 }
 
-// Descent implements DescentObject: an inline formula sits on its own baseline, which is above the bottom of its box
-// by this much (so a subscript or the lower part of a fraction hangs below the line's baseline).
 func (e *EquationObject) Descent() float64 { return e.descent }
 
-// label is the text drawn when there is no formula.
 func (e *EquationObject) label() string {
 	if f := strings.TrimSpace(e.Formula); f != "" {
 		return f
@@ -93,6 +81,5 @@ func (e *EquationObject) DrawAt(p Painter, x, y float64) {
 		b.draw(p, x+2, y+e.h-e.descent)
 		return
 	}
-	// a block: centred in its box, the baseline so that the formula is in the middle of the height
 	b.draw(p, x+(e.w-b.w)/2, y+(e.h-(b.asc+b.desc))/2+b.asc)
 }

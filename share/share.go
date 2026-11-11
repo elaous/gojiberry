@@ -1,10 +1,3 @@
-// Package share builds links to a piece of selected text in a document, and
-// finds the text again when the link is opened.
-//
-// A link carries the selection as rune offsets and the start of the quoted
-// text (?sel=120-184&q=The+quick+brown...). The offsets alone would point at
-// the wrong words once the document has changed; the quote lets the opening
-// side check them and, if they moved, look for the quote near where it was.
 package share
 
 import (
@@ -13,19 +6,14 @@ import (
 	"strings"
 )
 
-// QuoteRunes is how much of the selected text a link quotes.
 const QuoteRunes = 80
 
-// Selection is a range of a document's text, [From, To) in runes, with the
-// text it held.
 type Selection struct {
 	From, To int
-	// Quote is the start of the selected text (at most QuoteRunes).
-	Quote string
+	Quote    string
 }
 
-// Of describes the range [from, to) of text. An empty or inverted range
-// gives the zero Selection.
+// Of describes the range [from, to) of text.
 func Of(text string, from, to int) Selection {
 	rs := []rune(text)
 	from, to = max(from, 0), min(to, len(rs))
@@ -52,8 +40,6 @@ func (s Selection) Query() url.Values {
 	return v
 }
 
-// Parse reads a selection from URL parameters; ok is false when there is none
-// or it is malformed.
 func Parse(v url.Values) (Selection, bool) {
 	a, b, found := strings.Cut(v.Get("sel"), "-")
 	if !found {
@@ -67,13 +53,8 @@ func Parse(v url.Values) (Selection, bool) {
 	return Selection{From: from, To: to, Quote: v.Get("q")}, true
 }
 
-// DocSegment is the path segment before a document's id in a page's address:
-// https://host/app/d/{doc}. The document is a path argument; what is optional
-// (hub, transport, a selection) stays in the query string.
 const DocSegment = "d"
 
-// SplitPath splits a page's path into the app's own base (ending in "/") and
-// the document id; doc is empty when the path does not end in /d/{doc}.
 func SplitPath(pathname string) (base, doc string) { return splitSegment(pathname, DocSegment) }
 
 // FolderSegment is the path segment before a folder's id: https://host/app/f/{folder}.
@@ -100,19 +81,15 @@ func splitSegment(pathname, segment string) (base, id string) {
 	return pathname, ""
 }
 
-// FolderPath is the page address for a folder under base: base + "f/" + folder.
 func FolderPath(base, folder string) string {
 	return strings.TrimSuffix(base, "/") + "/" + FolderSegment + "/" + url.PathEscape(folder)
 }
 
-// DocPath is the page address for a document under base (an app's base path
-// ending in "/"): base + "d/" + doc, the id escaped.
 func DocPath(base, doc string) string {
 	return strings.TrimSuffix(base, "/") + "/" + DocSegment + "/" + url.PathEscape(doc)
 }
 
-// Link is base with params and the selection added. A document in params
-// under "doc" goes in the path (see DocPath) rather than the query.
+// Link is base with params and the selection added.
 func Link(base string, params url.Values, s Selection) string {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -136,11 +113,6 @@ func Link(base string, params url.Values, s Selection) string {
 	return u.String()
 }
 
-// Resolve finds the selection in text, which may have changed since the link
-// was made: at the same offsets if the quote is still there, otherwise at the
-// occurrence of the quote nearest to them (keeping the length). ok is false
-// when the quote cannot be found; a link without a quote trusts its offsets
-// as far as the text reaches.
 func (s Selection) Resolve(text string) (from, to int, ok bool) {
 	rs := []rune(text)
 	if s.Empty() || s.From >= len(rs) && s.Quote == "" {

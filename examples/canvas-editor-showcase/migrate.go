@@ -13,12 +13,6 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// newMigrate is the Migrate tab's session: Google Docs and Microsoft Word on
-// OneDrive, into the folder the Save tab is showing. The access token is typed
-// into the tab (a real app gets it from its OAuth sign-in); ?driveapi= and
-// ?graphapi= point the clients at another address (a proxy, or a test server) but only
-// at this origin or a loopback host (see allowedEndpoint): a link must not be able to
-// send the typed token to another host.
 func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	param := func(k string) string {
@@ -38,8 +32,6 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	s.OnChange = func() { renderUI() }
 	s.OnDone = func(migrate.Report) { u.saver.Pending.Run(u.saver.Refresh) }
 	s.Deliver = transfer.Download
-	// What an earlier run brought is read from the origin tags of the documents in the target they go to, so a
-	// second run leaves the files that have not changed at the platform.
 	s.Known = func(ctx context.Context) (migrate.Ledger, error) {
 		target, _ := u.saver.Where()
 		return migrate.NewSaverLedger(ctx, u.saver.Saver, target)
@@ -48,7 +40,6 @@ func newMigrate(u *ui, renderUI func()) *migrate.Session {
 	return s
 }
 
-// pickWordFiles opens the chooser for Word files on this computer and migrates them.
 func pickWordFiles(u *ui) {
 	transfer.PickFiles(".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document", func(files []transfer.PickedFile, err error) {
 		if err != nil {

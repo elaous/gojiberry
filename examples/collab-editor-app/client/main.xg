@@ -1,14 +1,5 @@
 //go:build js && wasm
 
-// Package main is the browser half of the live collab-editor-app demo:
-// it opens a real WebSocket to the server (cmd/server) via
-// domrt/browser.Connect/Socket, sends its own edits, applies edits
-// broadcast from other connected clients, and gates what the current
-// visitor can do with components.Collab based on a role read from the
-// page's own URL (?role=owner/editor/viewer) -- so opening the same
-// URL with a different role query param in two browser tabs is
-// exactly how you'd demo (or test) two collaborators with different
-// permissions editing the same live document.
 package main
 
 import (
@@ -20,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// currentRole reads ?role= off the page's own URL, defaulting to
-// CollabEditor when absent or unrecognized.
 func currentRole() components.CollabRole {
 	window := browser.Window()
 	href := window.Location().Get("href").String()
@@ -34,8 +23,6 @@ func currentRole() components.CollabRole {
 	return components.CollabRole(role)
 }
 
-// wsURL builds the ws(s):// URL for /ws on the same host this page
-// was served from, so the demo works unmodified on any host/port.
 func wsURL() string {
 	loc := browser.Window().Location()
 	scheme := "ws"
@@ -53,12 +40,6 @@ type state struct {
 }
 
 func App(st *state, render func(), sock *browser.Socket) xango.Node {
-	// Collab only gates the surrounding affordances (Actions/Delete/
-	// Share/Comments) -- Content is an opaque []xango.Node it can't
-	// reach into, so making a non-editor's Content actually
-	// non-interactive (not just visually muted) is this caller's job.
-	// A genuinely disabled textarea is browser-enforced, unlike Collab's
-	// own gj-collab-readonly CSS class.
 	caps := components.CapabilitiesForRole(st.role)
 	content := []xango.Node{
 		components.Textarea(components.TextareaProps{

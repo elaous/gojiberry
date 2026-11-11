@@ -60,7 +60,6 @@ func TestCarousel(t *testing.T) {
 			OnSelect: func(i int) { selected = i },
 		})
 		handlers := findHandlers(n, "click")
-		// DOM order is prev, next, then the 3 dots.
 		if len(handlers) != 5 {
 			t.Fatalf("expected 5 click handlers, got %d", len(handlers))
 		}

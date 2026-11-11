@@ -38,7 +38,6 @@ func TestCheckboxGroup(t *testing.T) {
 
 	t.Run("Selected marks the matching options checked", func(t *testing.T) {
 		html := render(t, CheckboxGroup(CheckboxGroupProps{Options: opts, Selected: []string{"b"}}))
-		// Exactly one "checked" attribute should appear (for b, not a).
 		if count := strings.Count(html, `checked="checked"`); count != 1 {
 			t.Errorf("expected exactly 1 checked option, found %d in: %s", count, html)
 		}
@@ -337,8 +336,6 @@ func TestDropdown(t *testing.T) {
 			OnSelect: func(v string) { selected = v },
 		})
 		clickHandlers := findHandlers(n, "click")
-		// First click handler is the control's OnToggleOpen; the rest are
-		// per-option OnSelect handlers.
 		if len(clickHandlers) != 1+len(opts) {
 			t.Fatalf("expected %d click handlers, got %d", 1+len(opts), len(clickHandlers))
 		}

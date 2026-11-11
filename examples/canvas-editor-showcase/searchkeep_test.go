@@ -17,7 +17,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// memVault is the sealedVault of the tests: what the browser's IndexedDB would hold.
 type memVault struct {
 	mu   sync.Mutex
 	data map[string][]byte
@@ -43,7 +42,6 @@ func (v *memVault) Delete(name string) error {
 	return nil
 }
 
-// countingAdapter counts the documents read.
 type countingAdapter struct {
 	docstore.Adapter
 	loads int
@@ -80,7 +78,6 @@ func (r *rig) save(name, text string) saver.Entry {
 	return e
 }
 
-// resave saves the document id again with new text.
 func (r *rig) resave(id, name, text string) {
 	r.t.Helper()
 	d := docfile.Document{Title: name, Content: []docfile.Item{{Chars: &docfile.Chars{Text: text}}}}
@@ -91,7 +88,6 @@ func (r *rig) resave(id, name, text string) {
 	}
 }
 
-// view is the documents' own keys, as syncSearchAll lists them.
 func (r *rig) view() (docstore.Adapter, map[string]string) {
 	r.t.Helper()
 	entries, err := r.saver.List(context.Background(), r.target)
@@ -140,8 +136,6 @@ func refresh(t *testing.T, c *indexCache, v sealedVault, key []byte, r *rig) (do
 	return res, loaded
 }
 
-// The sealed index kept at one visit is used at the next: nothing is read again but the documents that
-// changed, were added or removed, and the search finds the same words.
 func TestKeptIndexMeansOnlyChangedDocumentsAreRead(t *testing.T) {
 	r := newSearchRig(t)
 	vault, key := newVault(), testKey(1)
@@ -158,7 +152,6 @@ func TestKeptIndexMeansOnlyChangedDocumentsAreRead(t *testing.T) {
 		t.Fatalf("the index was not kept: %d entries", len(vault.data))
 	}
 
-	// A new visit: a fresh page state, the same storage.
 	r.mem.loads = 0
 	var second indexCache
 	res, loaded = refresh(t, &second, vault, key, r)
@@ -169,7 +162,6 @@ func TestKeptIndexMeansOnlyChangedDocumentsAreRead(t *testing.T) {
 		t.Fatalf("the kept index does not find the word: %+v", hits)
 	}
 
-	// One document is saved, one added, one removed between visits.
 	r.resave(a.ID, "alpha", "the quick brown cat")
 	r.save("delta", "sphinx of black quartz")
 	e, _ := r.saver.List(context.Background(), r.target)
@@ -184,21 +176,17 @@ func TestKeptIndexMeansOnlyChangedDocumentsAreRead(t *testing.T) {
 	var third indexCache
 	res, loaded = refresh(t, &third, vault, key, r)
 	if !loaded || res.Added != 2 || res.Removed != 2 || r.mem.loads != 2 {
-		// the saver gives a saved document a new file, so a re-save is an add and a remove
 		t.Fatalf("third visit: loaded %v, %+v, %d documents read", loaded, res, r.mem.loads)
 	}
 	if len(third.ix.Search("fox", 5)) != 0 || len(third.ix.Search("cat", 5)) != 1 || len(third.ix.Search("quartz", 5)) != 1 || len(third.ix.Search("liquor", 5)) != 0 {
 		t.Fatal("the refreshed index is not in line with the documents")
 	}
-	// ...and what was kept after that is the refreshed index.
 	var fourth indexCache
 	if res, loaded := refresh(t, &fourth, vault, key, r); !loaded || res.Added+res.Updated+res.Removed != 0 {
 		t.Fatalf("the refreshed index was not kept: loaded %v, %+v", loaded, res)
 	}
 }
 
-// What is kept holds none of the words and no title, and an index that was changed, or sealed under
-// another key, is dropped and built again from the documents.
 func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
 	r := newSearchRig(t)
 	vault, key := newVault(), testKey(1)
@@ -215,7 +203,6 @@ func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
 		}
 	}
 
-	// Changed: one byte flipped.
 	tampered := bytes.Clone(kept)
 	tampered[len(tampered)/2] ^= 0x01
 	vault.data[keptName("m")] = tampered
@@ -228,13 +215,11 @@ func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
 		t.Fatal("the tampered index was left in place")
 	}
 
-	// Another key (another owner list, another device): it cannot be opened.
 	var e indexCache
 	res, loaded = refresh(t, &e, vault, testKey(2), r)
 	if loaded || res.Added != 1 {
 		t.Fatalf("a foreign index: loaded %v, %+v", loaded, res)
 	}
-	// ...and it is kept for the new key now, not the old.
 	var f indexCache
 	if _, loaded := refresh(t, &f, vault, testKey(2), r); !loaded {
 		t.Fatal("the rebuilt index was not kept under the new key")
@@ -244,7 +229,6 @@ func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
 		t.Fatal("the old key opened an index sealed under another")
 	}
 
-	// Rubbish and truncation.
 	for _, junk := range [][]byte{{}, []byte("GJSI1"), []byte("not an index at all")} {
 		vault.data[keptName("m")] = junk
 		var h indexCache
@@ -254,8 +238,6 @@ func TestKeptIndexIsSealedAndATamperedOrForeignOneIsRebuilt(t *testing.T) {
 	}
 }
 
-// Without a key (a locked encrypted store, a browser without a device key) nothing is read from or written
-// to the storage, and an index built under a key is not served any more.
 func TestNoKeyMeansNothingIsKeptOrKeptIndexServed(t *testing.T) {
 	r := newSearchRig(t)
 	vault, key := newVault(), testKey(1)
@@ -277,7 +259,6 @@ func TestNoKeyMeansNothingIsKeptOrKeptIndexServed(t *testing.T) {
 	if len(empty.data) != 0 {
 		t.Fatal("a keyless search kept an index")
 	}
-	// Locking the store (key gone) drops the in-memory index of the encrypted store too.
 	var e indexCache
 	refresh(t, &e, vault, key, r)
 	if e.ix.Len() == 0 {
@@ -292,7 +273,6 @@ func TestNoKeyMeansNothingIsKeptOrKeptIndexServed(t *testing.T) {
 	}
 }
 
-// The key of a place depends on the place and on the secret, and an empty secret makes none.
 func TestSearchKeyIsPerPlaceAndSecret(t *testing.T) {
 	s := bytes.Repeat([]byte{7}, 32)
 	a, _ := searchKey(s, "browser")
@@ -327,9 +307,6 @@ func keysOf(p *docsearch.Plan) []string {
 	return k
 }
 
-// A replacement across documents is written through the saver: the document opens with the new text
-// (its checksum is the saver's own), the history keeps the old text as a named version, and Undo puts the
-// old text back.
 func TestReplaceAcrossDocumentsKeepsTheOldTextAsAVersion(t *testing.T) {
 	ctx := context.Background()
 	r := newSearchRig(t)
@@ -374,8 +351,6 @@ func TestReplaceAcrossDocumentsKeepsTheOldTextAsAVersion(t *testing.T) {
 	}
 }
 
-// A document saved after the preview is not overwritten, and one saved after the replacement is not
-// reverted by Undo.
 func TestReplaceAndUndoNeverOverwriteALaterSave(t *testing.T) {
 	ctx := context.Background()
 	r := newSearchRig(t)
@@ -403,8 +378,6 @@ func TestReplaceAndUndoNeverOverwriteALaterSave(t *testing.T) {
 	}
 }
 
-// A refresh that changed one document keeps that change, not the whole index again: the base stays as it
-// was, a small record follows it, and a new visit sees both.
 func TestOneChangeKeepsOnlyThatChange(t *testing.T) {
 	r := newSearchRig(t)
 	vault, key := newVault(), testKey(3)
@@ -431,7 +404,6 @@ func TestOneChangeKeepsOnlyThatChange(t *testing.T) {
 		t.Error("the change holds readable text")
 	}
 
-	// A new visit: the base and the change give the index, and nothing is read.
 	r.mem.loads = 0
 	var third indexCache
 	res, loaded := refresh(t, &third, vault, key, r)
@@ -439,7 +411,6 @@ func TestOneChangeKeepsOnlyThatChange(t *testing.T) {
 		t.Fatalf("third visit: loaded %v, %+v, %d read", loaded, res, r.mem.loads)
 	}
 
-	// A change that was altered is refused with the ones after it; the documents are read again.
 	r.save("later", "yet another about quartz")
 	var fourth indexCache
 	refresh(t, &fourth, vault, key, r)
@@ -452,7 +423,6 @@ func TestOneChangeKeepsOnlyThatChange(t *testing.T) {
 	}
 }
 
-// After many changes the index is sealed whole again and the old changes go.
 func TestManyChangesAreFoldedIntoANewBase(t *testing.T) {
 	r := newSearchRig(t)
 	vault, key := newVault(), testKey(4)

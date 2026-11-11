@@ -43,7 +43,6 @@ func TestItemsAreKeyedByNameAndSeparatedFromTheEmptyState(t *testing.T) {
 	if strings.Count(html, `data-key="`) != 1 || !strings.Contains(html, `data-key="Ada"`) || strings.Contains(html, "Nobody here yet.") {
 		t.Errorf("one person: %s", html)
 	}
-	// Markup in a field is text.
 	html, err = xango.RenderString(Page([]Person{{"<i>x</i>", "r&d"}}))
 	if err != nil {
 		t.Fatal(err)

@@ -54,7 +54,6 @@ func chars(items []Item) string {
 	return sb.String()
 }
 
-// A clip is written as text that stands for it: a line naming it as a link, and its words under Transcript.
 func TestMediaTextNamesTheClipAndCarriesItsWords(t *testing.T) {
 	m := MediaItem{URL: "https://example.com/talk.mp4", Title: "The talk", Captions: vtt}
 	items := MediaText(m)
@@ -75,8 +74,6 @@ func TestMediaTextNamesTheClipAndCarriesItsWords(t *testing.T) {
 	}
 }
 
-// A document with clips opens in the editor with each clip as a card (it has no player), and saving it again gives
-// the clip back with every field; the plain formats flatten it to the text that stands for it.
 func TestMediaOpensAsACardAndDocumentsKeepTheirClips(t *testing.T) {
 	m := &MediaItem{URL: "a.mp4", Title: "Clip", Transcript: "Spoken words.", Captions: "WEBVTT\n", CaptionsURL: "a.vtt", Width: 320, Height: 180}
 	d := Document{Content: []Item{{Chars: &Chars{Text: "Before"}}, {Media: m}, {Chars: &Chars{Text: "After"}}}}
@@ -121,7 +118,6 @@ func TestMediaOpensAsACardAndDocumentsKeepTheirClips(t *testing.T) {
 	}
 }
 
-// The clip survives every codec with all its fields (the fill document has one with every field set).
 func TestMediaItemIsSavedByEveryCodec(t *testing.T) {
 	d := Document{Content: []Item{{Media: &MediaItem{URL: "u", Kind: "audio", Title: "t", Captions: vtt, CaptionsURL: "c", Transcript: "w", Width: 640, Height: 360}}}}
 	for _, c := range Formats() {

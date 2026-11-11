@@ -11,8 +11,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// Profile runs action with the browser's CPU profiler on and returns the n functions with the most time of
-// their own, then those with the most time with everything they called, as "ms  function (url:line)" lines, for finding where the time of an action goes.
 func (d *Tab) Profile(action func(), n int) []string {
 	d.t.Helper()
 	d.must(chromedp.ActionFunc(func(ctx context.Context) error { return profiler.Enable().Do(ctx) }))
@@ -38,7 +36,6 @@ func (d *Tab) Profile(action func(), n int) []string {
 	for _, nd := range prof.Nodes {
 		byName[name(nd)] += self[nd.ID]
 	}
-	// the time of a function with everything it called, counted once per call path (not again for recursion)
 	byID := map[int64]*profiler.ProfileNode{}
 	for _, nd := range prof.Nodes {
 		byID[nd.ID] = nd

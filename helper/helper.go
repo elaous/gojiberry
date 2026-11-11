@@ -1,6 +1,3 @@
-// Package helper holds the writing-help actions the llm add-on can be asked for (summarise, make plainer, make shorter,
-// change the tone, explain): the prompt of each, and the cleaning of what a model answers. It knows no model and no
-// browser; the page sends the prompt to the add-on and shows the answer for the author to read and decide on.
 package helper
 
 import (
@@ -34,12 +31,9 @@ func (a Action) Valid() bool {
 	return false
 }
 
-// Replaces says the answer is a new version of the text (it can replace the selection); Explain and Summarise are
-// about the text and are put beside it.
 func (a Action) Replaces() bool { return a == Plainer || a == Shorter || a == Formal || a == Friendly }
 
-// MaxText is the longest text one request takes, in runes. Longer text is refused, not cut: a summary of half a text
-// would pass for a summary of all of it.
+// MaxText is the longest text one request takes, in runes.
 const MaxText = 6000
 
 const common = "Answer with only the result, in the same language as the text, with no introduction, no quotation marks and no notes."
@@ -58,7 +52,6 @@ type ErrTooLong struct{ Runes int }
 
 func (e ErrTooLong) Error() string { return "helper: the text is too long for one request" }
 
-// Prompt is the prompt for an action on a text; lang is the text's language tag ("" when not known).
 func Prompt(a Action, text, lang string) (string, error) {
 	if !a.Valid() {
 		return "", ErrUnknown
@@ -91,8 +84,6 @@ const (
 	ErrEmpty   helperError = "helper: there is no text"
 )
 
-// Clean tidies a model's answer: a code fence around it, a leading "Here is…" line and quotation marks round the whole
-// of it are taken off, and surrounding space.
 func Clean(answer string) string {
 	s := strings.TrimSpace(answer)
 	if strings.HasPrefix(s, "```") {

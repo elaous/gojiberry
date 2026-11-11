@@ -2,8 +2,6 @@
 
 package main
 
-// lorem is the starting document; only the browser entry point (main.go) uses it, so it
-// lives in a js/wasm-only file.
 const lorem = "# Quarterly report\n\n" +
 	"This whole canvas is a **xango** tree: `<canvas.TextFlow>` inside `<canvas.Canvas>`, with the page furniture " +
 	"described by a render prop. Switch to edit mode and double-click a header to type in it; the text stays when the state changes.\n\n" +

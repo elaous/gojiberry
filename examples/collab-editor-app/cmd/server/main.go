@@ -1,21 +1,3 @@
-// Command server runs the live collab-editor-app demo: it serves the
-// static client (index.html, main.wasm, wasm_exec.js, the components
-// CSS the client needs) and a /ws WebSocket endpoint that relays
-// every edit to every other connected client, so two or more browser
-// tabs editing the same document actually see each other's changes in
-// real time -- not a simulation of collaboration, the real thing,
-// over a real WebSocket connection each client opens via
-// domrt/browser.Connect.
-//
-// The sync strategy is deliberately the simplest one that's still
-// genuinely real-time and correct for a single shared document: each
-// edit is the document's *entire* current text (not a diff/operational
-// transform), the server keeps the latest one in memory, and a newly
-// connecting client is sent that snapshot immediately so it starts in
-// sync. Last edit wins if two people type at the exact same instant --
-// a real product would want operational transforms or a CRDT to merge
-// concurrent edits properly, which is a much bigger project than this
-// demo's scope.
 package main
 
 import (
@@ -32,9 +14,6 @@ import (
 	"github.com/elaous/gojiberry/wasmserve"
 )
 
-// hub tracks every connected client and the document's last known
-// content, so a client that joins after others have already been
-// editing starts from the current state instead of a blank page.
 type hub struct {
 	mu      sync.Mutex
 	clients map[*websocket.Conn]bool
@@ -55,8 +34,7 @@ func (h *hub) broadcast(ctx context.Context, from *websocket.Conn, msg []byte) {
 	}
 	h.mu.Unlock()
 	for _, c := range peers {
-		// A peer that is not reading must not hold up everyone else: give each write a
-		// deadline, and drop the peer that misses it.
+		// a stalled peer must not hold up the others
 		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := c.Write(wctx, websocket.MessageText, msg); err != nil {
 			_ = c.CloseNow()
@@ -66,16 +44,12 @@ func (h *hub) broadcast(ctx context.Context, from *websocket.Conn, msg []byte) {
 }
 
 func (h *hub) handleWS(w http.ResponseWriter, r *http.Request) {
-	// Only pages served by this server may open the socket (the library's default
-	// check: the Origin's host must be the request's Host), so another site open in the
-	// same browser cannot read or overwrite the document through localhost. Set
-	// ALLOWED_ORIGINS (comma-separated host patterns) to let others in.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins()})
 	if err != nil {
 		log.Println("websocket accept:", err)
 		return
 	}
-	defer func() { _ = conn.CloseNow() }() // the connection is going away either way; nothing to do on a failed teardown
+	defer func() { _ = conn.CloseNow() }()
 
 	ctx := r.Context()
 
@@ -105,8 +79,6 @@ func (h *hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// allowedOrigins reads ALLOWED_ORIGINS ("example.com,*.example.com"); none means only
-// the server's own origin.
 func allowedOrigins() []string {
 	var out []string
 	for _, p := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
@@ -122,12 +94,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.handleWS)
-	// wasmserve sends main.wasm as application/wasm (streaming compile) and gzipped, with an ETag so a
-	// reload is a 304; the fast gzip level keeps a rebuilt wasm from costing seconds on its first request.
 	mux.Handle("/", wasmserve.Handler(os.DirFS("static"), wasmserve.Options{GzipLevel: gzip.BestSpeed}))
 
-	// Loopback by default: the demo has no sign-in, so it is not offered to the network.
-	// Set ADDR (":8096") to listen on every interface.
 	addr := "127.0.0.1:8096"
 	if v := os.Getenv("ADDR"); v != "" {
 		addr = v

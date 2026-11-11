@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// fixedProposals makes the ids and times of new proposals predictable (p1, p2, ...).
 func fixedProposals(t *testing.T) {
 	t.Helper()
 	oldID, oldClock := proposalID, proposalClock
@@ -36,7 +35,6 @@ func TestProposalMarkRoundTrip(t *testing.T) {
 	}
 }
 
-// text of the flow as the person sees it: struck text in [..], added text in {..}.
 func marked(f *TextFlow) string {
 	var sb strings.Builder
 	for _, it := range f.Slice(0, len([]rune(f.EditText()))) {
@@ -70,7 +68,6 @@ func TestTypingAndDeletingInSuggestionMode(t *testing.T) {
 	if ps := f.Proposals(); len(ps) != 1 || ps[0].Inserted != "!?" || ps[0].Deleted != "" || ps[0].Author != "ana" {
 		t.Fatalf("one proposal: %+v", ps)
 	}
-	// backspace over the proposed text removes it for real: it was never part of the document
 	st.HandleKey("Backspace", false)
 	if marked(f) != "hello{!} world" || f.Cursors()[0] != At(6) {
 		t.Fatalf("backspace over a proposal: %q %v", marked(f), f.Cursors())
@@ -83,14 +80,12 @@ func TestTypingAndDeletingInSuggestionMode(t *testing.T) {
 	if f.Cursors()[0] != At(4) {
 		t.Fatalf("the caret goes before what was struck: %v", f.Cursors())
 	}
-	// the Delete key strikes forward and the caret moves past it
 	st.HandleKey("Delete", false)
 	if marked(f) != "hell[o] world" {
 		t.Fatalf("delete of already struck text changes nothing: %q", marked(f))
 	}
 	st.HandleKey("ArrowRight", false)
 	st.HandleKey("Delete", false)
-	// (the Delete over struck text moved the caret past it; the arrow moved it past the space)
 	if marked(f) != "hell[o] [w]orld" {
 		t.Fatalf("delete forward: %q", marked(f))
 	}
@@ -141,7 +136,6 @@ func TestAcceptAndRejectAProposal(t *testing.T) {
 		if f.AcceptProposal(id) || f.RejectProposal("nope") {
 			t.Error("settling a proposal twice, or one that is not there, does nothing")
 		}
-		// one undo brings the proposal back
 		if !f.Undo() || len(f.Proposals()) != 1 {
 			t.Fatalf("accept=%v: undo: %d proposals", accept, len(f.Proposals()))
 		}
@@ -187,7 +181,6 @@ func TestTypingOutsideSuggestionModeDoesNotJoinAProposal(t *testing.T) {
 	if marked(f) != "abc{X}Ydef" {
 		t.Fatalf("%q", marked(f))
 	}
-	// formatting applied to a proposal keeps it a proposal, and bold text carries no mark of its own
 	f.SetSelection(3, 5)
 	f.ApplyFormat(func(fm *Format) { fm.FontWeight = 700 })
 	if len(f.Proposals()) != 1 {
@@ -262,7 +255,6 @@ func TestReviewCommands(t *testing.T) {
 	}
 }
 
-// Accepting a completion while suggesting is a proposal too: one proposal holding the whole word.
 func TestCompletionWhileSuggestingIsAProposal(t *testing.T) {
 	fixedProposals(t)
 	f, _ := editFlow(t, 0, Chars{Text: "alpha alps\n"})
@@ -275,7 +267,6 @@ func TestCompletionWhileSuggestingIsAProposal(t *testing.T) {
 		t.Fatal("completions are offered")
 	}
 	f.HandleKey("Tab", false)
-	// the typed letters were themselves proposed additions, which the completion replaces for real
 	if flowText(f) != "alpha alps\nalps" {
 		t.Fatalf("%q / %q", marked(f), flowText(f))
 	}

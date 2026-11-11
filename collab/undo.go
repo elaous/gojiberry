@@ -7,15 +7,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// Per-user undo. The flow's own undo restores snapshots, which would also
-// rewind other people's edits. Instead the bridge records the inverse of each
-// of your own changes by character id -- the characters you inserted, the
-// runs you deleted (with the character they followed), the attributes you
-// changed (with their old values) -- and undoing applies the inverse to the
-// document as it is now: characters other people typed stay, a deleted run
-// comes back where it was even if its neighbours moved.
-
-// maxUndo is how many steps are kept.
 const maxUndo = 200
 
 type deletedRun struct {
@@ -30,7 +21,6 @@ type formatChange struct {
 	old []string // the value before, per id ("" for none)
 }
 
-// entry is the inverse of one local change.
 type entry struct {
 	inserted []crdt.Timestamp
 	origin   crdt.Timestamp // what the first inserted character followed
@@ -42,8 +32,6 @@ func (e entry) empty() bool {
 	return len(e.inserted) == 0 && len(e.deleted) == 0 && len(e.formats) == 0
 }
 
-// pureInsert and pureDelete say an entry is one run of typing or of
-// deleting, which a following one may extend.
 func (e entry) pureInsert() bool {
 	return len(e.inserted) > 0 && len(e.deleted) == 0 && len(e.formats) == 0
 }
@@ -52,9 +40,6 @@ func (e entry) pureDelete() bool {
 	return len(e.deleted) == 1 && len(e.inserted) == 0 && len(e.formats) == 0
 }
 
-// record stores the inverse of a change just made: on the undo stack for
-// an edit of yours (clearing redo), or on the stack an undo or redo in
-// progress says. Typing and deleting runs are merged into one step.
 func (b *Bridge) record(e entry) {
 	if e.empty() {
 		return
@@ -91,21 +76,18 @@ func (b *Bridge) record(e entry) {
 	}
 }
 
-// CanUndo and CanRedo say whether there is a step of yours to undo or redo.
 func (b *Bridge) CanUndo() bool { return len(b.undo) > 0 }
 
 // CanRedo reports whether an undone step can be redone.
 func (b *Bridge) CanRedo() bool { return len(b.redo) > 0 }
 
-// Undo undoes your last change, leaving other people's alone; it reports
-// whether it did anything. The flow's undo commands (Ctrl+Z) come here.
+// Undo undoes your last change, leaving others' changes alone.
 func (b *Bridge) Undo() bool { return b.UndoStep(false) }
 
 // Redo redoes the change you undid last.
 func (b *Bridge) Redo() bool { return b.UndoStep(true) }
 
-// UndoStep undoes (or, with redo, redoes) one step, skipping steps whose
-// text other people have since removed.
+// UndoStep undoes or redoes one step, skipping others' changes.
 func (b *Bridge) UndoStep(redo bool) bool {
 	if !b.ready {
 		return false
@@ -127,9 +109,6 @@ func (b *Bridge) UndoStep(redo bool) bool {
 	return false
 }
 
-// revert applies the inverse e to the document as it stands, through the
-// flow (so the change is shared like any other and its own inverse recorded
-// for redo).
 func (b *Bridge) revert(e entry) bool {
 	atoms := b.read()
 	ids := b.Doc.VisibleIDs(block)

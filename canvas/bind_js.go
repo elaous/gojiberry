@@ -17,7 +17,6 @@ var (
 	errNoContext = errors.New("canvas: browser gave no 2D context")
 )
 
-// jsPainter adapts *html.Context2D to ImagePainter.
 type jsPainter struct{ *html.Context2D }
 
 // NewPainter adapts a canvas 2D context to ImagePainter.
@@ -43,8 +42,7 @@ type HTMLImage struct {
 	url string
 }
 
-// URL is the address the image was loaded from (a data: URL included), so a
-// document that holds it can be saved and the image fetched again on load.
+// URL is the load address, including data: URLs.
 func (i *HTMLImage) URL() string { return i.url }
 
 // Size implements ImageSource.
@@ -52,9 +50,6 @@ func (i *HTMLImage) Size() (w, h float64) {
 	return i.v.Get("naturalWidth").Float(), i.v.Get("naturalHeight").Float()
 }
 
-// Pixels is a small RGBA copy of the picture (at most maxSide pixels on the longer side, 4 bytes a pixel, row by
-// row), read in the page: for a description made on the device, which never sends the picture anywhere. ok is false
-// if the browser will not give the pixels.
 func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
 	nw, nh := i.Size()
 	if nw <= 0 || nh <= 0 || maxSide <= 0 {
@@ -88,8 +83,6 @@ func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
 	return rgba, w, h, ok
 }
 
-// PNG is the picture as PNG bytes, scaled down so that the longer side is at most maxSide pixels (never up), read in
-// the page: for an add-on that describes or reads the picture on the device. ok is false if the browser will not give it.
 func (i *HTMLImage) PNG(maxSide int) (png []byte, ok bool) {
 	nw, nh := i.Size()
 	if nw <= 0 || nh <= 0 || maxSide <= 0 {
@@ -122,9 +115,6 @@ func (i *HTMLImage) PNG(maxSide int) (png []byte, ok bool) {
 	return data, true
 }
 
-// LoadImage starts loading url (a normal or data: URL) and calls
-// onLoad, on the browser's event loop, once it has decoded. onError is
-// optional.
 func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 	el := js.Global().Get("Image").New()
 	var load, fail js.Func
@@ -146,19 +136,6 @@ func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 	el.Set("src", url)
 }
 
-// Bind wires the stage to a real <canvas> and a text <input> that
-// captures keyboard input (so typing, paste and IME composition all
-// behave natively): it gives every component the canvas's painter,
-// registers mouse and keyboard handlers, blinks carets, sets the CSS
-// cursor, and draws once. Width/Height default to the canvas's size.
-//
-// input must be focusable but can be visually hidden (e.g. opacity 0,
-// 1px, position: fixed at the top-left so the browser never scrolls to
-// it while you type). Bind returns an error if canvasEl is
-// not a <canvas> or has no 2D context.
-//
-// The returned function redraws the stage; call it after changing a
-// component from outside (SetMode, editing a field, ...).
 func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	cv := canvasEl.AsCanvas()
 	if cv == nil {
@@ -187,8 +164,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return v.String(), true
 	}
 	s.OpenLink = func(url string) { js.Global().Call("open", url, "_blank", "noopener") }
-	// The async clipboard API (needs a secure context and, for reading,
-	// the user's permission; without it the commands do nothing).
+	// async clipboard API: needs a secure context; without it commands do nothing
 	if cb := js.Global().Get("navigator").Get("clipboard"); cb.Truthy() {
 		s.Clipboard = Clipboard{
 			Write: func(text string) { cb.Call("writeText", text) },
@@ -208,9 +184,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return e.X - r.Left, e.Y - r.Top
 	}
 
-	// focusByPointer is true while the page itself gives the input the focus because of a click: that focus is
-	// not the keyboard arriving, and must not start editing the text (a click may be going to edit a header, or
-	// to select something that is not text).
+	// set while a click focuses the input: must not start editing
 	focusByPointer := false
 	focusInput := func() {
 		focusByPointer = true
@@ -221,19 +195,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		if e.Button != 0 {
 			return
 		}
-		// The canvas isn't focusable; without this the browser
-		// clears the input's focus once this handler returns.
 		e.PreventDefault()
 		x, y := local(e)
 		s.MouseDownMods(x, y, Mods{Ctrl: e.CtrlKey, Shift: e.ShiftKey, Alt: e.AltKey, Meta: e.MetaKey})
 		if e.Detail == 2 { // the second press of a double click
 			s.DoubleClick(x, y)
 		}
-		// The input needs focus to receive keys: for typing into a
-		// cell, and for arrow/Enter/Escape navigation of a menu.
 		if s.WantsFocus() {
-			// preventScroll: focusing the (offscreen) input must not make the
-			// page jump.
 			focusInput()
 		}
 		redraw()
@@ -244,14 +212,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	})
-	// mouseup on the window so a drag that ends outside the canvas
-	// still ends.
+	// mouseup on the window: a drag ending outside the canvas still ends
 	up := js.Global()
 	up.Call("addEventListener", "mouseup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		r := canvasEl.BoundingRect()
 		ev := args[0]
 		if s.MouseUp(ev.Get("clientX").Float()-r.Left, ev.Get("clientY").Float()-r.Top) {
-			// A drag-selection only has something selected once it ends.
+			// a drag-selection only has something selected once it ends
 			if s.WantsFocus() {
 				focusInput()
 			}
@@ -273,19 +240,12 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 
-	// Composition (an input method editor: Chinese, Japanese, Korean, accents by dead keys): while the person
-	// is composing, the input holds the preedit text and must be left alone; clearing it would end the
-	// composition. The text is inserted once, when the composition ends. Browsers differ in the order of the
-	// last "input" and "compositionend", so the text is taken from the input (or the event) at the end and
-	// the input is emptied, which leaves a later "input" with nothing to insert.
 	composing := false
 	insert := func(t string) {
 		if t != "" && s.InsertText(t) {
 			redraw()
 		}
 	}
-	// The preedit is drawn on the canvas at the caret, and the input (which the method puts its candidate
-	// window next to) is moved there for as long as the composition lasts.
 	place := func() {
 		x, y, h, ok := s.CompositionAnchor()
 		if !ok {
@@ -302,7 +262,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	}
-	// The keyboard arriving in the editor starts editing: without a pointer there is no click to do it.
+	// the keyboard arriving in the editor starts editing: there is no click
 	input.AddEventListener("focus", js.FuncOf(func(js.Value, []js.Value) any {
 		if !focusByPointer && s.FocusIn() {
 			redraw()
@@ -347,19 +307,16 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 	input.OnKeyDown(func(e html.KeyEvent) {
-		// While an input method is composing, its keys (Enter to choose a candidate, the arrows, Backspace in
-		// the preedit) are the method's, not the editor's. keyCode 229 is what browsers send for them.
 		if composing || e.Value.Get("isComposing").Bool() || e.Value.Get("keyCode").Int() == 229 {
 			return
 		}
 		if e.CtrlKey || e.MetaKey || e.AltKey {
 			key := e.Key
-			// Alt changes the character on some layouts; the physical key
-			// is what a shortcut means.
+			// Alt changes the character on some layouts: the physical key is meant
 			if strings.HasPrefix(e.Code, "Key") && len(e.Code) == 4 {
 				key = e.Code[3:]
 			}
-			// With Shift, a digit key types a symbol (Shift+8 is "*").
+			// with Shift, a digit key types a symbol (Shift+8 is "*")
 			if strings.HasPrefix(e.Code, "Digit") && len(e.Code) == 6 {
 				key = e.Code[5:]
 			}
@@ -375,9 +332,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		}
 	})
 
-	// The system clipboard, through the browser's own events (which is
-	// how a page is allowed to use it): copy and cut put the selection on
-	// it, paste inserts from it.
 	clip := func(args []js.Value) js.Value { return args[0].Get("clipboardData") }
 	input.AddEventListener("copy", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if text, ok := s.Copy(); ok {
@@ -402,7 +356,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 
-	// Blink carets.
 	on := true
 	blink := js.FuncOf(func(js.Value, []js.Value) any {
 		on = !on
@@ -417,8 +370,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	return redraw, nil
 }
 
-// Bind is shorthand for a single-component Stage: it wires v to a
-// <canvas> and hidden <input> (see Stage.Bind), and makes Refresh work.
 func (v *TableView) Bind(canvasEl, input *html.Element) error {
 	st := NewStage(nil, 0, 0, v)
 	redraw, err := st.Bind(canvasEl, input)

@@ -1,13 +1,3 @@
-// Package main demos two ways xango pulls a file into a program at
-// transpile time instead of a separate go:embed + read-file dance: a
-// JSON config decoded directly into a struct you declare yourself
-// (config.(SiteConfig) tells xango to decode into SiteConfig -- xango
-// doesn't generate or infer it, so any shape you can declare in Go
-// works), and a page's stylesheet pulled in by a blank CSS import
-// (`import _ "<module path>/style.css"`, written like a Go package
-// import), and an @title annotation on Page below, which wraps Page's
-// return in the <html><head>...</head><body>...</body></html>
-// boilerplate (xango.Document) automatically.
 package main
 
 import (
@@ -24,14 +14,6 @@ type SiteConfig struct {
 	Title string `json:"title"`
 }
 
-// Page renders the configured title as a heading. @title is metadata,
-// not a tool directive or an editor hint (see
-// internal/transpile/page_metadata.go) -- xgc reads it and wraps Page's
-// return value in xango.Document{Title: ...}.Render(), which also puts
-// every stylesheet registered by a CSS import (the blank style.css import
-// above) in the head, so Page itself only needs to return the page's
-// actual content.
-//
 // @title resource-imports-demo
 func Page(cfg SiteConfig) xango.Node {
 	return <h1>{cfg.Title}</h1>

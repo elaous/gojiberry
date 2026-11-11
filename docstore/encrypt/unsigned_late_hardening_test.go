@@ -11,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// legacyFile stores, as a file of the document, an unsigned v2 frame (what a client with no
-// Signer writes).
 func (w *world) legacyFile(t *testing.T, id, name string) string {
 	t.Helper()
 	f := id + "~" + name + ".open"
@@ -24,10 +22,6 @@ func (w *world) legacyFile(t *testing.T, id, name string) string {
 	return f
 }
 
-// A store writer that puts back an older, validly signed record that says Signed in the gap
-// between the flip and the mark must not get the owner's marker write to sign it again: that
-// would make the replay the truth. The mark is refused, the error says so, the replayed bytes
-// stay as they are.
 func TestMarkIsRefusedOnAReplayedOlderRecord(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -58,7 +52,6 @@ func TestMarkIsRefusedOnAReplayedOlderRecord(t *testing.T) {
 	}
 }
 
-// The record and the error text are bounded however many files are found unsigned.
 func TestUnsignedLateIsCapped(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -93,7 +86,6 @@ func TestUnsignedLateIsCapped(t *testing.T) {
 	}
 }
 
-// clearUnsignedLate on a document that still has an unsigned file keeps the mark.
 func TestClearUnsignedLateKeepsTheMarkWhileAFileIsUnsigned(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -106,8 +98,6 @@ func TestClearUnsignedLateKeepsTheMarkWhileAFileIsUnsigned(t *testing.T) {
 	}
 }
 
-// With more unsigned files than the record lists, settling the listed ones is not enough: a file
-// outside the listed ids is still unsigned, so the mark stays until every file is settled.
 func TestClearUnsignedLateLooksPastTheListedIDs(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -159,8 +149,6 @@ func TestClearUnsignedLateLooksPastTheListedIDs(t *testing.T) {
 	}
 }
 
-// loadFailsAfterSave makes the reads of one file fail once it was written: the re-key worked,
-// the look afterwards cannot read it.
 type loadFailsAfterSave struct {
 	*flaky
 	file  string
@@ -190,8 +178,6 @@ func (l *loadFailsAfterSave) Load(ctx context.Context, id string) (docstore.Docu
 	return l.flaky.Load(ctx, id)
 }
 
-// A successful re-key is not failed by the tidy-up of the mark: when the files cannot be
-// looked at, the mark stays and the re-key reports success.
 func TestClearUnsignedLateFailureDoesNotFailTheRekey(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -213,8 +199,6 @@ func TestClearUnsignedLateFailureDoesNotFailTheRekey(t *testing.T) {
 	}
 }
 
-// Verify reports the documents in the unsigned-late state (Saver.UnsignedCheck), apart from the
-// pending ones, and the entry goes when the owner settles the document.
 func TestVerifyReportsUnsignedLateDocuments(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

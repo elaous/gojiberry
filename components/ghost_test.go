@@ -7,7 +7,6 @@ func TestGhostShowsOnlyWhatContinuesThePrefix(t *testing.T) {
 	if !g.Show("ze", "zebra", 5) || g.Suffix != "bra" || !g.Visible() {
 		t.Fatalf("ze -> %+v", g)
 	}
-	// A typed capital is not changed: only the rest is offered.
 	if !g.Show("ZE", "zebra", 5) || g.Suffix != "bra" {
 		t.Fatalf("ZE -> %+v", g)
 	}
@@ -21,7 +20,6 @@ func TestGhostShowsOnlyWhatContinuesThePrefix(t *testing.T) {
 	}
 }
 
-// Only Tab accepts; no other key inserts the suggestion.
 func TestGhostIsAcceptedByTabAlone(t *testing.T) {
 	keys := []string{"Enter", " ", "ArrowRight", "ArrowLeft", "End", "a", "Backspace", "ArrowDown", "Shift", "Delete", "."}
 	for _, k := range keys {

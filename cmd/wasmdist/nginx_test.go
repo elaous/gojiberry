@@ -15,9 +15,6 @@ import (
 	"time"
 )
 
-// startNginx runs nginx with the showcase's own server block (examples/canvas-editor-showcase/nginx.conf) on a free
-// local port, serving dir, and returns the address. The test is skipped when nginx is not installed, unless
-// GOJIBERRY_REQUIRE_NGINX is set.
 func startNginx(t *testing.T, dir string) string {
 	t.Helper()
 	bin, err := exec.LookPath("nginx")
@@ -43,7 +40,7 @@ func startNginx(t *testing.T, dir string) string {
 	}
 	tmp := t.TempDir()
 	user := ""
-	if os.Geteuid() == 0 { // as root nginx's workers would otherwise run as another user, who cannot read the test's directory
+	if os.Geteuid() == 0 {
 		user = "user root;\n"
 	}
 	main := fmt.Sprintf(user+`pid %[1]s/nginx.pid;
@@ -93,9 +90,6 @@ http {
 	return ""
 }
 
-// The nginx recipe of docs/deploy.md, run against a real nginx: the showcase's server block serves a directory that
-// wasmdist compressed with the wasm type, the precompressed file as it is, a validator that makes a repeat visit a
-// 304, a 404 for a script that is not there, and the start page for an app path.
 func TestShowcaseNginxRecipe(t *testing.T) {
 	dir, wasm := site(t)
 	if err := run([]string{"-brotli", "off", dir}, io.Discard); err != nil {
@@ -118,7 +112,6 @@ func TestShowcaseNginxRecipe(t *testing.T) {
 		return res, b
 	}
 
-	// wasm: its own type, and the .gz beside it sent as it is for a browser that takes gzip
 	res, body := get("/main.wasm", map[string]string{"Accept-Encoding": "gzip"})
 	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "application/wasm" || res.Header.Get("Content-Encoding") != "gzip" {
 		t.Fatalf("main.wasm for gzip: %d %q %q", res.StatusCode, res.Header.Get("Content-Type"), res.Header.Get("Content-Encoding"))
@@ -141,13 +134,11 @@ func TestShowcaseNginxRecipe(t *testing.T) {
 		t.Errorf("Cache-Control = %q, want no-cache (the file names carry no hash)", cc)
 	}
 
-	// a browser that takes no gzip gets the file itself, with the same type
 	res, body = get("/main.wasm", map[string]string{"Accept-Encoding": "identity"})
 	if res.Header.Get("Content-Encoding") != "" || !bytes.Equal(body, wasm) || res.Header.Get("Content-Type") != "application/wasm" {
 		t.Errorf("main.wasm for identity: %q %q, %d bytes", res.Header.Get("Content-Encoding"), res.Header.Get("Content-Type"), len(body))
 	}
 
-	// a repeat visit asks with the validator and gets no body
 	etag := res.Header.Get("ETag")
 	if etag == "" {
 		t.Fatal("no ETag")
@@ -157,7 +148,6 @@ func TestShowcaseNginxRecipe(t *testing.T) {
 		t.Errorf("a repeat visit: %d with %d bytes, want 304 and none", res.StatusCode, len(body))
 	}
 
-	// scripts: the right type, and a missing one is a 404, not the start page
 	if res, _ = get("/wasm_exec.js", nil); res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Type"), "javascript") {
 		t.Errorf("wasm_exec.js: %d %q", res.StatusCode, res.Header.Get("Content-Type"))
 	}
@@ -168,7 +158,6 @@ func TestShowcaseNginxRecipe(t *testing.T) {
 		t.Errorf("sw.js: %d, Cache-Control %q (it must be fetched afresh to notice a new build)", res.StatusCode, res.Header.Get("Cache-Control"))
 	}
 
-	// an app path is answered with the start page
 	res, body = get("/d/report", map[string]string{"Accept-Encoding": "identity"})
 	if res.StatusCode != 200 || !strings.HasPrefix(string(body), "<!doctype html>") {
 		t.Errorf("/d/report: %d %.40q", res.StatusCode, body)

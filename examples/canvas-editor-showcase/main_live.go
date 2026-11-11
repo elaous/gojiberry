@@ -20,9 +20,6 @@ import (
 	"time"
 )
 
-// liveProps makes the page a shared document when it was opened on /d/{doc} (or ?doc=):
-// the Collab element does the connecting; this says where, as whom, over what
-// (?transport=ws for a WebSocket) and what to do when the state changes.
 func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()) *collabxango.CollabProps {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	doc := pageDoc()
@@ -46,8 +43,6 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 		transport = ws.WebSockets()
 	}
 	u.liveName, u.liveColor = name, get("color", "#7c5cff")
-	// In a shared session each person is who they say they are: their comments, suggestions and saved
-	// versions carry that name, not the page's placeholder address.
 	state.Author = name
 	if u.saver != nil {
 		u.saver.Author = name
@@ -83,7 +78,6 @@ func liveProps(u *ui, state *State, origin string, renderCanvas, renderUI func()
 	}
 }
 
-// liveState summarises a shared session for the e2e test.
 func liveState(u *ui, flow *canvas.TextFlow) any {
 	s := u.live
 	if s == nil {
@@ -118,7 +112,6 @@ func titleOf(cmds []canvas.CommandInfo, c canvas.Command) string {
 	return string(c)
 }
 
-// resetBinding puts cmd's chords back to their defaults.
 func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Command) {
 	stage.Rebind(cmd, "")
 	for _, chord := range defaults.Chords(cmd) {
@@ -126,7 +119,6 @@ func resetBinding(stage *canvas.Stage, defaults canvas.Keymap, cmd canvas.Comman
 	}
 }
 
-// livePresence shows who is at a shared document and the connection.
 func livePresence(u *ui, flow func() *canvas.TextFlow, renderUI func()) xango.Node {
 	s := u.live
 	var peers []components.PresencePeer
@@ -134,8 +126,6 @@ func livePresence(u *ui, flow func() *canvas.TextFlow, renderUI func()) xango.No
 		peers = append(peers, components.PresencePeer{Name: p.Name, Color: p.Color, User: p.User, Role: string(p.Role)})
 	}
 	slices.SortFunc(peers, func(a, b components.PresencePeer) int { return strings.Compare(a.Name, b.Name) })
-	// "Where is <name>?" buttons are a per-person setting (View > Display preferences): off, the cursors are
-	// never spoken; on, the position is given only when asked.
 	var where func(components.PresencePeer)
 	if curPrefs.Where == "on" {
 		where = func(p components.PresencePeer) { u.sayWhere(flow(), p); renderUI() }
@@ -150,8 +140,6 @@ func livePresence(u *ui, flow func() *canvas.TextFlow, renderUI func()) xango.No
 	return pres
 }
 
-// hubURL is the collaboration hub's address: the page's own /collab unless ?hub= names
-// another that allowedEndpoint accepts.
 func hubURL(param, origin string) string {
 	if u := pageEndpoint(param); u != "" {
 		return u
@@ -159,9 +147,6 @@ func hubURL(param, origin string) string {
 	return origin + "/collab"
 }
 
-// downloadChoices lists the formats of the "Download as" menu under headings: the
-// documents people send around first, then web and text formats, then the data formats,
-// and last opendocs' own file, which carries the history too.
 func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 	groups := []struct {
 		title string
@@ -200,9 +185,6 @@ func downloadChoices(exporters []transfer.Exporter) []components.SaverChoice {
 	return out
 }
 
-// publishEncState brings the "encryption" part of #state up to date. The rest of #state is written
-// when the canvas is drawn, which a change in the Save or People tab (unlock, restore, a directory
-// address confirmed) does not do.
 func (u *ui) publishEncState() {
 	el := js.Global().Get("document").Call("getElementById", "state")
 	if !el.Truthy() {

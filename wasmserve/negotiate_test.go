@@ -132,7 +132,6 @@ func TestPrecompressedRanges(t *testing.T) {
 
 func TestStalePrecompressedSiblingIsNotSent(t *testing.T) {
 	fsys, plain, _ := precompressedSite(t)
-	// The program was rebuilt after the .gz and .br were made.
 	fsys["main.wasm"] = &fstest.MapFile{Data: append([]byte("new "), plain...), ModTime: time.Unix(3000, 0)}
 	h := Handler(fsys, Options{})
 	rec := get(h, "GET", "/main.wasm", map[string]string{"Accept-Encoding": "br, gzip"})

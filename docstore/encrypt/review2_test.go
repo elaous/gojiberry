@@ -12,12 +12,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Tests of the second review round of PR 83: the window between a re-key and the change of the
-// record to Signed, the way out of the lockout it leaves, and the document id in the signature.
-
-// otherClient is a client that has no Signer (an older build, or a browser that is not the
-// owner's): it saves server-level documents with the unsigned v2 frame while the record does
-// not say Signed.
 func (w *world) otherClient() *Adapter { return New(w.inner, w.ring) }
 
 func mustNotChange(t *testing.T, w *world, f string, before []byte) {
@@ -31,9 +25,6 @@ func mustNotChange(t *testing.T, w *world, f string, before []byte) {
 	}
 }
 
-// A client without the Signer that saves between the re-key and the change of the record is
-// noticed by the owner before the record says Signed: the file is sealed again, signed, and the
-// document is not locked.
 func TestUnsignedSaveBetweenRekeyAndSignedFlipIsResealed(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -73,9 +64,6 @@ func TestUnsignedSaveBetweenRekeyAndSignedFlipIsResealed(t *testing.T) {
 	}
 }
 
-// lockedDocument leaves the state the window of finishFiles leaves (a save by a client without
-// the Signer after the owner's last look and before the record is written): an unsigned file
-// under a record that says Signed.
 func lockedDocument(t *testing.T, w *world, kind string) (id, f string) {
 	t.Helper()
 	ctx := context.Background()
@@ -91,8 +79,6 @@ func lockedDocument(t *testing.T, w *world, kind string) (id, f string) {
 			t.Error(err)
 		}
 	}
-	// The re-key's second look, after it flipped, finds the file saved in the window: the owner
-	// is told (the record does say Signed).
 	if _, err := w.sharing.Repair(ctx, id); !errors.Is(err, ErrUnsignedAfterFlip) || !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("setup: Repair = %v, want ErrUnsignedAfterFlip wrapping ErrForgedFrame", err)
 	}
@@ -111,14 +97,12 @@ func TestLockoutIsRefusedByDefaultAndRepairedWithAcceptUnsigned(t *testing.T) {
 	id, f := lockedDocument(t, w, "v2")
 	raw, _ := w.inner.Load(ctx, f)
 
-	// What the lockout is: every operation refuses the file.
 	if _, err := w.ad.Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("Load: %v", err)
 	}
 	if err := w.ad.Save(ctx, id+"~dddddddddddd.open", []byte("x")); !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("Save: %v", err)
 	}
-	// The default is to refuse, with an error that names the file and the option.
 	_, err := w.sharing.Repair(ctx, id)
 	if !errors.Is(err, ErrForgedFrame) || !strings.Contains(err.Error(), f) || !strings.Contains(err.Error(), "AcceptUnsigned") {
 		t.Fatalf("Repair without the option: %v", err)
@@ -128,7 +112,6 @@ func TestLockoutIsRefusedByDefaultAndRepairedWithAcceptUnsigned(t *testing.T) {
 	}
 	mustNotChange(t, w, f, raw.Data)
 
-	// The owner confirms: the file is sealed again, signed, with its content.
 	if _, err := w.sharing.Repair(ctx, id, AcceptUnsigned()); err != nil {
 		t.Fatalf("Repair with AcceptUnsigned: %v", err)
 	}
@@ -161,7 +144,6 @@ func TestRecoverWithAcceptUnsignedGetsOutOfTheLockout(t *testing.T) {
 	}
 }
 
-// An older build that wrote v1/v2 frames under a record that already says Signed: the same way out.
 func TestLegacyV1FilesUnderASignedRecordAreRecoverable(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -188,8 +170,6 @@ func TestLegacyV1FilesUnderASignedRecordAreRecoverable(t *testing.T) {
 	}
 }
 
-// AcceptUnsigned launders unsigned frames only: a v3 frame whose signature is bad is a forgery,
-// and nothing is written over it by Repair or Recover, with or without the option.
 func TestBadSignatureV3FileIsNeverResealed(t *testing.T) {
 	ctx := context.Background()
 	attacker, _ := NewSigner(bytes.Repeat([]byte{7}, 32))
@@ -233,8 +213,6 @@ func TestBadSignatureV3FileIsNeverResealed(t *testing.T) {
 	}
 }
 
-// AcceptUnsigned does not excuse an unsigned file that contradicts the record: one claiming a
-// newer record than there is is still a replay finding.
 func TestAcceptUnsignedStillChecksSeqAndLevel(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -261,12 +239,6 @@ func TestAcceptUnsignedNeedsTheAdapterSigner(t *testing.T) {
 	}
 }
 
-// ---- the document id is part of what a frame's signature covers ------------------------------
-
-// A genuine signed frame of one document put into another (with the id in its header changed,
-// as an attacker who knows both recipient lists can) is refused because the signature does not
-// cover that id: not merely because the header id differs, which unframe checks and which would
-// hide an id left out of the signed message.
 func TestFrameSignatureCoversTheDocumentID(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -287,7 +259,6 @@ func TestFrameSignatureCoversTheDocumentID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// frameSigMessage directly: the signature verifies for A's id and for no other.
 	pub := w.signer.Public()
 	msgA := frameSigMessage(fa, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
 	msgB := frameSigMessage(fb, levelByte(fi.b.Level), fi.b.Seq, fi.b.Hash, fi.content)
@@ -298,7 +269,6 @@ func TestFrameSignatureCoversTheDocumentID(t *testing.T) {
 		t.Fatal("the signed message does not depend on the document id")
 	}
 
-	// The replay: A's frame with B's id in the header, which unframe accepts for B.
 	i := bytes.Index(framed, []byte(fa))
 	if i < len(frameMagic) {
 		t.Fatal("setup: cannot find the id in the header")
@@ -315,7 +285,6 @@ func TestFrameSignatureCoversTheDocumentID(t *testing.T) {
 	if !errors.Is(err, ErrForgedFrame) || !strings.Contains(err.Error(), "signature") {
 		t.Fatalf("verifyFrame of A's signature over B's id: %v", err)
 	}
-	// And end to end, through Load of B's file.
 	if err := w.inner.Save(ctx, fb, sealRaw(t, w.publicRecipients(), replay)); err != nil {
 		t.Fatal(err)
 	}
@@ -323,8 +292,6 @@ func TestFrameSignatureCoversTheDocumentID(t *testing.T) {
 		t.Fatalf("Load of the replayed frame: %v", err)
 	}
 }
-
-// ---- Verify keeps what the pending check found beside the record it could not verify ----------
 
 func TestVerifyKeepsPendingResultsWhenOneRecordDoesNotVerify(t *testing.T) {
 	ctx := context.Background()

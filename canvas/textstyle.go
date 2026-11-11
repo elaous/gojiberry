@@ -21,8 +21,7 @@ type TextStyle struct {
 	LineHeight float64 // px between baselines; 0 means 1.4 x FontSize
 	Color      string  // CSS color
 
-	// Decorations. Superscript and Subscript draw the text at 70% of
-	// FontSize, raised or lowered; Background highlights behind it.
+	// Decorations.
 	Underline   bool
 	Strike      bool
 	Superscript bool
@@ -35,8 +34,6 @@ func DefaultTextStyle() TextStyle {
 	return TextStyle{FontFamily: "sans-serif", FontSize: 16, FontWeight: 400, FontStyle: StyleNormal, LineHeight: 22, Color: "#2e3338"}
 }
 
-// Font returns the CSS font shorthand Context2D.font expects, filling
-// in defaults for unset fields.
 func (s TextStyle) Font() string {
 	style, weight, size, family := s.FontStyle, s.FontWeight, s.drawSize(), s.FontFamily
 	if style == "" {
@@ -54,8 +51,6 @@ func (s TextStyle) Font() string {
 	return style + " " + strconv.Itoa(weight) + " " + strconv.FormatFloat(size, 'f', -1, 64) + "px " + family
 }
 
-// drawSize is the size text is actually drawn at: FontSize, or 70% of
-// it for superscripts and subscripts (default 16 if unset).
 func (s TextStyle) drawSize() float64 {
 	size := s.FontSize
 	if size <= 0 {
@@ -67,8 +62,6 @@ func (s TextStyle) drawSize() float64 {
 	return size
 }
 
-// baselineShift is how far the text is moved down from the baseline (a
-// negative value raises it): superscripts rise, subscripts sink.
 func (s TextStyle) baselineShift() float64 {
 	size := s.FontSize
 	if size <= 0 {
@@ -83,8 +76,6 @@ func (s TextStyle) baselineShift() float64 {
 	return 0
 }
 
-// Leading returns the line height in px, applying the 1.4 x FontSize
-// default.
 func (s TextStyle) Leading() float64 {
 	if s.LineHeight > 0 {
 		return s.LineHeight
@@ -96,8 +87,6 @@ func (s TextStyle) Leading() float64 {
 	return 1.4 * size
 }
 
-// CSS returns s as an inline CSS declaration list, for previewing the
-// style in ordinary HTML (a style editor's sample text, say).
 func (s TextStyle) CSS() string {
 	var b strings.Builder
 	decl := func(k, v string) { b.WriteString(k + ":" + v + ";") }

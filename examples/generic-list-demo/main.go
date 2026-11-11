@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// run renders the demo page to out, followed by a newline.
 func run(out io.Writer) error {
 	html, err := xango.RenderString(Page([]Person{{"Ada", "Engineer"}, {"Grace", "Admiral"}}))
 	if err != nil {

@@ -24,7 +24,6 @@ func TestOMMLHasTheOfficeMathFormOfEachPart(t *testing.T) {
 			t.Errorf("%q gave %s, want it to hold %s", c.formula, got, c.want)
 		}
 	}
-	// whatever the notation is given, the result is well formed
 	for _, f := range []string{"", "{{", "}}", "^", "_2", "frac{1}", "sqrt", "a^{b^{c}}", "\x00x"} {
 		if got := OMML(f); !strings.HasPrefix(got, "<m:oMath>") || strings.Count(got, "<m:oMath>") != 1 {
 			t.Errorf("%q: %s", f, got)
@@ -32,8 +31,6 @@ func TestOMMLHasTheOfficeMathFormOfEachPart(t *testing.T) {
 	}
 }
 
-// An equation goes into the Word file as Office Math with its words as hidden text, and comes back from it as the
-// same formula with the same alternative.
 func TestEquationRoundTripsThroughWord(t *testing.T) {
 	for _, f := range []string{"x^2+y^2=z^2", "frac{a+b}{2}", "sqrt{x_i}", "sum_{i=1}^n i", "int_0^1 x dx"} {
 		doc := docfile.Document{Content: []docfile.Item{
@@ -65,7 +62,6 @@ func TestEquationRoundTripsThroughWord(t *testing.T) {
 		if strings.ReplaceAll(eq.Formula, " ", "") != strings.ReplaceAll(f, " ", "") || eq.Alt != "the words for "+f {
 			t.Errorf("%q came back as %+v", f, eq)
 		}
-		// no stray empty line or visible alt text around it
 		text := ""
 		for _, it := range back.Content {
 			if it.Chars != nil {

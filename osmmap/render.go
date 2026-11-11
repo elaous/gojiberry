@@ -15,14 +15,12 @@ import (
 	"strings"
 )
 
-// Credit is the credit that goes with every map (the data is under the Open Database Licence).
 const Credit = "Map data © OpenStreetMap contributors (ODbL)"
 
 const (
 	tileSize = 256
 	// MaxTiles is how many tiles one map may ask for.
-	MaxTiles = 16
-	// MinZoom and MaxZoom bound the zoom (0 is the whole world in one tile, 19 is a building).
+	MaxTiles         = 16
 	MinZoom, MaxZoom = 1, 19
 	maxTileBytes     = 1 << 20
 )
@@ -32,8 +30,6 @@ type TileSource interface {
 	Tile(ctx context.Context, z, x, y int) (image.Image, error)
 }
 
-// Tiles reads tiles from a server by an address with {z}, {x} and {y} in it (the public OpenStreetMap server by default,
-// which is for light use; see the package doc).
 type Tiles struct {
 	URL       string // "" is https://tile.openstreetmap.org/{z}/{x}/{y}.png
 	Client    *http.Client
@@ -73,7 +69,6 @@ func (t Tiles) Tile(ctx context.Context, z, x, y int) (image.Image, error) {
 	return img, nil
 }
 
-// worldPixel is where a place is on the map of the whole world at the zoom, in pixels from its top left corner.
 func worldPixel(lat, lng float64, zoom int) (x, y float64) {
 	lat = math.Max(math.Min(lat, 85.0511), -85.0511) // the map ends there
 	size := float64(tileSize) * math.Pow(2, float64(zoom))
@@ -83,7 +78,6 @@ func worldPixel(lat, lng float64, zoom int) (x, y float64) {
 	return x, y
 }
 
-// Render draws the map of w x h pixels centred on the place at the zoom, with a marker on the place, and returns it as a PNG.
 func Render(ctx context.Context, src TileSource, lat, lng float64, zoom, w, h int) ([]byte, error) {
 	if zoom < MinZoom || zoom > MaxZoom {
 		return nil, fmt.Errorf("osmmap: the zoom must be between %d and %d", MinZoom, MaxZoom)
@@ -122,7 +116,6 @@ func Render(ctx context.Context, src TileSource, lat, lng float64, zoom, w, h in
 	return out.Bytes(), nil
 }
 
-// marker draws a red dot with a white ring.
 func marker(img *image.RGBA, cx, cy int) {
 	const outer, inner = 9, 6
 	for y := -outer; y <= outer; y++ {

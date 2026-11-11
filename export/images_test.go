@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// pngDataURL is a small opaque PNG as a data: URL.
 func pngDataURL(t *testing.T, w, h int) string {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -32,7 +31,7 @@ func pngDataURL(t *testing.T, w, h int) string {
 func TestDOCXEmbedsADataURLPicture(t *testing.T) {
 	snap := Snapshot{Blocks: []Block{
 		{Kind: Image, ImageSrc: pngDataURL(t, 4, 3), ImageAlt: "A gradient", ImageCaption: "Fig. 1"},
-		{Kind: Image, ImageSrc: pngDataURL(t, 2, 2), ImageW: 5000, ImageH: 5000}, // wider than the page: scaled down
+		{Kind: Image, ImageSrc: pngDataURL(t, 2, 2), ImageW: 5000, ImageH: 5000},
 		{Kind: Image, ImageSrc: "https://example.com/not-a-data-url.png", ImageCaption: "Remote"},
 		{Kind: Image, ImageSrc: "data:image/webp;base64,AAAA", ImageCaption: "Unsupported"},
 		{Kind: Image, ImageSrc: "data:image/png;base64,!!!notbase64", ImageCaption: "Broken"},
@@ -88,7 +87,6 @@ func TestDecodeDataURLImage(t *testing.T) {
 	if err != nil || img.Bounds().Dx() != 3 || img.Bounds().Dy() != 2 {
 		t.Fatalf("%v %v", img, err)
 	}
-	// without the "data:...," head the payload alone is accepted
 	raw := strings.TrimPrefix(pngDataURL(t, 2, 2), "data:image/png;base64,")
 	if _, err := decodeDataURLImage(raw); err != nil {
 		t.Errorf("bare base64: %v", err)
@@ -102,7 +100,6 @@ func TestDecodeDataURLImage(t *testing.T) {
 }
 
 func TestOwnerOfAndHeadingLevelAndRawCode(t *testing.T) {
-	// a 2x2 table whose first cell spans both columns: (0,1) belongs to (0,0)
 	cells := []Block{
 		{TableColSpan: 2, TableRowSpan: 1}, {TableCovered: true},
 		{TableColSpan: 1, TableRowSpan: 1}, {TableColSpan: 1, TableRowSpan: 1},
@@ -124,7 +121,6 @@ func TestOwnerOfAndHeadingLevelAndRawCode(t *testing.T) {
 	}
 }
 
-// A picture's legend is written under the picture in every format, as a paragraph in italics.
 func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
 	d := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Before\n"}},
@@ -152,7 +148,6 @@ func TestALegendIsWrittenUnderThePictureInEveryFormat(t *testing.T) {
 			t.Errorf("%s does not carry the legend:\n%.300s", format, out)
 		}
 	}
-	// Word and OpenDocument keep their text in a zip: read the part that holds it.
 	for format, part := range map[string]string{"docx": "word/document.xml", "odt": "content.xml"} {
 		raw := rawOne(t, registry(), format, d)
 		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
@@ -196,7 +191,6 @@ func TestTableFormulasAreWrittenAsTheirValues(t *testing.T) {
 	}
 }
 
-// A picture found in an image repository keeps its credit in the picture's properties: Word's title, ODT's description.
 func TestImageCreditTravelsInWordAndODTProperties(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{{Image: &docfile.ImageItem{
 		URL: tinyPNG, Alt: "A dot", Credit: "Dot by Ann, CC BY 4.0, via Openverse", SourceURL: "https://example.org/dot"}}}}

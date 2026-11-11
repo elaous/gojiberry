@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// Dialect says how a SQL database spells the few things SQLStore needs.
 type Dialect int
 
 const (
@@ -21,24 +20,13 @@ const (
 	DialectDollar
 )
 
-// SQLStore keeps accounts in two columns' worth of a SQL table, not in a docstore: one row per
-// account with its ID, the user handle (unique, indexed), a version counter and the account as
-// JSON. It implements Store, Updater and Creator over any database/sql driver, with no
-// dependency on one: pass the *sql.DB and the Dialect. Update is an optimistic compare-and-set
-// on the version, so replicas on one database never lose a change (the same guarantee
-// AdapterStore gives over a conditional write); Create is the primary key.
-//
-// The rows hold public keys and e-mail addresses, not secrets, but they are personal data.
 type SQLStore struct {
 	DB      *sql.DB
 	Dialect Dialect
-	// Table is the table's name; "passkey_accounts" if empty. It is put into statements as is,
-	// so it must come from the program, never from a request.
+	// Table is the table's name; "passkey_accounts" if empty.
 	Table string
 }
 
-// Schema is the statement that makes the table (and the handle index) if they are not there; run
-// it once at start, or put the same in a migration.
 func (s *SQLStore) Schema() string {
 	t := s.table()
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
@@ -62,7 +50,6 @@ func (s *SQLStore) table() string {
 	return s.Table
 }
 
-// q turns "?" placeholders into the dialect's.
 func (s *SQLStore) q(query string) string {
 	if s.Dialect != DialectDollar {
 		return query
@@ -115,7 +102,7 @@ func (s *SQLStore) ByHandle(ctx context.Context, handle []byte) (*Account, error
 	return a, err
 }
 
-// Create implements Creator: the primary key (or the unique handle) refuses a second account.
+// primary key or unique handle refuses a second account
 func (s *SQLStore) Create(ctx context.Context, a *Account) error {
 	data, err := json.Marshal(a)
 	if err != nil {
@@ -132,7 +119,6 @@ func (s *SQLStore) Create(ctx context.Context, a *Account) error {
 	return nil
 }
 
-// Put implements Store: create the account or replace what it had.
 func (s *SQLStore) Put(ctx context.Context, a *Account) error {
 	data, err := json.Marshal(a)
 	if err != nil {
@@ -144,8 +130,6 @@ func (s *SQLStore) Put(ctx context.Context, a *Account) error {
 	return err
 }
 
-// Update implements Updater: read the row, change it, write it only if its version is still the
-// one read, else read again and call fn again.
 func (s *SQLStore) Update(ctx context.Context, id string, fn func(*Account) error) error {
 	for try := 0; try < maxUpdateTries; try++ {
 		a, version, err := s.read(ctx, s.DB, "id", id)

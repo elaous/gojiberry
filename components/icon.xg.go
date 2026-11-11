@@ -39,31 +39,14 @@ var iconGlyphs = map[IconName]string{
 
 // IconProps configures Icon.
 type IconProps struct {
-	Name IconName // one of the built-in names above; ignored if Glyph is set
-	// Glyph overrides Name with any caller-supplied character (or short
-	// string) -- an easy escape hatch for a symbol not in the built-in
-	// set, styled the same way as a built-in one.
+	Name  IconName // one of the built-in names above; ignored if Glyph is set
 	Glyph string
 	Size  int    // px, defaults to 20
 	Color string // defaults to inheriting the surrounding text color
-	// Label is the icon's accessible name. "" marks it as decorative
-	// (aria-hidden) -- the right default when it sits next to text
-	// that already says the same thing, e.g. a Button's label.
+	// Label is the icon's accessible name.
 	Label string
 }
 
-// Icon renders a small inline glyph, sized and colored via CSS. It's
-// deliberately text (a Unicode character), not an inline <svg>: domrt's
-// client-side Mount/Update create elements with plain createElement,
-// which builds the wrong (HTML, not SVG) namespace element for <svg>/
-// <path>/etc., so any such tree silently fails to render once mounted
-// client-side even though it looks fine in server-rendered HTML (see
-// Progress's circle variant, and domrt/svg's own doc comment, for the
-// same constraint solved the same way elsewhere in this package). For
-// a real vector icon that must render client-side, build it yourself
-// with domrt/svg.CreateElement and pass it through one of this
-// package's existing Icon *xango.Node slots (Chip, Dropdown,
-// ContextMenu) instead.
 func Icon(props IconProps) xango.Node {
 	glyph := props.Glyph
 	if glyph == "" {

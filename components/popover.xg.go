@@ -4,7 +4,6 @@ package components
 
 import "github.com/elaous/gojiberry/xango"
 
-// PopoverPlacement selects which side of the trigger Popover's panel appears on.
 type PopoverPlacement string
 
 const (
@@ -20,16 +19,9 @@ type PopoverProps struct {
 	Placement PopoverPlacement // defaults to PopoverBottom
 
 	OnToggleOpen func(open bool) // called when Trigger is clicked
-	// OnClose is called when the full-viewport backdrop behind the
-	// panel is clicked -- a click anywhere outside it, the same
-	// backdrop trick ContextMenu uses.
-	OnClose func()
+	OnClose      func()
 }
 
-// Popover renders Trigger, and, when Open, a panel of Content
-// anchored to it plus a full-viewport backdrop that closes it on an
-// outside click. Unlike Tooltip (pure CSS hover), Popover is
-// click-triggered and can hold interactive content of its own.
 func Popover(props PopoverProps) xango.Node {
 	placement := props.Placement
 	if placement == "" {

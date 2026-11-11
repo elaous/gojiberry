@@ -9,16 +9,11 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// formatExporter lets an Exporter (which reads a Snapshot) be registered with
-// a transfer.Registry (which hands over the saved document).
 type formatExporter struct {
-	format transfer.Format
-	e      Exporter
-	// tracked says the format can show suggested changes (as insertions and deletions); the others
-	// write the document as it would be with every suggestion accepted.
+	format  transfer.Format
+	e       Exporter
 	tracked bool
-	// media says the format embeds audio and video (HTML); the others write a clip as text.
-	media bool
+	media   bool
 }
 
 func (f formatExporter) Format() transfer.Format { return f.format }
@@ -32,7 +27,6 @@ func (f formatExporter) Export(d docfile.Document) ([]byte, error) {
 	return f.e.Export(FromDocument(d))
 }
 
-// docxImporter and pdfImporter read the formats docximport and pdftext do.
 type docxImporter struct{}
 
 func (docxImporter) Format() transfer.Format {
@@ -61,28 +55,22 @@ func (pdfImporter) Format() transfer.Format {
 }
 func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.Import(b) }
 
-// acceptedExporter writes the document as it would be with every suggestion accepted, for the exporters that
-// have no way to show a suggestion: text proposed to be removed must not reach a file that cannot strike it.
+// text proposed for removal must not reach a file
 type acceptedExporter struct{ transfer.Exporter }
 
 func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {
 	return a.Exporter.Export(acceptedView(d).MediaAsText().EquationsAsText().FormFieldsAsText())
 }
 
-// RegisterAccepted makes the Markdown and plain-text exporters of transfer.Default write the document as it
-// would be with every suggestion accepted (Register does it too). It pulls in none of the heavy formats, for a
-// program that does those elsewhere (package export/remote).
 func RegisterAccepted(r *transfer.Registry) {
-	for _, e := range r.Exporters() { // Markdown and plain text of transfer.Default read the text as it is
+	for _, e := range r.Exporters() {
 		if n := e.Format().Name; n == "markdown" || n == "text" {
 			r.AddExporter(acceptedExporter{e})
 		}
 	}
 }
 
-// Register adds the formats this package handles to r. It writes HTML, RTF,
-// EPUB, PDF, OpenDocument and Word (.docx), and reads Word, OpenDocument, HTML and PDF text. (Markdown and plain
-// text are in transfer.Default; for braille see package braille.)
+// Register adds this package's formats to r.
 func Register(r *transfer.Registry) {
 	RegisterAccepted(r)
 	for _, f := range []formatExporter{

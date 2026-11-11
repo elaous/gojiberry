@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/fontserver"
 )
 
-// writeFont writes a minimal sfnt file (an offset table, a directory
-// entry and a 'name' table) carrying the given family and subfamily.
 func writeFont(t *testing.T, dir, rel, family, subfamily string) {
 	t.Helper()
 	enc := func(s string) []byte {
@@ -91,7 +89,6 @@ func TestLocalRepository(t *testing.T) {
 		t.Fatalf("URL = %q", sans.Variants[1].URL)
 	}
 
-	// New files appear after Rescan.
 	writeFont(t, dir, "New.ttf", "Fresh", "Regular")
 	if again, _ := repo.Fonts(bg); len(again) != 2 {
 		t.Fatal("fonts are scanned once")
@@ -102,7 +99,6 @@ func TestLocalRepository(t *testing.T) {
 	if again, _ := repo.Fonts(bg); len(again) != 3 {
 		t.Fatalf("after Rescan: %d families", len(again))
 	}
-	// A missing directory is just empty.
 	empty, err := Local(filepath.Join(dir, "nope"), "").Fonts(bg)
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("%v %v", empty, err)
@@ -128,14 +124,12 @@ func TestServerRepositoryAgainstARealFontserver(t *testing.T) {
 	if v.Weight != 700 || v.URL != srv.URL+"/local/files/A%20Bold.ttf" {
 		t.Fatalf("variant = %+v", v)
 	}
-	// The URL really serves the file.
 	resp, err := http.Get(v.URL)
 	if err != nil || resp.StatusCode != 200 {
 		t.Fatalf("GET %s: %v %v", v.URL, resp, err)
 	}
 	resp.Body.Close()
 
-	// Google catalog with no API key: enabled=false, no families, no error.
 	g, err := Server(srv.URL, ServerGoogle, nil).Fonts(bg)
 	if err != nil || len(g) != 0 {
 		t.Fatalf("google (no key) = %v, %v", g, err)
@@ -176,7 +170,6 @@ func TestServerGoogleDecoding(t *testing.T) {
 		}
 	}
 
-	// HTTP errors and bad JSON are reported.
 	if _, err := Server(srv.URL, ServerLocal, nil).Fonts(bg); err == nil || !strings.Contains(err.Error(), "500") || !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("err = %v", err)
 	}

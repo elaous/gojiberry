@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// A backup of the store under the encrypting adapter holds only what the server holds (ciphertext),
-// is made and restored without a key, and after a restore the owner reads the same documents.
 func TestBackupOfAnEncryptedStoreIsOpaqueAndRestoresReadable(t *testing.T) {
 	ctx := context.Background()
 	id, err := age.GenerateX25519Identity()

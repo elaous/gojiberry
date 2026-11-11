@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// byAttr returns the first node under n carrying attribute name=value.
 func byAttr(n xango.Node, name, value string) (xango.Node, bool) {
 	for _, a := range n.Attrs {
 		if a.Name == name && a.Value == value {
@@ -25,7 +24,6 @@ func byAttr(n xango.Node, name, value string) (xango.Node, bool) {
 	return xango.Node{}, false
 }
 
-// fire runs the handler for event on the node found by attribute.
 func fire(t *testing.T, root xango.Node, attr, value, event string, payload any) {
 	t.Helper()
 	n, ok := byAttr(root, attr, value)
@@ -59,7 +57,6 @@ func TestFontSelectorClosed(t *testing.T) {
 	html = render(t, FontSelector(FontSelectorProps{}))
 	mustContain(t, html, ">Choose a font<")
 
-	// A selected family missing from the catalog is still shown in itself.
 	html = render(t, FontSelector(FontSelectorProps{Fonts: testFonts, Selected: "Unknown One"}))
 	mustContain(t, html, ">Unknown One<", `font-family:&#34;Unknown One&#34;`)
 }
@@ -84,18 +81,15 @@ func TestFontSelectorPanelListsFontsInTheirOwnTypefaces(t *testing.T) {
 		`data-family="Open Sans"`, `data-family="Georgia"`, `data-family="My Local"`,
 		`font-family:&#34;Open Sans&#34;, sans-serif`, ">Hamburgefonstiv<", ">Google Fonts<")
 	mustContain(t, html, `aria-selected="true"`, "gj-fontselector-option-selected")
-	// Source chips: All plus each source.
 	mustContain(t, html, `data-source=""`, `data-source="Google Fonts"`, `data-source="Web safe"`, `data-source="Local fonts"`)
 	if strings.Count(html, `role="option"`) != 4 {
 		t.Fatalf("expected 4 options: %s", html)
 	}
-	// Default preview text.
 	mustContain(t, render(t, FontSelector(FontSelectorProps{Fonts: testFonts, Open: true})), "The quick brown fox")
 }
 
 func TestFontSelectorSearchAndSourceFilter(t *testing.T) {
 	html := render(t, FontSelector(FontSelectorProps{Fonts: testFonts, Open: true, Query: "o"}))
-	// "o" matches Open Sans, Lora, Georgia, My Local; prefix match first.
 	if strings.Count(html, `role="option"`) != 4 || strings.Index(html, `data-family="Open Sans"`) > strings.Index(html, `data-family="Lora"`) {
 		t.Fatalf("prefix matches first: %s", html)
 	}
@@ -110,7 +104,6 @@ func TestFontSelectorSearchAndSourceFilter(t *testing.T) {
 	mustContain(t, html, `aria-pressed="true" data-source="Google Fonts"`)
 	html = render(t, FontSelector(FontSelectorProps{Fonts: testFonts, Open: true, Query: "zzz"}))
 	mustContain(t, html, "No fonts match")
-	// One source: no chips.
 	one := render(t, FontSelector(FontSelectorProps{Fonts: testFonts[:2], Open: true}))
 	mustNotContain(t, one, "gj-fontselector-chip")
 }
@@ -143,22 +136,17 @@ func TestFontSelectorRecentAndLimit(t *testing.T) {
 	}
 	html := render(t, FontSelector(FontSelectorProps{Fonts: many, Open: true, Limit: 10, Recent: []string{"Font 07", "Missing", "Font 03"}}))
 	mustContain(t, html, "gj-fontselector-group", ">Recent<", "20 more — keep typing to narrow the list")
-	// Recent first, in the order given, skipping fonts not in the catalog.
 	i7, i3, i0 := strings.Index(html, `data-family="Font 07"`), strings.Index(html, `data-family="Font 03"`), strings.Index(html, `data-family="Font 00"`)
 	if i7 >= i3 || i3 >= i0 {
 		t.Fatalf("recent order: %d %d %d", i7, i3, i0)
 	}
-	// While searching, no Recent group.
 	mustNotContain(t, render(t, FontSelector(FontSelectorProps{Fonts: many, Open: true, Query: "Font", Recent: []string{"Font 07"}})), ">Recent<")
-	// Default limit is 100.
 	big := make([]fonts.Font, 150)
 	for i := range big {
 		big[i] = fonts.Font{Family: fmt.Sprintf("F%03d", i)}
 	}
 	mustContain(t, render(t, FontSelector(FontSelectorProps{Fonts: big, Open: true})), "50 more")
 }
-
-// --- StyleEditor ---
 
 func edit(t *testing.T, props StyleEditorProps, attr, value, event string, payload any) canvas.Format {
 	t.Helper()
@@ -182,7 +170,6 @@ func TestStyleEditorRendersTheFormatAndAPreview(t *testing.T) {
 		`data-action="bold"`, `data-action="italic"`, `data-action="underline"`, `data-action="strike"`, `data-action="superscript"`, `data-action="subscript"`,
 		`value="20"`, `value="#aa0000"`, `value="#ffff00"`, `>Sample<`,
 		`data-preview="true"`, "font-family:Georgia;font-size:20px;font-weight:700;font-style:italic;color:#aa0000;background-color:#ffff00;text-decoration:underline;")
-	// Pressed toggles are marked.
 	for _, action := range []string{"bold", "italic", "underline"} {
 		n, _ := byAttr(StyleEditor(StyleEditorProps{Format: canvas.Format{FontWeight: 700, FontStyle: canvas.StyleItalic, Underline: true}}), "data-action", action)
 		pressed := false
@@ -193,7 +180,6 @@ func TestStyleEditorRendersTheFormatAndAPreview(t *testing.T) {
 			t.Errorf("%s should be pressed", action)
 		}
 	}
-	// Defaults.
 	mustContain(t, render(t, StyleEditor(StyleEditorProps{})), "The quick brown fox jumps over the lazy dog", `value="16"`, `value="#000000"`, `value="#ffff00"`)
 	mustContain(t, render(t, StyleEditor(StyleEditorProps{Disabled: true})), `disabled="disabled"`)
 }
@@ -224,7 +210,6 @@ func TestStyleEditorToggles(t *testing.T) {
 	if f := edit(t, StyleEditorProps{Base: base}, "data-action", "strike", "click", nil); !f.Strike {
 		t.Fatal("strike on")
 	}
-	// Superscript and subscript exclude each other.
 	if f := edit(t, StyleEditorProps{Base: base, Format: canvas.Format{Subscript: true}}, "data-action", "superscript", "click", nil); !f.Superscript || f.Subscript {
 		t.Fatalf("super replaces sub: %+v", f)
 	}
@@ -234,7 +219,6 @@ func TestStyleEditorToggles(t *testing.T) {
 	if f := edit(t, StyleEditorProps{Base: base, Format: canvas.Format{Superscript: true}}, "data-action", "superscript", "click", nil); f.Superscript {
 		t.Fatalf("super off: %+v", f)
 	}
-	// Other fields are kept.
 	if f := edit(t, StyleEditorProps{Base: base, Format: canvas.Format{Color: "#123456"}}, "data-action", "bold", "click", nil); f.Color != "#123456" {
 		t.Fatalf("bold dropped the color: %+v", f)
 	}
@@ -272,7 +256,6 @@ func TestStyleEditorFields(t *testing.T) {
 	if f := edit(t, StyleEditorProps{Base: base, Format: canvas.Format{Background: "#00ff00"}}, "data-clear", "background", "click", nil); f.Background != "" {
 		t.Fatalf("clear highlight: %+v", f)
 	}
-	// The selected weight option is marked.
 	html := render(t, StyleEditor(StyleEditorProps{Format: canvas.Format{FontWeight: 600}}))
 	mustContain(t, html, `value="600" selected="selected"`)
 }
@@ -308,12 +291,9 @@ func TestStyleEditorFontPicker(t *testing.T) {
 	if pickedByUser != "Lora" || changed.FontFamily != `"Lora", serif` {
 		t.Fatalf("user=%q format=%+v: choosing a font calls both", pickedByUser, changed)
 	}
-	// No picker, no selector.
 	mustNotContain(t, render(t, StyleEditor(StyleEditorProps{})), "gj-fontselector")
-	// Disabled editors disable the picker too.
 	props.Disabled = true
 	mustNotContain(t, render(t, StyleEditor(props)), "gj-fontselector-panel")
-	// A picker with no OnSelect of its own still updates the format.
 	props.Disabled = false
 	props.FontPicker = &FontSelectorProps{Fonts: testFonts, Open: true}
 	changed = canvas.Format{}

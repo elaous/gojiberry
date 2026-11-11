@@ -15,7 +15,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// cors lets the page (another origin) call a fake backend.
 func cors(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -27,8 +26,6 @@ func cors(h http.HandlerFunc) http.Handler {
 	})
 }
 
-// TestLanguageTab drives the Language tab against fake translate and grammar
-// servers.
 func TestLanguageTab(t *testing.T) {
 	tr := httptest.NewServer(cors(func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Text, TargetLang string }
@@ -56,7 +53,6 @@ func TestLanguageTab(t *testing.T) {
 	d.OK(d.Count(".gj-lang-target") == 1 && d.Count(".gj-lang-check") == 1, "both backends are offered")
 	d.OK(d.Is("s.language.translate && s.language.grammar"), "the page knows both are set up")
 
-	// Translate a selected word.
 	d.OK(d.Disabled(".gj-lang-translate"), "translate waits for a selection")
 	d.CanvasDblClick(240, 164)
 	d.Click(`button[data-tab="stats"]`)
@@ -65,8 +61,6 @@ func TestLanguageTab(t *testing.T) {
 	d.Click(".gj-lang-translate")
 	translated := d.Text(".gj-lang-translation")
 	d.OK(strings.Contains(translated, "[FR]"), "the selection is translated by the server: "+translated)
-	// Edited since it was translated: the range is not that text any more, so the
-	// translation is refused, not put in the wrong place.
 	stale := d.State().Str("text")
 	d.Focus("#input")
 	d.Press("Home")
@@ -79,7 +73,7 @@ func TestLanguageTab(t *testing.T) {
 	d.Click(".gj-lang-use")
 	d.WaitFor("the refusal", `(document.querySelector('.gj-doc-error, .gj-lang-error') || {textContent: ''}).textContent.includes('changed since')`)
 	d.OK(d.State().Str("text") == edited, "and the text is left alone")
-	d.CanvasDblClick(240, 164) // select a word again and translate it, now in the text as it is
+	d.CanvasDblClick(240, 164)
 	d.Click(`button[data-tab="stats"]`)
 	d.Click(`button[data-tab="language"]`)
 	d.Click(".gj-lang-translate")
@@ -89,7 +83,6 @@ func TestLanguageTab(t *testing.T) {
 	d.Wait("s.text !== " + e2etest.J(before))
 	d.OK(strings.Contains(d.State().Str("text"), "[FR]"), "Replace the selection puts the translation in the text")
 
-	// Grammar: the fake model flags the first "canvas" and offers "canvases".
 	d.Click(".gj-lang-check")
 	d.WaitFor("an issue", "document.querySelector('.gj-lang-issue')")
 	d.OK(d.State().Int("language.issues") == 1, "an issue is found")
@@ -101,7 +94,6 @@ func TestLanguageTab(t *testing.T) {
 	d.NoErrors()
 }
 
-// Counts in the status bar take the plural form and the number format of the interface language.
 func TestStatusCountsFollowTheLanguage(t *testing.T) {
 	for lang, want := range map[string]string{"en": `^[\d,]+ words$`, "de": `^[\d.]+ Wörter$`, "fr": `^[\d\x{202f}]+ mots$`, "es": `^[\d.]+ palabras$`} {
 		d := e2etest.NewSite(t).Open(t, "?lang="+lang)

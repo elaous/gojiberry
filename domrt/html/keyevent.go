@@ -4,12 +4,7 @@ package html
 
 import "syscall/js"
 
-// KeyEvent wraps a keydown/keyup DOM event with the fields a text
-// editor or shortcut handler actually needs -- xango.Event carries none
-// of these (see its doc comment: Value is only ever a simple
-// string/bool payload), so, like DragEvent and SubmitEvent, this is a
-// typed escape hatch for the parts a plain xango.EventHandler can't
-// express.
+// KeyEvent wraps a keydown or keyup DOM event.
 type KeyEvent struct {
 	Value    js.Value
 	Key      string // e.g. "a", "Enter", "ArrowLeft", "Backspace"
@@ -32,17 +27,13 @@ func newKeyEvent(v js.Value) KeyEvent {
 	}
 }
 
-// PreventDefault suppresses the browser's default handling of the
-// event (e.g. stopping ArrowUp/ArrowDown from scrolling the page).
+// PreventDefault suppresses the browser's default key handling.
 func (e KeyEvent) PreventDefault() { e.Value.Call("preventDefault") }
 
 // StopPropagation stops the event from bubbling further.
 func (e KeyEvent) StopPropagation() { e.Value.Call("stopPropagation") }
 
-// OnKeyDown registers fn for the keydown event -- the one that fires
-// for non-printable keys (arrows, Backspace, Enter, Ctrl/Cmd
-// shortcuts), unlike "input" which only fires once a character
-// actually changes the value.
+// OnKeyDown registers fn for the keydown event.
 func (e *Element) OnKeyDown(fn func(KeyEvent)) js.Func {
 	return e.onKeyEvent("keydown", fn)
 }

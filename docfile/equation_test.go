@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 )
 
-// A saved document holds an equation with its text alternative, a diagram's long description and the language
-// of a code block, in every encoding, and the editor's flow gives them back.
 func richElements() Document {
 	return Document{Title: "Elements", Content: []Item{
 		{Chars: &Chars{Text: "Before\n"}},
@@ -68,7 +66,6 @@ func TestElementsSurviveTheEditorsFlow(t *testing.T) {
 	if !reflect.DeepEqual(back.Content, d.Content) {
 		t.Errorf("flow back to a document:\n got %+v\nwant %+v", back.Content, d.Content)
 	}
-	// editing the equation in the flow is saved
 	eq.Alt = "Pythagoras"
 	if got := FromFlow("Elements", f).Content[1].Equation; got == nil || got.Alt != "Pythagoras" {
 		t.Errorf("an edited alternative is not saved: %+v", got)
@@ -127,7 +124,6 @@ func TestAnInlineEquationStaysInItsLineAsText(t *testing.T) {
 	}
 }
 
-// A form field keeps its properties and what was written in it through the editor and back.
 func TestFormFieldRoundTripsThroughTheFlow(t *testing.T) {
 	d := Document{Title: "Form", Content: []Item{
 		{Chars: &Chars{Text: "Name "}},
@@ -159,7 +155,6 @@ func TestFormFieldRoundTripsThroughTheFlow(t *testing.T) {
 	}
 }
 
-// A form field in a table cell is saved with the table, comes back as a field, and its cell text is its words.
 func TestTableCellFieldRoundTrips(t *testing.T) {
 	d := Document{Title: "T", Content: []Item{
 		{Table: &TableItem{Rows: []TableRow{{Cells: []string{"Item", "Qty"}}, {Cells: []string{"Pens", "Qty: 4"}}},
@@ -199,7 +194,6 @@ func TestTableCellFieldRoundTrips(t *testing.T) {
 	}
 }
 
-// Sizes set by dragging a grip are saved with the table and come back.
 func TestTableSizesRoundTrip(t *testing.T) {
 	d := Document{Title: "T", Content: []Item{
 		{Table: &TableItem{Rows: []TableRow{{Cells: []string{"a", "b"}}, {Cells: []string{"c", "d"}}}, ColWidths: []float64{0, 140}, RowHeights: []float64{0, 48}}},

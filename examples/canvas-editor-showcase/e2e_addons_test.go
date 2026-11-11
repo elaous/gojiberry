@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// whisperStub is a whisper add-on: one model to download and a transcribe that records what it was given.
 const whisperStub = `(() => {
 	let installed = false;
 	window.addons = window.addons || {};
@@ -22,8 +21,6 @@ const whisperStub = `(() => {
 	};
 })()`
 
-// The Add-ons tab lists what the page has, shows the models of an add-on with size and terms only when asked,
-// downloads and removes one; dictation can then run on the device through the whisper add-on and send nothing.
 func TestAddonsTabAndDictationOnTheDevice(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -45,7 +42,6 @@ func TestAddonsTabAndDictationOnTheDevice(t *testing.T) {
 	d.WaitSelector("#addons-whisper-0-remove")
 	d.OK(strings.Contains(d.Text("#addons-message"), "downloaded"), "it says it is downloaded: "+d.Text("#addons-message"))
 
-	// dictation on the device
 	d.Click(`button[data-tab="speech"]`)
 	d.WaitSelector("#speech-local")
 	d.OK(d.Str(`String(document.getElementById('speech-dictate').disabled)`) == "true", "dictation is off without an address or the add-on")
@@ -66,9 +62,6 @@ func TestAddonsTabAndDictationOnTheDevice(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the describe add-on, the draft description comes from what the picture shows: the add-on is given the picture as
-// PNG bytes, the draft says it came from the add-on and can be wrong, and nothing goes into the description until the
-// author uses it.
 func TestDraftDescriptionFromTheDescribeAddon(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Eval(`localStorage.setItem('showcase:a11y', JSON.stringify({hint: 'on'}))`, nil)
@@ -95,8 +88,6 @@ func TestDraftDescriptionFromTheDescribeAddon(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the ocr add-on, a picture offers "Read the text in the picture": the add-on is given PNG bytes, the text is shown
-// to be checked, and goes into the document, after the picture, only when the author says so.
 func TestReadTheTextInAPictureWithTheOcrAddon(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Eval(`window.addons = window.addons || {}; window.addons.ocr = { recognize(o) {
@@ -119,9 +110,6 @@ func TestReadTheTextInAPictureWithTheOcrAddon(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the translate add-on (and no translation server named in the address), the Language tab translates the
-// selection on the device: the add-on gets the plain language tag and the text, and the translation replaces the
-// selection only when asked.
 func TestTranslateTheSelectionWithTheTranslateAddon(t *testing.T) {
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
 	d.WaitSelector("canvas")
@@ -147,9 +135,6 @@ func TestTranslateTheSelectionWithTheTranslateAddon(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the llm add-on, the Language tab checks grammar on the device (the model is asked for issues and its answer is
-// checked against the text), and "Writing help" asks for the selection to be rewritten: the answer is shown, marked as
-// machine-made, and goes into the document only when the author presses a button.
 func TestLanguageTabWithTheLlmAddon(t *testing.T) {
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
 	d.WaitSelector("canvas")
@@ -166,13 +151,11 @@ func TestLanguageTabWithTheLlmAddon(t *testing.T) {
 	d.Click(`button[data-tab="language"]`)
 	d.WaitSelector(".gj-lang-check")
 
-	// grammar through the add-on
 	d.Click(".gj-lang-check")
 	d.WaitFor("an issue", "document.querySelector('.gj-lang-issue')")
 	d.OK(d.State().Int("language.issues") == 1, "an issue is found by the model on the device")
 	d.OK(strings.Contains(d.Text(".gj-lang-apply"), "canvases"), "with the fix on offer: "+d.Text(".gj-lang-apply"))
 
-	// writing help on a selection
 	d.OK(d.Disabled("#help-shorter"), "asking waits for a selection")
 	d.CanvasDblClick(240, 164)
 	d.Click(`button[data-tab="stats"]`)
@@ -189,8 +172,6 @@ func TestLanguageTabWithTheLlmAddon(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the spell add-on, the dictionaries it keeps are offered in the Spelling tab next to the built-in one; choosing one
-// reads the files the add-on hands over, and the words that are not in it are flagged.
 func TestSpellingWithTheSpellAddonsDictionary(t *testing.T) {
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
 	d.WaitSelector("canvas")
@@ -218,8 +199,6 @@ func TestSpellingWithTheSpellAddonsDictionary(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the diagram add-on, the Pictures tab draws a diagram from a description; it is put in the document as a picture
-// only with a description in words, and its source becomes the picture's long description.
 func TestDrawADiagramWithTheDiagramAddon(t *testing.T) {
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
 	d.WaitSelector("canvas")
@@ -245,7 +224,6 @@ func TestDrawADiagramWithTheDiagramAddon(t *testing.T) {
 	d.OK(d.Value("#img-alt-0") == "Three boxes in a row, A leads to B and B to C.", "the description is the picture's alt text")
 	d.OK(d.Value("#img-long-0") == "A --> B --> C", "and the source is its long description: "+d.Value("#img-long-0"))
 
-	// the picture can be changed: its description goes back into the form and the new drawing takes its place
 	d.Click("#img-diagram-0")
 	d.WaitFor("the form has the description", `document.getElementById('diagram-source').value === 'A --> B --> C' && document.getElementById('diagram-kind').value === 'map'`)
 	d.Fill("#diagram-source", "A --> B --> C --> D")

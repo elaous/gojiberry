@@ -5,14 +5,8 @@ import (
 	"slices"
 )
 
-// Spread view: the shade in the fold between two facing sheets, and the corner tabs that turn to the neighbouring
-// pair. Both are drawn only while PageSet.Spread is on.
-
-// foldTab is the side of the square corner tab; its triangle is drawn in one-pixel strips.
 const foldTab = 22
 
-// drawGutterShade darkens the inner edge of each sheet of a facing pair, strongest at the fold and fading
-// across GutterShadeWidth, the way a book's pages curve into the spine.
 func (ps *PageSet) drawGutterShade() {
 	s := ps.Style
 	if !ps.Spread || s.GutterShade <= 0 || s.GutterShadeWidth <= 0 {
@@ -36,8 +30,6 @@ func (ps *PageSet) drawGutterShade() {
 	}
 }
 
-// turnTab is where a sheet's corner tab sits: the bottom outer corner (left for the left sheet of a pair, right for
-// the right one). ok is false for a sheet without one (not a spread, or nothing to turn to).
 func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	if !ps.Spread || ps.OnTurn == nil {
 		return 0, 0, false, false
@@ -47,7 +39,7 @@ func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	if r < 0 {
 		return 0, 0, false, false
 	}
-	// The left sheet of a pair (or a lone last sheet) turns back; the right sheet turns forward.
+	// left sheets (or a lone last sheet) turn back, right forward
 	left = len(rows[r]) == 1 || rows[r][0] == i
 	if _, can := ps.TurnTarget(i, left); !can {
 		return 0, 0, false, false
@@ -59,8 +51,6 @@ func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	return px + pw - foldTab, py + ph - foldTab, false, true
 }
 
-// TurnTarget returns the first sheet of the pair before (back) or after the pair that holds sheet i, and whether there
-// is one.
 func (ps *PageSet) TurnTarget(i int, back bool) (page int, ok bool) {
 	rows := ps.rows()
 	r := slices.IndexFunc(rows, func(row []int) bool { return slices.Contains(row, i) })
@@ -83,7 +73,6 @@ func (ps *PageSet) TurnTarget(i int, back bool) (page int, ok bool) {
 	return 0, false
 }
 
-// drawTurnTabs draws a small folded corner on each sheet that has a neighbouring pair to turn to.
 func (ps *PageSet) drawTurnTabs() {
 	p, s := ps.Painter, ps.Style
 	for i := range ps.Pages {
@@ -91,8 +80,6 @@ func (ps *PageSet) drawTurnTabs() {
 		if !ok {
 			continue
 		}
-		// A right triangle in the corner, built from one-pixel strips: the page colour on the fold, the border
-		// on its edge.
 		for k := range foldTab {
 			w := float64(foldTab - k)
 			p.SetFillStyle(s.Shadow)
@@ -105,7 +92,6 @@ func (ps *PageSet) drawTurnTabs() {
 	}
 }
 
-// turnAt handles a press on a corner tab: it asks the host to show the pair that tab leads to.
 func (ps *PageSet) turnAt(x, y float64) bool {
 	for i := range ps.Pages {
 		tx, ty, left, ok := ps.turnTab(i)

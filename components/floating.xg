@@ -6,9 +6,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// FloatingPosition selects which corner/edge of the viewport (or
-// nearest positioned ancestor, see FloatingProps.Fixed) Floating's
-// children stick to.
 type FloatingPosition string
 
 const (
@@ -24,21 +21,10 @@ const (
 type FloatingProps struct {
 	Position FloatingPosition // defaults to FloatingBottomRight
 	Offset   int              // px gap from the chosen edge(s); 0 uses the CSS default (1em)
-	// Absolute positions relative to the nearest positioned ancestor
-	// (position:absolute) instead of the viewport, for floating within
-	// a scrolling container rather than over the whole page. Defaults
-	// to false (position:fixed, relative to the viewport), the more
-	// common "float over the whole page" case.
 	Absolute bool
 	Children []xango.Node
 }
 
-// Floating makes Children float above the surrounding content at a
-// fixed corner/edge position -- a formalized version of the
-// "wrap one or more Toasts in your own position:fixed container"
-// idiom Toast's own doc comment already describes, generalized to any
-// content: a floating action button, a badge, a persistent status
-// widget, or a Toast stack.
 func Floating(props FloatingProps) xango.Node {
 	pos := props.Position
 	if pos == "" {

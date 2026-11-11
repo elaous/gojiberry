@@ -16,12 +16,7 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Where the encrypted store lives. By default it is this browser's storage and every key below is the one
-// it has always been. When the person has chosen to keep it on the docstore server they confirmed
-// (encLocationKey, applied at the next load), the same screens run over that server's documents: the
-// target is called "server", and the things that belong to one store (its key list, the passkey made
-// for it, the lists of keys the person confirmed, when keys were used and checked) get a suffix naming
-// the server, so a store on a server and the one in the browser never mix.
+// Where the encrypted store lives.
 var (
 	encTarget          = "browser"
 	encServerHost      = "" // the host of the server when the store lives there
@@ -35,11 +30,8 @@ var (
 	deviceLabelKey     = "showcase-enc:device-label"
 )
 
-// encLocationKey holds "server" when the person chose to keep the encrypted store on the server.
 const encLocationKey = "showcase-enc:location"
 
-// useServerScope switches the keys above to the store of a server. Called once, before the page builds its
-// encryption state.
 func useServerScope(host string) {
 	sum := sha256.Sum256([]byte(host))
 	suffix := "@" + hex.EncodeToString(sum[:6])
@@ -49,8 +41,6 @@ func useServerScope(host string) {
 	}
 }
 
-// encLabel is the name of the encrypted store's save target: the browser's, or "Server <host>" for a store
-// on the server (format has the %s that the browser's own label fills).
 func encLabel(browserText, serverFormat string) string {
 	if encTarget == "browser" {
 		return browserText
@@ -58,7 +48,6 @@ func encLabel(browserText, serverFormat string) string {
 	return T("enc.serverStoreLabel", "Server %s (end-to-end encrypted)", encServerHost)
 }
 
-// encCapacity is how much the store holds (a server has no limit the page knows of).
 func encCapacity() int64 {
 	if encTarget == "browser" {
 		return 5 << 20
@@ -66,9 +55,6 @@ func encCapacity() int64 {
 	return 0
 }
 
-// chosenServerStore returns the server the person chose to keep the store on: its address and an adapter
-// that talks to it with the sign-in token. ok is false when the choice was not made or the server is not
-// the confirmed one.
 func chosenServerStore() (url string, adapter docstore.Adapter, ok bool) {
 	if lsGet(encLocationKey) != "server" {
 		return "", nil, false
@@ -81,7 +67,7 @@ func chosenServerStore() (url string, adapter docstore.Adapter, ok bool) {
 	if err != nil {
 		return "", nil, false
 	}
-	d := &dirUI{url: clean} // only for the sign-in token, kept the way the page keeps it
+	d := &dirUI{url: clean}
 	if tok := lsGet(dirTokenKey); tok != "" && lsGet(dirTokenURLKey) == clean {
 		d.token = tok
 	}
@@ -89,9 +75,6 @@ func chosenServerStore() (url string, adapter docstore.Adapter, ok bool) {
 	return clean, docstore.NewHTTPAdapter(clean, &http.Client{Transport: bearerTransport{token: func(ctx context.Context) (string, error) { return d.sessionToken(ctx) }}}), true
 }
 
-// locationNodes is the choice of where the encrypted store lives, shown with the server settings once a
-// server is confirmed: a checkbox, and once the choice differs from what is loaded, a button that
-// reloads the page to apply it (the store a page works on is fixed for the whole visit).
 func (d *dirUI) locationNodes(e *encUI) []xango.Node {
 	want := lsGet(encLocationKey) == "server"
 	nodes := []xango.Node{
@@ -114,9 +97,6 @@ func (d *dirUI) locationNodes(e *encUI) []xango.Node {
 	return nodes
 }
 
-// keyListNodes is where a device that has the key list hands it over: the text goes to the clipboard
-// and the short code is shown to compare on the other device. Shown with the keys, for any store (the
-// list is what a second device needs; it is public information).
 func (u *ui) keyListNodes() []xango.Node {
 	e := u.enc
 	text, code, err := e.store.ExportKeyList()
@@ -135,9 +115,6 @@ func (u *ui) keyListNodes() []xango.Node {
 	}
 }
 
-// keyListImportNodes is the form that takes a key list copied on another device, on a page whose own list
-// is missing: after the person has compared its code it becomes this device's list and the page loads
-// again, locked, ready for one of the store's keys.
 func (u *ui) keyListImportNodes() []xango.Node {
 	e := u.enc
 	return []xango.Node{

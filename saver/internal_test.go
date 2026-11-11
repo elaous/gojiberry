@@ -2,7 +2,6 @@ package saver
 
 import "context"
 
-// readCatalogForTest returns the stored catalog for tests in this package.
 func (s *Saver) readCatalogForTest(ctx context.Context, target string) (*catalog, error) {
 	t, err := s.Target(target)
 	if err != nil {

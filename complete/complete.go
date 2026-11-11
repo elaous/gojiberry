@@ -1,7 +1,3 @@
-// Package complete suggests whole words for the part of a word being typed. It is a pure, in-memory
-// index: no network, no telemetry. Words come from the text itself (the ones typed last count
-// most), from a vocabulary (a dictionary, a user dictionary) and from providers a program adds
-// (snippets, mentions).
 package complete
 
 import (
@@ -12,14 +8,13 @@ import (
 
 // Suggestion is one candidate.
 type Suggestion struct {
-	// Word is the whole word to put in place of the prefix.
+	// Word is the whole word to insert.
 	Word string
-	// Source says where it comes from: "text", "vocabulary" or a provider's name.
+	// Source says where a suggestion comes from.
 	Source string
 }
 
-// Provider adds candidates from a custom source (snippets, mentions). It is asked with the prefix as
-// typed and returns whole words, best first.
+// Provider adds candidates from a custom source.
 type Provider interface {
 	Name() string
 	Complete(prefix string) []string
@@ -29,7 +24,7 @@ type Provider interface {
 type Options struct {
 	// Max is the most suggestions returned; 5 when zero.
 	Max int
-	// MinPrefix is the fewest letters in a prefix that gets suggestions; 2 when zero.
+	// MinPrefix is the fewest letters a prefix needs.
 	MinPrefix int
 }
 
@@ -41,7 +36,7 @@ type entry struct {
 	vocab int // weight from the vocabulary
 }
 
-// Index is the words known, searched by prefix. The zero value is ready to use.
+// Index is the known words, searched by prefix.
 type Index struct {
 	words     map[string]*entry // by the word as written
 	sorted    []*entry          // by lower-case form, rebuilt when dirty
@@ -50,8 +45,6 @@ type Index struct {
 	providers []Provider
 }
 
-// IsWordRune says what a word is made of: letters, digits, and the apostrophe, hyphen and underscore
-// inside it.
 func IsWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) || r == '_' || r == '\'' || r == '’' || r == '-'
 }
@@ -94,8 +87,7 @@ func (ix *Index) get(w string) *entry {
 	return e
 }
 
-// AddText counts the words of text, in order: a word nearer the end of the text counts as used more
-// recently. Call Reset first to index a text again after it changed.
+// AddText counts the words of text, in order.
 func (ix *Index) AddText(text string) {
 	for _, w := range Words(text) {
 		ix.clock++
@@ -105,8 +97,7 @@ func (ix *Index) AddText(text string) {
 	}
 }
 
-// AddVocabulary adds words that are suggested even when the text does not have them; weight (1 or
-// more) puts them above or below each other.
+// AddVocabulary adds words suggested even when absent from the text.
 func (ix *Index) AddVocabulary(words []string, weight int) {
 	if weight < 1 {
 		weight = 1
@@ -121,7 +112,7 @@ func (ix *Index) AddVocabulary(words []string, weight int) {
 	}
 }
 
-// Reset forgets the words of the text (the vocabulary and providers stay).
+// Reset forgets the words of the text; vocabulary is kept.
 func (ix *Index) Reset() {
 	for w, e := range ix.words {
 		if e.vocab == 0 {
@@ -146,8 +137,6 @@ func (ix *Index) sort() {
 	ix.dirty = false
 }
 
-// score ranks candidates: a word used in the text beats a vocabulary word; more uses and later uses
-// rank higher; a prefix match that keeps the typed case ranks above one that does not.
 func (e *entry) score(prefix string, clock int) float64 {
 	s := float64(e.vocab)
 	if e.count > 0 {
@@ -162,9 +151,6 @@ func (e *entry) score(prefix string, clock int) float64 {
 	return s
 }
 
-// Suggest returns up to Max whole words that start with prefix (without regard to case) and are
-// longer than it, best first. A prefix shorter than MinPrefix gets nothing. A word that is only the
-// prefix again is not suggested. The case of the first letter follows what was typed.
 func (ix *Index) Suggest(prefix string, o Options) []Suggestion {
 	if o.Max <= 0 {
 		o.Max = 5
@@ -188,7 +174,6 @@ func (ix *Index) Suggest(prefix string, o Options) []Suggestion {
 		if len([]rune(e.lower)) <= len([]rune(lower)) {
 			continue
 		}
-		// The text's own occurrence of the prefix being typed is not a candidate when it is the only use.
 		cands = append(cands, cand{e, e.score(prefix, ix.clock)})
 	}
 	sort.SliceStable(cands, func(a, b int) bool {
@@ -225,8 +210,6 @@ func (ix *Index) Suggest(prefix string, o Options) []Suggestion {
 	return out
 }
 
-// matchCase gives word the capital of prefix's first letter when the prefix is capitalised and the
-// word is not (typing "Hel" for "hello" gives "Hello"); otherwise the word is as it is.
 func matchCase(word, prefix string) string {
 	pr, wr := []rune(prefix), []rune(word)
 	if len(pr) == 0 || len(wr) == 0 {
@@ -239,8 +222,7 @@ func matchCase(word, prefix string) string {
 	return word
 }
 
-// PrefixAt finds the word being typed: the letters before offset in runes, and where they start. It
-// is "" when the caret is not at the end of a word's start (for example after a space).
+// PrefixAt finds the word being typed before offset.
 func PrefixAt(text []rune, offset int) (string, int) {
 	if offset > len(text) {
 		offset = len(text)
@@ -252,7 +234,7 @@ func PrefixAt(text []rune, offset int) (string, int) {
 	return string(text[start:offset]), start
 }
 
-// WordEnd is where the word that contains offset ends, so a replacement covers the rest of the word.
+// WordEnd is where the word containing offset ends.
 func WordEnd(text []rune, offset int) int {
 	end := offset
 	for end < len(text) && IsWordRune(text[end]) {

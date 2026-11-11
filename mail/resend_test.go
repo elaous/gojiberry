@@ -45,7 +45,6 @@ func TestResendRefusalsNeverCarryTheKey(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "re_secretkey") || !strings.Contains(err.Error(), "did not accept") {
 		t.Fatalf("%v", err)
 	}
-	// nothing is sent for a message that is not valid, a missing key, a bad sender or a bad URL
 	n := 0
 	counting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { n++ }))
 	defer counting.Close()
@@ -66,13 +65,11 @@ func TestResendRefusalsNeverCarryTheKey(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("%d requests were sent", n)
 	}
-	// a cancelled context stops the call
 	cctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := (Resend{APIKey: "k", From: "a@example.com", BaseURL: counting.URL}).Send(cctx, good); err == nil {
 		t.Fatal("cancelled")
 	}
-	// a long first line of a provider error is cut
 	if got := briefError(errString(strings.Repeat("x", 500) + "\nsecond line")); len(got) != 160 {
 		t.Fatalf("%d", len(got))
 	}

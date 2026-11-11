@@ -29,8 +29,6 @@ func sealTo(t *testing.T, to age.Recipient, plaintext string) docstore.Directory
 	return docstore.DirectoryChallenge{Token: "t", Encrypted: base64.StdEncoding.EncodeToString(enc.Bytes())}
 }
 
-// The directory chooses what the client opens and gets the answer back, so a "challenge" that is
-// really a secret made for the key (a stored document's envelope, a message) must not be answered.
 func TestOpenChallengeIsNotADecryptionOracle(t *testing.T) {
 	id, err := age.GenerateX25519Identity()
 	if err != nil {

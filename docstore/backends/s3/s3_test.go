@@ -22,10 +22,6 @@ import (
 	"github.com/aws/smithy-go"
 )
 
-// fakeS3 is a minimal in-memory stand-in for *s3.Client, implementing
-// just the s3API operations Adapter calls. It lets Adapter's
-// logic (key prefixing, pagination, not-found translation) be tested
-// natively, with no live AWS/MinIO endpoint required.
 type fakeS3 struct {
 	mu      sync.Mutex
 	objects map[string][]byte
@@ -38,7 +34,6 @@ func newFakeS3() *fakeS3 {
 	return &fakeS3{objects: make(map[string][]byte), etags: make(map[string]string)}
 }
 
-// apiErr is an S3 error with a code, as the SDK's service errors have.
 type apiErr struct{ code string }
 
 func (e apiErr) Error() string                 { return e.code }
@@ -134,8 +129,6 @@ func TestS3AdapterSaveIf(t *testing.T) {
 	docstore.CheckConditional(t, func() docstore.ConditionalAdapter { return newAdapter(newFakeS3(), "test-bucket", "docs/") })
 }
 
-// A write another process makes between the read and the write is refused by S3 itself
-// (If-Match on the ETag read), not only by the digest compared before.
 func TestS3SaveIfRefusesAWriteThatLandedInBetween(t *testing.T) {
 	fake := newFakeS3()
 	a := newAdapter(fake, "b", "")
@@ -151,8 +144,6 @@ func TestS3SaveIfRefusesAWriteThatLandedInBetween(t *testing.T) {
 	}
 }
 
-// DeleteIf removes what was read and refuses what changed, what is gone and a version swapped in
-// between the read and the delete (If-Match on the ETag, not only the digest compared before).
 func TestS3DeleteIf(t *testing.T) {
 	fake := newFakeS3()
 	a := newAdapter(fake, "b", "p/")
@@ -177,7 +168,6 @@ func TestS3DeleteIf(t *testing.T) {
 	if err := a.DeleteIf(ctx, "x", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrNotFound) {
 		t.Fatalf("a document that is gone: %v", err)
 	}
-	// the same bytes written again between the read and the delete is a new version: kept
 	_ = a.Save(ctx, "y", []byte("one"))
 	racer := &racingDelete{fakeS3: fake, before: func() { _ = newAdapter(fake, "b", "p/").Save(ctx, "y", []byte("one")) }}
 	if err := newAdapter(racer, "b", "p/").DeleteIf(ctx, "y", docstore.Digest([]byte("one"))); !errors.Is(err, docstore.ErrConflict) {
@@ -188,7 +178,6 @@ func TestS3DeleteIf(t *testing.T) {
 	}
 }
 
-// racingDelete runs a write just before the conditional DeleteObject.
 type racingDelete struct {
 	*fakeS3
 	before func()
@@ -202,7 +191,6 @@ func (r *racingDelete) DeleteObject(ctx context.Context, in *s3.DeleteObjectInpu
 	return r.fakeS3.DeleteObject(ctx, in, o...)
 }
 
-// racingS3 runs a write just before the PutObject of a conditional save.
 type racingS3 struct {
 	*fakeS3
 	before func()
@@ -280,8 +268,6 @@ func TestS3AdapterListPrefix(t *testing.T) {
 	docstore.CheckPrefixLister(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "") })
 }
 
-// ListPrefix asks the service to filter: the request carries the adapter's prefix followed by
-// the caller's, and a truncated listing is followed to its end.
 type pagingS3 struct {
 	*fakeS3
 	prefixes []string
@@ -323,7 +309,6 @@ func TestS3AdapterHeadReader(t *testing.T) {
 	docstore.CheckHeadReader(t, func() docstore.Adapter { return newAdapter(newFakeS3(), "test-bucket", "") })
 }
 
-// LoadHead asks the service for a byte range, not the object.
 func TestS3LoadHeadSendsARange(t *testing.T) {
 	fake := newFakeS3()
 	a := newAdapter(fake, "b", "docs/")
@@ -338,7 +323,6 @@ func TestS3LoadHeadSendsARange(t *testing.T) {
 	}
 }
 
-// ignoresIfMatch is a service that does not know If-Match on DeleteObject: it deletes whatever is there.
 type ignoresIfMatch struct{ *fakeS3 }
 
 func (r *ignoresIfMatch) DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, o ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
@@ -347,8 +331,6 @@ func (r *ignoresIfMatch) DeleteObject(ctx context.Context, in *s3.DeleteObjectIn
 	return r.fakeS3.DeleteObject(ctx, &c, o...)
 }
 
-// A service that ignores If-Match on delete is found out by the first DeleteIf, which then declines for
-// good (ErrConditionalUnsupported) and deletes nothing; the probe object does not stay.
 func TestS3DeleteIfDeclinesOnAServiceThatIgnoresIfMatch(t *testing.T) {
 	fake := newFakeS3()
 	a := newAdapter(&ignoresIfMatch{fake}, "b", "p/")
@@ -367,7 +349,6 @@ func TestS3DeleteIfDeclinesOnAServiceThatIgnoresIfMatch(t *testing.T) {
 	}
 }
 
-// A probe that cannot run (no permission to write) is an error, not an answer: it is asked again next time.
 func TestS3DeleteIfProbeFailureIsNotRemembered(t *testing.T) {
 	fake := newFakeS3()
 	failing := &failPut{fakeS3: fake, fail: true}

@@ -60,7 +60,6 @@ func TestExportManifestAndLines(t *testing.T) {
 	if err := json.Unmarshal([]byte(rows[0]), &l); err != nil || l.Text != "Good morning" || !strings.HasPrefix(l.Audio, "audio/") || !names[l.Audio] {
 		t.Fatalf("line %+v %v", l, err)
 	}
-	// the same dataset gives the same bytes, and a filter exports only what it keeps
 	b2, _ := exportBytes(t, d, nil)
 	if !bytes.Equal(b, b2) {
 		t.Error("export is not reproducible")
@@ -84,13 +83,11 @@ func TestExportThenImportRoundTrips(t *testing.T) {
 	}) {
 		t.Error("the imported dataset differs")
 	}
-	// a second import adds nothing and says so
 	if res, _ := back.Import(b); res.Added != 0 || res.Duplicate != 3 {
 		t.Errorf("again: %+v", res)
 	}
 }
 
-// rebuild writes a zip with the given files, for the refusals below.
 func rebuild(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
 	var b bytes.Buffer
@@ -134,7 +131,6 @@ func TestImportRefusesWhatItShould(t *testing.T) {
 		t.Error("nothing is added by a refused file")
 	}
 
-	// one damaged recording is reported and the others still come in
 	var first Line
 	_ = json.Unmarshal([]byte(strings.Split(string(files["data.jsonl"]), "\n")[0]), &first)
 	files[first.Audio] = append([]byte{}, files[first.Audio]...)
@@ -144,7 +140,6 @@ func TestImportRefusesWhatItShould(t *testing.T) {
 		t.Fatalf("damaged: %+v %v", res, err)
 	}
 
-	// a path that escapes is not followed
 	evil := strings.Replace(string(files["data.jsonl"]), "audio/", "../audio/", 1)
 	files["data.jsonl"] = []byte(evil)
 	var e2 Dataset
@@ -152,7 +147,6 @@ func TestImportRefusesWhatItShould(t *testing.T) {
 	if len(res.Problems) == 0 || !strings.Contains(res.Problems[0], "path") {
 		t.Errorf("escaping path: %+v", res)
 	}
-	// an unknown source or a missing file is reported
 	files["data.jsonl"] = []byte(`{"audio":"audio/` + strings.Repeat("0", 24) + `.wav","source":"prompted"}` + "\n")
 	var e3 Dataset
 	if res, _ = e3.Import(rebuild(t, files)); len(res.Problems) != 1 || e3.Len() != 0 {

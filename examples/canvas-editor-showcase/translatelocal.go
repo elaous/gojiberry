@@ -12,22 +12,12 @@ import (
 	"github.com/elaous/gojiberry/translate"
 )
 
-// localTranslator is translate.Translator over the translate add-on (window.addons.translate): the text is translated
-// on this device and goes nowhere. The add-on offers
-//
-//	translate({text, from, to, model}) -> Promise<{text, detected?}>
-//
-// where from is a language tag or "" (let the add-on find it), to is a language tag ("de", "pt"), and model is the id of
-// an installed model (a language pair) or "". Its models (models, install, remove) are listed in the Add-ons tab; a
-// model serving a pair has Lang "from>to" (for example "en>de").
 type localTranslator struct{}
 
 var _ translate.Translator = localTranslator{}
 
 func translateAddon() bool { return hasAddon("translate", "translate") }
 
-// translator is what the Language tab translates with: the server named in the page's address, else the add-on, else
-// nothing.
 func (u *ui) translator() translate.Translator {
 	if u.lang.translator != nil {
 		return u.lang.translator
@@ -38,8 +28,6 @@ func (u *ui) translator() translate.Translator {
 	return nil
 }
 
-// pairModel is the installed model for translating from one language into another ("" when none is listed): one whose
-// pair is exactly from>to, else any into the target.
 func pairModel(from, to string) string {
 	to = strings.ToLower(strings.SplitN(to, "-", 2)[0])
 	from = strings.ToLower(strings.SplitN(from, "-", 2)[0])
@@ -62,8 +50,7 @@ func pairModel(from, to string) string {
 	return best
 }
 
-// Translate implements translate.Translator. target is a DeepL language code ("DE", "EN-US", "PT-PT"); the add-on gets
-// the plain tag ("de", "en", "pt").
+// Translate implements translate.Translator.
 func (localTranslator) Translate(ctx context.Context, text, target, source string) (translate.Result, error) {
 	if strings.TrimSpace(text) == "" {
 		return translate.Result{}, nil

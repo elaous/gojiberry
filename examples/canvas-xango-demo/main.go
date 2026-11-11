@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-xango-demo draws a canvas from an xango tree (app.xg): a
-// TextFlow over several pages whose header, footer and page number come
-// from a render prop. Buttons change the state (mode, page count, text)
-// and re-render the tree; the canvas components are updated in place.
-// #state mirrors the result as JSON (the e2e test reads it).
 package main
 
 import (

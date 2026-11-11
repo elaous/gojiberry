@@ -1,20 +1,5 @@
 //go:build !(js && wasm)
 
-// Package screenreader is a screen reader for tests. It reads the page the way a screen reader does,
-// from the browser's own accessibility tree (the Accessibility domain of the DevTools protocol, the
-// tree Chrome gives NVDA, JAWS and VoiceOver through the platform APIs), keeps a cursor that moves
-// through it in reading order or by heading, landmark, link, button, form field and table, and turns
-// each stop into the phrase a screen reader would say ("Second thoughts, heading, level 2"). A test
-// asserts on those phrases, on the order of the page, on what is announced when focus moves and on
-// what a live region announces.
-//
-// It is not NVDA, JAWS or VoiceOver: each has its own speech rules and browse-mode habits, so the
-// manual run in docs/accessibility-testing.md stays. What this catches are the regressions that
-// need no person: a control with no name, a heading level that skips, a dialog that does not name
-// itself, a focus move that says nothing, a status message that is never announced.
-//
-// Phrases are "<name>, <role>[, <state>...]", with ARIA role names and plain English states. Text is
-// read as the text itself.
 package screenreader
 
 import (
@@ -35,11 +20,8 @@ import (
 
 // Item is one stop of the cursor.
 type Item struct {
-	// Role is the ARIA role Chrome computed ("heading", "button", "StaticText", ...).
-	Role string
-	// Name is the accessible name, or the text of a text node.
-	Name string
-	// Value is the value of a form control or the text it shows.
+	Role  string
+	Name  string
 	Value string
 	// Level is the heading level, 0 for anything else.
 	Level int
@@ -49,7 +31,7 @@ type Item struct {
 	node *node
 }
 
-// Reader is a screen reader on one page. Create it with New after the page has loaded.
+// Reader is a screen reader on one page.
 type Reader struct {
 	t   testing.TB
 	ctx context.Context
@@ -60,8 +42,6 @@ type Reader struct {
 	live  bool
 }
 
-// New returns a reader for the page in ctx (the browser context of an e2etest.Tab), with the cursor
-// before the first item.
 func New(t testing.TB, ctx context.Context) *Reader {
 	t.Helper()
 	r := &Reader{t: t, ctx: ctx, pos: -1}
@@ -107,8 +87,7 @@ func (r *Reader) call(a chromedp.Action) error {
 	return chromedp.Run(ctx, a)
 }
 
-// Refresh reads the page again. The movement commands do this themselves, so a test rarely needs to;
-// the cursor stays on the same element when it is still there.
+// Refresh reads the page again.
 func (r *Reader) Refresh() {
 	r.t.Helper()
 	var current cdp.BackendNodeID
@@ -165,14 +144,13 @@ func (r *Reader) Refresh() {
 	}
 }
 
-// namesFromContent are the roles whose descendants' text is already in their name.
 var namesFromContent = map[string]bool{
 	"heading": true, "link": true, "button": true, "tab": true, "menuitem": true, "menuitemcheckbox": true, "menuitemradio": true,
 	"option": true, "treeitem": true, "checkbox": true, "radio": true, "switch": true, "cell": true, "columnheader": true,
 	"rowheader": true, "gridcell": true, "caption": true, "legend": true, "img": true, "image": true,
 }
 
-// structural roles are never a stop by themselves.
+// structural roles are never a stop by themselves
 var structural = map[string]bool{
 	"": true, "generic": true, "none": true, "presentation": true, "paragraph": true, "listitem": true, "row": true, "rowgroup": true,
 	"InlineTextBox": true, "LineBreak": true, "RootWebArea": true, "WebArea": true, "Section": true, "LabelText": true, "caption": true, "legend": true, "DescriptionList": true,
@@ -180,16 +158,13 @@ var structural = map[string]bool{
 	"time": true, "abbr": true, "code": true, "figure": true, "label": true, "Legend": true, "ListMarker": true, "Ignored": true,
 }
 
-// spokenElsewhere are roles whose text is already in another item's name (a label's text is the
-// field's name, a caption is the table's).
 var spokenElsewhere = map[string]bool{"LabelText": true, "caption": true, "legend": true}
 
-// inlineRoles hold text that belongs to the line around them ("Some <strong>bold</strong> text").
 var inlineRoles = map[string]bool{"strong": true, "emphasis": true, "mark": true, "code": true, "abbr": true, "time": true, "generic": true}
 
 func (r *Reader) walk(n *node, muted bool) {
 	if spokenElsewhere[n.role] {
-		muted = true // its text is somebody's name; a field inside it is still read
+		muted = true
 	}
 	if !n.ignored {
 		if it, ok := r.item(n); ok && (!muted || it.Role != "StaticText") {
@@ -305,7 +280,6 @@ func phrase(n *node, it Item) string {
 	if l, ok := landmarks[n.role]; ok {
 		label = l
 	}
-	// states
 	switch n.props["checked"] {
 	case "true":
 		add("checked")
@@ -379,7 +353,6 @@ var interactive = map[string]bool{
 	"treeitem": true, "listbox": true,
 }
 
-// siblingPosition is the 1-based place of n among its siblings of the same role, and how many there are.
 func siblingPosition(n *node, role string) (pos, total int) {
 	if n.parent == nil {
 		return 0, 0
@@ -405,7 +378,6 @@ func hasText(n *node) bool {
 	return false
 }
 
-// block is the element whose line a text node is on: its parent, past any inline wrappers.
 func block(n *node) *node {
 	p := n.parent
 	for p != nil && inlineRoles[p.role] && p.parent != nil {
@@ -414,8 +386,6 @@ func block(n *node) *node {
 	return p
 }
 
-// mergeText joins neighbouring text nodes of one line ("Some", "bold", "text.") into one stop, as a
-// screen reader reads a line.
 func mergeText(items []Item) []Item {
 	var out []Item
 	for _, it := range items {
@@ -432,7 +402,6 @@ func mergeText(items []Item) []Item {
 	return out
 }
 
-// say records what was spoken and returns it.
 func (r *Reader) say(s string) string {
 	r.log = append(r.log, s)
 	return s
@@ -441,7 +410,6 @@ func (r *Reader) say(s string) string {
 // Items is every stop of the page in reading order.
 func (r *Reader) Items() []Item { r.Refresh(); return append([]Item(nil), r.items...) }
 
-// Current is the item the cursor is on, if it is on one.
 func (r *Reader) Current() (Item, bool) {
 	if r.pos < 0 || r.pos >= len(r.items) {
 		return Item{}, false
@@ -452,13 +420,12 @@ func (r *Reader) Current() (Item, bool) {
 // Reset puts the cursor before the first item.
 func (r *Reader) Reset() { r.Refresh(); r.pos = -1 }
 
-// Next moves to the next item and says it. ok is false, and nothing is said, at the end of the page.
+// Next moves to the next item and says it.
 func (r *Reader) Next() (string, bool) { return r.NextWhere(func(Item) bool { return true }) }
 
 // Previous moves to the previous item and says it.
 func (r *Reader) Previous() (string, bool) { return r.PreviousWhere(func(Item) bool { return true }) }
 
-// NextWhere moves to the next item for which match is true.
 func (r *Reader) NextWhere(match func(Item) bool) (string, bool) {
 	r.t.Helper()
 	r.Refresh()
@@ -471,7 +438,6 @@ func (r *Reader) NextWhere(match func(Item) bool) (string, bool) {
 	return "", false
 }
 
-// PreviousWhere moves to the previous item for which match is true.
 func (r *Reader) PreviousWhere(match func(Item) bool) (string, bool) {
 	r.t.Helper()
 	r.Refresh()
@@ -488,7 +454,6 @@ func (r *Reader) PreviousWhere(match func(Item) bool) (string, bool) {
 	return "", false
 }
 
-// NextHeading moves to the next heading, of one of the levels if any are given.
 func (r *Reader) NextHeading(levels ...int) (string, bool) {
 	return r.NextWhere(func(it Item) bool {
 		if it.Role != "heading" {
@@ -531,8 +496,6 @@ func (r *Reader) NextFormField() (string, bool) {
 	})
 }
 
-// MoveTo puts the cursor on the first item with this role and name (the name may be a part), without
-// saying it. It reports whether there is one.
 func (r *Reader) MoveTo(role, name string) bool {
 	r.Refresh()
 	for i, it := range r.items {
@@ -544,7 +507,6 @@ func (r *Reader) MoveTo(role, name string) bool {
 	return false
 }
 
-// ReadAll reads the whole page from the top and returns what was said, in order.
 func (r *Reader) ReadAll() []string {
 	r.Reset()
 	var out []string
@@ -557,7 +519,6 @@ func (r *Reader) ReadAll() []string {
 	}
 }
 
-// Headings is the outline of the page: each heading's phrase in order.
 func (r *Reader) Headings() []string {
 	r.Refresh()
 	var out []string
@@ -569,7 +530,6 @@ func (r *Reader) Headings() []string {
 	return out
 }
 
-// Unlabelled lists the controls and graphics a screen reader could only call "unlabelled".
 func (r *Reader) Unlabelled() []string {
 	r.Refresh()
 	var out []string
@@ -581,7 +541,6 @@ func (r *Reader) Unlabelled() []string {
 	return out
 }
 
-// HeadingProblems lists heading outline faults: no level 1, more than one, or a level skipped on the way down.
 func (r *Reader) HeadingProblems() []string {
 	r.Refresh()
 	var out []string
@@ -607,7 +566,6 @@ func (r *Reader) HeadingProblems() []string {
 	return out
 }
 
-// Focused is what a screen reader says for the element that has the keyboard focus, or "" if none.
 func (r *Reader) Focused() string {
 	r.t.Helper()
 	r.Refresh()
@@ -620,8 +578,6 @@ func (r *Reader) Focused() string {
 	return ""
 }
 
-// Press sends a key to the page (see chromedp's kb package: kb.Tab, kb.Enter, kb.ArrowDown, ...) and
-// says what is focused afterwards. It returns "" when focus is on nothing.
 func (r *Reader) Press(key string) string {
 	r.t.Helper()
 	if err := r.call(chromedp.KeyEvent(key)); err != nil {
@@ -634,10 +590,8 @@ func (r *Reader) Press(key string) string {
 	return ""
 }
 
-// Tab moves focus to the next focusable element and says it; ShiftTab goes back.
 func (r *Reader) Tab() string { return r.Press(kb.Tab) }
 
-// ShiftTab moves focus to the previous focusable element and says it.
 func (r *Reader) ShiftTab() string {
 	r.t.Helper()
 	if err := r.call(chromedp.KeyEvent(kb.Tab, chromedp.KeyModifiers(input.ModifierShift))); err != nil {
@@ -658,8 +612,7 @@ func (r *Reader) ClearSpoken() { r.log = nil }
 
 // Announcement is a message a live region made.
 type Announcement struct {
-	Text string
-	// Assertive is true for an alert or aria-live="assertive": it would interrupt the speech.
+	Text      string
 	Assertive bool
 }
 
@@ -684,8 +637,6 @@ const watchJS = `(() => {
   }).observe(document.documentElement, {subtree: true, childList: true, characterData: true});
 })()`
 
-// WatchLive starts recording what live regions (aria-live, role status, alert and log) say from now
-// on. Call it before the action that should make an announcement.
 func (r *Reader) WatchLive() {
 	r.t.Helper()
 	if err := r.call(chromedp.Evaluate(watchJS, nil)); err != nil {
@@ -694,7 +645,6 @@ func (r *Reader) WatchLive() {
 	r.live = true
 }
 
-// Announcements returns what the live regions announced since the last call, and forgets it.
 func (r *Reader) Announcements() []Announcement {
 	r.t.Helper()
 	if !r.live {

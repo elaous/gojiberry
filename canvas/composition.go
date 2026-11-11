@@ -1,18 +1,12 @@
 package canvas
 
-// Composer is a component that shows the text an input method is composing (the preedit: the pinyin or the
-// kana before a candidate is chosen) where it will go, and says where, so that the method's candidate window can
-// be put there. The text is not part of the document until the composition ends.
 type Composer interface {
-	// SetComposition shows text at the caret ("" ends the composition) and reports whether the component
-	// took it.
+	// SetComposition shows preedit text at the caret; "" ends it.
 	SetComposition(text string) bool
-	// CompositionAnchor is the caret's place (x, y, height in the component's own coordinates) while a
-	// composition is shown.
+	// CompositionAnchor is the caret's x, y and height while composing.
 	CompositionAnchor() (x, y, h float64, ok bool)
 }
 
-// SetComposition gives the preedit to the topmost component that takes it.
 func (s *Stage) SetComposition(text string) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if c, ok := s.Components[i].(Composer); ok && c.SetComposition(text) {
@@ -24,7 +18,7 @@ func (s *Stage) SetComposition(text string) bool {
 	return false
 }
 
-// CompositionAnchor is where the caret is in the component showing the preedit, or ok false when none is.
+// CompositionAnchor is the caret of the component showing the preedit.
 func (s *Stage) CompositionAnchor() (x, y, h float64, ok bool) {
 	if s.composer == nil {
 		return 0, 0, 0, false
@@ -32,7 +26,7 @@ func (s *Stage) CompositionAnchor() (x, y, h float64, ok bool) {
 	return s.composer.CompositionAnchor()
 }
 
-// SetComposition implements Composer: while the caret is in the text, the preedit is drawn at it, underlined.
+// SetComposition draws the preedit at the caret, underlined.
 func (f *TextFlow) SetComposition(text string) bool {
 	if text != "" && (!f.Editing() || len(f.Cursors()) != 1) {
 		return false
@@ -49,8 +43,6 @@ func (f *TextFlow) CompositionAnchor() (x, y, h float64, ok bool) {
 	return f.caretRect(f.Cursors()[0])
 }
 
-// drawPreedit draws the preedit at the caret, in the font of the text there, on the page's colour so that the
-// text it covers does not show through, with an underline as input methods draw it.
 func (f *TextFlow) drawPreedit(lay Layout) {
 	if f.preedit == "" || f.Painter == nil || !f.Editing() || len(f.Cursors()) != 1 {
 		return
@@ -93,7 +85,6 @@ func (f *TextFlow) drawPreedit(lay Layout) {
 // SetComposition implements Composer: the content shows the preedit.
 func (sv *ScrollView) SetComposition(text string) bool { return sv.content.SetComposition(text) }
 
-// CompositionAnchor implements Composer, in the coordinates of the view's own parent.
 func (sv *ScrollView) CompositionAnchor() (x, y, h float64, ok bool) {
 	x, y, h, ok = sv.content.CompositionAnchor()
 	return sv.X - sv.ScrollX + x, sv.Y - sv.ScrollY + y, h, ok

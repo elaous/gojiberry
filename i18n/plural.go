@@ -5,14 +5,6 @@ import (
 	"strings"
 )
 
-// Plural forms. A message that depends on a number is stored as one text per plural category of the
-// language, under the id with "#category" added: "files.count#one" and "files.count#other" ("%d file",
-// "%d files"). The categories are CLDR's cardinal ones (zero, one, two, few, many, other); a language
-// has only those it needs (English: one and other; Russian: one, few and many; Japanese: other).
-// Catalog.Plural picks the text for the number, falls back to "#other" and then to the English the
-// code has, and puts the number in.
-
-// PluralCategory is the CLDR cardinal plural category of the whole number n in lang ("en", "fr-CA").
 func PluralCategory(lang string, n int) string {
 	if n < 0 {
 		n = -n
@@ -83,16 +75,12 @@ func PluralCategory(lang string, n int) string {
 		}
 		return "other"
 	}
-	// English, German, Dutch, Swedish and the rest: one for exactly 1.
 	if n == 1 {
 		return "one"
 	}
 	return "other"
 }
 
-// Plural returns the text of id for the number n in lang, with n put in (and args after it, for
-// messages that have more than one verb). one and other are the English texts the code has, used when
-// the catalog has nothing for the category (and "#other" nothing either).
 func (c *Catalog) Plural(lang, id, one, other string, n int, args ...any) string {
 	cat := PluralCategory(lang, n)
 	m, ok := c.Lookup(lang, id+"#"+cat)
@@ -106,7 +94,6 @@ func (c *Catalog) Plural(lang, id, one, other string, n int, args ...any) string
 		}
 	}
 	if strings.Contains(m, "%d") {
-		// the number is written the way the language writes numbers (1,234 / 1.234 / 1 234)
 		m = strings.Replace(m, "%d", "%s", 1)
 		return fmt.Sprintf(m, append([]any{Number(lang, float64(n), 0)}, args...)...)
 	}

@@ -24,8 +24,6 @@ func build(t *testing.T, files map[string]string) []byte {
 
 const ns = `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"`
 
-// What LibreOffice writes: automatic styles named P1, T1..., a styles.xml with named styles, white space
-// between elements, runs of spaces as text:s, and things this importer leaves out.
 func TestImportReadsLibreOfficeStyleMarkup(t *testing.T) {
 	content := `<?xml version="1.0"?>
 <office:document-content ` + ns + ` office:version="1.2">
@@ -155,7 +153,6 @@ func TestNotAnODTAndLimits(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// A hostile picture path cannot reach outside the package, and deep nesting is refused, not followed.
 	deep := strings.Repeat("<text:section>", 600) + "<text:p>x</text:p>" + strings.Repeat("</text:section>", 600)
 	d, err := Import(build(t, map[string]string{"content.xml": `<office:document-content ` + ns + `><office:body><office:text>` + deep + `</office:text></office:body></office:document-content>`}))
 	if err == nil || len(d.Content) != 0 {

@@ -64,7 +64,6 @@ func TestFromDocumentBuildsBlocks(t *testing.T) {
 	}
 }
 
-// Every format turns the same document into something that holds its text.
 func TestEveryFormatHoldsTheText(t *testing.T) {
 	snap := FromDocument(sampleDoc())
 	for name, e := range map[string]Exporter{"html": HTML{}, "rtf": RTF{}, "epub": EPUB{}, "pdf": PDF{}, "docx": DOCX{}} {
@@ -189,7 +188,6 @@ func unzipEntry(t *testing.T, data []byte, name string) []byte {
 	return nil
 }
 
-// A run with a language is written in HTML as a span with a lang attribute.
 func TestHTMLWritesTheLanguageOfARun(t *testing.T) {
 	got := wrapHTMLRun("monde", Format{Lang: `fr"x`})
 	if got != `<span lang="fr&#34;x">monde</span>` && got != `<span lang="fr&quot;x">monde</span>` {
@@ -200,7 +198,6 @@ func TestHTMLWritesTheLanguageOfARun(t *testing.T) {
 	}
 }
 
-// An image's description is its alt text in HTML and Markdown; one marked decorative has an empty alt.
 func TestImageAltTextIsExported(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Image: &docfile.ImageItem{URL: "a.png", Alt: `A "graph" of sales`}},
@@ -230,8 +227,6 @@ func TestImageAltTextIsExported(t *testing.T) {
 	}
 }
 
-// The document's language is written where the format can say so: <html lang>, the EPUB's dc:language and
-// its pages, Word's default run language and core properties; and the title is in the PDF's information.
 func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 	doc := docfile.Document{Title: "Rapport"}
 	doc.Content = []docfile.Item{{Chars: &docfile.Chars{Text: "Bonjour"}}}
@@ -263,10 +258,9 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 		t.Errorf("docx styles/core lack the language")
 	}
 	pdf, err := PDF{}.Export(snap)
-	if err != nil || !strings.Contains(string(pdf), "/Title <FEFF0052006100700070006F00720074>") { // "Rapport" in UTF-16
+	if err != nil || !strings.Contains(string(pdf), "/Title <FEFF0052006100700070006F00720074>") {
 		t.Errorf("the PDF information has no title: %v", err)
 	}
-	// none set: as before
 	plain := FromDocument(docfile.Document{Title: "T"})
 	if h, _ := (HTML{}).Export(plain); strings.Contains(string(h), "lang=") {
 		t.Errorf("a document with no language gained one:\n%s", h)
@@ -274,7 +268,6 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 	if e, _ := (EPUB{}).Export(plain); !strings.Contains(part(e, "OEBPS/content.opf"), "<dc:language>en</dc:language>") {
 		t.Error("the EPUB default language changed")
 	}
-	// an invalid tag is not kept
 	doc.SetLanguage("not a tag")
 	if doc.Language() != "fr-CA" {
 		t.Errorf("an invalid tag replaced the language: %q", doc.Language())
@@ -285,8 +278,6 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 	}
 }
 
-// A formula in the middle of a sentence is inline MathML in the HTML export and the words that stand for it
-// everywhere else.
 func TestInlineFormulaIsInlineMathMLInHTML(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Area is "}},
@@ -307,8 +298,6 @@ func TestInlineFormulaIsInlineMathMLInHTML(t *testing.T) {
 	}
 }
 
-// A form field is an HTML control in the HTML export, with its label, its value and its checks, and the words
-// "label: value" in the formats that have no controls.
 func TestFormFieldsAreHTMLControlsAndWordsElsewhere(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Order "}},
@@ -345,8 +334,6 @@ func TestFormFieldsAreHTMLControlsAndWordsElsewhere(t *testing.T) {
 	}
 }
 
-// With an address for the answers the form fields sit in a form with a send button; only https and mailto addresses
-// are accepted, and a document without form fields gets no form.
 func TestHTMLSubmitToWrapsFormFieldsInAForm(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Form: &docfile.FormFieldItem{Kind: "text", Name: "a", Label: "A"}},
@@ -389,7 +376,6 @@ func mustHTML(t *testing.T, snap Snapshot) []byte {
 	return b
 }
 
-// A form page written by the HTML export reads back as the same fields, with what was filled in.
 func TestHTMLFormFieldsReadBackFromTheirPage(t *testing.T) {
 	want := []docfile.FormFieldItem{
 		{Kind: "text", Name: "order", Label: "Order no.", Placeholder: "AB123", Pattern: `[A-Z]{2}\d{3}`, Required: true, Value: `AB123<b>`},
@@ -419,13 +405,11 @@ func TestHTMLFormFieldsReadBackFromTheirPage(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("read back:\n got %+v\nwant %+v", got, want)
 	}
-	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 { // the send button
+	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 {
 		t.Errorf("skipped %+v", s)
 	}
 }
 
-// A formula in a sentence is Office Math in the line in Word, with its words as hidden text, and reads back as an
-// equation in the line (not on a line of its own) with those words as its alternative.
 func TestInlineFormulaIsOfficeMathInTheLineInWord(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "The area is "}},
@@ -471,7 +455,6 @@ func TestInlineFormulaIsOfficeMathInTheLineInWord(t *testing.T) {
 	}
 }
 
-// A form field in a table cell is a control in the HTML export, like one in the text, and takes part in the form.
 func TestFormFieldInATableCellIsAnHTMLControl(t *testing.T) {
 	f := docfile.FormFieldItem{Kind: "text", Name: "qty", Label: "Qty", Value: "3"}
 	doc := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{

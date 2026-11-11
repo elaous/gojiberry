@@ -6,21 +6,6 @@ import (
 	"testing"
 )
 
-// realCSS is copied verbatim from OnDesign's own editor/index.html (as
-// of the commit this test was written against) -- the :root/body.dark
-// token block in full, plus a representative slice of real class
-// rules covering every case this package's own doc comment claims to
-// handle: plain padding/background/border/border-radius, a var(--x)
-// background, an rgba() background, a literal-hex border, "none"
-// background/border, an unsupported property mixed into an otherwise
-// recognized rule (proving unrelated properties don't interfere with
-// each other), a :hover/.active/:disabled variant of a class that
-// should be skipped-and-warned rather than misapplied to the base
-// rule, and a class whose only declaration is entirely unsupported
-// (proving it's correctly left out of the result rather than added as
-// an empty entry). Deliberately not synthetic/simplified CSS -- the
-// whole point of testing against this is proving the parser handles
-// real syntax, not an idealized version of it.
 const realCSS = `
     :root {
       --bg: #fff;
@@ -130,9 +115,6 @@ func TestGenerateAgainstRealClassRules(t *testing.T) {
 		if s.CornerRadius != 3 {
 			t.Errorf("CornerRadius = %v, want 3", s.CornerRadius)
 		}
-		// The :hover variant's own "background: var(--hover-bg)" must
-		// NOT leak into the base style -- that would make the base
-		// rule look permanently hovered.
 		if s.Background != (color.NRGBA{}) {
 			t.Errorf("Background = %+v, want zero value: the :hover rule's background must not merge into the base style", s.Background)
 		}
@@ -156,10 +138,6 @@ func TestGenerateAgainstRealClassRules(t *testing.T) {
 		if !ok {
 			t.Fatal("no style generated for .style-editor")
 		}
-		// 0.35*255 = 89.25, truncated to 89 by parseColorValue's own
-		// int(af*255) conversion -- matched here, not recomputed as a
-		// constant expression, to avoid a compile-time non-integer
-		// constant conversion error.
 		want := color.NRGBA{R: 0, G: 0, B: 0, A: 89}
 		if s.Background != want {
 			t.Errorf("Background = %+v, want %+v (rgba(0, 0, 0, 0.35))", s.Background, want)
@@ -194,12 +172,6 @@ func TestGenerateAgainstRealClassRules(t *testing.T) {
 		}
 	})
 
-	// Every real warning-worthy shape actually got flagged: the three
-	// pseudo/compound selectors that must not be silently merged
-	// (.font-picker-item:hover, .find-toggle.active,
-	// .find-toggle:disabled, .style-editor-closebtn:hover -- four, not
-	// three), and at least one genuinely unsupported property
-	// (font-size, appearing on several of these rules).
 	wantSelectorWarnings := map[string]bool{
 		".font-picker-item:hover":      false,
 		".find-toggle.active":          false,
@@ -302,7 +274,7 @@ func TestAtRulesDoNotSwallowOrLeakRules(t *testing.T) {
 }
 
 func TestLaterDeclarationWins(t *testing.T) {
-	for i := 0; i < 50; i++ { // used to depend on map iteration order
+	for i := 0; i < 50; i++ { // output must not depend on map iteration order
 		styles, _ := Generate(".a{border:1px solid #f00; border-color:#00f}", []string{"a"}, nil)
 		if got := styles["a"].BorderColor; got != (color.NRGBA{0, 0, 255, 255}) {
 			t.Fatalf("run %d: border colour %+v, want the later border-color (blue)", i, got)

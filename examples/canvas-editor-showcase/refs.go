@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// refsState is the References tab: the sources the document cites, the style, and the source being typed.
 type refsState struct {
 	style   reference.Style
 	sources []reference.Source
@@ -23,7 +22,6 @@ type refsState struct {
 	next    int
 }
 
-// loadSources takes the sources and the style a document was saved with (none for a document without).
 func (u *ui) loadSources(d docfile.Document) {
 	u.refs = refsState{style: d.ReferenceStyle(), sources: d.Sources(), form: reference.Source{Kind: reference.Book}}
 	u.refs.next = len(u.refs.sources)
@@ -36,7 +34,6 @@ func refKinds() [][2]string {
 		{string(reference.Web), T("ref.web", "Web page")}, {string(reference.Report), T("ref.report", "Report")}}
 }
 
-// insertRuns writes formatted runs at the caret, one paragraph each when para is set.
 func insertRuns(f *canvas.TextFlow, runs []reference.Run, para bool) {
 	var items []canvas.Item
 	for _, r := range runs {

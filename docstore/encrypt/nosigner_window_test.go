@@ -10,13 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Backlog item 4: what is left of the window in which a client with no Signer can write an
-// unsigned frame. Every unsigned file that lands in it is reported to the owner or to its own
-// writer; with RequireSigned a client that cannot sign does not write one at all.
-
-// A save in the steps between the owner's last look and the write of the record: the owner's
-// re-key reports it (it does not stay silent), the document is refused as forged until the
-// owner accepts the file, and AcceptUnsigned is the way out.
 func TestWindowSaveIsReportedToTheOwnerAfterTheFlip(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -24,8 +17,6 @@ func TestWindowSaveIsReportedToTheOwnerAfterTheFlip(t *testing.T) {
 	if _, err := w.ad.Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("Load of the window file: %v, want ErrForgedFrame", err)
 	}
-	// An unsigned writer that saves after the record says Signed is refused at its own Save, and
-	// a raw unsigned frame put in the store is forged for every reader.
 	if err := w.otherClient().Save(ctx, f, []byte("late")); !errors.Is(err, ErrForgedFrame) {
 		t.Fatalf("unsigned Save under a signed record: %v, want ErrForgedFrame", err)
 	}
@@ -37,8 +28,6 @@ func TestWindowSaveIsReportedToTheOwnerAfterTheFlip(t *testing.T) {
 	}
 }
 
-// The writer is told too: the owner flips the record between the writer's read of it and its
-// write, so the file it wrote is unsigned under a Signed record. Save and SaveIf say so.
 func TestUnsignedWriterIsToldWhenTheRecordFlipsUnderIt(t *testing.T) {
 	for _, mode := range []string{"Save", "SaveIf"} {
 		t.Run(mode, func(t *testing.T) {
@@ -47,7 +36,7 @@ func TestUnsignedWriterIsToldWhenTheRecordFlipsUnderIt(t *testing.T) {
 			id := w.history(t)
 			f := id + "~cccccccccccc.open"
 			other := w.otherClient()
-			other.afterBind = func() { // the record was read as not signed; now the owner flips it
+			other.afterBind = func() {
 				other.afterBind = nil
 				if _, err := w.sharing.Repair(ctx, id); err != nil {
 					t.Error(err)
@@ -72,7 +61,6 @@ func TestUnsignedWriterIsToldWhenTheRecordFlipsUnderIt(t *testing.T) {
 	}
 }
 
-// An unsigned save before the record says Signed is the normal case and is not an error.
 func TestUnsignedSaveBeforeSignedIsNotAnError(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -92,9 +80,6 @@ func TestUnsignedSaveBeforeSignedIsNotAnError(t *testing.T) {
 	}
 }
 
-// With RequireSigned an Adapter that cannot sign refuses to write an unsigned frame (it could
-// not read it back, and it would be the one that enters the window); nothing is written. One
-// that signs, and one without RequireSigned, are unchanged.
 func TestRequireSignedAdapterWithoutSignerDoesNotWrite(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -111,8 +96,6 @@ func TestRequireSignedAdapterWithoutSignerDoesNotWrite(t *testing.T) {
 	if _, err := w.inner.Load(ctx, f); !errors.Is(err, docstore.ErrNotFound) {
 		t.Fatalf("a refused Save wrote a file: %v", err)
 	}
-	// Ids that are not bound to a document's record are still saved: the refusal is for the
-	// documents' files only (a plain item, a settings item, a key record).
 	for _, other := range []string{"notes/plain", "settings", KeysPrefix + "xyz"} {
 		if err := strict.Save(ctx, other, []byte("y")); err != nil {
 			t.Errorf("Save %s: %v", other, err)
@@ -130,7 +113,6 @@ func TestRequireSignedAdapterWithoutSignerDoesNotWrite(t *testing.T) {
 	}
 }
 
-// evilV3 stores, as a file of the document, a v3 frame signed by a key that is not an owner's.
 func (w *world) evilV3(t *testing.T, id, name string) string {
 	t.Helper()
 	f := id + "~" + name + ".open"
@@ -145,8 +127,6 @@ func (w *world) evilV3(t *testing.T, id, name string) string {
 	return f
 }
 
-// signedPending leaves a document whose record says Signed and Pending: the re-key that
-// finishes it has no unsigned file to look for before the flip, and flips nothing it was not.
 func (w *world) signedPending(t *testing.T) string {
 	t.Helper()
 	id := w.history(t)
@@ -157,7 +137,6 @@ func (w *world) signedPending(t *testing.T) string {
 	return id
 }
 
-// afterRecordWrite runs hook once, right after a conditional write of a keys: record succeeds.
 type afterRecordWrite struct {
 	*flaky
 	hook func()
@@ -173,14 +152,11 @@ func (a *afterRecordWrite) SaveIf(ctx context.Context, id string, b []byte, prev
 	return err
 }
 
-// A v3 file with a bad signature that the second look finds is not "saved unsigned": it is
-// reported as a forgery, with its own message, and still wraps ErrForgedFrame.
 func TestSecondLookReportsABadSignatureAsForged(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
 	id := w.signedPending(t)
 	var f string
-	// The file lands after the record was written (the check before the write would refuse it).
 	st := &afterRecordWrite{flaky: w.inner, hook: func() { f = w.evilV3(t, id, "dddddddddddd") }}
 	sh := &Sharing{Store: st, Adapter: w.ad, Signer: w.signer}
 	_, err := sh.Repair(ctx, id)
@@ -192,7 +168,6 @@ func TestSecondLookReportsABadSignatureAsForged(t *testing.T) {
 	}
 }
 
-// A file saved unsigned in the window is named once in the message, not as "<doc>: <doc>~file".
 func TestSecondLookMessageNamesTheDocumentOnce(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -216,9 +191,6 @@ func TestSecondLookMessageNamesTheDocumentOnce(t *testing.T) {
 	}
 }
 
-// A Sharing with a Signer over an Adapter without one cannot sign, so it does not flip the record
-// and takes no second look: a bad file that appears in the window is not its business, and
-// nothing dereferences the missing Signer.
 func TestSharingSignerWithAdapterWithoutOneDoesNotFlip(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -233,9 +205,6 @@ func TestSharingSignerWithAdapterWithoutOneDoesNotFlip(t *testing.T) {
 	}
 }
 
-// A legacy unsigned (v2) file that lands after the record was written reaches the second look
-// as an error of the cross-check (the record says Signed): it is told as saved unsigned, not as
-// a bad signature, and wraps ErrForgedFrame.
 func TestSecondLookReportsAnUnsignedFrameAsSavedUnsigned(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

@@ -1,15 +1,11 @@
 package canvas
 
-// CaretBoxer is implemented by editable components that can say where
-// their caret is, so a ScrollView can keep it in view while typing.
+// CaretBoxer reports where an editable component's caret is.
 type CaretBoxer interface {
-	// CaretBox returns the caret's x, top y and height in the component's
-	// coordinates; ok is false when there is no caret to show.
 	CaretBox() (x, y, h float64, ok bool)
 }
 
-// CaretBox implements CaretBoxer for the first (primary) cursor while the
-// text is being edited.
+// CaretBox returns the primary cursor while text is edited.
 func (f *TextFlow) CaretBox() (x, y, h float64, ok bool) {
 	if f.mode != ModeEdit || !f.WantsFocus() {
 		return 0, 0, 0, false
@@ -27,8 +23,7 @@ func (ft *FloatingText) CaretBox() (x, y, h float64, ok bool) {
 	return ft.inner.CaretRect(ft.caret)
 }
 
-// CaretBox returns the caret of the topmost focused component that has
-// one.
+// CaretBox returns the topmost focused caret.
 func (s *Stage) CaretBox() (x, y, h float64, ok bool) {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if c, isC := s.Components[i].(CaretBoxer); isC {
@@ -49,11 +44,8 @@ func (sv *ScrollView) CaretBox() (x, y, h float64, ok bool) {
 	return x - sv.ScrollX + sv.X, y - sv.ScrollY + sv.Y, h, true
 }
 
-// scrollMargin is the room kept around a caret that is scrolled into view.
 const scrollMargin = 16
 
-// RevealCaret scrolls the minimum needed to bring the caret into view,
-// and reports whether it moved.
 func (sv *ScrollView) RevealCaret() bool {
 	x, y, h, ok := sv.content.CaretBox()
 	if !ok {
@@ -80,8 +72,7 @@ func (sv *ScrollView) RevealCaret() bool {
 	return sv.ScrollTo(nx, ny)
 }
 
-// TakeReveal returns the pending position of the first component that has
-// one (see TextFlow.GotoOffset).
+// TakeReveal returns the first pending GotoOffset position.
 func (s *Stage) TakeReveal() (x, y, h float64, ok bool) {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if r, isR := s.Components[i].(Revealer); isR {
@@ -93,8 +84,7 @@ func (s *Stage) TakeReveal() (x, y, h float64, ok bool) {
 	return 0, 0, 0, false
 }
 
-// RevealPending scrolls so a position asked for with GotoOffset is at the
-// top of the view, and reports whether it moved.
+// RevealPending scrolls a GotoOffset position to the top; reports movement.
 func (sv *ScrollView) RevealPending() bool {
 	_, y, _, ok := sv.content.TakeReveal()
 	if !ok {
@@ -103,8 +93,6 @@ func (sv *ScrollView) RevealPending() bool {
 	return sv.ScrollTo(sv.ScrollX, y-scrollMargin)
 }
 
-// afterEvent keeps the view on what the event did: a requested position,
-// else the caret.
 func (sv *ScrollView) afterEvent() {
 	if !sv.RevealPending() {
 		sv.RevealCaret()

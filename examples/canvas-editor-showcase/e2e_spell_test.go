@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestSpellCheckAndHyphenation drives the spell check and hyphenation: the
-// Spelling tab lists unknown words with suggestions, picks and Add to
-// dictionary change the text and persist, and the View menu turns hyphenation on.
 func TestSpellCheckAndHyphenation(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OK(!d.State().Bool("spell.enabled"), "spell check is off at first")
@@ -26,7 +23,6 @@ func TestSpellCheckAndHyphenation(t *testing.T) {
 	d.OK(d.State().Int("spell.spans") > 0, "and marked on the canvas")
 	d.OK(d.Text(".gj-spell-info") == "Dictionary: English", "the dictionary is named")
 
-	// A typo: type "teh" at the end of a line and take the suggestion.
 	d.CanvasClick(240, 164)
 	d.Focus("#input")
 	d.Press("End")
@@ -39,7 +35,6 @@ func TestSpellCheckAndHyphenation(t *testing.T) {
 	d.OK(strings.Contains(d.State().Str("text"), " the"), "picking a suggestion replaces the word")
 	d.OK(d.Count(`.gj-spell-item[data-word="teh"]`) == 0, "and it leaves the list")
 
-	// Add to dictionary persists.
 	d.Click(`.gj-spell-item[data-word="Gojiberry"] .gj-spell-add`)
 	d.WaitFor("the word to be added", `document.querySelectorAll('.gj-spell-item[data-word="Gojiberry"]').length === 0`)
 	d.OK(d.Bool(`JSON.parse(localStorage.getItem('showcase:dictionary')).includes('gojiberry')`), "an added word is kept in the browser")
@@ -50,7 +45,6 @@ func TestSpellCheckAndHyphenation(t *testing.T) {
 	d.Wait("s.spell.checked") // the check has run
 	d.OK(d.Count(`.gj-spell-item[data-word="Gojiberry"]`) == 0, "and still known after a reload")
 
-	// Hyphenation: a View menu switch.
 	d.OK(!d.State().Bool("hyphenate"), "hyphenation is off at first")
 	d.Click(`button.gj-menubar-button:has-text("View")`)
 	d.Click(`.gj-menubar-panel li:has-text("Hyphenate long words")`)

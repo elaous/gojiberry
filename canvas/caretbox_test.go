@@ -57,7 +57,6 @@ func TestCaretBoxNotEditing(t *testing.T) {
 	}
 }
 
-// In typewriter mode the line being typed stays at one height and the page moves; a click does not move the page.
 func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 	f, p := selFlow(Chars{Text: strings.Repeat("line\n", 60)})
 	f.SetMode(ModeEdit)
@@ -84,20 +83,17 @@ func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 			t.Fatalf("the caret stays in the middle of a 200 px view: %v", heights)
 		}
 	}
-	// Typing on the same line does not move the page.
 	before := sv.ScrollY
 	sv.InsertText("abc")
 	if sv.ScrollY != before {
 		t.Fatalf("typing on a line keeps the page: %v -> %v", before, sv.ScrollY)
 	}
-	// Near the top the page cannot move further than its start.
 	for i := 0; i < 60; i++ {
 		sv.HandleKey("ArrowUp", false)
 	}
 	if sv.ScrollY != 0 {
 		t.Fatalf("at the top the page is at its start: %v", sv.ScrollY)
 	}
-	// Another height.
 	sv.TypewriterAt = 0.25
 	for i := 0; i < 30; i++ {
 		sv.HandleKey("ArrowDown", false)
@@ -105,7 +101,6 @@ func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 	if _, y, h, _ := sv.CaretBox(); y+h/2 < 49 || y+h/2 > 51 {
 		t.Fatalf("a quarter down the view: %v", y+h/2)
 	}
-	// Off: back to the smallest move.
 	sv.Typewriter = false
 	sv.ScrollTo(0, 0)
 	sv.HandleKey("ArrowUp", false)
@@ -114,8 +109,6 @@ func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 	}
 }
 
-// A typewriter carriage: the letter being typed stays at one place across the view, so the page slides left as the
-// line grows and, on a carriage return, slides back right and a line up; the page may run past its edges.
 func TestTypewriterCarriageKeepsTheLetterInOnePlace(t *testing.T) {
 	f, p := selFlow(Chars{Text: "start"})
 	f.SetMode(ModeEdit)
@@ -151,7 +144,6 @@ func TestTypewriterCarriageKeepsTheLetterInOnePlace(t *testing.T) {
 	if sv.ScrollX >= 0 {
 		t.Fatalf("at the start of a line the page is past its left edge: %v", sv.ScrollX)
 	}
-	// without the carriage the page stays put for a short line
 	sv.TypewriterX = false
 	sv.ScrollTo(0, 0)
 	if sv.ScrollX != 0 {

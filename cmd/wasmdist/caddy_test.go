@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// caddyBlock is the Caddy recipe of docs/deploy.md, as a site on a local port (the block in the page uses a host
-// name and a directory the reader sets). Keep the two the same.
 const caddyBlock = `{
 	admin off
 	auto_https off
@@ -85,9 +83,6 @@ func startCaddy(t *testing.T, dir string) string {
 	return ""
 }
 
-// The Caddy recipe of docs/deploy.md run against a real Caddy: the precompressed file in the encoding the browser
-// asks for (brotli, then gzip), the file itself otherwise, the wasm type, a 304 for a repeat visit, a 404 for a
-// script that is not there, and the start page for an app path.
 func TestShowcaseCaddyRecipe(t *testing.T) {
 	dir, wasm := site(t)
 	brotli := "off"
@@ -147,7 +142,6 @@ func TestShowcaseCaddyRecipe(t *testing.T) {
 	}
 }
 
-// docs/deploy.md shows the block this test runs: every line of it is in the page.
 func TestDeployDocShowsTheTestedCaddyBlock(t *testing.T) {
 	page, err := os.ReadFile(filepath.Join("..", "..", "docs", "deploy.md"))
 	if err != nil {

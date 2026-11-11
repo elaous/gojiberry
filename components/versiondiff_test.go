@@ -60,7 +60,6 @@ func TestVersionsListShowsNamesPinsAndAuthors(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, html)
 		}
 	}
-	// the pinned one cannot be deleted; the other can
 	if strings.Count(html, `disabled="disabled"`) != 1 {
 		t.Errorf("one delete button is disabled (the pinned version's): %d", strings.Count(html, `disabled="disabled"`))
 	}

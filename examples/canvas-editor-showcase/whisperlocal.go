@@ -15,19 +15,13 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// localWhisper is speechcoach.Transcriber over the whisper add-on (window.addons.whisper): the recording is turned
-// into text on this device and goes nowhere. The add-on offers
-//
-//	transcribe({samples: Float32Array /* 16 kHz mono */, sampleRate: 16000, language, prompt, model}) -> Promise<{text}>
-//
-// and, to keep its models, models(), install(id, onProgress) and remove(id) (see docs/addons.md).
 type localWhisper struct{ model string }
 
 var _ speechcoach.Transcriber = localWhisper{}
 
 func whisperAvailable() bool { return hasAddon("whisper", "transcribe") }
 
-// Transcribe implements speechcoach.Transcriber. It blocks: call it from a goroutine of its own.
+// Transcribe implements speechcoach.Transcriber.
 func (w localWhisper) Transcribe(ctx context.Context, pcm []int16, prompt, lang string) (string, error) {
 	if !whisperAvailable() {
 		return "", errors.New("the page has no whisper add-on")
@@ -68,8 +62,6 @@ func putFloat32(b []byte, f float32) {
 	b[0], b[1], b[2], b[3] = byte(u), byte(u>>8), byte(u>>16), byte(u>>24)
 }
 
-// localChoice is the choice between a recogniser at an address and the whisper add-on, shown when the page has the
-// add-on.
 func (s *speechUI) localChoice() xango.Node {
 	if !whisperAvailable() {
 		return xango.Frag()

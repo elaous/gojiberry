@@ -8,11 +8,6 @@ import (
 	"rsc.io/qr"
 )
 
-// RecoveryQR draws the recovery key as a QR code, an inline SVG that goes on the printed sheet so
-// that the key can be moved to another device by pointing its camera at the paper instead of typing
-// seventy characters. The key stays on the sheet as text as well, and the SVG has a text alternative
-// (alt) for a screen reader: the code is a convenience, never the only way to read the key. It is
-// black on white with the four-module quiet zone scanners need, and refers to nothing outside itself (no namespace URL either: inline SVG in HTML needs none).
 func RecoveryQR(secret, alt string) (string, error) {
 	secret = strings.TrimSpace(secret)
 	if secret == "" {

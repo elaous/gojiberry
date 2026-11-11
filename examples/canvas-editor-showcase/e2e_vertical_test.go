@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Format > Vertical text lays the text out in columns: down the column is forward along the line, and the arrow
-// to the left goes to the column after it.
 func TestVerticalTextInTheEditor(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
@@ -18,7 +16,7 @@ func TestVerticalTextInTheEditor(t *testing.T) {
 	d.Click(`.gj-menubar-panel li.gj-menu-item:has-text("Vertical text")`)
 	d.CanvasClick(240, 164)
 	d.Focus("#input")
-	d.Press("Control+Home") // the start of the document; the body text that follows the heading is a long paragraph
+	d.Press("Control+Home")
 	for range 17 {
 		d.Press("ArrowDown")
 	}

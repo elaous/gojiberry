@@ -46,7 +46,6 @@ func TestObjectsWrapAroundTheFlowBeforeThem(t *testing.T) {
 	}
 	r.Stage.Draw() // everything draws
 
-	// A drag on the canvas survives an identical re-render; a changed prop wins.
 	im.X, im.Y = 99, 98
 	ft.SetText("edited")
 	tv.Table.SetCell(0, 0, "Z")
@@ -126,7 +125,6 @@ func TestScrollViewElement(t *testing.T) {
 	if _, h := sv.ContentSize(); h < 900 || sv.LockH {
 		t.Errorf("a changed page count regrows the content: %g, lockH %v", h, sv.LockH)
 	}
-	// A child added later gets the mode too.
 	_ = r.Render(Canvas(CanvasProps{Mode: canvas.ModeEdit, Children: []xango.Node{
 		ScrollView(ScrollViewProps{Width: 100, Height: 100, ContentWidth: 400, ContentHeight: 900, Children: []xango.Node{
 			Table(TableProps{Cells: [][]string{{"x"}}}),
@@ -174,7 +172,6 @@ func TestElementErrorsAndRegistry(t *testing.T) {
 	}
 }
 
-// A custom element type registers like the built-in ones.
 type badge struct{ text string }
 
 func (b *badge) Drawers() []canvas.Drawer { return nil }
@@ -208,8 +205,6 @@ func TestRegisterCustomElement(t *testing.T) {
 	Register("x.Badge", func() Element { return &badge{} })
 }
 
-// Inserting an element in the middle (a fragment child that was empty
-// before) keeps the others -- and what the user did to them.
 func TestFragmentsAndStableMatching(t *testing.T) {
 	r, _ := newRoot()
 	tree := func(withImage bool) xango.Node {
@@ -314,7 +309,6 @@ func TestWatermarkBackgroundSpreadAndOpacityProps(t *testing.T) {
 		t.Errorf("floating text opacity = %g", ft.Opacity)
 	}
 	r.Stage.Draw()
-	// A watermark with neither text nor image counts as none.
 	_ = r.Render(Canvas(CanvasProps{Children: []xango.Node{TextFlow(TextFlowProps{Text: "x", PageCount: 2, Pages: func(page xango.Node, i int) xango.Node {
 		return xango.Frag(page, Watermark(WatermarkProps{}), Background(BackgroundProps{}))
 	}})}}))

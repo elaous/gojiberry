@@ -14,9 +14,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// peopleState is who can open the document, held in memory here: a real app keeps
-// the ACL where its documents are (docstore's /docs/{id}/acl) and plugs those
-// calls into the same props.
 type peopleState struct {
 	acl         docstore.ACL
 	draft, role string
@@ -24,8 +21,6 @@ type peopleState struct {
 	rerender    func()
 	links       *linksUI // share links (links.go)
 
-	// remote, when set, gives the server's adapter and the id of the document open there (ok false: the
-	// document is not on a server). Then the list below is the server's: read from it, and every change is sent.
 	remote    func() (a *docstore.HTTPAdapter, id string, ok bool)
 	syncedFor string // the document whose list was asked for
 	note      string // how the server answered, in words
@@ -70,9 +65,6 @@ func (p *peopleState) peoplePanel(confirm func(string, func())) xango.Node {
 	})
 }
 
-// handles gives each person with access the handle a comment can name them by (their user name, else the part of
-// the address before the @, in letters, digits, "_", "." and "-"), keyed by the address in lower case. Two people
-// who would share a handle get "-2", "-3" in the order of the list, so the handles are stable while the list is.
 func (p *peopleState) handles() map[string]string {
 	out := map[string]string{}
 	taken := map[string]bool{}
@@ -104,7 +96,6 @@ func (p *peopleState) handles() map[string]string {
 
 var handleChars = regexp.MustCompile(`[^A-Za-z0-9_.-]+`)
 
-// HandleOf and Has make the people of the document the roster of its comments (canvas.Roster).
 func (p *peopleState) HandleOf(address string) (string, bool) {
 	h, ok := p.handles()[strings.ToLower(strings.TrimSpace(address))]
 	return h, ok

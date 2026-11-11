@@ -17,11 +17,6 @@ import (
 	"gocloud.dev/gcerrors"
 )
 
-// newTestBlobBucket opens a fresh, isolated in-memory *blob.Bucket --
-// memblob.OpenBucket takes no name/singleton parameter, so each call
-// (via blob.OpenBucket's own "mem://" scheme) starts from an empty
-// map, exactly like NewMemoryAdapter's own fresh-map-per-call
-// contract every other conformance test here relies on.
 func newTestBlobBucket(t *testing.T) *blob.Bucket {
 	t.Helper()
 	bucket, err := blob.OpenBucket(context.Background(), "mem://")
@@ -90,7 +85,6 @@ func TestBuildAdapterBlobBackendRequiresURL(t *testing.T) {
 func TestBlobAdapterListPrefix(t *testing.T) {
 	docstore.CheckPrefixLister(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "docs/") })
 	docstore.CheckPrefixLister(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "") })
-	// The adapter's own prefix scopes the listing: another deployment's keys are not seen.
 	bucket := newTestBlobBucket(t)
 	ctx := context.Background()
 	_ = New(bucket, "other/").Save(ctx, "directory/a/1", []byte("x"))
@@ -107,8 +101,6 @@ func TestBlobAdapterHeadReader(t *testing.T) {
 	docstore.CheckHeadReader(t, func() docstore.Adapter { return New(newTestBlobBucket(t), "") })
 }
 
-// rangeDriver is a blob driver holding a few objects whose ranged reads of an empty object fail
-// the way S3 and GCS do (416 InvalidRange, which gocloud leaves as an unclassified error).
 type rangeDriver struct {
 	driver.Bucket
 	objs map[string][]byte
@@ -160,7 +152,6 @@ func TestBlobAdapterLoadHeadEmptyObjectOnInvalidRange(t *testing.T) {
 	if err != nil || len(head) != 0 {
 		t.Fatalf("empty object: %q, %v", head, err)
 	}
-	// Through the helper the empty head is the whole document.
 	head, whole, err := docstore.LoadHead(ctx, a, "empty", 8)
 	if err != nil || len(head) != 0 || !whole {
 		t.Fatalf("docstore.LoadHead empty: %q whole=%v err=%v", head, whole, err)
@@ -172,7 +163,6 @@ func TestBlobAdapterLoadHeadEmptyObjectOnInvalidRange(t *testing.T) {
 	if _, err := a.LoadHead(ctx, "missing", 8); !errors.Is(err, docstore.ErrNotFound) {
 		t.Fatalf("missing: %v, want ErrNotFound", err)
 	}
-	// A cancelled context stays a context error and is not retried as a whole read.
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := a.LoadHead(cctx, "long", 4); err == nil {

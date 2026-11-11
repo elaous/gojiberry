@@ -24,7 +24,6 @@ func TestRekeyAllContinuesAndDoesNotHalfRekeyADocument(t *testing.T) {
 	for _, id := range []string{d1 + "~a.json", d1 + "~b.json", d2 + "~a.json", d3 + "~a.json"} {
 		_ = a.Save(ctx, id, []byte(id))
 	}
-	// doc1's second file is damaged; doc3's is stored in the clear.
 	_ = inner.Save(ctx, d1+"~b.json", []byte("junk"))
 	_ = inner.Save(ctx, d3+"~a.json", []byte("clear"))
 	before, _ := inner.Load(ctx, d1+"~a.json")
@@ -46,7 +45,6 @@ func TestRekeyAllContinuesAndDoesNotHalfRekeyADocument(t *testing.T) {
 	if _, err := asBo.Load(ctx, d2+"~a.json"); err != nil {
 		t.Errorf("doc2 went on: %v", err)
 	}
-	// The clear store is migrated with the opt-out.
 	a.AllowPlaintext = true
 	if n, err := a.RekeyIDs(ctx, []string{d3 + "~a.json"}); err != nil || n != 1 {
 		t.Fatalf("%d %v", n, err)
@@ -89,7 +87,6 @@ func TestConcurrentSaveAndRekeyLoseNothing(t *testing.T) {
 	}
 }
 
-// failing makes Save fail for chosen ids, a number of times.
 type failing struct {
 	docstore.Adapter
 	fail map[string]int
@@ -141,7 +138,6 @@ func TestRemoveCanBeRetriedAfterAMidRekeyFailure(t *testing.T) {
 	if _, err := asBo.Load(ctx, f2); err != nil {
 		t.Fatal("f2 is the file that was not re-keyed")
 	}
-	// Run Remove again: the key is already gone from the list, but the re-key finishes.
 	n, err = sh.Remove(ctx, docA, bo.r.Fingerprint)
 	if err != nil || n != 3 {
 		t.Fatalf("n=%d err=%v", n, err)
@@ -157,7 +153,6 @@ func TestRemoveCanBeRetriedAfterAMidRekeyFailure(t *testing.T) {
 	if _, err := sh.Remove(ctx, docA, bo.r.Fingerprint); !errors.Is(err, docstore.ErrNotFound) {
 		t.Errorf("%v", err)
 	}
-	// Repair is the same path without naming a key.
 	inner.fail[f1] = 1
 	cy := newPerson(t, "cy")
 	if err := sh.Add(ctx, docA, cy.r, cy.r.Fingerprint); err == nil {
@@ -181,7 +176,6 @@ func TestAddOfAListedKeyStillRekeys(t *testing.T) {
 	if err := sh.Add(ctx, docA, bo.r, bo.r.Fingerprint); err != nil {
 		t.Fatal(err)
 	}
-	// A file written by a client that did not know yet (encrypted to the owner only).
 	_ = New(inner, Static{To: []age.Recipient{ana.r.Key}}).Save(ctx, f, []byte("stale"))
 	asBo := New(inner, Static{Keys: []age.Identity{bo.id}})
 	if _, err := asBo.Load(ctx, f); !errors.Is(err, ErrNoKey) {
@@ -220,7 +214,6 @@ func TestRemoveEverywhereContinuesPastAFailureAndCanBeRerun(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), ids[1]) || len(done) != 2 || n != 2 {
 		t.Fatalf("%v %d %v", done, n, err)
 	}
-	// The failed document's list no longer has the key, but Usage still finds it: its re-key is pending.
 	used, err := sh.Usage(ctx, bo.r.Fingerprint)
 	if err != nil || len(used) != 1 || used[0] != ids[1] {
 		t.Fatalf("%v %v", used, err)
@@ -282,7 +275,6 @@ func TestSaveIsNotLostToARekeyOnAStoreWithoutSaveIf(t *testing.T) {
 	}
 }
 
-// ghost lists a file that is gone when it is read, as one deleted after the listing.
 type ghost struct{ docstore.Adapter }
 
 func (g ghost) List(ctx context.Context) ([]docstore.Meta, error) {
@@ -329,7 +321,6 @@ func TestRekeyRekeyAllAndRekeyDocumentGroupTheSame(t *testing.T) {
 	}
 }
 
-// onDocWrite runs fn before the first conditional write of a document file (not of a record).
 type onDocWrite struct {
 	docstore.Adapter
 	fn   func()
@@ -352,7 +343,6 @@ func TestFinishDoesNotClearPendingWhenTheListChangedDuringTheRekey(t *testing.T)
 	ad, sh := sharingSetup(t, h, ana)
 	f := docA + "~aaaaaaaaaaaa.json"
 	_ = ad.Save(ctx, f, []byte("x"))
-	// While Add(bo) re-keys, another client saves a list that has cy too, pending.
 	h.fn = func() {
 		_, err := sh.mutate(ctx, docA, func(rec *sharedRecord) (bool, error) {
 			p, _ := parseShared(sharedEntry{Type: cy.r.Type, Key: cy.r.Text, Label: "cy"})
@@ -377,7 +367,6 @@ func TestFinishDoesNotClearPendingWhenTheListChangedDuringTheRekey(t *testing.T)
 	}
 }
 
-// RekeyProgress is told after each document (its files together) how far the re-key is.
 func TestRekeyAllReportsProgress(t *testing.T) {
 	ctx := context.Background()
 	ana := newPerson(t, "ana")

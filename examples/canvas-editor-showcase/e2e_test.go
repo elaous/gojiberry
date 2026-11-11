@@ -14,11 +14,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestEndToEnd drives the showcase: the xango tree renders with every element
-// registered, the features are registered, the DOM command list and style editor
-// are there, and in edit mode the text flow is editable (typing, multi-cursor,
-// line operations, page breaks, Markdown copy/paste), with the panels, the saver,
-// transfer and roles.
 func TestEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	ok := d.OK
@@ -27,7 +22,6 @@ func TestEndToEnd(t *testing.T) {
 		b, _ := json.Marshal(want)
 		return d.Is("JSON.stringify(s." + path + ") === " + e2etest.J(string(b)))
 	}
-	// scrollTop puts the document back at the top.
 	scrollTop := func(ms int) {
 		d.CanvasMove(450, 300)
 		d.Wheel(0, -5000)
@@ -45,7 +39,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Value(".gj-docview-top input.gj-docview-title-edit") == "Quarterly report", "the DocumentView title is an editable box")
 	ok(d.Count(".gj-docview-desk canvas#stage") == 1, "the canvas sits in the DocumentView desk")
 
-	// The menu bar is built from the registered commands: one submenu per feature.
 	d.Click(`button.gj-menubar-button:has-text("Edit")`)
 	subs := d.Count(".gj-menubar-panel > .gj-menu > .gj-menu-item-sub")
 	ok(subs == 17, fmt.Sprint("Edit has a submenu per feature: ", subs))
@@ -56,7 +49,6 @@ func TestEndToEnd(t *testing.T) {
 	d.MouseClick(600, 700, 1) // the backdrop closes the menu
 	ok(d.Count(".gj-menubar-panel") == 0, "a click outside closes the menu")
 
-	// The components' stylesheets come from CSS imports, installed by domrt.Mount.
 	var sheets []string
 	d.Eval(`Array.from(document.querySelectorAll('style[data-xango-style]')).map((e) => e.getAttribute('data-xango-style'))`, &sheets)
 	hasStyleEditor := false
@@ -71,7 +63,6 @@ func TestEndToEnd(t *testing.T) {
 	s = S()
 	ok(s.Str("mode") == "edit", "edit mode")
 
-	// Click into the first paragraph (title is at the top of page 1) and type.
 	before := s.Str("text")
 	body()
 	s = S()
@@ -94,12 +85,10 @@ func TestEndToEnd(t *testing.T) {
 	s = S()
 	ok(len(s.Str("text")) == len(before)+1, "Ctrl+Shift+Z and Ctrl+Y redo")
 
-	// Multi-cursor: select the word at the caret, then every match.
 	d.Press("Control+D")
 	d.Press("Control+D")
 	ok(d.Is("s.cursors.length >= 1"), "Ctrl+D works on the flow")
 
-	// Page break: Ctrl+Enter makes a fourth page's worth of flow.
 	body()
 	d.Press("Control+Enter")
 	ok(d.Is("s.cursors[0].After === true"), "the caret goes after the page break")
@@ -107,7 +96,6 @@ func TestEndToEnd(t *testing.T) {
 	s = S()
 	ok(strings.Contains(s.Str("text"), "NEWPAGE"), "typing after the break")
 
-	// Line operations: move the line the caret is on.
 	t0 := s.Str("text")
 	d.Press("Alt+ArrowDown")
 	s = S()
@@ -119,7 +107,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Control+Shift+K")
 	ok(len(S().Str("text")) == len(t0), "Ctrl+Shift+K deletes it again")
 
-	// Styles: the gallery applies a paragraph style to the caret's paragraph.
 	d.Click(`button[data-tab="styles"]`)
 	ok(d.Count(`.gj-stylepicker-item[data-style="Heading 1"]`) == 1, "the style gallery lists the styles")
 	body()
@@ -139,7 +126,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Wait(total + " === " + fmt.Sprint(sum(hBefore)))
 	ok(true, "Normal puts it back")
 
-	// Symbols: pick one from the DOM picker into the canvas text.
 	d.Click(`button[data-tab="symbols"]`)
 	body()
 	tLen := len(S().Str("text"))
@@ -151,7 +137,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Count(".gj-symbolpicker-grid .gj-symbol") == 2, "the symbol search filters by name")
 	d.Click(`button[data-tab="format"]`)
 
-	// A link: hovering it shows its address on the canvas and a preview card in the DOM.
 	s = S()
 	for i := 0; i < 20 && (s.Num("link.y") > 560 || s.Num("link.y") < 20); i++ {
 		d.CanvasMove(450, 300)
@@ -172,7 +157,6 @@ func TestEndToEnd(t *testing.T) {
 	d.WaitFor("the card to go", "!document.querySelector('#link-preview a.gj-linkpreview')")
 	ok(d.Count("#link-preview a.gj-linkpreview") == 0, "the card goes when the pointer leaves")
 
-	// Key bindings editor: rebind Copy line down to Ctrl+J.
 	d.Click(`button[data-tab="keys"]`)
 	d.Click(`[data-action="change:line.duplicate-down"]`)
 	d.WaitFor("the key capture", "document.querySelector('.gj-keybindings-capture')")
@@ -180,7 +164,6 @@ func TestEndToEnd(t *testing.T) {
 	d.WaitFor("the new binding", "document.querySelector('.gj-keybindings-message')")
 	ok(d.Count(`.gj-keybindings-message:has-text("Copy line down is now Ctrl+J")`) == 1, "the editor reports the new binding")
 	ok(d.Count(`.gj-keybindings-row-modified:has-text("Copy line down")`) == 1, "and marks it modified")
-	// The long key list may have scrolled the whole page (overflow:hidden still scrolls).
 	d.Eval(`(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach((e) => { if (e.scrollTop) e.scrollTop = 0; }); })()`, nil)
 	scrollTop(50)
 	body() // a body line
@@ -192,7 +175,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(`[data-action="reset-all"]`)
 	d.Click(`button[data-tab="format"]`)
 
-	// Page furniture: the watermark starts on page 2; removing the header from one page.
 	ok(jsonIs("watermarks", []string{"", "DRAFT", "DRAFT"}), fmt.Sprint("watermark from page 2 on: ", S().Get("watermarks")))
 	ok(jsonIs("headers", []string{"Gojiberry editor", "Gojiberry editor", "Gojiberry editor"}), fmt.Sprint("headers: ", S().Get("headers")))
 	d.Click(`button.gj-menubar-button:has-text("Edit")`)
@@ -206,7 +188,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(`.gj-menubar-panel li:has-text("Two-page spread")`)
 	ok(!S().Bool("spread"), "and off again")
 
-	// Paragraph formatting: lists, numbering, drop cap.
 	scrollTop(50)
 	body()
 	markers := func() int { return d.Int(`JSON.parse(document.getElementById('state').textContent).markers.length`) }
@@ -228,14 +209,12 @@ func TestEndToEnd(t *testing.T) {
 	d.Press("Control+e")
 	ok(len(S().Str("text")) > 0, "Ctrl+E (centre) is handled without breaking the text")
 
-	// Markdown clipboard.
 	d.GrantClipboard()
 	d.Eval(`navigator.clipboard.writeText('pasted **bold** text')`, nil)
 	d.Press("Control+Shift+V")
 	d.Wait("s.text.includes('pasted bold text')")
 	ok(strings.Contains(S().Str("text"), "pasted bold text"), "Ctrl+Shift+V pastes Markdown as text, not marks")
 
-	// Auto-closing pairs and completion in the text flow (at several cursors too).
 	d.Focus("#input")
 	d.Press("End")
 	d.Type("(note")
@@ -250,7 +229,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Wait("s.text.includes('(note) feature')")
 	ok(d.Count(`#suggestions [role="option"]`) == 0, "Tab accepts the completion")
 
-	// Outline and bookmarks: the headings are a list that jumps; a bookmark is a named place.
 	d.Click(`button[data-tab="outline"]`)
 	ok(d.Is("s.outline.includes('1:Gojiberry editor') && s.outline.includes('2:Second thoughts')"), fmt.Sprint("the outline lists the headings: ", S().Get("outline")))
 	ok(d.Count(`.gj-outline-item[data-level="2"]`) >= 1, "the Outline component shows them with their levels")
@@ -276,7 +254,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(".gj-bookmark-remove")
 	ok(d.Is("s.bookmarks.length === 0"), "Remove takes it off")
 
-	// Footnotes, a table of contents and an index.
 	scrollTop(100)
 	body() // a body line
 	d.Focus("#input")
@@ -296,7 +273,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(`.gj-menubar-panel li:has-text("Table of contents")`)
 	d.Wait("s.tocRows >= 2")
 	ok(S().Int("tocRows") >= 2, fmt.Sprint("a table of contents lists the headings: ", S().Get("tocRows")))
-	// Its look is the person's to choose: how many heading levels it lists, and a leader or none.
 	rows := S().Int("tocRows")
 	d.WaitSelector("#toc-depth")
 	d.Select("#toc-depth", "1")
@@ -320,7 +296,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Wait("s.footnotes.length === 0")
 	ok(true, "deleting a footnote removes its mark and note")
 
-	// Comments: comment the selection, see it listed with its text and mentions, hover it, reply, resolve, delete.
 	scrollTop(100)
 	body() // a body line
 	d.Focus("#input")
@@ -356,8 +331,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Click(".gj-comment-delete")
 	ok(d.Is("s.comments === 0 && s.comment === null"), "Delete removes the comment and un-marks its text")
 
-	// Lazy fonts: picking a font only adds it; the file is downloaded into
-	// the store the first time the text uses it.
 	var realFont []byte
 	for _, p := range []string{"/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", "/usr/share/fonts/truetype/freefont/FreeSerif.ttf"} {
 		if b, err := os.ReadFile(p); err == nil {
@@ -394,7 +367,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Sleep(100)
 	ok(fontHits() == 1, "using it again does not download it again")
 
-	// Saver: memory target, protobuf binary, then the browser's localStorage as JSON.
 	d.Click(`button[data-tab="save"]`)
 	ok(d.Count(`.gj-saver-select[data-field="Save to"] option`) == 2, "the Saver offers its targets")
 	ok(d.Count(`.gj-saver-select[data-field="Format"] option`) == 4, "and the formats")
@@ -413,7 +385,6 @@ func TestEndToEnd(t *testing.T) {
 	d.WaitFor("the saved entry", `document.querySelector('.gj-doclist-item')`)
 	savedID := d.Attr(".gj-doclist-item", "data-id")
 	var stored string
-	// The file's key carries a generation suffix: find it by its ID and extension.
 	d.Eval(`(() => { const k = Object.keys(localStorage).find((k) => k.startsWith('showcase:`+savedID+`~') && k.endsWith('.json')); return JSON.parse(localStorage.getItem(k)).d })()`, &stored)
 	raw, err := base64.StdEncoding.DecodeString(stored)
 	if err != nil {
@@ -445,7 +416,6 @@ func TestEndToEnd(t *testing.T) {
 	}
 	ok(inFamily, "text in the font is saved with its family")
 
-	// Open: change the text, open the saved JSON, the text is back.
 	textBefore := S().Str("text")
 	d.Focus("#input")
 	d.Press("Control+End")
@@ -461,7 +431,6 @@ func TestEndToEnd(t *testing.T) {
 	d.WaitFor("an empty list", "document.querySelectorAll('.gj-doclist-item').length === 0")
 	ok(d.Text(".gj-saver-status") == "notes deleted", "Delete removes a saved document")
 
-	// Import / Export.
 	d.Click(`button[data-tab="transfer"]`)
 	name, data := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="markdown"]`) })
 	ok(name == "Quarterly report.md", "Export downloads a file named after the title: "+name)
@@ -470,7 +439,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Wait("s.text.includes('fresh words')")
 	ok(d.Text("#transfer-message") == "Imported hello.md", "Import reads the file into the editor")
 
-	// The other formats: each export is a real file of its kind, and a Word file comes back in.
 	var docxBytes []byte
 	for _, f := range []struct {
 		format, ext string
@@ -495,7 +463,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Wait("s.text.includes('fresh words') && document.getElementById('transfer-message').textContent === 'Imported back.docx'")
 	ok(true, "a Word file exported by the editor imports back with its text")
 
-	// Roles: a viewer is held in view mode and cannot comment; an editor can edit but not manage.
 	d.CanvasClick(100, 164) // into the imported text's second line
 	d.Focus("#input")
 	d.Press("End")

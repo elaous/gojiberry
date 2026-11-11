@@ -6,7 +6,6 @@ func TestNormalizeAndSame(t *testing.T) {
 	if Normalize(" Ana@Gojiberry.io ") != "ana@gojiberry.io" || !Same("ANA@gojiberry.io", "ana@gojiberry.io ") || Same("", "") || Same("a", "b") {
 		t.Fatal("addresses are compared trimmed and case-folded; empty is nobody")
 	}
-	// A subject is case-sensitive: two subjects that differ in case are two people.
 	if Same("google:AbC", "google:abc") || !Same(" google:AbC ", "google:AbC") {
 		t.Fatal("subjects are compared exactly")
 	}

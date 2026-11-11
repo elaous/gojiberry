@@ -14,10 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Tests of Sharing.RepairAll (docs/roadmap.md, backlog item 3).
-
-// legacyV2 rewrites every stored file of the document with the unsigned v2 frame (level and seq,
-// no signature) and the record as it was before frames were signed.
 func (w *world) legacyV2(t *testing.T, id string) {
 	t.Helper()
 	ctx := context.Background()
@@ -45,7 +41,6 @@ func (w *world) legacyV2(t *testing.T, id string) {
 	}
 }
 
-// mixedStore has a document in each state RepairAll has to tell apart.
 type mixedStore struct {
 	v1, v1e2ee, v2, v3, junk, foreign string
 }
@@ -61,12 +56,10 @@ func (w *world) mixed(t *testing.T) mixedStore {
 	m.v2 = w.history(t)
 	w.legacyV2(t, m.v2)
 	m.v3 = w.e2eeDoc(t)
-	// An unreadable file: the age header and then noise, under a document of its own.
 	m.junk = "0b1c2d3e-0000-4000-8000-00000000000a"
 	if err := w.inner.Save(ctx, m.junk+"~deadbeef0001.open", ageHeaderJunk(7)); err != nil {
 		t.Fatal(err)
 	}
-	// A confidential document of someone else's: encrypted to keys the keyring does not hold.
 	m.foreign = "0b1c2d3e-0000-4000-8000-00000000000b"
 	stranger := newPerson(t, "stranger")
 	ff := m.foreign + "~deadbeef0002.open"
@@ -124,11 +117,9 @@ func TestRepairAllMixedStoreIsIdempotent(t *testing.T) {
 			}
 		}
 	}
-	// The record now says every file is signed, so an unsigned frame is forged from here on.
 	if !w.binding(t, w.mainFile(t, m.v1e2ee)).Signed {
 		t.Error("the record of a repaired document does not say signed")
 	}
-	// Skipped documents are byte for byte what they were; nothing was deleted anywhere.
 	after := w.snapshot(t)
 	for _, doc := range []string{m.junk, m.foreign} {
 		for id, d := range before {
@@ -142,7 +133,6 @@ func TestRepairAllMixedStoreIsIdempotent(t *testing.T) {
 			t.Errorf("%s was deleted", id)
 		}
 	}
-	// A second run repairs nothing and writes nothing.
 	settled := w.snapshot(t)
 	rep2, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
 	if err != nil {
@@ -190,12 +180,10 @@ func TestRepairAllDryRunLimitAndResume(t *testing.T) {
 		t.Fatalf("%v %+v", err, dry)
 	}
 	sameStore(t, "dry run", before, w.snapshot(t))
-	// Limit 1 repairs one document and says how many it did not look at.
 	r1, err := w.sharing.RepairAll(ctx, RepairAllOptions{Limit: 1})
 	if err != nil || r1.Repaired != 1 || r1.Remaining == 0 {
 		t.Fatalf("%v %+v", err, r1)
 	}
-	// Running again carries on and finishes.
 	r2, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
 	if err != nil || r2.Repaired != 2 || r2.Remaining != 0 || len(r2.Skipped) != 2 {
 		t.Fatalf("%v %+v", err, r2)
@@ -231,8 +219,6 @@ func TestRepairAllStopsOnContextAndResumes(t *testing.T) {
 	}
 }
 
-// A record that already says every file is signed turns an unsigned file into a forgery: RepairAll
-// reports it and leaves the owner's explicit AcceptUnsigned to settle it, never vouching itself.
 func TestRepairAllDoesNotAcceptUnsignedFilesOfASignedRecord(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -254,7 +240,6 @@ func TestRepairAllDoesNotAcceptUnsignedFilesOfASignedRecord(t *testing.T) {
 	sameStore(t, "forged", before, w.snapshot(t))
 }
 
-// A Save by another writer while RepairAll runs is not lost, and every file ends signed.
 func TestRepairAllWithConcurrentSaves(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -291,8 +276,6 @@ func TestRepairAllWithConcurrentSaves(t *testing.T) {
 	if len(rep.Skipped) != 0 {
 		t.Fatalf("%+v", rep.Skipped)
 	}
-	// Another run settles whatever a Save that raced the scan left (a Save through the signing
-	// adapter writes v3, so there is nothing), and the last write is the one that is stored.
 	if rep2, err := w.sharing.RepairAll(ctx, RepairAllOptions{}); err != nil || rep2.Repaired != 0 {
 		t.Fatalf("%v %+v", err, rep2)
 	}
@@ -309,15 +292,12 @@ func TestRepairAllWithConcurrentSaves(t *testing.T) {
 	}
 }
 
-// listCounter counts the List calls that reach the store (the scan's, the adapter's and Repair's).
 type listCounter struct {
 	*flaky
-	lists atomic.Int64
-	// saveErr, when set, is returned by a conditional write of an id that contains saveOn.
+	lists   atomic.Int64
 	saveOn  string
 	saveErr error
-	// onSave, when set, runs before such a write.
-	onSave func()
+	onSave  func()
 }
 
 func (c *listCounter) List(ctx context.Context) ([]docstore.Meta, error) {
@@ -335,8 +315,6 @@ func (c *listCounter) SaveIf(ctx context.Context, id string, b []byte, prev stri
 	return c.flaky.SaveIf(ctx, id, b, prev)
 }
 
-// over runs a RepairAll on the world's store through inner (a wrapper of it) and mod, a change of
-// the Adapter (Skip, ...). It returns the Sharing.
 func (w *world) over(inner docstore.Adapter, mod func(*Adapter)) *Sharing {
 	ad := New(inner, w.ring)
 	ad.Signer = w.signer
@@ -346,7 +324,6 @@ func (w *world) over(inner docstore.Adapter, mod func(*Adapter)) *Sharing {
 	return &Sharing{Store: w.inner, Adapter: ad, Signer: w.signer}
 }
 
-// legacyItem stores a non-document encrypted item in an unsigned v2 frame.
 func (w *world) legacyItem(t *testing.T, id string, data []byte) {
 	t.Helper()
 	rs, err := w.ring.Recipients(context.Background(), id)
@@ -358,8 +335,6 @@ func (w *world) legacyItem(t *testing.T, id string, data []byte) {
 	}
 }
 
-// The store is listed a constant number of times by the scan, however many documents there are:
-// once for the run, plus what Repair lists under its lock for a document it repairs.
 func TestRepairAllListsTheStoreOncePerRun(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -376,11 +351,9 @@ func TestRepairAllListsTheStoreOncePerRun(t *testing.T) {
 	if err != nil || rep.Repaired != 2 || rep.Signed != 12 {
 		t.Fatalf("%v %+v", err, rep)
 	}
-	// 1 for the run, and Repair lists under its lock at most a few times per repaired document.
 	if n := cnt.lists.Load(); n > 1+3*int64(rep.Repaired) {
 		t.Errorf("%d List calls for 14 documents, 2 of them repaired", n)
 	}
-	// A run with nothing to repair lists once.
 	cnt.lists.Store(0)
 	if rep, err := sh.RepairAll(ctx, RepairAllOptions{}); err != nil || rep.Signed != 14 {
 		t.Fatalf("%v %+v", err, rep)
@@ -390,8 +363,6 @@ func TestRepairAllListsTheStoreOncePerRun(t *testing.T) {
 	}
 }
 
-// An encrypted item that is not a document's (expiry:, collab:, passkey/, public/ ...) in an
-// unsigned frame is repaired too, and one that cannot be is reported, so Left is honest.
 func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -411,7 +382,6 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	docFiles := len(w.files(t, doc))
 	w.legacyV2(t, doc)
 
-	// Without a signer nothing is written and every unsigned item is reported.
 	before := w.snapshot(t)
 	nosign := &Sharing{Store: w.inner, Adapter: New(w.inner, w.ring), Signer: w.signer}
 	rep, err := nosign.RepairAll(ctx, RepairAllOptions{})
@@ -429,7 +399,6 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	}
 	sameStore(t, "no signer", before, w.snapshot(t))
 
-	// A dry run lists them and writes nothing.
 	dry, err := w.sharing.RepairAll(ctx, RepairAllOptions{DryRun: true})
 	if err != nil || len(dry.Todo) != len(items)+1 {
 		t.Fatalf("%v %+v", err, dry)
@@ -443,7 +412,6 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	if rep.Repaired != len(items)+1 || rep.Signed != 1 || len(rep.Skipped) != 1 || rep.Total != len(items)+3 || rep.Left() != 1 {
 		t.Fatalf("%+v", rep)
 	}
-	// Files counts each item's one file and all the files of the document.
 	if rep.Files != len(items)+docFiles {
 		t.Errorf("Files = %d, want %d", rep.Files, len(items)+docFiles)
 	}
@@ -465,8 +433,6 @@ func TestRepairAllCoversItemsThatAreNotDocuments(t *testing.T) {
 	sameStore(t, "second run", settled, w.snapshot(t))
 }
 
-// Ids the Adapter leaves readable (a custom Skip, and DefaultSkip's keys:, catalog:, acl:) are not
-// looked at: they are not counted, reported or written.
 func TestRepairAllLeavesSkippedIdsAlone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -495,7 +461,6 @@ func TestRepairAllLeavesSkippedIdsAlone(t *testing.T) {
 			t.Errorf("%s was written", id)
 		}
 	}
-	// The default Skip alone leaves open/readme in the report, as plaintext.
 	rep, err = w.sharing.RepairAll(ctx, RepairAllOptions{})
 	if err != nil || skippedBy(rep)["open/readme"] != SkipPlaintext || len(rep.Skipped) != 1 {
 		t.Fatalf("%v %+v", err, rep)
@@ -521,8 +486,6 @@ func TestRepairAllReportsPlaintext(t *testing.T) {
 	sameStore(t, "plaintext", before, w.snapshot(t))
 }
 
-// The context ending while Repair runs (its error then is the context's) returns the context's
-// error with the document not counted as skipped.
 func TestRepairAllStopsWhenTheContextEndsInsideRepair(t *testing.T) {
 	w := newWorld(t)
 	doc := w.history(t)
@@ -578,7 +541,6 @@ func TestRepairAllDryRunWithLimit(t *testing.T) {
 	sameStore(t, "dry run with limit", before, w.snapshot(t))
 }
 
-// A document whose only file is the folder's real name ("folder-secret/<ID>") is a document.
 func TestRepairAllRepairsAFolderSecretOnlyDocument(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -600,8 +562,6 @@ func TestRepairAllRepairsAFolderSecretOnlyDocument(t *testing.T) {
 	}
 }
 
-// A document that was never shared (no keys: record) gets a signed record with Signed set when it
-// is repaired: from then on an unsigned frame in it is forged.
 func TestRepairAllCreatesTheRecordOfADocumentWithoutOne(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -625,9 +585,6 @@ func TestRepairAllCreatesTheRecordOfADocumentWithoutOne(t *testing.T) {
 	}
 }
 
-// delOnList deletes an id from the store when the n-th List call arrives (the first is RepairAll's
-// own listing, the next the one Rekey or Repair makes under its lock): an item deleted between the
-// scan and the write.
 type delOnList struct {
 	*flaky
 	id    string
@@ -644,8 +601,6 @@ func (d *delOnList) List(ctx context.Context) ([]docstore.Meta, error) {
 	return d.flaky.List(ctx)
 }
 
-// An item deleted after the scan, before Rekey, is gone: it is neither repaired nor skipped (the
-// scan ignores a deletion the same way), and the other items are still repaired.
 func TestRepairAllIgnoresAnItemDeletedAfterTheScan(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -668,8 +623,6 @@ func TestRepairAllIgnoresAnItemDeletedAfterTheScan(t *testing.T) {
 	}
 }
 
-// A Save of a non-document item (expiry:) while RepairAll runs is not lost, and the item ends
-// signed.
 func TestRepairAllWithConcurrentSaveOfAnItem(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -716,7 +669,6 @@ func TestRepairAllWithConcurrentSaveOfAnItem(t *testing.T) {
 	}
 }
 
-// errRing is a Keyring whose Recipients fails for one id with a fixed error.
 type errRing struct {
 	Keyring
 	id  string
@@ -730,9 +682,6 @@ func (r errRing) Recipients(ctx context.Context, id string) ([]age.Recipient, er
 	return r.Keyring.Recipients(ctx, id)
 }
 
-// A keyring answer is never "gone" (docs/roadmap.md, backlog item 32): a Keyring that returns
-// docstore.ErrNotFound from Recipients, for an item that is still stored, is a skip with the
-// keyring's error, and Left counts it.
 func TestRepairAllKeyringNotFoundIsNotGone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -763,7 +712,6 @@ func (notFoundFloor) Get(context.Context, string) (uint64, error) {
 }
 func (notFoundFloor) Raise(context.Context, string, uint64) error { return nil }
 
-// hideKeys makes the record of every document look missing to whoever reads through it.
 type hideKeys struct{ docstore.Adapter }
 
 func (h hideKeys) Load(ctx context.Context, id string) (docstore.Document, error) {
@@ -773,8 +721,6 @@ func (h hideKeys) Load(ctx context.Context, id string) (docstore.Document, error
 	return h.Adapter.Load(ctx, id)
 }
 
-// The built-in StoreKeyring can answer ErrNotFound too (its record lookup, here through a floor
-// that reports it): the document still exists, so it is a skip, not "gone".
 func TestRepairAllStoreKeyringNotFoundIsNotGone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -798,7 +744,6 @@ func TestRepairAllStoreKeyringNotFoundIsNotGone(t *testing.T) {
 	}
 }
 
-// hideOnList omits one id from the listings after the first, though it stays stored.
 type hideOnList struct {
 	*flaky
 	id    string
@@ -819,8 +764,6 @@ func (h *hideOnList) List(ctx context.Context) ([]docstore.Meta, error) {
 	return out, nil
 }
 
-// An ErrNotFound that does not come from a missing file (here a listing that no longer shows an
-// item that is still stored) leaves the file stored, so RepairAll does not call it gone.
 func TestRepairAllNotFoundWithTheFilesStoredIsNotGone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -839,7 +782,6 @@ func TestRepairAllNotFoundWithTheFilesStoredIsNotGone(t *testing.T) {
 	}
 }
 
-// idRing is a Keyring whose Identities fails for one id with a fixed error.
 type idRing struct {
 	Keyring
 	id  string
@@ -853,9 +795,6 @@ func (r idRing) Identities(ctx context.Context, id string) ([]age.Identity, erro
 	return r.Keyring.Identities(ctx, id)
 }
 
-// Identities is a keyring call like Recipients: an ErrNotFound from it, over an item that is
-// still stored, is a real error for RekeyAll and a skip for RepairAll, never "gone" and never
-// swallowed.
 func TestKeyringIdentitiesNotFoundIsNotGone(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

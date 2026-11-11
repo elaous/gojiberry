@@ -1,12 +1,3 @@
-// Package transfer is the seam for importing documents from, and
-// exporting them to, other file formats: an Importer turns a file into a
-// docfile.Document, an Exporter turns a Document into a file, and a
-// Registry lists what is available so a menu can offer it (see
-// components.Transfer).
-//
-// It starts with the formats the library already writes (JSON, protobuf),
-// plain text and Markdown; add Word, PDF, HTML and the like by
-// registering more.
 package transfer
 
 import (
@@ -57,8 +48,6 @@ type Registry struct {
 // ErrUnknownFormat is returned when no importer or exporter fits.
 var ErrUnknownFormat = errors.New("transfer: unknown format")
 
-// AddImporter and AddExporter register a format; one with the same name
-// replaces the earlier one.
 func (r *Registry) AddImporter(i Importer) {
 	for k, o := range r.importers {
 		if o.Format().Name == i.Format().Name {
@@ -86,8 +75,6 @@ func (r *Registry) Importers() []Importer { return append([]Importer(nil), r.imp
 // Exporters lists the registered exporters.
 func (r *Registry) Exporters() []Exporter { return append([]Exporter(nil), r.exporters...) }
 
-// Accept is the value for an <input type=file accept=...>: every
-// extension an importer reads.
 func (r *Registry) Accept() string {
 	var exts []string
 	for _, i := range r.importers {
@@ -97,7 +84,6 @@ func (r *Registry) Accept() string {
 	return strings.Join(exts, ",")
 }
 
-// ImporterFor picks the importer for a file name by its extension.
 func (r *Registry) ImporterFor(filename string) (Importer, error) {
 	ext := strings.ToLower(path.Ext(filename))
 	for _, i := range r.importers {
@@ -110,7 +96,6 @@ func (r *Registry) ImporterFor(filename string) (Importer, error) {
 	return nil, ErrUnknownFormat
 }
 
-// Import reads data as the named format ("" picks by filename).
 func (r *Registry) Import(name, filename string, data []byte) (docfile.Document, error) {
 	if name == "" {
 		i, err := r.ImporterFor(filename)
@@ -127,8 +112,6 @@ func (r *Registry) Import(name, filename string, data []byte) (docfile.Document,
 	return docfile.Document{}, ErrUnknownFormat
 }
 
-// Export writes doc as the named format and returns the file name (from
-// the title) with its bytes and media type.
 func (r *Registry) Export(name string, doc docfile.Document) (filename string, data []byte, mime string, err error) {
 	for _, e := range r.exporters {
 		f := e.Format()
@@ -145,8 +128,6 @@ func (r *Registry) Export(name string, doc docfile.Document) (filename string, d
 	return "", nil, "", ErrUnknownFormat
 }
 
-// Default returns a registry with the built-in formats: JSON, protobuf
-// text and binary, plain text and Markdown.
 func Default() *Registry {
 	r := &Registry{}
 	for _, c := range docfile.Formats() {
@@ -182,10 +163,6 @@ func (markdown) Format() Format {
 // MaxMarkdownBytes is the largest Markdown file read.
 const MaxMarkdownBytes = 16 << 20
 
-// Import reads Markdown as the editor's own Markdown does (see canvas.Markdown): headings, emphasis, lists, quotes,
-// code, rules, links and pipe tables, where a table cell that starts with = stays a formula. The title is the first
-// heading. A picture whose address is a data: URL is kept with its alternative text; one on a server is not fetched
-// (an importer makes no request for the author of a file), so it stays as its alternative text in brackets.
 func (markdown) Import(b []byte) (docfile.Document, error) {
 	if len(b) > MaxMarkdownBytes {
 		return docfile.Document{}, errors.New("transfer: the Markdown file is too large")
@@ -203,9 +180,6 @@ func (markdown) Import(b []byte) (docfile.Document, error) {
 	return d, nil
 }
 
-// Footnotes in Markdown: a reference [^label] in the text and a definition "[^label]: the note" on a line of its own
-// (indented lines after it continue the note). Each reference with a definition becomes a footnote mark, numbered by
-// the order of the references; a reference with no definition stays as the text it was.
 const (
 	noteOpen  = "\ue000"
 	noteClose = "\ue001"
@@ -223,7 +197,6 @@ type mdNotes struct {
 	list []mdNote // in the order the references come
 }
 
-// takeFootnotes removes the definitions from the source and returns it with the references marked.
 func takeFootnotes(src string) (string, *mdNotes) {
 	n := &mdNotes{defs: map[string]string{}}
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
@@ -248,7 +221,7 @@ func takeFootnotes(src string) (string, *mdNotes) {
 	if len(n.defs) == 0 {
 		return src, n
 	}
-	seen := map[string]string{} // the label's footnote id in the document: n1, n2, ... by order of reference
+	seen := map[string]string{}
 	fenced = false
 	for i, l := range kept {
 		if t := strings.TrimSpace(l); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
@@ -275,7 +248,6 @@ func takeFootnotes(src string) (string, *mdNotes) {
 	return out, n
 }
 
-// markFootnotes turns the markers left in the text into footnote marks.
 func markFootnotes(items []docfile.Item, n *mdNotes) []docfile.Item {
 	if len(n.list) == 0 {
 		return items
@@ -309,7 +281,6 @@ func markFootnotes(items []docfile.Item, n *mdNotes) []docfile.Item {
 	return out
 }
 
-// firstHeading is the text of the first "# " heading outside a code fence.
 func firstHeading(src string) string {
 	fenced := false
 	for _, line := range strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n") {
@@ -325,7 +296,6 @@ func firstHeading(src string) string {
 	return ""
 }
 
-// dataImage makes an image of a data: URL of a picture the editor shows; any other address gives nil.
 func dataImage(url, alt string) canvas.InlineObject {
 	if !strings.HasPrefix(url, "data:image/png;base64,") && !strings.HasPrefix(url, "data:image/jpeg;base64,") &&
 		!strings.HasPrefix(url, "data:image/gif;base64,") && !strings.HasPrefix(url, "data:image/webp;base64,") {
@@ -348,7 +318,6 @@ func dataImage(url, alt string) canvas.InlineObject {
 	return im
 }
 
-// dataSource is a picture known only by its data: URL.
 type dataSource struct {
 	url  string
 	w, h float64
@@ -381,11 +350,10 @@ func (text) Export(d docfile.Document) ([]byte, error) {
 	return []byte(sb.String()), nil
 }
 
-// MarkdownSkipped counts what a Markdown file holds that Import leaves out or only keeps as text.
 type MarkdownSkipped struct {
-	RemoteImages int // pictures given by an address that is not a data: URL (not fetched; their alternative text stays)
-	CellMarks    int // table cells whose emphasis, code or links are shown as plain text (a cell holds text only)
-	HTML         int // lines with HTML tags, which are shown as the text they are
+	RemoteImages int
+	CellMarks    int
+	HTML         int
 }
 
 var (
@@ -393,7 +361,6 @@ var (
 	reMDHTML  = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9]*(\s[^>]*)?/?>`)
 )
 
-// InspectMarkdown counts what Import leaves out of a Markdown file (code blocks are not read).
 func InspectMarkdown(data []byte) MarkdownSkipped {
 	var s MarkdownSkipped
 	fenced := false
@@ -414,7 +381,6 @@ func InspectMarkdown(data []byte) MarkdownSkipped {
 			s.HTML++
 		}
 		if t := strings.TrimSpace(line); strings.HasPrefix(t, "|") {
-			// a table row: the cells that have marks
 			for _, c := range strings.Split(strings.Trim(t, "|"), "|") {
 				if c = strings.TrimSpace(c); strings.TrimLeft(c, ":-") != "" && canvas.StripMarkdown(c) != c {
 					s.CellMarks++

@@ -12,9 +12,6 @@ type CheckboxProps struct {
 	OnChange func(checked bool)
 }
 
-// Checkbox renders a single labeled checkbox, the label wrapping the
-// input so clicking the text toggles it too (same zero-JS trick
-// FileUploader's dropzone label uses).
 func Checkbox(props CheckboxProps) xango.Node {
 	attrs := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-checkbox-input")}
 	if props.Checked {

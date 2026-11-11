@@ -13,18 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Evidence of other writers.
-//
-// The directory's log appends and challenge claims are atomic across processes only on a store
-// with conditional writes, and GOJIBERRY_DOCSTORE_REPLICAS is how the operator says how many
-// processes share the store. That is a declaration, and a wrong one (a second replica started by
-// an autoscaler, a forgotten staging copy) is silent. Each AdapterDirectory therefore registers
-// itself in the store ("directory-log/instance/<random id>", refreshed every writerBeat) and
-// looks for other registrations that are fresh: Writers returns how many, so the start-up can say
-// loudly that the declaration is contradicted by the store itself. It is evidence, not proof: a
-// process that restarted within writerFresh looks like another writer, and a writer whose
-// registration cannot be written is not seen.
-
 const instancePrefix = docstore.DirectoryLogPrefix + "instance/"
 
 const (
@@ -37,7 +25,6 @@ type instanceRecord struct {
 	At int64 `json:"at"`
 }
 
-// instanceID is this process's registration name (random, made once).
 func (d *AdapterDirectory) instanceID() string {
 	d.idMu.Lock()
 	defer d.idMu.Unlock()
@@ -49,9 +36,7 @@ func (d *AdapterDirectory) instanceID() string {
 	return d.id
 }
 
-// Writers refreshes this process's registration in the store and returns how many other
-// processes have a fresh one: processes that are, as far as the store shows, writing the same
-// directory.
+// Writers refreshes this process's registration.
 func (d *AdapterDirectory) Writers(ctx context.Context) (int, error) {
 	if d.Signer == nil {
 		return 0, ErrDirectoryOff
@@ -92,9 +77,7 @@ func (d *AdapterDirectory) Writers(ctx context.Context) (int, error) {
 	return others, nil
 }
 
-// RunWriterWatch keeps the registration fresh and, while replicas (the declared number of
-// processes) is 1 or less, logs an error, at most every ten minutes, whenever another process
-// shows up as writing the same directory. It runs until ctx ends.
+// RunWriterWatch keeps the registration fresh while it runs.
 func (d *AdapterDirectory) RunWriterWatch(ctx context.Context, replicas int) {
 	t := time.NewTicker(writerBeat)
 	defer t.Stop()

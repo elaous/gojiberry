@@ -10,22 +10,11 @@ type SearchProps struct {
 	Open        bool // whether the suggestion list is shown
 	Disabled    bool
 
-	// OnChange fires on every keystroke. Filtering Suggestions (and
-	// any debouncing of a remote lookup) is the caller's job -- Search
-	// itself has no fetch/timer logic of its own, the same
-	// "consumer drives the async part" split FileUploader uses for
-	// reading files.
+	// OnChange fires on every keystroke.
 	OnChange func(value string)
-	// OnSelect fires when a suggestion is clicked; the caller typically
-	// sets Value to it and closes the list (Open: false).
 	OnSelect func(suggestion string)
 }
 
-// Search renders a text input plus, when Open, a listbox of
-// Suggestions below it -- a basic implementation of the ARIA combobox
-// pattern (role/aria-* attributes only, no keyboard navigation of its
-// own, the same scope RadioGroup/Dropdown/etc. keep to elsewhere in
-// this package).
 func Search(props SearchProps) xango.Node {
 	inputAttrs := []xango.Attr{
 		xango.A("type", "search"),

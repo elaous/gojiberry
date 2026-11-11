@@ -16,7 +16,6 @@ func env(kv ...string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-// withFactory registers a sink factory for the length of a test and counts its calls.
 func withFactory(t *testing.T, name string, s Sink, err error) *atomic.Int32 {
 	t.Helper()
 	var calls atomic.Int32
@@ -42,7 +41,6 @@ func TestOffByDefaultBuildsNothingAndReadsNothing(t *testing.T) {
 	for _, e := range []func(string) string{
 		env(),
 		env("GOJIBERRY_OBS", "off", "GOJIBERRY_OBS_SINKS", "otlp,posthog", "GOJIBERRY_OBS_POSTHOG_KEY_FILE", "/run/secrets/k"),
-		// a bad value cannot stop a server that has the switch off
 		env("GOJIBERRY_OBS_SINKS", "not-a-sink", "GOJIBERRY_OBS_TRACE_SAMPLE", "lots"),
 	} {
 		o, cfg, err := fromEnv(context.Background(), e, func(string) ([]byte, error) { read = true; return nil, nil }, ServiceName)
@@ -125,7 +123,6 @@ func TestASinkThatThisBuildLacksIsAnErrorAtStart(t *testing.T) {
 func TestSinksAreRoutedPerProducer(t *testing.T) {
 	ext := &rec{}
 	withFactory(t, "otlp", ext, nil)
-	// operator metrics to builtin only, usage counts to otlp
 	o, _, err := FromEnv(context.Background(), env("GOJIBERRY_OBS", "on", "GOJIBERRY_OBS_SINKS", "builtin", "GOJIBERRY_OBS_USAGE_SINKS", "builtin, otlp"))
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +134,6 @@ func TestSinksAreRoutedPerProducer(t *testing.T) {
 	if len(pts) != 1 || pts[0].Metric != UsageEvents {
 		t.Fatalf("the external sink got %+v, want only the usage count", pts)
 	}
-	// operator metrics to otlp only: usage goes nowhere external
 	ext2 := &rec{}
 	withFactory(t, "otlp", ext2, nil)
 	o, _, err = FromEnv(context.Background(), env("GOJIBERRY_OBS", "on", "GOJIBERRY_OBS_SINKS", "otlp"))

@@ -8,10 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Doc is the whole canvas, described as an xango tree: a text flow over
-// three pages whose header, footer and page number come from the Pages
-// render prop. The header changes on page 3 and numbering is off on
-// page 1, to show per-page changes.
 func Doc(state State) xango.Node {
 	return canvas.Canvas(canvas.CanvasProps{Width: 900, Height: 560, Mode: state.Mode, Children: []xango.Node{canvas.TextFlow(canvas.TextFlowProps{X: 0, Y: 0, Width: 900, Source: state.Source, Transform: cv.Markdown{}, PageCount: state.Pages, PageWidth: 560, PageHeight: 380, Margins: []float64{60, 50, 60, 50}, Pages: func(page xango.Node, n int) xango.Node {
 		return xango.Frag(xango.Child(header(n)), xango.Child(page), canvas.Footer(canvas.FooterProps{Children: []xango.Node{xango.Child(pageNumber(n))}}))

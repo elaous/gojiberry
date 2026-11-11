@@ -1,7 +1,3 @@
-// Pages are xango SSR components shared by both entry points: the
-// Encore-annotated raw handlers (api.go) and the plain net/http dev
-// server (cmd/devserver). Both call these directly, so the markup
-// only exists in one place.
 package canvas
 
 import (
@@ -9,10 +5,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// DefaultTitle is what an annotated page falls back to when it
-// doesn't set its own @title (see internal/transpile/page_metadata.go
-// in the gojiberry module). Both pages below just use this, since
-// neither needs a title that varies per document.
 var DefaultTitle = "xango-canvas"
 
 // HomePageProps lists the documents to show on the home page.
@@ -20,8 +12,7 @@ type HomePageProps struct {
 	Documents []DocumentSummary
 }
 
-// HomePage lists existing documents and offers a way to start a new
-// one.
+// HomePage lists documents and starts a new one.
 //
 // @title xango-canvas
 func HomePage(props HomePageProps) xango.Node {
@@ -50,14 +41,6 @@ type CanvasPageProps struct {
 	Content string
 }
 
-// CanvasPage is the typing canvas for one document: a textarea seeded
-// with its current content, a status indicator, and the WASM client
-// that debounces edits into PUT /api/documents/{id} autosave calls.
-// @wasm below pulls in the wasm_exec.js loader and the
-// WebAssembly.instantiateStreaming bootstrap script automatically
-// (see internal/transpile/page_metadata.go) -- this page doesn't
-// write either <script> tag itself.
-//
 // @wasm /static/main.wasm
 // @title xango-canvas
 func CanvasPage(props CanvasPageProps) xango.Node {

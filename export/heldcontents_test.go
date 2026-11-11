@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/pdftext"
 )
 
-// heldContentsDoc is a document with a table of contents in it (not the Page tab's switch), a chapter and a section.
 func heldContentsDoc(toc docfile.Block) docfile.Document {
 	f := &canvas.TextFlow{Items: []canvas.Item{
 		canvas.Inline{Object: &canvas.TOCObject{Title: toc.Title, Style: toc.Style, Depth: toc.Depth}, Block: true}, canvas.Chars{Text: "\n"},
@@ -19,7 +18,6 @@ func heldContentsDoc(toc docfile.Block) docfile.Document {
 	return docfile.FromFlow("Report", f)
 }
 
-// A table of contents the document holds is what the exports write: once, with its title, look and depth.
 func TestExportsWriteTheContentsTheDocumentHolds(t *testing.T) {
 	d := heldContentsDoc(docfile.Block{Title: "Inhalt", Style: "plain", Depth: 1})
 	snap := FromDocument(d)
@@ -52,7 +50,6 @@ func TestExportsWriteTheContentsTheDocumentHolds(t *testing.T) {
 		t.Errorf("RTF contents: %s", s[:min(len(s), 600)])
 	}
 
-	// The default look keeps its dots and lists every level.
 	dotted := FromDocument(heldContentsDoc(docfile.Block{}))
 	if got := dotted.Outline(); len(got) != 2 {
 		t.Errorf("all levels by default: %+v", got)
@@ -76,7 +73,6 @@ func TestExportsWriteTheContentsTheDocumentHolds(t *testing.T) {
 	}
 }
 
-// midContentsDoc has a paragraph before its table of contents, the chapters after it, and (optionally) a last paragraph.
 func midContentsDoc(atEnd bool) docfile.Document {
 	items := []canvas.Item{canvas.Chars{Text: "Intro text\n"}}
 	chapters := []canvas.Item{
@@ -94,7 +90,6 @@ func midContentsDoc(atEnd bool) docfile.Document {
 	return docfile.FromFlow("Report", &canvas.TextFlow{Items: items})
 }
 
-// The contents are written where the document has them: after the text before them, before the chapters after them.
 func TestContentsAreWrittenWhereTheDocumentHasThem(t *testing.T) {
 	snap := FromDocument(midContentsDoc(false))
 	if !snap.TOC || snap.TOCAt <= 0 || snap.TOCAt >= len(snap.Blocks) {
@@ -134,7 +129,6 @@ func TestContentsAreWrittenWhereTheDocumentHasThem(t *testing.T) {
 	all := strings.Join(pages, "\n")
 	order("PDF", all, "Intro text", "Inhalt", "Chapter one")
 
-	// A table of contents at the end of the document is written there.
 	end := FromDocument(midContentsDoc(true))
 	if end.TOCAt != len(end.Blocks) {
 		t.Fatalf("at the end: TOCAt = %d of %d", end.TOCAt, len(end.Blocks))
@@ -149,7 +143,6 @@ func TestContentsAreWrittenWhereTheDocumentHasThem(t *testing.T) {
 	pages, _ = pdftext.ExtractPagesBytes(pdf)
 	order("PDF end", strings.Join(pages, "\n"), "Chapter one", "Inhalt")
 
-	// At the start (the usual case, and the Page tab's switch) nothing moves.
 	start := FromDocument(heldContentsDoc(docfile.Block{}))
 	if start.TOCAt != 0 {
 		t.Errorf("at the start: TOCAt = %d", start.TOCAt)

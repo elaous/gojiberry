@@ -13,7 +13,6 @@ import (
 	"testing"
 )
 
-// plain hides every optional method of an adapter.
 type plain struct{ Adapter }
 
 func conditionalAdapters(t *testing.T) map[string]ConditionalAdapter {
@@ -36,7 +35,6 @@ func conditionalAdapters(t *testing.T) map[string]ConditionalAdapter {
 func TestSaveIfOnlySavesWhatWasRead(t *testing.T) {
 	ctx := context.Background()
 	for name, a := range conditionalAdapters(t) {
-		// A new document: prev "" means it must not exist yet.
 		if err := a.SaveIf(ctx, "x", []byte("one"), ""); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -46,7 +44,6 @@ func TestSaveIfOnlySavesWhatWasRead(t *testing.T) {
 		if err := a.SaveIf(ctx, "x", []byte("two"), Digest([]byte("one"))); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		// Somebody else changed it: the stale writer is told.
 		if err := a.SaveIf(ctx, "x", []byte("three"), Digest([]byte("one"))); !errors.Is(err, ErrConflict) {
 			t.Errorf("%s: stale save: %v", name, err)
 		}

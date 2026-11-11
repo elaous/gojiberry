@@ -1,13 +1,8 @@
 package canvas
 
-// Columns sets the number of text columns from the caret's paragraph on:
-// one to four equal columns, a wide column beside a narrow one (2+1) and the
-// mirror (1+2), and the space between them. A new region starts at that
-// paragraph; the text above keeps its own columns. A column break
-// (break.column) moves the text on to the next column.
+// Columns sets the column count from the caret's paragraph on.
 type Columns struct{}
 
-// Command names.
 const (
 	CmdColumns1    Command = "columns.1"
 	CmdColumns2    Command = "columns.2"
@@ -18,12 +13,10 @@ const (
 	CmdGapNarrow   Command = "columns.gap-narrow"
 	CmdGapStandard Command = "columns.gap-standard"
 	CmdGapWide     Command = "columns.gap-wide"
-	// CmdColumnsReset gives the columns back equal widths (what dragging a grip changed is undone); the number of
-	// columns and the space between them stay.
+	// CmdColumnsReset restores equal widths; the column count is unchanged.
 	CmdColumnsReset Command = "columns.reset-widths"
 )
 
-// ColumnsHost is what the column commands need of their target: TextFlow.
 type ColumnsHost interface {
 	SetColumnsAt(offset int, cfg ColumnConfig)
 	ColumnsAt(offset int) ColumnConfig
@@ -32,14 +25,11 @@ type ColumnsHost interface {
 // DefaultColumnGap is the space between columns the commands start with.
 const DefaultColumnGap = 24
 
-// Name implements Feature.
 func (Columns) Name() string { return "columns" }
 
-// proportion is a column width ratio: only the ratio counts, the layout scales
-// the widths down to fit the page.
+// only the ratio counts: layout scales widths down to fit
 const proportion = 1000
 
-// Install implements Feature.
 func (Columns) Install(r *Registry) {
 	set := func(cfg func(old ColumnConfig) ColumnConfig) CommandFunc {
 		return func(c *CommandContext) bool {
@@ -103,7 +93,6 @@ func (Columns) Install(r *Registry) {
 	r.AddCommand(CmdGapWide, "Column spacing: wide", "", set(gap(48)))
 }
 
-// paragraphStart is the offset of the start of the primary cursor's paragraph.
 func paragraphStart(t EditTarget) int {
 	rs := textRunes(t)
 	i := min(t.Cursors()[0].Caret, len(rs))

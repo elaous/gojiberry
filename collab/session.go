@@ -10,45 +10,32 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// Session ties a Bridge to a live connection: local edits go to the server
-// as they happen, and changes from the others are applied when you call
-// Poll. Call Poll from the goroutine that owns the flow (the UI's loop or
-// timer): it applies everything that has arrived and returns, so the canvas
-// is only ever touched from one goroutine.
+// Session ties a Bridge to a live connection.
 type Session struct {
 	Bridge *Bridge
 	Conn   Conn
-	// Role is what the server says you may do (empty until it says).
+	// Role is what the server allows (empty until connected).
 	Role wire.Role
-	// Peers are the other people's cursors, by replica id.
+	// Peers are other people's cursors, keyed by replica id.
 	Peers map[string]wire.Presence
 	// Status is the connection's state.
 	Status client.Status
-	// Err is the last error the server reported for something you sent
-	// (see client.Rejected). The replica is then out of step with the
-	// server; Poll repairs the session (see Repair) unless NoRepair is set.
+	// Err is the last error the server reported.
 	Err error
-	// NoRepair stops Poll from repairing a session after a rejection; Err is
-	// then left set for the caller to deal with.
+	// NoRepair stops Poll from repairing a session automatically.
 	NoRepair bool
-	// Repairs counts how many times the session has been rebuilt.
+	// Repairs counts how many times the session was repaired.
 	Repairs int
-	// Merged counts the changes that were made while offline (or kept from an earlier visit) and met the
-	// server's copy when the connection came back: each time, the number of changes that waited. Rejected
-	// counts the changes the server refused (a viewer's edit, a batch that was too large), which a repair
-	// then drops. Both only grow, and survive Repair; a host announces the difference since it last looked.
+	// Merged counts changes made while offline and merged later.
 	Merged, Rejected int
-	// Conflicts counts the times other people changed a paragraph that was being edited here (the merge keeps
-	// both changes); ConflictWith names them (from the presence list; empty when a replica is not known)
-	// for the latest one. Both survive Repair.
+	// Conflicts counts times others changed a paragraph edited here.
 	Conflicts    int
 	ConflictWith []string
 	// Name and Color are shown to others with your cursor.
 	Name, Color string
-	// Holding is the object this person is changing, sent with the cursor (see wire.Presence.Holding); the host sets it.
+	// Holding is the object this person is changing.
 	Holding string
-	// TypedFor is how long text other people typed stays in their colour (see canvas.TypedRange); zero is
-	// DefaultTypedFor, negative turns the colours off.
+	// TypedFor is how long others' typed text stays highlighted.
 	TypedFor time.Duration
 
 	typed   []typedChar
@@ -57,31 +44,27 @@ type Session struct {
 	now     func() time.Time // the clock, replaced in tests
 
 	replica   string
-	names     map[string]string // the name each replica gave, kept after it leaves, for saying who did something
+	names     map[string]string
 	opts      client.Options
 	transport Transport
 	needFix   bool
 	sharing   Sharing
 
 	snapshots int
-	waiting   int // changes that waited when the last connection was made, until its snapshot is applied
+	waiting   int
 }
 
-// Connect joins the document opts.Doc with flow. If the server has no
-// content for it yet and you may edit, the flow's content becomes the
-// document. opts.Replica is set to replica.
+// Connect joins the document opts.Doc with flow.
 func Connect(replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
 	return ConnectWith(HTTPEndpoints(), replica, flow, opts)
 }
 
-// ConnectWith is Connect over the given transport (HTTPEndpoints, or another
-// such as collab/ws's WebSockets).
+// ConnectWith is Connect over the given transport.
 func ConnectWith(t Transport, replica string, flow *canvas.TextFlow, opts client.Options) (*Session, error) {
 	return ConnectShared(t, replica, flow, Sharing{}, opts)
 }
 
-// ConnectShared is ConnectWith sharing more (or less) than the flow's text:
-// see Sharing.
+// ConnectShared is ConnectWith, sharing a chosen set of side data.
 func ConnectShared(t Transport, replica string, flow *canvas.TextFlow, sh Sharing, opts client.Options) (*Session, error) {
 	if t == nil {
 		t = HTTPEndpoints()
@@ -99,12 +82,7 @@ func ConnectShared(t Transport, replica string, flow *canvas.TextFlow, sh Sharin
 	return s, nil
 }
 
-// Repair rebuilds the session after the server refused something: the local
-// replica holds changes the server will never have, so it is dropped, a new
-// replica joins from the server's copy, and the flow shows what the server
-// has. Edits that were refused are lost; the others' work and the document
-// are intact. It is called by Poll after a rejection (unless NoRepair), and
-// can be called by hand.
+// Repair rebuilds the session after the server refused it.
 func (s *Session) Repair() error {
 	s.needFix = false
 	s.Bridge.Detach()
@@ -127,8 +105,6 @@ func (s *Session) Repair() error {
 	return nil
 }
 
-// noteConflict counts a paragraph that others changed under the person and names who, as far as the
-// presence list knows them.
 func (s *Session) noteConflict(c Conflict) {
 	s.Conflicts++
 	s.ConflictWith = s.ConflictWith[:0:0]
@@ -141,15 +117,13 @@ func (s *Session) noteConflict(c Conflict) {
 	}
 }
 
-// Replica is this session's replica id, as the others see it in their presence lists.
+// Replica is this session's replica id.
 func (s *Session) Replica() string { return s.replica }
 
 // Close ends the connection.
 func (s *Session) Close() { s.Conn.Close() }
 
-// Poll applies every event that has arrived, without waiting, and reports
-// whether anything changed (the flow, the peers or the status), so the
-// caller knows to redraw.
+// Poll applies every arrived event, without waiting.
 func (s *Session) Poll() bool {
 	changed := false
 	for {
@@ -174,10 +148,6 @@ func (s *Session) Poll() bool {
 	}
 }
 
-// RefreshPeers puts the other people's cursors into the flow
-// (TextFlow.RemoteCursors) at the places their characters are now. Poll
-// does it when something arrived; call it again after local edits if you
-// want the cursors to stay on their text as you type.
 func (s *Session) RefreshPeers() {
 	var rc []canvas.RemoteCursor
 	for _, pc := range s.PeerCursors() {
@@ -191,7 +161,6 @@ func (s *Session) RefreshPeers() {
 	s.Bridge.Flow.TypedRanges = s.typedRanges()
 }
 
-// Pending is how many of your changes have not reached the server yet.
 func (s *Session) Pending() int { return s.Conn.Pending() }
 
 func (s *Session) handle(e client.Event) bool {
@@ -217,10 +186,6 @@ func (s *Session) handle(e client.Event) bool {
 		if s.Role.CanEdit() {
 			s.Bridge.PushSurfaces() // what this side has and the document lacks
 		}
-		// A hub that restarted (or lost its last saves) answers with less than
-		// we hold: the edits it acknowledged earlier are gone from it, and
-		// nothing else would send them again. Operations are idempotent, so
-		// sending the whole document is safe.
 		if s.Bridge.Ready() && s.Role.CanEdit() {
 			if all := s.Bridge.Snapshot(); opWeight(all) > opWeight(e.Ops) {
 				s.Conn.Send(all)
@@ -291,8 +256,6 @@ func (s *Session) PeerCursors() []PeerCursor {
 	return out
 }
 
-// opWeight counts operations including their character operations: how much a
-// set of operations says.
 func opWeight(ops []crdt.Op) int {
 	n := 0
 	for _, op := range ops {

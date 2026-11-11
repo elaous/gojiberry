@@ -4,7 +4,6 @@ import "strings"
 
 // FootnoteHost is implemented by targets with footnotes (a TextFlow).
 type FootnoteHost interface {
-	// FootnoteSet returns the notes, making the set if there is none.
 	FootnoteSet() *FootnoteSet
 }
 
@@ -18,20 +17,9 @@ func (f *TextFlow) FootnoteSet() *FootnoteSet {
 	return f.Footnotes
 }
 
-// Notes adds footnotes, a table of contents and an alphabetical index:
-//
-//   - Ctrl/Cmd+Alt+F asks for a note and puts its mark after the selection
-//     (or at the caret); footnote.edit changes the note whose mark is next
-//     to the caret and footnote.delete removes mark and note;
-//   - toc.insert puts a table of contents (the outline with page numbers)
-//     at the caret, as a block that keeps itself current;
-//   - Ctrl/Cmd+Alt+X marks the selection as an index entry (asking for the
-//     term, the selected text by default), index.unmark takes the mark off
-//     the text at the caret, and index.insert puts the alphabetical index
-//     at the caret.
+// Notes adds footnotes, a table of contents and an index.
 type Notes struct{}
 
-// Command names.
 const (
 	CmdFootnoteAdd    Command = "footnote.add"
 	CmdFootnoteEdit   Command = "footnote.edit"
@@ -42,11 +30,8 @@ const (
 	CmdIndexInsert    Command = "index.insert"
 )
 
-// Name implements Feature.
 func (Notes) Name() string { return "notes" }
 
-// footnoteAtCursor finds the footnote mark just after or at the caret and
-// its stream offset.
 func footnoteAtCursor(t EditTarget) (FootnoteHost, *FootnoteRef, int) {
 	h, ok := t.(FootnoteHost)
 	if !ok {
@@ -72,9 +57,6 @@ func footnoteAtCursor(t EditTarget) (FootnoteHost, *FootnoteRef, int) {
 	return nil, nil, 0
 }
 
-// insertObject puts an inline object at the end of the primary
-// selection; a block object is a paragraph of its own (a line break
-// follows it).
 func insertObject(t EditTarget, in Inline) {
 	cur := t.Cursors()[0]
 	_, at := cur.Range()
@@ -86,7 +68,6 @@ func insertObject(t EditTarget, in Inline) {
 	t.SetCursors([]Cursor{At(at + len(items))})
 }
 
-// Install implements Feature.
 func (Notes) Install(r *Registry) {
 	r.AddCommand(CmdFootnoteAdd, "Add footnote", "Mod+Alt+F", func(c *CommandContext) bool {
 		h, ok := c.Target.(FootnoteHost)

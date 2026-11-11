@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// utf16hex is a PDF text string's hex form after the byte order mark.
 func utf16hex(s string) string {
 	var sb strings.Builder
 	for _, u := range utf16.Encode([]rune(s)) {
@@ -30,7 +29,6 @@ func rawOne(t *testing.T, r *transfer.Registry, format string, d docfile.Documen
 	return data
 }
 
-// everything is one document that uses every feature.
 func everything() docfile.Document {
 	d := docfile.Document{Title: "Everything"}
 	d.SetLanguage("de")
@@ -63,8 +61,6 @@ func TestUsageFindsEveryFeatureInItsPairAndOnlyThere(t *testing.T) {
 	}
 }
 
-// The report lists exactly the losses the table records, for the features the document uses, the dropped ones
-// first, each with how many places it concerns; and nothing for a feature the document does not use.
 func TestFidelityReportListsEveryLossAndOnlyThose(t *testing.T) {
 	all := everything()
 	for _, format := range Formats {
@@ -96,7 +92,6 @@ func TestFidelityReportListsEveryLossAndOnlyThose(t *testing.T) {
 				t.Errorf("%s / %s: reported %s/%q, table says %s/%q", format, f, l.Treatment, l.Note, e.t, e.note)
 			}
 		}
-		// A document without the feature does not list it.
 		for _, f := range Features {
 			if _, listed := got[f]; !listed {
 				continue
@@ -117,7 +112,6 @@ func TestFidelityReportListsEveryLossAndOnlyThose(t *testing.T) {
 	}
 }
 
-// The facts the person is told, spelled out for the examples the roadmap names.
 func TestFidelityReportNamedExamples(t *testing.T) {
 	pairs := featurePairs()
 	find := func(format string, f Feature) (Loss, bool) {
@@ -148,7 +142,6 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 			t.Errorf("%s / %s: got %+v (listed %v), want %s %q", c.format, c.f, l, ok, c.t, c.note)
 		}
 	}
-	// What is kept is not listed.
 	for _, c := range []struct {
 		format string
 		f      Feature
@@ -176,7 +169,6 @@ func TestFidelityOfFormatsThatKeepEverythingAndOfUnknownOnes(t *testing.T) {
 	}
 }
 
-// Where the table says the content itself is left out (not only its marking), the content is not in the file.
 func TestContentLostMeansTheTextIsNotInTheFile(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()
@@ -185,7 +177,7 @@ func TestContentLostMeansTheTextIsNotInTheFile(t *testing.T) {
 		for f, word := range words {
 			e := exportMatrix[format][f]
 			out := string(exportOne(t, r, format, pairs[f].with))
-			if format == "pdf" { // the text of a PDF is drawn in a compressed stream
+			if format == "pdf" {
 				out, _ = pdftext.ExtractBytes(rawOne(t, r, "pdf", pairs[f].with))
 			}
 			has := strings.Contains(out, word)
@@ -199,8 +191,6 @@ func TestContentLostMeansTheTextIsNotInTheFile(t *testing.T) {
 	}
 }
 
-// The accessibility data the report promises (alt text, language, headings, links) is in the file of each
-// format that is said to keep it, and the exact words are there.
 func TestAccessibilityDataIsInTheFileWhereTheTableSaysKept(t *testing.T) {
 	r := registry()
 	pairs := featurePairs()
@@ -225,7 +215,6 @@ func TestAccessibilityDataIsInTheFileWhereTheTableSaysKept(t *testing.T) {
 			}
 		}
 	}
-	// Word keeps them in its parts.
 	docx := string(unzipEntry(t, rawOne(t, r, "docx", pairs[FeatImageAlt].with), "word/document.xml"))
 	if !strings.Contains(docx, `descr="A blue dot"`) {
 		t.Errorf("docx: the alternative text is not in the picture's description: %s", docx)

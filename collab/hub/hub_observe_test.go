@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/observe"
 )
 
-// capture makes the process observer keep its totals in a builtin sink for the test.
 func capture(t *testing.T) *observe.Builtin {
 	t.Helper()
 	b := observe.NewBuiltin()
@@ -19,7 +18,6 @@ func capture(t *testing.T) *observe.Builtin {
 	return b
 }
 
-// The hub reports its own work: batches of operations and how they end, and the rooms it holds.
 func TestHubReportsItsOperationsAndRooms(t *testing.T) {
 	b := capture(t)
 	h := New(Config{})

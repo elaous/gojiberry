@@ -13,16 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/transpile"
 )
 
-// hclSchema is xango's schema DSL:
-//
-//	table "users" {
-//	  column "id"    { type = "uuid"   primary_key = true }
-//	  column "email" { type = "string" unique = true }
-//	}
-//
-// Not general-purpose HCL -- a small, fixed schema shape decoded via
-// hclsimple, real HCL syntax (comments, references, etc. all work; the
-// block/attribute shape is just narrow by design).
 type hclSchema struct {
 	Tables []hclTable `hcl:"table,block"`
 }
@@ -41,8 +31,6 @@ type hclColumn struct {
 	References *string `hcl:"references,optional"` // "othertable.column"
 }
 
-// hclTypeMap maps a schema column type to a Go field type and a SQL
-// column type. Unrecognized types fall back to Go `any` / SQL TEXT.
 var hclTypeMap = map[string][2]string{
 	"uuid":      {"string", "UUID"},
 	"string":    {"string", "TEXT"},
@@ -58,18 +46,6 @@ var hclTypeMap = map[string][2]string{
 	"date":      {"time.Time", "DATE"},
 }
 
-// loadHCL parses an xango schema file and generates a Go package (model
-// structs) plus a SQL migration file, both written under
-// <moduleRoot>/internal/xggen/hcl/<alias>/, then rewrites the import
-// to point at the generated package -- so `schema.Users{}` works like
-// any other imported type, which a value spliced into the importing
-// file (as JSON/CSS do) couldn't give since Go has no runtime notion of
-// a type namespace.
-//
-// Scoped to snapshot generation: each run overwrites the models file
-// and (0001_init.sql) from the current schema, there's no diffing
-// against a previous schema version to produce an incremental
-// migration.
 func LoadHCL(in transpile.LoaderInput) (transpile.LoaderResult, error) {
 	abs, err := transpile.ResolveResourcePath(in)
 	if err != nil {
@@ -192,14 +168,8 @@ func generateHCLMigration(schema hclSchema) (string, error) {
 	return b.String(), nil
 }
 
-// quoteIdent quotes an SQL identifier, so a reserved word, a hyphen or a
-// space in a table or column name stays one name.
 func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 
-// orderTables lists tables so that one a column references comes before the
-// table that references it (the CREATE TABLEs would otherwise fail on a
-// forward reference); other tables keep their file order, and so does a
-// reference cycle.
 func orderTables(tables []hclTable) []hclTable {
 	byName := map[string]int{}
 	for i, t := range tables {
@@ -232,9 +202,6 @@ func orderTables(tables []hclTable) []hclTable {
 	return out
 }
 
-// claimAlias records which schema file owns the generated package in dir, and
-// refuses a second, different file under the same alias: its output would
-// silently overwrite the first's.
 func claimAlias(dir, source string) error {
 	marker := filepath.Join(dir, ".source")
 	if prev, err := os.ReadFile(marker); err == nil && strings.TrimSpace(string(prev)) != source {

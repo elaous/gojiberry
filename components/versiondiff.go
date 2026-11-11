@@ -10,19 +10,12 @@ import (
 // VersionDiffProps configures VersionDiff.
 type VersionDiffProps struct {
 	// ID is the list's id; "version-diff" when empty.
-	ID string
-	// Label names the list; "Changes between the two versions" (translated) when empty.
-	Label   string
-	Changes []docdiff.Change
-	// ShowUnchanged lists the blocks that did not change too (as context); by default a run of them is
-	// one line saying how many there are.
+	ID            string
+	Label         string
+	Changes       []docdiff.Change
 	ShowUnchanged bool
 }
 
-// VersionDiff shows the difference between two versions of a document as a list, one item per changed
-// block. It is not coloured text alone: each item starts with words a screen reader says ("Inserted
-// paragraph", "Deleted heading 2", "Edited paragraph"), added words are <ins> and removed words are
-// <del>, and the list opens with a count ("3 changes: 1 inserted, 1 deleted, 1 edited").
 func VersionDiff(p VersionDiffProps) xango.Node {
 	id := p.ID
 	if id == "" {
@@ -84,7 +77,6 @@ func diffItem(c docdiff.Change) xango.Node {
 			}
 		}
 	}
-	// What a screen reader hears first; the visible markup repeats it in colour and strike-through.
 	lead := map[docdiff.Op]string{
 		docdiff.Insert: tr("diff.inserted", "Inserted"),
 		docdiff.Delete: tr("diff.deleted", "Deleted"),
@@ -100,7 +92,6 @@ func diffItem(c docdiff.Change) xango.Node {
 		xango.El("span", []xango.Attr{xango.A("class", "gj-diff-text")}, content...))
 }
 
-// diffKindName is the name of the changed block's kind, in the interface language.
 func diffKindName(c docdiff.Change) string {
 	switch docdiff.KindName(c.Kind) {
 	case "heading 1":

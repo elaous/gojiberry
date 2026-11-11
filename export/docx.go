@@ -13,38 +13,30 @@ import (
 	"time"
 )
 
-// DOCX renders a Snapshot to a Word document. It writes the OOXML package
-// directly (no third-party library), so that what the other formats keep is
-// kept here too: real hyperlinks, embedded pictures (data: URLs), super and
-// subscript, bullet and numbered lists that nest and restart, headings, quotes,
-// code and tables.
+// DOCX renders a Snapshot to a Word document.
 type DOCX struct{}
 
 const (
 	docxNS      = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"`
 	docxEMU     = 9525
-	docxMaxEMU  = 6 * 914400 // six inches: a picture is scaled to fit the text width
+	docxMaxEMU  = 6 * 914400
 	docxHeading = "Heading"
 )
 
-// docxBuilder collects the parts of the package while the body is written.
 type docxBuilder struct {
-	body    strings.Builder
-	rels    []string // relationship elements
-	media   map[string][]byte
-	nextRel int
-	nextNum int // numbering instances for numbered lists (each list restarts)
-	nums    []int
-	links   map[string]string
-	// linkColour is the colour of hyperlink text, six hex digits (Word blue unless the theme names one).
+	body       strings.Builder
+	rels       []string // relationship elements
+	media      map[string][]byte
+	nextRel    int
+	nextNum    int // numbering instances for numbered lists (each list restarts)
+	nums       []int
+	links      map[string]string
 	linkColour string
 	imgs       int
 	docPr      int
 	revs       int // tracked changes written so far (their ids)
-	// cur is the index of the block being written; marks names the bookmark of each heading the table
-	// of contents points to (by block index).
-	cur   int
-	marks map[int]string
+	cur        int
+	marks      map[int]string
 }
 
 func (b *docxBuilder) rel(typ, target string, external bool) string {
@@ -86,8 +78,6 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 					continue
 				}
 			}
-			// Cells that do not make up a whole table are kept as paragraphs rather
-			// than dropped.
 			b.block(Block{Kind: Paragraph, Segments: blk.Segments})
 			continue
 		}
@@ -111,7 +101,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 		return err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n"
-	var hfRels [6]string // the relationship ids of the header, the footer, and those of the first page and the even pages
+	var hfRels [6]string
 	var hfTypes string
 	var hfParts []struct{ name, content string }
 	hfList := []struct{ kind, text, num string }{{"header", snap.Header, "1"}, {"footer", snap.Footer, "1"},
@@ -154,8 +144,6 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` + strings.Join(b.rels, "") + `</Relationships>`},
 	}
 	if th.background != "" || snap.EvenDiffers {
-		// Word draws a page colour only when the document asks for the background to be shown, and gives the
-		// even pages their own header and footer only when the document asks for that.
 		var settings string
 		if th.background != "" {
 			settings += `<w:displayBackgroundShape/>`
@@ -198,8 +186,6 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// docxSection is the section properties; hf holds the relationship ids of the header and the footer part
-// ("" for none), which the section names first.
 func docxSection(snap Snapshot, hf [6]string) string {
 	px := func(v float64) int { return int(v * 15) } // twips
 	refs := ""
@@ -209,8 +195,6 @@ func docxSection(snap Snapshot, hf [6]string) string {
 	if hf[1] != "" {
 		refs += `<w:footerReference w:type="default" r:id="` + hf[1] + `"/>`
 	}
-	// With a page of its own, the first page shows only the first header and footer: Word leaves it bare
-	// when there is no reference of type "first".
 	if snap.FirstDiffers {
 		if hf[2] != "" {
 			refs += `<w:headerReference w:type="first" r:id="` + hf[2] + `"/>`
@@ -219,7 +203,6 @@ func docxSection(snap Snapshot, hf [6]string) string {
 			refs += `<w:footerReference w:type="first" r:id="` + hf[3] + `"/>`
 		}
 	}
-	// Likewise the even pages (the default ones are then the odd pages'; the switch itself is in settings.xml).
 	if snap.EvenDiffers {
 		if hf[4] != "" {
 			refs += `<w:headerReference w:type="even" r:id="` + hf[4] + `"/>`
@@ -239,14 +222,11 @@ func docxSection(snap Snapshot, hf [6]string) string {
 		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft), title)
 }
 
-// docxField is a Word field (PAGE, NUMPAGES) as a complex field with a cached value, which Word replaces
-// when it lays the page out.
 func docxField(instr, cached string) string {
 	return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ` + instr + ` </w:instrText></w:r>` +
 		`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>` + cached + `</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`
 }
 
-// docxDecorRuns writes a header or footer part's text as runs, the fields as Word fields.
 func docxDecorRuns(text, title string) string {
 	var sb strings.Builder
 	lit := func(s string) {
@@ -280,8 +260,6 @@ func docxDecorRuns(text, title string) string {
 	return sb.String()
 }
 
-// docxHeaderFooter is the XML of a header or footer part: one paragraph whose left, centre and right
-// parts are set apart by tab stops at the middle and the right edge of the text.
 func docxHeaderFooter(snap Snapshot, kind, text string) string {
 	width := int((snap.PageWidth - snap.MarginLeft - snap.MarginRight) * 15)
 	l, c, r := decorParts(text)
@@ -295,10 +273,6 @@ func docxHeaderFooter(snap Snapshot, kind, text string) string {
 		`</w:tabs><w:spacing w:after="0"/></w:pPr>` + runs + `</w:p></w:` + root + `>`
 }
 
-// tableOfContents writes the table of contents at the start of the body: a TOC field whose entries link
-// to a bookmark on each heading and carry a PAGEREF field. Word knows the page of each heading and fills
-// the numbers in when it lays the document out (the field is marked dirty so it does so on opening); the
-// cached numbers are placeholders. It also records the bookmark names in b.marks.
 func (b *docxBuilder) tableOfContents(snap Snapshot) {
 	if !snap.TOC {
 		return
@@ -333,9 +307,6 @@ func (b *docxBuilder) tableOfContents(snap Snapshot) {
 	w.WriteString(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`)
 }
 
-// numbering is numbering.xml: abstract 0 is bullets, abstract 1 numbers
-// (decimal, letters, roman, by level); num 1 uses the bullets and each
-// numbered list gets its own num, restarting at 1.
 func (b *docxBuilder) numbering() string {
 	var sb strings.Builder
 	sb.WriteString(`<w:numbering ` + docxNS + `>`)
@@ -372,7 +343,6 @@ const docxStyles = `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordpro
 <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>`
 
-// The ids of the bookmarks of footnotes start here, clear of those of the table of contents (a block's index).
 const (
 	noteBookmarkBase = 1 << 20
 	noteRefBookmarks = 1 << 19
@@ -390,9 +360,6 @@ func (b *docxBuilder) block(blk Block) {
 		return
 	case Paragraph:
 		if blk.Equation != "" {
-			// Word and LibreOffice typeset it as an equation and read it out themselves. Office Math has no field
-			// for the words that stand for it, so they follow as hidden text (every format carries them, and
-			// docximport reads them back as the equation's alternative).
 			w.WriteString(`<w:p><m:oMathPara>` + OMML(blk.Equation) + `</m:oMathPara>` +
 				`<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">` + esc(plainTextInline(blk.Segments)) + `</w:t></w:r></w:p>`)
 			return
@@ -417,7 +384,7 @@ func (b *docxBuilder) block(blk Block) {
 	case BulletItem:
 		ppr = `<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="` + strconv.Itoa(min(blk.Level, 8)) + `"/><w:numId w:val="1"/></w:numPr>`
 	case NumberedItem:
-		if (blk.Level == 0 && blk.NumberedIndex <= 1) || len(b.nums) == 0 { // a new list restarts at 1; a nested item stays in its list
+		if (blk.Level == 0 && blk.NumberedIndex <= 1) || len(b.nums) == 0 { // A new list restarts at 1.
 			b.nextNum++
 			b.nums = append(b.nums, b.nextNum+1) // numId 1 is the bullets
 		}
@@ -429,7 +396,6 @@ func (b *docxBuilder) block(blk Block) {
 	}
 	inner := b.inline(blk.Segments)
 	if blk.Note > 0 {
-		// a footnote: the mark in the text links here (bookmark _fnN), and a link at its end goes back to the mark
 		n := strconv.Itoa(blk.Note)
 		inner = `<w:bookmarkStart w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `" w:name="_fn` + n + `"/>` + inner + `<w:bookmarkEnd w:id="` + strconv.Itoa(noteBookmarkBase+blk.Note) + `"/>` +
 			`<w:r><w:t xml:space="preserve"> </w:t></w:r><w:hyperlink w:anchor="_fnref` + n + `" w:history="1"><w:r><w:rPr><w:color w:val="` + b.linkColour + `"/><w:u w:val="single"/></w:rPr><w:t>` + "\u21a9" + `</w:t></w:r></w:hyperlink>`
@@ -450,12 +416,9 @@ func (b *docxBuilder) inline(segs []Segment) string {
 		}
 		f := s.Format
 		if f.Formula != "" && f.Change == NoChange && f.Href == "" && f.NoteRef == 0 {
-			// a formula in the sentence: Office Math in the line, with the words that stand for it as hidden text
-			// (docximport reads them back as the equation's alternative)
 			sb.WriteString(OMML(f.Formula) + `<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`)
 			continue
 		}
-		// Children in the order the schema lists them (Word is strict about it).
 		var rpr strings.Builder
 		if f.Bold {
 			rpr.WriteString(`<w:b/>`)
@@ -491,7 +454,6 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			run += `<w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`
 		}
 		if f.Change != NoChange {
-			// a tracked change: Word shows it as a revision by its author, to accept or reject there
 			tag := "w:ins"
 			if f.Change == Deleted {
 				tag = "w:del"
@@ -504,7 +466,6 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			run = `<` + tag + ` w:id="` + strconv.Itoa(b.revs) + `" w:author="` + esc(author) + `" w:date="` + time.Unix(f.Time, 0).UTC().Format("2006-01-02T15:04:05Z") + `">` + run + `</` + tag + `>`
 		}
 		if f.NoteRef > 0 {
-			// the mark of a footnote: a link to the note (bookmark _fnN), itself the target of the note's way back
 			n := strconv.Itoa(f.NoteRef)
 			run = `<w:bookmarkStart w:id="` + strconv.Itoa(noteBookmarkBase+noteRefBookmarks+f.NoteRef) + `" w:name="_fnref` + n + `"/>` +
 				`<w:hyperlink w:anchor="_fn` + n + `" w:history="1">` + run + `</w:hyperlink><w:bookmarkEnd w:id="` + strconv.Itoa(noteBookmarkBase+noteRefBookmarks+f.NoteRef) + `"/>`
@@ -534,8 +495,6 @@ func (b *docxBuilder) table(cells []Block) {
 		}
 	}
 	w.WriteString(`</w:tblGrid>`)
-	// A cell a merge covers from above continues its vertical merge; one it
-	// covers from the left is not written at all (the owner's gridSpan holds it).
 	for r := 0; r < rows; r++ {
 		height := ""
 		if px := cells[r*cols].TableRowH; px > 0 {
@@ -549,9 +508,6 @@ func (b *docxBuilder) table(cells []Block) {
 		for c := 0; c < cols; c++ {
 			cell := cells[r*cols+c]
 			if cell.TableCovered {
-				// Beside its owner: the owner's gridSpan holds it, so nothing is written.
-				// Below its owner, in the owner's column: continue the vertical merge,
-				// as wide as the owner; elsewhere under the span: nothing again.
 				owner := ownerOf(cells, rows, cols, r, c)
 				if owner.row != r && owner.col == c {
 					span := cells[owner.row*cols+owner.col].TableColSpan
@@ -559,7 +515,6 @@ func (b *docxBuilder) table(cells []Block) {
 				}
 				continue
 			}
-			// tcPr children in schema order: tcW, gridSpan, vMerge, shd.
 			props := `<w:tcW w:w="0" w:type="auto"/>` + gridSpan(cell.TableColSpan)
 			if px := cell.TableColW; px > 0 && cell.TableColSpan <= 1 {
 				props = `<w:tcW w:w="` + strconv.Itoa(int(px*15)) + `" w:type="dxa"/>` + gridSpan(cell.TableColSpan)
@@ -593,8 +548,6 @@ func gridSpan(n int) string {
 
 type cellPos struct{ row, col int }
 
-// ownerOf finds the merged cell that covers (r, c): the nearest owner above
-// and to the left whose span reaches it.
 func ownerOf(cells []Block, rows, cols, r, c int) cellPos {
 	for or := r; or >= 0; or-- {
 		for oc := c; oc >= 0; oc-- {
@@ -607,8 +560,6 @@ func ownerOf(cells []Block, rows, cols, r, c int) cellPos {
 	return cellPos{r, c}
 }
 
-// picture embeds a data: URL image; "" when it cannot be (not a data URL, or
-// not a PNG, JPEG or GIF).
 func (b *docxBuilder) picture(blk Block) string {
 	head, b64, ok := strings.Cut(blk.ImageSrc, ",")
 	if !ok || !strings.HasPrefix(head, "data:") || !strings.HasSuffix(head, ";base64") {
@@ -640,11 +591,11 @@ func (b *docxBuilder) picture(blk Block) string {
 	b.media[name] = raw
 	id := b.rel("image", "media/"+name, false)
 	b.docPr++
-	descr := "" // the alternative text, which Word reads out and shows as the picture's description
+	descr := ""
 	if blk.ImageAlt != "" {
 		descr = ` descr="` + esc(blk.ImageAlt) + `"`
 	}
-	docTitle := "" // the credit shows under Alt Text > Title in Word's picture properties
+	docTitle := ""
 	if c := imageCredit(blk); c != "" {
 		docTitle = ` title="` + esc(c) + `"`
 	}
@@ -652,7 +603,6 @@ func (b *docxBuilder) picture(blk Block) string {
 		cx, cy, b.docPr, b.docPr, descr, docTitle, b.docPr, name, descr, id, cx, cy)
 }
 
-// hexFill reads "#rrggbb" as the six hex digits Word wants.
 func hexFill(c string) (string, bool) {
 	c = strings.TrimPrefix(c, "#")
 	if len(c) != 6 {
@@ -666,7 +616,6 @@ func hexFill(c string) (string, bool) {
 	return strings.ToLower(c), true
 }
 
-// docxCoreLanguage is the dc:language of the document properties, or "".
 func docxCoreLanguage(lang string) string {
 	if lang == "" {
 		return ""
@@ -674,8 +623,6 @@ func docxCoreLanguage(lang string) string {
 	return "<dc:language>" + esc(lang) + "</dc:language>"
 }
 
-// docxStylesFor is docxStyles with the document's language as the default of every run (w:lang), so
-// Word's proofing and a screen reader use it for text that names no other.
 func docxStylesFor(lang string, th docTheme) string {
 	out := docxStyles
 	if th.text != "" || th.bodyPt > 0 {
@@ -695,8 +642,6 @@ func docxStylesFor(lang string, th docTheme) string {
 	return out
 }
 
-// docxBackground is the page colour of the theme (w:background); Word shows it only with the display setting
-// in settings.xml, which docxSettings writes.
 func docxBackground(th docTheme) string {
 	if th.background == "" {
 		return ""

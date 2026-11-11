@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/userconfig/client"
 )
 
-// server runs the real Service; the person is named by the X-User header. up false makes it refuse.
 type server struct {
 	*httptest.Server
 	store *docstore.MemoryAdapter
@@ -66,7 +65,6 @@ func TestOfflineChangesAreQueuedAndSentLater(t *testing.T) {
 		t.Fatalf("%v pending %d", err, c.Pending())
 	}
 
-	// the app is closed and opened again: the queue is in the cache
 	reopened := device(s, "ana", cache)
 	if reopened.Pending() != 1 {
 		t.Fatalf("pending after reopening: %d", reopened.Pending())
@@ -99,7 +97,6 @@ func TestTwoDevicesMergeInsteadOfOverwriting(t *testing.T) {
 	if g, _ := laptop.Get("tags"); string(g) != "a" {
 		t.Fatalf("pulled %q", g)
 	}
-	// both change it from revision 1, the phone first
 	phone.Set("tags", []byte("aP"))
 	laptop.Set("tags", []byte("aL"))
 	if err := phone.Sync(ctx); err != nil {
@@ -140,7 +137,6 @@ func TestDefaultMergeKeepsTheLocalChangeAndDeletesSync(t *testing.T) {
 		t.Fatalf("%q", g)
 	}
 
-	// delete here, the other device learns it
 	a.Delete("x")
 	if _, err := a.Get("x"); !errors.Is(err, client.ErrNotFound) {
 		t.Fatal("deleted at once")
@@ -154,7 +150,6 @@ func TestDefaultMergeKeepsTheLocalChangeAndDeletesSync(t *testing.T) {
 	if _, err := b.Get("x"); !errors.Is(err, client.ErrNotFound) || len(b.Names()) != 0 {
 		t.Fatalf("the removal arrives: %v %v", err, b.Names())
 	}
-	// an item the server never had is just dropped
 	a.Set("local-only", []byte("z"))
 	a.Delete("local-only")
 	if a.Pending() != 0 {
@@ -198,7 +193,6 @@ func TestRemovedElsewhereAndConflictsThatNeverSettle(t *testing.T) {
 		t.Fatalf("the change recreates what was removed: %v", err)
 	}
 
-	// a server that always says "changed" cannot trap the client in a loop
 	always := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			w.Header().Set("Etag", `"9"`)
@@ -236,7 +230,6 @@ func TestBadServerAnswersAreErrorsNotPanics(t *testing.T) {
 		}
 		srv.Close()
 	}
-	// unreachable server, cancelled context
 	c := client.New("http://127.0.0.1:1", nil)
 	c.Set("a", []byte("x"))
 	if err := c.Sync(ctx); !errors.Is(err, client.ErrOffline) {

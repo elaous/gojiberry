@@ -1,19 +1,3 @@
-// Package guard decides who may call one of this repo's HTTP servers from a
-// browser or anywhere else: it sets the CORS headers and, depending on the
-// Guard chosen, checks the Origin of a request or a shared token.
-//
-// The servers (docstore, fontserver, syncserver, voiceserver,
-// translate/server, brailleserver, the collab hub) all take a Guard in their
-// Config. The choice is the operator's:
-//
-//	guard.Origins("https://app.example.com")   only pages from these origins
-//	guard.Token(secret)                        only callers that present the token
-//	guard.Chain(guard.Origins(...), guard.Token(secret))   both
-//	guard.Open()                               any origin, no check (the default)
-//
-// or any type that implements Guard (a custom check, a JWT, mTLS, ...).
-// FromEnv builds one from environment variables for the command-line
-// servers.
 package guard
 
 import (
@@ -34,8 +18,6 @@ type Func func(next http.Handler) http.Handler
 // Wrap implements Guard.
 func (f Func) Wrap(next http.Handler) http.Handler { return f(next) }
 
-// Or returns g, or Open() when g is nil: what a server does with a Config
-// that names no Guard.
 func Or(g Guard) Guard {
 	if g == nil {
 		return Open()
@@ -45,24 +27,14 @@ func Or(g Guard) Guard {
 
 // Options are the CORS details every built-in Guard shares.
 type Options struct {
-	// Methods is Access-Control-Allow-Methods; the default is
-	// "GET, POST, PUT, DELETE, OPTIONS".
 	Methods string
-	// Headers is Access-Control-Allow-Headers; the default is
-	// "Content-Type, Authorization".
+	// Headers is Access-Control-Allow-Headers; the default is "Content-Type, Authorization".
 	Headers string
-	// TokenHeader names the header a Token guard reads. Empty means
-	// "Authorization: Bearer <token>"; any other name carries the bare token
-	// ("X-Gojiberry-Token: <token>"), for a server whose own sign-in already
-	// uses the Authorization header (docstore).
+	// TokenHeader names the header a Token guard reads.
 	TokenHeader string
-	// TokenQuery, if set, also accepts the token as that URL query parameter
-	// when the header is absent, on a path ending in "/ws" only: a browser cannot set headers on a WebSocket,
-	// so the collab hub's socket takes ?guard_token=... (a token in a URL can
-	// end up in logs: use TLS and short-lived tokens).
+	// only for "/ws" paths: browsers cannot set WebSocket headers
 	TokenQuery string
-	// Public lists paths (exact, e.g. "/health") a Token guard lets through
-	// without the token.
+	// Public lists paths that need no token.
 	Public []string
 }
 
@@ -84,7 +56,6 @@ func (o Options) headers() string {
 	return h
 }
 
-// bearer returns the token a request carries under the Options' header.
 func (o Options) bearer(r *http.Request) (string, bool) {
 	var v string
 	var ok bool
@@ -110,7 +81,6 @@ func (o Options) public(path string) bool {
 	return false
 }
 
-// setIfAbsent sets a response header unless an earlier guard in a Chain has.
 func setIfAbsent(h http.Header, k, v string) {
 	if h.Get(k) == "" {
 		h.Set(k, v)
@@ -124,10 +94,7 @@ func allowAnyOrigin(w http.ResponseWriter, o Options) {
 	setIfAbsent(h, "Access-Control-Allow-Headers", o.headers())
 }
 
-// Open lets every origin call the server and checks nothing: the
-// wildcard-CORS behaviour the servers had before they took a Guard. Fine for
-// a server on a private network or a local demo; not for anything holding
-// data that matters or running costly work.
+// checks nothing: not for data that matters or costly work
 func Open(opts ...Options) Guard {
 	o := pick(opts)
 	return Func(func(next http.Handler) http.Handler {
@@ -142,13 +109,7 @@ func Open(opts ...Options) Guard {
 	})
 }
 
-// Origins lets only pages from the listed origins ("https://app.example.com",
-// scheme and host, no path) call the server. A request that carries another
-// Origin is refused with 403 whatever its method, so a page on another site
-// cannot even fire a simple POST; the allowed origins get CORS headers that
-// name them, and a request without an Origin header (curl, another server)
-// passes: this stops other websites, not other programs. "*" means any
-// origin, as Open.
+// another Origin gets 403 whatever the method; no Origin passes
 func Origins(origins ...string) Guard { return OriginsWith(Options{}, origins...) }
 
 // OriginsWith is Origins with explicit Options.
@@ -172,7 +133,7 @@ func OriginsWith(o Options, origins ...string) Guard {
 			case any:
 				allowAnyOrigin(w, o)
 			case origin == "":
-				// not a browser cross-origin call
+			// no Origin: not a browser cross-origin call
 			case allowed[strings.ToLower(origin)]:
 				h := w.Header()
 				h.Set("Access-Control-Allow-Origin", origin)
@@ -193,13 +154,7 @@ func OriginsWith(o Options, origins ...string) Guard {
 	})
 }
 
-// Token requires every request to carry the secret as "Authorization:
-// Bearer <secret>" (compared in constant time); a request without it, or
-// with another, gets 401. Preflight requests and the paths in
-// Options.Public pass without it. Because the credential is the token, not
-// the page's origin, CORS is open to any origin (unless an Origins guard
-// earlier in a Chain already named one). An empty secret refuses every
-// request rather than allowing all.
+// constant-time compare; an empty secret refuses every request
 func Token(secret string, opts ...Options) Guard {
 	o := pick(opts)
 	return TokenFunc(func(r *http.Request) bool {
@@ -208,9 +163,6 @@ func Token(secret string, opts ...Options) Guard {
 	}, o)
 }
 
-// TokenFunc is Token with the check supplied by the caller: ok decides, from
-// the request, whether it may go on (a JWT verified against a key, a lookup
-// in a table of API keys, ...).
 func TokenFunc(ok func(*http.Request) bool, opts ...Options) Guard {
 	o := pick(opts)
 	return Func(func(next http.Handler) http.Handler {
@@ -231,9 +183,7 @@ func TokenFunc(ok func(*http.Request) bool, opts ...Options) Guard {
 	})
 }
 
-// Chain applies the guards one inside the next: the first listed runs first.
-// Put Origins first, so its CORS headers (which name the origin) win over a
-// Token guard's open ones.
+// put Origins first: its CORS headers must win
 func Chain(guards ...Guard) Guard {
 	return Func(func(next http.Handler) http.Handler {
 		h := next
@@ -253,11 +203,6 @@ func pick(opts []Options) Options {
 	return Options{}
 }
 
-// FromEnv builds a Guard from <prefix>_ALLOW_ORIGINS (comma-separated
-// origins, or "*") and <prefix>_TOKEN; with both set, a request must satisfy
-// both; with neither, the result is Open(). Public paths are exempt from the
-// token. A command-line server passes its own prefix, for example
-// "GOJIBERRY_FONTSERVER".
 func FromEnv(prefix string, public ...string) Guard {
 	return FromEnvWith(prefix, Options{Public: public})
 }

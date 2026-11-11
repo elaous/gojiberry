@@ -197,7 +197,6 @@ func TestRemoveRestoreAndPurgeAsks(t *testing.T) {
 		t.Fatalf("%q", out)
 	}
 	r.must("restore 'old 1'")
-	// purge asks; the first answer is no.
 	out := r.must("purge 'old *'")
 	if !strings.Contains(out, "[y/N]") || !strings.Contains(out, "left alone") {
 		t.Fatalf("%q", out)
@@ -205,13 +204,11 @@ func TestRemoveRestoreAndPurgeAsks(t *testing.T) {
 	if tr, _ := r.s.Trashed(context.Background(), "m"); len(tr) != 1 {
 		t.Fatalf("a no leaves it: %d", len(tr))
 	}
-	// A dry run asks nothing and changes nothing.
 	r.sh.DryRun = true
 	if out := r.must("purge 'old *'"); !strings.Contains(out, "would delete for good") || strings.Contains(out, "[y/N]") {
 		t.Fatalf("%q", out)
 	}
 	r.sh.DryRun = false
-	// The second answer is yes.
 	out = r.must("purge 'old *'")
 	if !strings.Contains(out, "delete for good old 2") {
 		t.Fatalf("%q", out)
@@ -284,7 +281,6 @@ func TestImportExportAndPack(t *testing.T) {
 	if out := other.must("ls"); out != "notes\n" {
 		t.Fatalf("%q", out)
 	}
-	// A dry run packs nothing.
 	r.sh.DryRun = true
 	nope := filepath.Join(dir, "nope.opendoc")
 	r.must("pack " + nope)
@@ -512,7 +508,6 @@ func TestPackAndExportDoNotClobber(t *testing.T) {
 		t.Error("the file is untouched")
 	}
 	r.must("pack --force " + pk)
-	// A failure leaves no partial file and no temporary file.
 	bad := filepath.Join(dir, "nodir", "x.opendoc")
 	if err := r.run("pack " + bad); err == nil {
 		t.Error("an unwritable path")
@@ -562,7 +557,6 @@ func TestUnpackReportsSignatureAndFailures(t *testing.T) {
 	if !strings.Contains(out, "not signed") {
 		t.Errorf("it says whether the pack is signed: %q", out)
 	}
-	// A store that cannot save: every document fails, and that is an error.
 	broken := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: failingSave{docstore.NewMemoryAdapter()}}}}
 	b := &rig{t: t, out: &bytes.Buffer{}, err: &bytes.Buffer{}, s: broken}
 	b.sh = New(broken, "m", strings.NewReader(""), b.out, b.err)
@@ -577,7 +571,6 @@ func TestUnpackReportsSignatureAndFailures(t *testing.T) {
 
 type failingSave struct{ docstore.Adapter }
 
-// Save fails for documents; the catalog (its index and folders) still saves.
 func (f failingSave) Save(ctx context.Context, id string, data []byte) error {
 	if strings.HasPrefix(id, "catalog:") {
 		return f.Adapter.Save(ctx, id, data)

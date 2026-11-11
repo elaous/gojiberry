@@ -1,24 +1,8 @@
 package canvas
 
-// Paragraphs are the paragraph commands of a word processor, for targets
-// with paragraph formats (a TextFlow):
-//
-//   - alignment: Ctrl/Cmd+L, E, R (left, centre, right);
-//   - indents: Ctrl/Cmd+] and [ indent and outdent (a list item changes
-//     level instead); para.first-line toggles a first-line indent;
-//   - spacing: para.space-before and para.space-after toggle a 12px gap;
-//     para.line-spacing cycles 1, 1.15, 1.5, 2;
-//   - lists: Ctrl/Cmd+Shift+8 bullets, +7 numbers, +9 check boxes (each
-//     toggles; Tab and Shift+Tab nest an item); list.cycle-bullet and
-//     list.cycle-number-format change the bullet character and the
-//     number style ("1." "1)" "(1)" "a." "i." "I." "A.");
-//   - para.quote toggles a block quote, para.drop-cap a three-line
-//     initial letter.
-//
-// Enter in a list continues it, and on an empty item ends it.
+// Paragraphs are paragraph commands for targets with paragraph formats.
 type Paragraphs struct{}
 
-// Command names.
 const (
 	CmdAlignLeft         Command = "para.align-left"
 	CmdAlignCenter       Command = "para.align-center"
@@ -38,14 +22,10 @@ const (
 	CmdCycleNumberFormat Command = "list.cycle-number-format"
 )
 
-// Name implements Feature.
 func (Paragraphs) Name() string { return "paragraphs" }
 
-// ParagraphGap is the space the space-before and space-after commands
-// toggle.
 const ParagraphGap = 12.0
 
-// Install implements Feature.
 func (Paragraphs) Install(r *Registry) {
 	set := func(name Command, title, chord string, fn func(*ParaFormat)) {
 		r.AddCommand(name, title, chord, func(c *CommandContext) bool {
@@ -56,8 +36,6 @@ func (Paragraphs) Install(r *Registry) {
 			return pe.ApplyParagraph(fn)
 		})
 	}
-	// toggle makes a command that switches on, or -- when every touched
-	// paragraph already has it -- off.
 	toggle := func(name Command, title, chord string, has func(ParaFormat) bool, on, off func(*ParaFormat)) {
 		r.AddCommand(name, title, chord, func(c *CommandContext) bool {
 			pe, ok := c.Target.(ParagraphEditor)

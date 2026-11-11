@@ -11,11 +11,8 @@ import (
 	"math/rand/v2"
 )
 
-// An Adapter is the small set of weights that makes a shared base model recognise one person: low-rank
-// (LoRA-style) matrices per adapted layer. It is the only thing that is trained on a device and the only
-// thing that can leave it, as an Update.
 type Adapter struct {
-	Base   string // SHA-256 (hex) of the base model file the adapter was made for
+	Base   string
 	Rank   int
 	Layers []Tensor
 }
@@ -37,7 +34,6 @@ const (
 
 var adapterMagic = []byte("GJAD1")
 
-// ErrBadAdapter is returned for bytes that are not an adapter this package wrote.
 var ErrBadAdapter = errors.New("speechmodel: the adapter cannot be read")
 
 func elems(shape []int) (int, bool) {
@@ -54,8 +50,6 @@ func elems(shape []int) (int, bool) {
 	return n, len(shape) > 0
 }
 
-// Marshal writes the adapter: a magic, the base digest, the rank, then each tensor, and a SHA-256 over
-// all of it, so a changed byte is refused when it is read.
 func (a *Adapter) Marshal() ([]byte, error) {
 	if len(a.Layers) > maxLayers {
 		return nil, fmt.Errorf("%w: too many layers", ErrBadAdapter)
@@ -150,17 +144,13 @@ func UnmarshalAdapter(data []byte) (*Adapter, error) {
 	return a, nil
 }
 
-// An Update is the change a device makes to the shared adapter: tuned minus the global one, layer by layer.
-// It is what a device may contribute (with consent), after Clip and AddNoise.
 type Update struct {
 	Base   string
 	Layers []Tensor
-	// Weight is how much this update counts in Aggregate (the number of examples it was trained on, or 1).
 	Weight float64
 }
 
-// Delta is the update that turns global into tuned. The two must be for the same base model and have the
-// same layers.
+// Delta is the update that turns global into tuned.
 func Delta(global, tuned *Adapter) (*Update, error) {
 	if global.Base != tuned.Base {
 		return nil, ErrWrongBase
@@ -194,8 +184,7 @@ func (u *Update) Norm() float64 {
 	return math.Sqrt(s)
 }
 
-// Clip scales the update down so its norm is at most max. One person's update can then move the shared
-// adapter only so far, which bounds what any update can reveal or break.
+// Clip bounds what any update can reveal or break
 func (u *Update) Clip(max float64) {
 	n := u.Norm()
 	if n <= max || n == 0 || max <= 0 {
@@ -209,9 +198,6 @@ func (u *Update) Clip(max float64) {
 	}
 }
 
-// AddNoise adds Gaussian noise of standard deviation sigma to every weight. With Clip(max) and sigma
-// proportional to max this is the Gaussian mechanism; this package does not compute the resulting
-// (epsilon, delta), and a deployment that claims one must.
 func (u *Update) AddNoise(sigma float64, rng *rand.Rand) {
 	if sigma <= 0 {
 		return
@@ -223,7 +209,6 @@ func (u *Update) AddNoise(sigma float64, rng *rand.Rand) {
 	}
 }
 
-// Aggregate is the weighted mean of updates for the same base model and layers (federated averaging).
 func Aggregate(updates []*Update) (*Update, error) {
 	if len(updates) == 0 {
 		return nil, errors.New("speechmodel: no updates")
@@ -264,7 +249,6 @@ func Aggregate(updates []*Update) (*Update, error) {
 	return out, nil
 }
 
-// ApplyUpdate moves the global adapter by lr times the update (lr 1 adds it whole) and returns the new one.
 func ApplyUpdate(global *Adapter, u *Update, lr float64) (*Adapter, error) {
 	if global.Base != u.Base {
 		return nil, ErrWrongBase

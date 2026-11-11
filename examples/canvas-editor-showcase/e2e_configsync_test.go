@@ -15,7 +15,6 @@ import (
 	"github.com/elaous/gojiberry/userconfig"
 )
 
-// settingsSite is a site whose docstore server also serves the signed-in person's settings.
 func settingsSite(t *testing.T) (*e2etest.Site, *userconfig.Store) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -36,8 +35,6 @@ func openOnSettingsServer(t *testing.T, site *e2etest.Site) *e2etest.Tab {
 	return d
 }
 
-// The display preferences stay on this device until the person asks for them to follow them; then they reach the
-// settings server, and another device that asks gets them.
 func TestPreferencesFollowThePersonWhenAsked(t *testing.T) {
 	site, store := settingsSite(t)
 	a := openOnSettingsServer(t, site)
@@ -58,7 +55,6 @@ func TestPreferencesFollowThePersonWhenAsked(t *testing.T) {
 	}
 	a.NoErrors()
 
-	// another device of the same person: it asks for them and gets what the first one set
 	b := openOnSettingsServer(t, site)
 	b.Click(`button[data-tab="prefs"]`)
 	b.WaitSelector(".gj-prefs-sync input")
@@ -76,8 +72,6 @@ func contains(l []string, s string) bool {
 	return false
 }
 
-// A saved theme is shared as a file; another person reads what it holds, says yes, and has it. A file that was
-// changed is refused in words, and a name already taken is not replaced.
 func TestShareAThemeAsAFile(t *testing.T) {
 	a := e2etest.NewSite(t).Open(t, "?lang=en")
 	a.Click(`button[data-tab="styles"]`)
@@ -104,13 +98,11 @@ func TestShareAThemeAsAFile(t *testing.T) {
 	b.WaitSelector(".gj-theme-saved-name")
 	b.OK(b.Text(".gj-theme-saved-name") == "Warm paper", "the theme is in the list")
 
-	// the same file again is added next to it, not over it
 	b.ChooseFile(func() { b.Click("#theme-import") }, "warm.json", file)
 	b.WaitSelector("#theme-import-add")
 	b.Click("#theme-import-add")
 	b.WaitFor("two themes", `document.querySelectorAll('.gj-theme-saved-name').length === 2`)
 
-	// a changed file is refused
 	bad := strings.Replace(string(file), `"sha256":"`, `"sha256":"0`, 1)
 	b.ChooseFile(func() { b.Click("#theme-import") }, "bad.json", []byte(bad))
 	b.WaitFor("a refusal in words", `document.querySelector('.gj-theme-library [role="status"]') && document.querySelector('.gj-theme-library [role="status"]').textContent.includes('cannot be used')`)
@@ -118,8 +110,6 @@ func TestShareAThemeAsAFile(t *testing.T) {
 	b.NoErrors()
 }
 
-// A font of the person's own is added with its licence note, listed with the other fonts, drawn by the canvas and
-// kept in the settings; a file with no licence, or that is no font, is refused in words.
 func TestAFontOfMyOwnIsKeptAndUsable(t *testing.T) {
 	var font []byte
 	for _, p := range []string{"/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", "/usr/share/fonts/truetype/freefont/FreeSerif.ttf"} {
@@ -152,7 +142,6 @@ func TestAFontOfMyOwnIsKeptAndUsable(t *testing.T) {
 	d.OK(strings.Contains(d.Text(".gj-font-stored"), "Bitstream Vera"), "its licence is shown: "+d.Text(".gj-font-stored"))
 	d.WaitFor("the browser has the font", `[...document.fonts].some((f) => f.family.replace(/"/g, '') === 'my-serif' && f.status === 'loaded')`)
 
-	// it is in the font list, under My fonts, and picking it sets the family without any download
 	d.Click(`button[data-tab="format"]`)
 	d.Click(".gj-fontselector-control")
 	d.Fill(".gj-fontselector-search", "my-serif")
@@ -168,11 +157,9 @@ func TestAFontOfMyOwnIsKeptAndUsable(t *testing.T) {
 		t.Fatalf("the settings on the server = %v (%v), want font.my-serif", items, err)
 	}
 
-	// another device gets the font from the server
 	e := openOnSettingsServer(t, site)
 	e.WaitFor("the other device has the font", `[...document.fonts].some((f) => f.family.replace(/"/g, '') === 'my-serif' && f.status === 'loaded')`)
 
-	// and it can be deleted
 	d.Click(`button[data-tab="styles"]`)
 	d.Click("#fonts-delete-my-serif")
 	d.WaitFor("gone from the list", `!document.querySelector('.gj-font-stored')`)

@@ -65,7 +65,6 @@ func TestNotifyHearsOfKeptReportsAndSurvivesAPanic(t *testing.T) {
 	d := e.create(tok, "x")
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r","category":"spam"}`)), 202)
 	<-done
-	// the same reporter and category again is a duplicate: kept once, told once
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"again","category":"spam"}`)), 202)
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"r2","category":"illegal"}`)), 202)
 	<-done
@@ -88,7 +87,6 @@ func TestATakedownRefusesTheSameBytesAgainEvenAfterARestart(t *testing.T) {
 	e.want(e.do("POST", "/public/doc", tok2, []byte("the bad bytes")), 422)
 	e.create(tok2, "other bytes")
 
-	// the digest outlives the sweep and a new service on the same store reads it
 	e.clk.Add(72 * hour)
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
@@ -154,7 +152,6 @@ func TestProofOfWorkAsksOnlyWhenBusyAndAcceptsEachAnswerOnce(t *testing.T) {
 	e.want(e.do("POST", "/public/session", "", nil, ChallengeAnswerHeader, answer), 201)
 	e.want(e.do("POST", "/public/session", "", nil, ChallengeAnswerHeader, answer), 403) // once only
 	e.want(e.do("POST", "/public/session", "", nil, ChallengeAnswerHeader, "1.x 1"), 403)
-	// a challenge of an old slot is not taken
 	e.clk.Add(10 * time.Minute)
 	e.want(e.do("POST", "/public/session", "", nil, ChallengeAnswerHeader, answer), 403)
 }

@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Two Savers on one store stand for two server processes: each has its own lock,
-// so only the conditional write keeps one from overwriting the other's catalog.
 func TestTwoSaversOnOneStoreLoseNothing(t *testing.T) {
 	ctx := context.Background()
 	for _, tg := range targets(t) {
@@ -42,7 +40,6 @@ func TestTwoSaversOnOneStoreLoseNothing(t *testing.T) {
 	}
 }
 
-// A store that cannot write conditionally still works, as before.
 type unconditional struct{ docstore.Adapter }
 
 func TestUpdateWithoutConditionalStoreStillWrites(t *testing.T) {
@@ -56,9 +53,6 @@ func TestUpdateWithoutConditionalStoreStillWrites(t *testing.T) {
 	}
 }
 
-// Two server processes on one SQLite file: each has its own connection, so SQLite's
-// own locking is what they meet (not a shared adapter), and a busy file must be
-// waited for, not reported as a failure.
 func TestTwoProcessesOnOneSQLiteFileLoseNothing(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "shared.db")
@@ -90,8 +84,6 @@ func TestTwoProcessesOnOneSQLiteFileLoseNothing(t *testing.T) {
 	}
 }
 
-// Two server processes on one directory: separate adapters, so only the directory
-// lock keeps their catalog updates apart.
 func TestTwoProcessesOnOneDirectoryLoseNothing(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -122,7 +114,6 @@ func TestTwoProcessesOnOneDirectoryLoseNothing(t *testing.T) {
 	}
 }
 
-// People sharing one store each keep their own catalog (and folder records).
 func TestPeopleSharingAStoreHaveTheirOwnCatalogs(t *testing.T) {
 	ctx := context.Background()
 	mem := docstore.NewMemoryAdapter()
@@ -133,9 +124,6 @@ func TestPeopleSharingAStoreHaveTheirOwnCatalogs(t *testing.T) {
 	if UserCatalogKey("ana@x.com") == UserCatalogKey("bob@x.com") || strings.Contains(UserCatalogKey("ana@x.com"), "ana") {
 		t.Fatal("keys differ and hide the identifier")
 	}
-	// Both catalogs are made while the store is empty (a catalog made later takes
-	// the documents the store lets that person list; a server with access lists
-	// lists only theirs).
 	_, _ = ana.Folders(ctx, "shared")
 	_, _ = bob.Folders(ctx, "shared")
 	if _, err := bob.Save(ctx, "shared", docfile.JSON, named("bob's doc")); err != nil {
@@ -153,9 +141,6 @@ func TestPeopleSharingAStoreHaveTheirOwnCatalogs(t *testing.T) {
 	if live, _, folders, _ := ana.Overview(ctx, "shared"); len(live) != 1 || live[0].Name != "ana's doc" || len(folders) != 1 {
 		t.Errorf("ana sees %+v %+v", live, folders)
 	}
-	// A rebuild of Bob's catalog takes the documents the store lets him list (a server
-	// with access lists lists only his), but not Ana's folder records: those are
-	// under her prefix.
 	if err := bob.Rebuild(ctx, "shared"); err != nil {
 		t.Fatal(err)
 	}

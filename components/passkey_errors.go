@@ -6,14 +6,9 @@ import (
 	"github.com/elaous/gojiberry/auth/passkey/client"
 )
 
-// The passkey ceremonies fail in ways a person can act on, and auth/passkey/client names them. They are
-// registered here, with the Passkey component that shows them, so every host gets them without a call: a
-// closed prompt, a timeout, a wrong PIN, a device that already holds a passkey for the account, a page that
-// is not https, an authenticator that cannot do what was asked. Without these ExplainError would file them
-// all under "something went wrong".
 func init() {
 	RegisterErrorGroups(
-		// ErrTimedOut and ErrNotVerified are ErrCancelled, so they come first.
+		// ErrTimedOut and ErrNotVerified are ErrCancelled: they come first
 		ErrorGroup{Kind: ErrKindPasskey, ID: "err.passkey.timedOut", Default: "The passkey prompt was open for a minute and nobody answered it. Try again and answer the prompt on your device.",
 			Match: func(err error) bool { return errors.Is(err, client.ErrTimedOut) }},
 		ErrorGroup{Kind: ErrKindPasskey, ID: "err.passkey.notVerified", Default: "Your device could not verify that it is you: the PIN or fingerprint did not match, or no screen lock is set up on this device. Set one up, or try again.",

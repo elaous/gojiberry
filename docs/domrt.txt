@@ -1,34 +1,16 @@
 package domrt // import "github.com/elaous/gojiberry/domrt"
 
-Package domrt is the client-side runtime: it mounts a xango.Node tree into
-a real DOM element and, on each Update, diffs the new tree against what's
-currently mounted, patching only what changed (text content, attributes,
-event listeners, children) instead of tearing down and rebuilding the DOM.
-Only builds under GOOS=js GOARCH=wasm; xango itself has no browser dependency so
-the same components render both here and via xango.Render on the server.
 
 FUNCTIONS
 
 func Await(p js.Value) (js.Value, error)
-    Await blocks the calling goroutine until the JS Promise p settles,
-    without blocking the rest of the WASM runtime: Go's js/wasm scheduler keeps
-    servicing the JS event loop (and other goroutines) while this one waits on
-    the channel. Shared by domrt/browser and domrt/sw so both bridge JS Promises
-    the same way.
+    Await blocks the calling goroutine until the JS Promise settles.
 
 func InstallStyles()
-    InstallStyles adds a <style data-xango-style="..."> element to the
-    document's <head> for every stylesheet registered by a CSS import (see
-    xango.RegisterStyle) that is not there yet -- including ones the server
-    already rendered into the page, which it leaves alone. Mount calls it,
-    so a program that mounts components has their styles; call it yourself if
-    you register sheets after mounting.
+    InstallStyles adds a style element to the document head.
 
 func ToPromise(work func() (js.Value, error)) js.Value
-    ToPromise returns a JS Promise that settles once work returns, running work
-    on its own goroutine so the calling event handler can return the Promise
-    immediately (as event.waitUntil/respondWith require) while the real work
-    happens asynchronously.
+    ToPromise returns a JS Promise that settles when work returns.
 
 
 TYPES
@@ -36,34 +18,16 @@ TYPES
 type Root struct {
 	// Has unexported fields.
 }
-    Root is a live mount point: the result of Mount, and the handle Update is
-    called on for every subsequent render.
+    Root is a live mount point, the handle Update patches.
 
 func Mount(container js.Value, initial xango.Node) *Root
-    Mount installs the registered stylesheets (see InstallStyles), creates DOM
-    nodes for initial and appends them to container, returning a Root whose
-    Update re-renders in place on future calls.
+    Mount installs the registered stylesheets and mounts a tree.
 
 func (r *Root) FirstNode() js.Value
-    FirstNode returns the first real DOM node this Root's mounted tree owns --
-    the element itself for a simple single-element component (e.g. Button).
-    Useful for a caller that mounts a small, static component once, reparents
-    the resulting node into its own DOM structure, and never calls Update again
-    -- driving all further state changes (a pressed/disabled toggle, a label
-    swap) directly on the returned node the same way it already would for any
-    other element it built by hand.
+    FirstNode returns the first DOM node of this Root's tree.
 
 func (r *Root) Listener(event string) js.Func
-    Listener returns the js.Func trampoline domrt created for the given event
-    name on this Root's own top-level node, or the zero js.Func if none is
-    bound. For a caller that -- like FirstNode's own use case -- never calls
-    Update, Update's own patch/replace machinery never runs to release this
-    js.Func on the caller's behalf; Listener lets that caller track and release
-    it through whatever mechanism it already uses for js.Funcs it creates
-    directly.
+    Listener returns the js.Func trampoline for an event.
 
 func (r *Root) Update(next xango.Node)
-    Update diffs next against the currently mounted tree and patches the
-    real DOM to match, preserving node identity (and therefore focus, scroll
-    position, input state, etc.) wherever the shape is unchanged.
 

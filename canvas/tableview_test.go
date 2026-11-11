@@ -5,11 +5,6 @@ import (
 	"testing"
 )
 
-// newView returns a 2x2 table view at (10,10). With the fake painter's
-// 8px runes, MinColWidth (80) wins for short text, so columns are 80
-// wide: col edges 10/90/170, rows 32 tall: row edges 10/42/74. The
-// "+" bars are 22 thick, 4px away: column bar x in [174,196), row bar
-// y in [78,100).
 func newView() (*TableView, *fakePainter) {
 	p := &fakePainter{}
 	v := NewTableView(NewTableFrom([][]string{{"A", "B"}, {"c", "d"}}), p)
@@ -69,7 +64,6 @@ func TestClickPlusBarsAddColumnAndRow(t *testing.T) {
 		t.Fatalf("active = %d,%d,%v, want header of new column", r, c, ok)
 	}
 
-	// Table is now 3 cols wide (right edge 250); row bar is below it.
 	v.MouseDown(50, 90)
 	if v.Table.Rows() != 3 {
 		t.Fatalf("after row click: %d rows", v.Table.Rows())
@@ -231,7 +225,6 @@ func TestHoverRevealsBars(t *testing.T) {
 	if !p.has("fillText \"+\"") {
 		t.Fatal("bars should show while hovered")
 	}
-	// Moving across the gap to a bar keeps them visible.
 	v.MouseMove(172, 40)
 	if !v.inRegion {
 		t.Fatal("gap should count as part of the hover region")
@@ -334,7 +327,6 @@ func TestNewTableViewReservesHandleGutter(t *testing.T) {
 	}
 }
 
-// clickMenuItem opens whatever menu is showing and clicks the item with label.
 func clickMenuItem(t *testing.T, v *TableView, label string) {
 	t.Helper()
 	m := v.Menu()
@@ -497,7 +489,7 @@ func TestTableHandleMenu(t *testing.T) {
 func TestClickOutsideMenuClosesAndPassesThrough(t *testing.T) {
 	v, _ := newView()
 	v.MouseDown(100, 3)
-	v.MouseDown(20, 20) // column 1's menu starts at x=90, so this is outside it
+	v.MouseDown(20, 20)
 	if v.Menu().IsOpen() {
 		t.Fatal("menu should close")
 	}
@@ -561,8 +553,6 @@ func TestHandlesVisibleOnHover(t *testing.T) {
 	v.MouseMove(3, 3) // over the table handle counts as hovering the table
 	p.calls = nil
 	v.Draw()
-	// Column 0's grip: a pill carrying the column's name, centered in the 80px-wide strip at x=10; the row grips
-	// carry the row numbers.
 	if !p.has(`fillText "A" 50 -2`) || !p.has(`fillText "B" 130 -2`) || !p.has(`fillText "2" -2 58`) {
 		t.Fatalf("grips not drawn with their names: %v", p.calls)
 	}
@@ -578,7 +568,6 @@ func TestEdges(t *testing.T) {
 	}
 }
 
-// clickTableHandle presses and releases the 2x2-boxes icon.
 func clickTableHandle(v *TableView) {
 	v.MouseDown(3, 3)
 	v.MouseUp(3, 3)
@@ -593,13 +582,12 @@ func TestHandlesAreGripPills(t *testing.T) {
 	var names, pillRows int
 	for _, c := range p.calls {
 		if strings.HasPrefix(c, "fillText") && strings.Contains(c, "-2") {
-			names++ // the grips sit outside the table, at negative coordinates in this view
+			names++
 		}
 		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 1") {
 			pillRows++
 		}
 	}
-	// A name on each of the two column handles and two row handles.
 	if names != 4 {
 		t.Fatalf("grip names drawn: %d", names)
 	}
@@ -609,7 +597,6 @@ func TestHandlesAreGripPills(t *testing.T) {
 	if DarkTableStyle().CellBG == DefaultTableStyle().CellBG {
 		t.Fatal("dark style differs")
 	}
-	// Hovering and selecting change the pill's color; narrow strips still draw.
 	v.Style.MinColWidth = 12
 	v.MouseDown(40, -2)
 	v.Draw()
@@ -717,13 +704,11 @@ func TestFormulaViewOpensOnCalculatedAndFormulaCellsAreReadOnlyThere(t *testing.
 	if r, c, _ := v.Active(); r != 1 || c != 0 {
 		t.Fatalf("Tab moves on: %d %d", r, c)
 	}
-	// a plain cell stays editable, and a cell that becomes a formula while it is typed stays editable until it is left
 	v.InsertText("=A1")
 	v.InsertText("+1")
 	if v.Table.Cell(1, 0) != "=A1+1" {
 		t.Fatalf("typing a new formula: %q", v.Table.Cell(1, 0))
 	}
-	// the formula view makes the formula cells editable
 	v.SetShowFormulas(true)
 	v.MouseDown(cx+cw/2, cy+ch/2)
 	v.InsertText("0")
@@ -734,7 +719,7 @@ func TestFormulaViewOpensOnCalculatedAndFormulaCellsAreReadOnlyThere(t *testing.
 
 func TestFormulaTooltipAndColours(t *testing.T) {
 	v, p := formulaView()
-	v.SetMode(ModeView) // a document that is only read still shows the formula on hover
+	v.SetMode(ModeView)
 	g := v.layout()
 	cx, cy, cw, ch := g.cellRect(v.Table, 0, 1)
 	v.MouseMove(cx+cw/2, cy+ch/2)
@@ -780,19 +765,16 @@ func TestPasteIntoATableFillsCellsFromTheActiveOne(t *testing.T) {
 	if tb.Cell(0, 0) != "A" {
 		t.Fatal("cells above the active one are kept")
 	}
-	// cells from a spreadsheet, growing a column too
 	if !v.PasteText("x\ty\tz\n1\t2\t3\n") {
 		t.Fatal("pasted tab-separated")
 	}
 	if tb.Cols() != 3 || tb.Cell(1, 2) != "z" || tb.Cell(2, 0) != "1" {
 		t.Fatalf("tabs: %q", tb.Cells)
 	}
-	// plain text goes in as typing, on one line
 	v.HandleKey("End", false)
 	if !v.PasteText("end\nof it") || !strings.HasSuffix(tb.Cell(1, 0), "endof it") {
 		t.Fatalf("one line: %q", tb.Cell(1, 0))
 	}
-	// a formula cell held in the calculated view is not pasted over
 	tb.SetCell(0, 0, "=1+1")
 	v.editing = false
 	v.edit(0, 0)

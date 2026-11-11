@@ -15,8 +15,6 @@ func newMenu(log *[]string) (*Menu, *fakePainter) {
 	return m, p
 }
 
-// Item rows: One y 60-88, separator 88-97, Two 97-125, Three 125-153; x 50-220.
-
 func TestMenuHitTestAndActivate(t *testing.T) {
 	var log []string
 	m, _ := newMenu(&log)
@@ -147,7 +145,6 @@ func TestMenuOpenWithinKeepsInsideBounds(t *testing.T) {
 	m := NewMenu(p)
 	items := []MenuItem{{Label: "Only"}, {Label: "Two"}}
 	h := 2 * 28.0
-	// Bounds are a rectangle that doesn't start at the origin.
 	m.OpenWithin(items, 500, 500, [4]float64{100, 200, 300, 150})
 	if m.x != 400-m.w || m.y != 350-h {
 		t.Fatalf("x,y = %g,%g", m.x, m.y)

@@ -1,18 +1,3 @@
-// Command xgc transpiles .xg files into gofmt-clean .go files.
-//
-// Usage:
-//
-//	xgc [-experimental] [dirs...]
-//
-// Every path/to/name.xg becomes path/to/name.xg.go in the same
-// directory and package. Defaults to "." if no directories are given.
-//
-// -experimental (or XANGO_EXPERIMENTAL=1) enables resource-import
-// extensions/annotations that either shell out to a mature external
-// tool this project doesn't reimplement (.hcl/.proto/.capnp/.sql,
-// each generating a real Go subpackage) or carry real footgun risk
-// (JSON's .(TypeName) annotation, which infers a struct shape from
-// one sample rather than a schema). Off by default.
 package main
 
 import (
@@ -49,11 +34,7 @@ func main() {
 				return err
 			}
 			if d.IsDir() {
-				// A directory literally named "experimental" holds .xg
-				// sources that need experimental mode; skip it entirely
-				// during an ordinary (non-experimental) walk so `go
-				// generate ./...` doesn't fail on examples it was never
-				// meant to touch without -experimental.
+				// "experimental" dirs need -experimental: else skipped
 				if d.Name() == "experimental" && !opts.Experimental {
 					return filepath.SkipDir
 				}

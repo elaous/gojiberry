@@ -8,26 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-// The get/set requests: what a script can read of the document, and change, beyond running commands and inserting text.
-// It covers what extended Markdown, text formatting, text styles, pictures and the document's metadata do, and nothing
-// else. The host (the page) is a Document as well as a Host to offer them.
-//
-//	markdown                  the document as extended Markdown                       (Read)
-//	setMarkdown  text         replace the document with the Markdown                  (Write)
-//	selection                 {from, to, text}: rune offsets and the selected text    (Read)
-//	setSelection data{from,to} select a range                                         (Write)
-//	format                    the format of the selection (of the first selected character, or at the caret) (Read)
-//	setFormat    data{bold,italic,underline,strike,color,background,family,size}  change the selection (Write)
-//	styles                    the names of the paragraph styles                       (Read)
-//	style                     the style of the paragraph at the caret                 (Read)
-//	setStyle     name         apply a style to the selected paragraphs                (Write)
-//	images                    [{index,alt,legend,credit,decorative,width,height}], never the picture itself (Read)
-//	setImage     index, data{alt,legend,decorative}  describe a picture               (Write)
-//	meta                      {title, language}                                       (Read)
-//	setMeta      data{title,language}         change them                             (Write)
-
-// Document is the editor as the get/set requests reach it. The host checks nothing about permission (Session does); it
-// still refuses what it cannot do, with an error whose text the script reads.
+// Document is the editor as the get/set requests reach it.
 type Document interface {
 	Markdown() string
 	SetMarkdown(md string) error
@@ -44,7 +25,6 @@ type Document interface {
 	SetMeta(MetaPatch) error
 }
 
-// Selection is a range of the text (rune offsets) and what it says.
 type Selection struct {
 	From int    `json:"from"`
 	To   int    `json:"to"`
@@ -63,8 +43,6 @@ type FormatInfo struct {
 	Size       float64 `json:"size,omitempty"`
 }
 
-// FormatPatch changes some of a format: what is not there is left as it is; an empty colour, background or family
-// takes it off.
 type FormatPatch struct {
 	Bold       *bool    `json:"bold"`
 	Italic     *bool    `json:"italic"`
@@ -120,7 +98,6 @@ var (
 	reLanguage = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$`)
 )
 
-// Validate says whether the patch is within what a script may set.
 func (p FormatPatch) Validate() error {
 	for _, c := range []*string{p.Color, p.Background} {
 		if c != nil && *c != "" && !reColor.MatchString(*c) {
@@ -136,7 +113,6 @@ func (p FormatPatch) Validate() error {
 	return nil
 }
 
-// Validate says whether the patch is within what a script may set.
 func (p ImagePatch) Validate() error {
 	for _, s := range []*string{p.Alt, p.Legend} {
 		if s != nil && utf8.RuneCountInString(*s) > MaxAlt {
@@ -146,7 +122,6 @@ func (p ImagePatch) Validate() error {
 	return nil
 }
 
-// Validate says whether the patch is within what a script may set.
 func (p MetaPatch) Validate() error {
 	if p.Title != nil && utf8.RuneCountInString(*p.Title) > MaxTitle {
 		return errors.New("a title is at most 200 characters")
@@ -157,7 +132,6 @@ func (p MetaPatch) Validate() error {
 	return nil
 }
 
-// handleDocument answers the get/set requests; handled is false for a request that is not one of them.
 func (s *Session) handleDocument(d Document, req Request) (out []byte, handled bool) {
 	fail := func(err error) ([]byte, bool) { return reply(Response{ID: req.ID, Error: err.Error()}), true }
 	ok := func(v any) ([]byte, bool) { return reply(Response{ID: req.ID, OK: true, Value: v}), true }

@@ -10,8 +10,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// The owner's publication signature covers the label: a server that swaps the label of a key the
-// owner signed is caught, and a signature over another label does not publish.
 func TestOwnerSignatureCoversTheLabel(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -34,7 +32,6 @@ func TestOwnerSignatureCoversTheLabel(t *testing.T) {
 	if a := e.audit(AuditOptions{}); len(a.Violations) != 0 {
 		t.Errorf("%+v", a.Violations)
 	}
-	// The stored label changed behind the owner's back: the evidence no longer verifies.
 	name := ""
 	metas, _ := docstore.ListPrefix(ctx, e.store, directoryPrefix)
 	for _, m := range metas {
@@ -60,8 +57,6 @@ func TestOwnerSignatureCoversTheLabel(t *testing.T) {
 	}
 }
 
-// Entry times never go back: a replica whose clock is behind writes the later time, and a chain
-// or audit that goes back by more than the skew is refused.
 func TestLogTimesDoNotGoBack(t *testing.T) {
 	ctx := context.Background()
 	d, _, clk := newTestDirectory(t)
@@ -79,7 +74,6 @@ func TestLogTimesDoNotGoBack(t *testing.T) {
 	if _, err := VerifyLog(ents, "", 0, logKeys(t, d)); err != nil {
 		t.Fatal(err)
 	}
-	// A chain that was signed with times going back (the directory key written by hand).
 	bad := append([]LogEntry(nil), ents...)
 	e2 := bad[1]
 	e2.At = ents[0].At - int64(time.Hour/time.Second)
@@ -93,7 +87,6 @@ func TestLogTimesDoNotGoBack(t *testing.T) {
 	if len(audit.Violations) == 0 || !strings.Contains(audit.Violations[0].Why, "went back") {
 		t.Errorf("%+v", audit.Violations)
 	}
-	// Within the skew it is fine.
 	ok := append([]LogEntry(nil), ents...)
 	e3 := ok[1]
 	e3.At = ents[0].At - 60
@@ -109,21 +102,17 @@ func signEntryForTest(d *AdapterDirectory, e LogEntry) string {
 	return SignLogEntry(d.Signer, e).Sig
 }
 
-// A crash between the log entry and the enrollment record leaves the log ahead; the next owner
-// operation (after a grace period) and the start-up reconcile complete the record from the log.
 func TestCrashedEnrollmentIsReconciledFromTheLog(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
 	_, priv := ownerKey(t)
 	e.mustEnroll(priv)
-	// The crash: the entry is in the log, the record never got written.
 	for _, id := range e.d.enrollNames("ana@x.io") {
 		_ = e.store.Delete(ctx, id)
 	}
 	if v, _ := e.d.Enrollment(ctx, "ana@x.io"); v.Enrolled {
 		t.Fatal("the record is gone")
 	}
-	// Too young to call dangling: the owner operation is refused for now.
 	if _, err := e.d.RequestReset(ctx, ana); !errors.Is(err, docstore.ErrDirectoryBusy) {
 		t.Fatalf("a young dangling entry: %v", err)
 	}
@@ -138,7 +127,6 @@ func TestCrashedEnrollmentIsReconciledFromTheLog(t *testing.T) {
 	if a := e.audit(AuditOptions{}); len(a.Violations) != 0 || !a.Enrolled {
 		t.Errorf("%+v", a)
 	}
-	// A record that is behind (a reset request logged, not recorded): the start-up completes it.
 	e.clk.Add(time.Hour)
 	if _, err := e.d.CancelReset(ctx, ana, e.sign(priv, OpResetCancel, "")); err != nil {
 		t.Fatal(err)
@@ -159,7 +147,6 @@ func TestCrashedEnrollmentIsReconciledFromTheLog(t *testing.T) {
 	}
 }
 
-// The operator's reset is a signed log entry the audit accepts and lists, and it frees the address.
 func TestOperatorResetIsLoggedAndVisible(t *testing.T) {
 	e := newOwnerEnv(t)
 	ctx := context.Background()
@@ -180,7 +167,6 @@ func TestOperatorResetIsLoggedAndVisible(t *testing.T) {
 	if len(a.Violations) != 0 || a.Enrolled || len(a.OperatorResets) != 1 || a.OperatorResets[0].Op != OpOperatorReset || a.OperatorResets[0].OwnerSig != "" {
 		t.Fatalf("%+v", a)
 	}
-	// The address is open again (trust on first use), and the new enrollment audits clean.
 	_, priv2 := ownerKey(t)
 	e.mustEnroll(priv2)
 	if a := e.audit(AuditOptions{}); len(a.Violations) != 0 || !a.Enrolled || len(a.OperatorResets) != 1 {
@@ -188,7 +174,6 @@ func TestOperatorResetIsLoggedAndVisible(t *testing.T) {
 	}
 }
 
-// The tombstone sweep deletes only the record it read: one republished since stays.
 func TestSweepDoesNotDeleteATombstoneReplacedSinceItWasRead(t *testing.T) {
 	ctx := context.Background()
 	hs, clk := newHookStore(), newTestClock()
@@ -228,7 +213,6 @@ func TestSweepDoesNotDeleteATombstoneReplacedSinceItWasRead(t *testing.T) {
 	hs.mu.Unlock()
 }
 
-// The directory's own keyspaces are skipped by the encryption whatever the case of the id.
 func TestDefaultSkipIsCaseInsensitive(t *testing.T) {
 	for _, id := range []string{"Directory/abc", "DIRECTORY/abc", "directory/abc", "Catalog:x", "ACL:x", "Fonts/a.woff", strings.ToUpper(docstore.DirectoryLogPrefix) + "1", strings.ToUpper(docstore.DirectoryEnrollPrefix) + "x"} {
 		if !DefaultSkip(id) {
@@ -240,7 +224,6 @@ func TestDefaultSkipIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// A second process writing the same directory is seen through its registration in the store.
 func TestWritersSeesOtherProcessesSharingTheStore(t *testing.T) {
 	ctx := context.Background()
 	store, clk := newHookStore(), newTestClock()

@@ -73,11 +73,9 @@ func TestViewerCanCommentWithoutEditing(t *testing.T) {
 	if flowText(f) != "hello brave world" {
 		t.Fatalf("the text is untouched: %q", flowText(f))
 	}
-	// Nothing else is allowed: formatting and other commands need an edit target.
 	if st.RunCommand(CmdBold) || st.RunCommand(CmdCommentDelete) || st.RunCommand(CmdBookmarkAdd) {
 		t.Fatal("a viewer can only add comments")
 	}
-	// The comment-only target refuses every other change.
 	tgt := f.CommentTarget()
 	tgt.Replace([]Edit{{From: 0, To: 5, Items: []Item{Chars{Text: "HELLO"}}}})
 	tgt.Replace([]Edit{{From: 0, To: 5, Items: []Item{Chars{Text: "hello", Format: Format{FontWeight: 700}}}}})
@@ -93,7 +91,6 @@ func TestViewerCanCommentWithoutEditing(t *testing.T) {
 	if tgt.(CommentHost).CommentAuthor() != "vee" {
 		t.Fatal("author")
 	}
-	// An editor in view mode may comment the same way.
 	g, st2 := editFlow(t, 0, Chars{Text: "abc"})
 	st2.SetMode(ModeView)
 	g.SetCursors([]Cursor{{Anchor: 0, Caret: 2}})
@@ -101,7 +98,6 @@ func TestViewerCanCommentWithoutEditing(t *testing.T) {
 	if !st2.RunCommand(CmdCommentAdd) {
 		t.Fatal("view mode")
 	}
-	// A role that cannot comment cannot (the zero role and others can).
 	st2.SetRole(Role("nobody"))
 	g.SetCursors([]Cursor{{Anchor: 0, Caret: 1}})
 	if st2.RunCommand(CmdCommentAdd) {

@@ -37,7 +37,6 @@ func TestShareTemplateBetweenTwoPeople(t *testing.T) {
 	if err != nil || it.Name != "template.report" || it.Rev != 1 || string(it.Data) != `{"title":"Quarterly","content":[]}` {
 		t.Fatalf("%+v %v", it, err)
 	}
-	// importing again never replaces: the second copy gets a new name
 	it2, err := bo.Import(ctx, b, "")
 	if err != nil || it2.Name != "template.report-2" {
 		t.Fatalf("%+v %v", it2, err)
@@ -46,7 +45,6 @@ func TestShareTemplateBetweenTwoPeople(t *testing.T) {
 	if it3.Name != "template.report-3" {
 		t.Fatalf("%q", it3.Name)
 	}
-	// the importer can name it, within the same kind
 	if it, err := bo.Import(ctx, b, "template.mine"); err != nil || it.Name != "template.mine" {
 		t.Fatalf("%+v %v", it, err)
 	}
@@ -55,7 +53,6 @@ func TestShareTemplateBetweenTwoPeople(t *testing.T) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
-	// ana still has only her own
 	if names, _ := ana.List(ctx); len(names) != 1 {
 		t.Fatalf("%v", names)
 	}
@@ -102,7 +99,6 @@ func TestThemesMustBeReadableToBeImported(t *testing.T) {
 	if _, err := bo.Import(ctx, b, ""); err != nil {
 		t.Fatal(err)
 	}
-	// a theme with unreadable text is refused on the way in, with the reason
 	low := tokens.Default()
 	low.Colors[tokens.Text] = "#cccccc"
 	lowJSON, _ := json.Marshal(low)
@@ -158,7 +154,6 @@ func TestDamagedAndForeignBundlesAreRefused(t *testing.T) {
 			t.Fatal("an error must not repeat the file")
 		}
 	}
-	// the import is subject to the importer's quota
 	small := &Store{A: docstore.NewMemoryAdapter(), User: "u", MaxItem: 3}
 	if _, err := small.Import(ctx, good, ""); !errors.Is(err, ErrQuota) {
 		t.Fatalf("%v", err)
@@ -179,8 +174,6 @@ func TestImportGivesUpAfterManyCopies(t *testing.T) {
 	}
 }
 
-// Bundle and OpenBundle are Export and Import without a Store: what one makes the other reads, and a changed
-// file is refused.
 func TestBundleAndOpenBundleRoundTripWithoutAStore(t *testing.T) {
 	data := []byte(`{"title":"Quarterly","content":[]}`)
 	b, err := Bundle("template.report", data, "from Ana")

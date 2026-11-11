@@ -51,7 +51,6 @@ func TestBackupThenRestoreCommands(t *testing.T) {
 		t.Fatalf("%q %v", d.Data, err)
 	}
 
-	// a store that has documents is only restored into on purpose
 	_, code, _, errOut = run(t, dst, "restore", file)
 	if code != 1 || !strings.Contains(errOut, "-force") || !strings.Contains(errOut, `"reason":"conflict"`) {
 		t.Fatalf("%d %q", code, errOut)

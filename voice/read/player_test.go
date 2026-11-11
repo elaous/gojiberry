@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// fakeEngine says what it is told by hand: tests finish an utterance when they choose.
 type fakeEngine struct {
 	avail  bool
 	spoken []Utterance

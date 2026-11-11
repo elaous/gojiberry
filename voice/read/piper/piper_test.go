@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/voice/read"
 )
 
-// ---- fakes of the ports
-
 type fakeFetcher struct {
 	files map[string][]byte // by URL
 	asked []string
@@ -95,8 +93,6 @@ func (o *fakeOutput) Play(a Audio, onTime func(time.Duration), onEnd func()) Pla
 func (o *fakeOutput) Stop()   { o.stopped = true }
 func (o *fakeOutput) Pause()  { o.paused = true }
 func (o *fakeOutput) Resume() { o.paused = false }
-
-// ---- a catalogue with one voice
 
 func sum(b []byte) string { h := md5.Sum(b); return hex.EncodeToString(h[:]) } //nolint:gosec
 
@@ -234,7 +230,7 @@ func TestSpeakSynthesizesPlaysAndMarksWordsByHowFarTheSoundHasGot(t *testing.T) 
 		t.Fatalf("started: %v %d", kinds, len(out.played))
 	}
 	out.onTime(0)
-	out.onTime(1100 * time.Millisecond) // a little over half: "schöne" (starts at 6 of 17 runes) has been reached
+	out.onTime(1100 * time.Millisecond)
 	out.onTime(1999 * time.Millisecond)
 	want := [][2]int{{0, 5}, {6, 6}, {13, 4}}
 	if fmt.Sprint(words) != fmt.Sprint(want) {

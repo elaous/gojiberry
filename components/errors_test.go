@@ -16,7 +16,6 @@ type shown struct{ msg string }
 func (s shown) Error() string       { return "raw " + s.msg }
 func (s shown) UserMessage() string { return s.msg }
 
-// Each built-in group, also when the sentinel is wrapped the way the library wraps it.
 func TestExplainErrorGroupsTheBuiltInSentinels(t *testing.T) {
 	cases := []struct {
 		name string
@@ -54,7 +53,6 @@ func TestExplainErrorGroupsTheBuiltInSentinels(t *testing.T) {
 	}
 }
 
-// A registered group is tried before the built-in ones and can borrow another group's message.
 func TestRegisteredGroupsComeFirst(t *testing.T) {
 	old := errorGroups
 	defer func() { errorGroups = old }()
@@ -71,7 +69,6 @@ func TestRegisteredGroupsComeFirst(t *testing.T) {
 	}
 }
 
-// A message the host already put in words is shown as is, and the raw text of what it wraps is the detail.
 func TestExplainErrorKeepsHostWordsAndRawDetails(t *testing.T) {
 	inner := errors.New("encrypt: raw inner")
 	info := ExplainError(&hostErr{"Reload the page.", inner})
@@ -101,7 +98,6 @@ func TestErrorViewIsAlertWithNativeDetails(t *testing.T) {
 			t.Errorf("missing %q in %s", want, html)
 		}
 	}
-	// The alert holds the message only: the raw text sits outside it.
 	i := strings.Index(html, "</p>")
 	if i < 0 || strings.Contains(html[:i], "docstore:") {
 		t.Errorf("the alert carries the raw text: %s", html)

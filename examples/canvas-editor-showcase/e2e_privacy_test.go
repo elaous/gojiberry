@@ -17,15 +17,12 @@ import (
 	"github.com/elaous/gojiberry/telemetry"
 )
 
-// telemetrySite serves a docstore server with the usage receiver on, behind a counter of every request
-// that reaches /telemetry (any method, so a CORS preflight would show too) and a record of the
-// bodies and the headers that could identify somebody.
 type telemetrySite struct {
 	*e2etest.Site
 	mu       sync.Mutex
 	requests int
 	bodies   []string
-	secrets  []string // a cookie or an Authorization header seen on a telemetry request
+	secrets  []string
 	counters *telemetry.Counters
 }
 
@@ -52,7 +49,6 @@ func newTelemetrySite(t *testing.T) *telemetrySite {
 
 func (ts *telemetrySite) count() int { ts.mu.Lock(); defer ts.mu.Unlock(); return ts.requests }
 
-// confirmServer confirms the site's own docstore server in the People tab, as a person would.
 func confirmServer(d *e2etest.Tab) {
 	d.Click(`button[data-tab="people"]`)
 	d.WaitSelector("#dir-offer-review")
@@ -69,8 +65,6 @@ func openWithServer(t *testing.T, ts *telemetrySite, opts ...string) *e2etest.Ta
 	return d
 }
 
-// The default is to send nothing: a visit that uses the editor, with a server confirmed and the
-// Privacy tab opened and closed again, makes not one request to /telemetry, and the Privacy tab says so.
 func TestOptedOutSendsNoRequestAtAll(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)
@@ -99,8 +93,6 @@ func TestOptedOutSendsNoRequestAtAll(t *testing.T) {
 	d.NoErrors()
 }
 
-// Opting in shows the exact request before it is sent; "Send now" sends exactly that and nothing
-// else, with no cookie and no token; choosing "Send nothing" again stops everything.
 func TestOptInSendsExactlyThePreviewedJSON(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)
@@ -160,7 +152,6 @@ func TestOptInSendsExactlyThePreviewedJSON(t *testing.T) {
 	d.WaitFor("the empty preview", `document.getElementById('privacy-preview').textContent.startsWith('Nothing yet')`)
 	d.OK(strings.Contains(d.Text("#privacy-message"), "Sent "), "the page says what was sent: "+d.Text("#privacy-message"))
 
-	// Opting out again: more use, and still no request.
 	d.Click("#telemetry-off")
 	d.WaitFor("off", `!JSON.parse(document.getElementById('state').textContent).usage.consent`)
 	for _, tab := range []string{"find", "stats", "privacy"} {
@@ -177,7 +168,6 @@ func TestOptInSendsExactlyThePreviewedJSON(t *testing.T) {
 	d.NoErrors()
 }
 
-// With Global Privacy Control the choice cannot be turned on, and nothing is sent.
 func TestGlobalPrivacyControlKeepsItOff(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := ts.OpenURL(t, "/index.html?docstore="+url.QueryEscape(ts.URL))
@@ -197,9 +187,6 @@ func TestGlobalPrivacyControlKeepsItOff(t *testing.T) {
 	d.NoErrors()
 }
 
-// The consent screen is real DOM a screen reader can use: a labelled section, a fieldset with a legend and
-// radio buttons with labels, the exact JSON as a focusable block, the allowlist as a list, a status
-// message; and axe finds nothing.
 func TestPrivacyTabIsAccessible(t *testing.T) {
 	ts := newTelemetrySite(t)
 	d := openWithServer(t, ts)
@@ -217,7 +204,6 @@ func TestPrivacyTabIsAccessible(t *testing.T) {
 	for _, v := range d.Axe("", axeDisabled...) {
 		t.Errorf("the privacy tab: %s", v)
 	}
-	// Keyboard: the radio group is reached with Tab and changed with the arrow keys.
 	d.Focus("#telemetry-on")
 	d.Press("ArrowUp")
 	d.WaitFor("off by keyboard", `!JSON.parse(document.getElementById('state').textContent).usage.consent`)

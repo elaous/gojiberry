@@ -2,9 +2,6 @@
 
 //go:build js && wasm
 
-// Package main is a client-side demo: a stateful counter compiled to
-// WASM and mounted into a real page via domrt, proving the diff/patch
-// runtime actually updates the DOM in a browser.
 package main
 
 import (

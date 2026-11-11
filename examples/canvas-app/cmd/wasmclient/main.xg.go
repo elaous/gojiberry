@@ -2,14 +2,6 @@
 
 //go:build js && wasm
 
-// Command wasmclient is the xango-canvas autosave client: it debounces
-// textarea edits into PUT /api/documents/{id} calls via
-// domrt/browser.FetchOpts, and drives a small status indicator through
-// domrt.Mount/Update so the diff/patch runtime -- not just fetch -- is
-// exercised in this example too. It attaches to server-rendered
-// markup (canvas/pages.xg's CanvasPage) rather than mounting the
-// whole page itself, since the textarea is plain editable HTML, not a
-// xango-managed subtree.
 package main
 
 import (
@@ -39,9 +31,6 @@ func main() {
 
 	root := domrt.Mount(statusContainer.Element, StatusView("saved"))
 
-	// One save at a time, so an older request cannot land after a newer one and win on
-	// the server; edits made while one is in flight are saved right after it, and
-	// "saved" is only shown when nothing is waiting.
 	saving, queued, typing := false, false, false
 	var save func()
 	put := func(content string) bool {
@@ -94,5 +83,5 @@ func main() {
 	})
 	textarea.AddEventListener("input", onInput)
 
-	select {} // keep the wasm program alive so the debounce timer and fetch callbacks keep firing
+	select {} // keeps the program alive for timer and fetch callbacks
 }

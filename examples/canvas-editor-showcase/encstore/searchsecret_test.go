@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The search secret is there only while a key is held, is the same on every visit for the same key
-// and owner list, differs for another store's keys, and is not readable from what is stored.
 func TestSearchSecretNeedsAnUnlockedKeyAndFollowsTheOwners(t *testing.T) {
 	r := newRig(t)
 	if _, ok := r.st.SearchSecret(); ok {

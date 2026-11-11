@@ -19,8 +19,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// hookStore is a conditional store whose reads and writes the tests can intercept, to make a
-// race between two directory instances (replicas) happen at an exact point.
 type hookStore struct {
 	*docstore.MemoryAdapter
 	mu         sync.Mutex
@@ -67,7 +65,6 @@ func (h *hookStore) Save(ctx context.Context, id string, data []byte) error {
 	return h.MemoryAdapter.Save(ctx, id, data)
 }
 
-// rotation returns the old signer and a rotated one that still knows it.
 func rotation(t *testing.T) (oldSigner, rotated DirectorySigner) {
 	t.Helper()
 	oldSigner = testSigner(t, 1)
@@ -87,14 +84,11 @@ func logOps(t *testing.T, d *AdapterDirectory) []LogEntry {
 	return l.Entries
 }
 
-// --- finding 1: Resign must not resurrect a revoked key ---------------------------------------
-
 func TestResignDoesNotResurrectAKeyRevokedWhileItRuns(t *testing.T) {
 	ctx := context.Background()
 	hs, clk := newHookStore(), newTestClock()
 	oldSigner, rotated := rotation(t)
 	d1 := &AdapterDirectory{Store: hs, Signer: oldSigner, Now: clk.Now}
-	// One record, so that Resign's reads happen in a known order (the store lists in any order).
 	k1 := newRecovery(t)
 	if err := d1.Publish(ctx, ana, k1); err != nil {
 		t.Fatal(err)
@@ -103,14 +97,12 @@ func TestResignDoesNotResurrectAKeyRevokedWhileItRuns(t *testing.T) {
 	d3 := &AdapterDirectory{Store: hs, Signer: rotated, Now: clk.Now} // another replica, already on the new key
 	oldID := d1.directoryID("ana@x.io", k1.Fingerprint)
 
-	// The rolling deploy: while d2 re-signs k1 (it has read the record), the user revokes k1
-	// through d3. The revoke writes its tombstone under the current key's name.
 	loads, fired := 0, false
 	hs.afterLoad = func(id string) {
 		if id != oldID || fired {
 			return
 		}
-		if loads++; loads == 2 { // the first read is the survey, the second the one under the address lock
+		if loads++; loads == 2 {
 			fired = true
 			if _, err := d3.Revoke(ctx, ana, k1.Fingerprint, nil); err != nil {
 				t.Errorf("revoke: %v", err)
@@ -148,8 +140,6 @@ func TestResignDoesNotResurrectAKeyRevokedWhileItRuns(t *testing.T) {
 	}
 }
 
-// --- finding 2: Resign must not launder a record forged with a compromised retired key ----------
-
 func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 	ctx := context.Background()
 	store, clk := docstore.NewMemoryAdapter(), newTestClock()
@@ -159,8 +149,6 @@ func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 	if err := d1.Publish(ctx, ana, good); err != nil {
 		t.Fatal(err)
 	}
-	// Someone who holds the retired key (it leaked) writes records for keys of their own: one
-	// with no log entry at all, one that borrows the number of a real entry.
 	forge := func(key Recipient, seq int64) string {
 		id := d1.directoryID("ana@x.io", key.Fingerprint)
 		rec := d1.sign(directoryRecord{Key: key.Text, Publisher: ana.ID, Provider: "google", Email: "ana@x.io", At: clk.Now().Unix(), Seq: seq}, id)
@@ -174,7 +162,6 @@ func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 	id1, id2 := forge(evil1, 0), forge(evil2, 1)
 
 	d2 := &AdapterDirectory{Store: store, Signer: rotated, Now: clk.Now}
-	// Before and after Resign a record that a retired key signed and no entry backs is unverified.
 	verified := func() map[string]bool {
 		got, err := d2.Lookup(ctx, "ana@x.io")
 		if err != nil {
@@ -199,7 +186,7 @@ func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 	if v := verified(); !v[good.Fingerprint] || v[evil1.Fingerprint] || v[evil2.Fingerprint] {
 		t.Errorf("after Resign: %v", v)
 	}
-	for _, id := range []string{id1, id2} { // left under the old name, not copied under the current one
+	for _, id := range []string{id1, id2} {
 		if _, err := store.Load(ctx, id); err != nil {
 			t.Errorf("the forged record was touched: %v", err)
 		}
@@ -213,8 +200,6 @@ func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 		t.Errorf("summary: %s", rep.Summary())
 	}
 }
-
-// --- finding 6: a wrong or missing key is visible ----------------------------------------------
 
 func TestStartupCountsRecordsNamedUnderUnknownKeys(t *testing.T) {
 	ctx := context.Background()
@@ -253,7 +238,6 @@ func TestStartupCountsRecordsNamedUnderUnknownKeys(t *testing.T) {
 	if dir["unknown_keys"] != float64(3) || dir["records"] != float64(3) {
 		t.Errorf("/health: %v", dir)
 	}
-	// With the right key (or the old one listed) nothing is unknown.
 	dC := &AdapterDirectory{Store: store, Signer: testSigner(t, 1)}
 	if rep, err := dC.Startup(ctx); err != nil || rep.Unknown != 0 || rep.Current != 3 {
 		t.Errorf("right key: %+v %v", rep, err)
@@ -262,8 +246,6 @@ func TestStartupCountsRecordsNamedUnderUnknownKeys(t *testing.T) {
 		t.Errorf("health: %+v", h)
 	}
 }
-
-// --- finding 3: publish and revoke are atomic across replicas ----------------------------------
 
 func TestRevokeOnAnotherReplicaIsNotOverwrittenByARepublish(t *testing.T) {
 	ctx := context.Background()
@@ -299,7 +281,6 @@ func TestRevokeOnAnotherReplicaIsNotOverwrittenByARepublish(t *testing.T) {
 	if got, _ := d1.Lookup(ctx, "ana@x.io"); len(got) != 0 {
 		t.Errorf("the revoked key is back: %+v", got)
 	}
-	// The log never claims the publication that lost: its entry is voided.
 	ops := logOps(t, d1)
 	var last LogEntry
 	for _, e := range ops {
@@ -319,8 +300,6 @@ func TestPublishOfANewKeyIsCreateIfAbsentAcrossReplicas(t *testing.T) {
 	key := newRecovery(t)
 	listed, fired := 0, false
 	hs.afterLoad = func(lid string) {
-		// d1 listed the address and found nothing; before it writes, d2 publishes the same key
-		// and revokes it.
 		if !strings.HasPrefix(lid, docstore.DirectoryEnrollPrefix) { // the owner enrollment is read after the listing
 			return
 		}
@@ -366,7 +345,6 @@ func TestPublishLeavesAVoidEntryWhenTheRecordCannotBeWritten(t *testing.T) {
 		t.Fatalf("log: %+v", ops)
 	}
 	audit := AuditAddress("ana@x.io", d.LogAddressesFor("ana@x.io"), ops, AuditOptions{})
-	// The voided entry stays visible, marked, and is not an error (its owner-less address has no rules).
 	if len(audit.Entries) != 1 || audit.Voided[1] != 2 || len(audit.Violations) != 0 {
 		t.Errorf("the voided entry must stay visible and marked: %+v %+v %+v", audit.Entries, audit.Voided, audit.Violations)
 	}
@@ -377,7 +355,6 @@ func TestPublishLeavesAVoidEntryWhenTheRecordCannotBeWritten(t *testing.T) {
 	if got, _ := d.Lookup(ctx, "ana@x.io"); len(got) != 0 {
 		t.Errorf("%+v", got)
 	}
-	// The same for a revoke.
 	hs.failSaveIf = nil
 	if err := d.Publish(ctx, ana, key); err != nil {
 		t.Fatal(err)
@@ -400,8 +377,6 @@ func TestPublishLeavesAVoidEntryWhenTheRecordCannotBeWritten(t *testing.T) {
 	}
 }
 
-// --- finding 9: a busy log answers 503, after bounded retries ----------------------------------
-
 func TestBusyLogIsBoundedAndAnswers503(t *testing.T) {
 	old := logBackoffBase
 	logBackoffBase = time.Microsecond
@@ -422,15 +397,13 @@ func TestBusyLogIsBoundedAndAnswers503(t *testing.T) {
 	hs.mu.Lock()
 	n := hs.saveIfs
 	hs.mu.Unlock()
-	if n > 20 { // 16 rounds lost, and the writes of the head and the claims around them
+	if n > 20 {
 		t.Errorf("%d conditional writes: the retries are not bounded", n)
 	}
 	if got, _ := e.dir.Lookup(context.Background(), "ana@x.io"); len(got) != 0 {
 		t.Errorf("nothing is published: %+v", got)
 	}
 }
-
-// --- finding 8: challenge tokens are honoured only for the current key -------------------------
 
 func TestChallengesVerifyAgainstTheCurrentKeyOnly(t *testing.T) {
 	ctx := context.Background()
@@ -439,7 +412,6 @@ func TestChallengesVerifyAgainstTheCurrentKeyOnly(t *testing.T) {
 	dOld := &AdapterDirectory{Store: store, Signer: oldSigner, Now: clk.Now}
 	dNew := &AdapterDirectory{Store: store, Signer: rotated, Now: clk.Now}
 	key, id := ageKey(t)
-	// Control: a challenge of the current key works.
 	c, err := dOld.Challenge(ctx, ana, key.Text)
 	if err != nil {
 		t.Fatal(err)
@@ -451,7 +423,6 @@ func TestChallengesVerifyAgainstTheCurrentKeyOnly(t *testing.T) {
 	if _, err := dOld.PublishWith(ctx, ana, key, PublishOptions{Challenge: proof.Token, Nonce: proof.Nonce}); err != nil {
 		t.Fatal(err)
 	}
-	// A challenge made under the old key is refused once it is retired.
 	key2, id2 := ageKey(t)
 	c2, _ := dOld.Challenge(ctx, ana, key2.Text)
 	p2, err := OpenChallenge(c2, id2)
@@ -461,15 +432,12 @@ func TestChallengesVerifyAgainstTheCurrentKeyOnly(t *testing.T) {
 	if _, err := dNew.PublishWith(ctx, ana, key2, PublishOptions{Challenge: p2.Token, Nonce: p2.Nonce}); !errors.Is(err, ErrBadProof) {
 		t.Fatalf("a challenge of a retired key = %v, want ErrBadProof", err)
 	}
-	// And the new key's own work.
 	c3, _ := dNew.Challenge(ctx, ana, key2.Text)
 	p3, _ := OpenChallenge(c3, id2)
 	if _, err := dNew.PublishWith(ctx, ana, key2, PublishOptions{Challenge: p3.Token, Nonce: p3.Nonce}); err != nil {
 		t.Fatalf("a challenge of the current key: %v", err)
 	}
 }
-
-// --- finding 10: a tombstone carries the revoke entry's number ----------------------------------
 
 func TestTombstoneCarriesTheRevokeEntrysNumber(t *testing.T) {
 	ctx := context.Background()
@@ -495,8 +463,6 @@ func TestTombstoneCarriesTheRevokeEntrysNumber(t *testing.T) {
 	}
 }
 
-// --- finding 11: the signed head and the truncation check ---------------------------------------
-
 func TestLogHeadDetectsTruncationAndRewrite(t *testing.T) {
 	ctx := context.Background()
 	d, store, clk := newTestDirectory(t)
@@ -520,7 +486,6 @@ func TestLogHeadDetectsTruncationAndRewrite(t *testing.T) {
 	if VerifyHead(tampered, keys) == nil {
 		t.Error("a head whose number was changed verifies")
 	}
-	// A client that saw entry 3 and fetches from entry 3 on.
 	all, _ := d.ReadLog(ctx, 0, 100)
 	seen := all.Entries[2]
 	fromSeen, _ := d.ReadLog(ctx, seen.Seq-1, 100)
@@ -533,7 +498,6 @@ func TestLogHeadDetectsTruncationAndRewrite(t *testing.T) {
 	if err := CheckHead(0, "", head); err != nil {
 		t.Fatal(err)
 	}
-	// Tail truncation: the server drops the last two entries and the head hint.
 	for _, seq := range []int64{4, 3} {
 		if err := store.Delete(ctx, logEntryID(seq)); err != nil {
 			t.Fatal(err)
@@ -554,7 +518,6 @@ func TestLogHeadDetectsTruncationAndRewrite(t *testing.T) {
 	if err := VerifyLogHead(seen.Seq, seen.Hash, cut.Entries); !errors.Is(err, ErrLogTruncated) {
 		t.Errorf("truncated entries: %v", err)
 	}
-	// Rewrite: the server puts a different entry where the client saw one.
 	other := seen
 	other.Fingerprint = "SHA256:other"
 	other.Hash = logHash(other)
@@ -565,8 +528,6 @@ func TestLogHeadDetectsTruncationAndRewrite(t *testing.T) {
 		t.Errorf("rewritten head: %v", err)
 	}
 }
-
-// --- finding 12: exactly one "@" --------------------------------------------------------------
 
 func TestMalformedAddressesAreRefused(t *testing.T) {
 	ctx := context.Background()
@@ -596,8 +557,6 @@ func TestMalformedAddressesAreRefused(t *testing.T) {
 	}
 }
 
-// --- finding 4: the log routes are not a policy bypass -------------------------------------------
-
 func TestLogRoutesNeedAProviderSessionAndFollowThePolicyAndBudgets(t *testing.T) {
 	e := newDirEnv(t)
 	anaTok := e.token(ana)
@@ -615,7 +574,6 @@ func TestLogRoutesNeedAProviderSessionAndFollowThePolicyAndBudgets(t *testing.T)
 		t.Errorf("provider session = %d", rec.Code)
 	}
 
-	// The policy applies: a policy that does not let this user read refuses the log too.
 	denied := newDirEnvWith(t, nil, func(s *docstore.Server) {
 		s.WithDirectoryPolicy(docstore.DirectoryPolicyFunc(func(auth.User, string) bool { return false }))
 	})
@@ -626,7 +584,6 @@ func TestLogRoutesNeedAProviderSessionAndFollowThePolicyAndBudgets(t *testing.T)
 		}
 	}
 
-	// A per-user budget: a user over their own limit is refused.
 	limited := newDirEnvWith(t, nil, func(s *docstore.Server) {
 		s.WithDirectoryLimits(func(name string, perMinute float64, burst int) docstore.Limiter {
 			if name == "dir-log" {
@@ -654,7 +611,6 @@ func TestLogAddressIsKeyedSoAGuessedAddressCannotBeTested(t *testing.T) {
 	if len(log.Entries) != 1 || log.Entries[0].Address == hex.EncodeToString(unkeyed[:]) {
 		t.Fatalf("the address in the log is the unkeyed hash: %+v", log.Entries)
 	}
-	// Another directory key names the same address differently: it cannot be computed without the key.
 	other := &AdapterDirectory{Store: docstore.NewMemoryAdapter(), Signer: testSigner(t, 9)}
 	if other.LogAddressFor("ana@x.io") == e.dir.LogAddressFor("ana@x.io") {
 		t.Error("the pseudonym does not depend on the key")
@@ -662,7 +618,6 @@ func TestLogAddressIsKeyedSoAGuessedAddressCannotBeTested(t *testing.T) {
 	if e.dir.LogAddressFor(" ANA@x.io ") != e.dir.LogAddressFor("ana@x.io") || e.dir.LogAddressFor("bo@x.io") == e.dir.LogAddressFor("ana@x.io") {
 		t.Error("normalised, and per address")
 	}
-	// The owner is told theirs, and finds their entries with it; nobody else gets it.
 	rec := e.do("GET", "/directory/log/address", anaTok, "")
 	var la docstore.DirectoryLogAddress
 	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &la) != nil || la.Address != log.Entries[0].Address {
@@ -674,13 +629,10 @@ func TestLogAddressIsKeyedSoAGuessedAddressCannotBeTested(t *testing.T) {
 	if lb.Address == la.Address {
 		t.Error("a user is told another's pseudonym")
 	}
-	// The chain still verifies without knowing any address.
 	if _, err := VerifyLog(log.Entries, "", 0, logKeys(t, e.dir)); err != nil {
 		t.Errorf("VerifyLog: %v", err)
 	}
 }
-
-// --- finding 5: a user over their own limit does not spend the shared budgets ------------------
 
 type countingLimiter struct {
 	inner docstore.Limiter
@@ -712,7 +664,7 @@ func TestLookupSpendsTheUsersOwnBudgetBeforeTheSharedOnes(t *testing.T) {
 	if code, _ := e.lookup(tok, "bo@x.io"); code != 200 {
 		t.Fatalf("first = %d", code)
 	}
-	for range 5 { // over their own limit: refused without touching the IP or global budget
+	for range 5 {
 		if code, _ := e.lookup(tok, "bo@x.io"); code != 429 {
 			t.Fatalf("over the limit = %d", code)
 		}
@@ -769,9 +721,6 @@ func TestGlobalLookupBudgetCanBePerPolicyDomain(t *testing.T) {
 	}
 }
 
-// --- D: a store without conditional writes -----------------------------------------------------
-
-// bareStore hides every optional capability of the store it wraps.
 type bareStore struct{ docstore.Adapter }
 
 func TestCheckStoreRefusesReplicasOnAStoreWithoutConditionalWrites(t *testing.T) {
@@ -792,7 +741,6 @@ func TestCheckStoreRefusesReplicasOnAStoreWithoutConditionalWrites(t *testing.T)
 	if err := cond.CheckStore(ctx, 5); err != nil {
 		t.Errorf("a conditional store: %v", err)
 	}
-	// A wrapper that has SaveIf but whose store does not honour it counts as plain.
 	refusing := &AdapterDirectory{Store: refusesConditional{docstore.NewMemoryAdapter()}, Signer: testSigner(t, 1)}
 	if err := refusing.CheckStore(ctx, 2); err == nil {
 		t.Error("a store that answers ErrConditionalUnsupported is not conditional")
@@ -810,7 +758,6 @@ func logTo(t *testing.T, w *strings.Builder) {
 	logCapture(t, w)
 }
 
-// The directory's keyspaces stay readable on an encrypting store and out of the document API.
 func TestDirectoryKeyspacesAreReservedAndLeftInTheClear(t *testing.T) {
 	for _, id := range []string{"directory/ab/cd", "directory-log/e/000000000001", "directory-log/head", "directory-enroll/ab", "ratelimit/x/y"} {
 		if !DefaultSkip(id) {
@@ -831,7 +778,6 @@ func TestDirectoryKeyspacesAreReservedAndLeftInTheClear(t *testing.T) {
 	}
 }
 
-// Two replicas revoking the same key: the second must not write a second tombstone over the first.
 func TestRevokeRacingAnotherRevokeDoesNotOverwriteIt(t *testing.T) {
 	ctx := context.Background()
 	hs, clk := newHookStore(), newTestClock()
@@ -872,8 +818,6 @@ func TestRevokeRacingAnotherRevokeDoesNotOverwriteIt(t *testing.T) {
 	}
 }
 
-// usersInShardOf makes n verified users at domain whose lookups spend the same shard of the
-// server-wide lookup budget as like's (the shard is chosen by the user ID).
 func usersInShardOf(like auth.User, n int, domain string) []auth.User {
 	shard := func(id string) uint32 {
 		h := fnv.New32a()
@@ -890,9 +834,6 @@ func usersInShardOf(like auth.User, n int, domain string) []auth.User {
 	return out
 }
 
-// The whole-server lookup budget is split into 16 sub-budgets (one record each under a
-// StoreLimiter), so callers do not all compare-and-set one key; the total is unchanged and users
-// are spread over the shards.
 func TestGlobalLookupBudgetIsSharded(t *testing.T) {
 	var mu sync.Mutex
 	figures := map[string]float64{}

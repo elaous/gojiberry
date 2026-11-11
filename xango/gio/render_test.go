@@ -18,16 +18,6 @@ import (
 	"testing"
 )
 
-// TestCheckboxHandlesARealPointerClick drives type=checkbox support
-// through a real pointer.Event press/release pair dispatched via a
-// real input.Router -- widget.Bool, unlike widget.Clickable, has no
-// exported Click() method for a shortcut programmatic click (see
-// layoutInput's own doc comment), so this is Gio's own widget package
-// test convention for Bool (see gioui.org/widget's TestBool) rather
-// than a Renderer-level Click/Toggle helper. The click position is the
-// exact center of the Dimensions Layout itself returned for the
-// checkbox, not a guessed coordinate, so this can't pass by accident
-// of a lucky click radius.
 func TestCheckboxHandlesARealPointerClick(t *testing.T) {
 	w, err := headless.NewWindow(60, 60)
 	if err != nil {
@@ -97,15 +87,6 @@ func TestCheckboxHandlesARealPointerClick(t *testing.T) {
 	}
 }
 
-// TestTextInputHandlesRealClickFocusAndTyping drives type=text support
-// through a real pointer click (to focus the widget.Editor, exactly as
-// a real user clicking into a text field would -- Editor.
-// processPointerEvent does the focusing itself, this test does nothing
-// to force it) followed by a real key.EditEvent (the same event Gio's
-// own widget package tests, e.g. TestEditorDimensions, use to simulate
-// real typed input), rather than calling widget.Editor.SetText
-// directly, which would bypass both the click-to-focus path and the
-// Update-driven onChange firing in layoutInput entirely.
 func TestTextInputHandlesRealClickFocusAndTyping(t *testing.T) {
 	w, err := headless.NewWindow(200, 60)
 	if err != nil {
@@ -176,14 +157,6 @@ func TestTextInputHandlesRealClickFocusAndTyping(t *testing.T) {
 	}
 }
 
-// TestTextareaHandlesRealClickFocusAndTyping mirrors
-// TestTextInputHandlesRealClickFocusAndTyping exactly, but for a
-// "textarea" node instead of "input" -- proving the new
-// case "input", "textarea" dispatch in Layout (and layoutInput's own
-// tag-aware widget.Editor{SingleLine: n.Tag != "textarea"} branch)
-// actually reaches the same real click/focus/typed-input/onChange path
-// input already had, not just that it no longer falls through to the
-// unrecognized-tag default (which would render but never wire up).
 func TestTextareaHandlesRealClickFocusAndTyping(t *testing.T) {
 	w, err := headless.NewWindow(200, 60)
 	if err != nil {
@@ -253,15 +226,6 @@ func TestTextareaHandlesRealClickFocusAndTyping(t *testing.T) {
 	}
 }
 
-// TestTextareaPreservesNewlinesUnlikeSingleLineInput proves the one
-// real behavioral difference layoutInput's own SingleLine:
-// n.Tag != "textarea" branch exists for: a newline typed into a
-// textarea survives in the widget's own Text(), where the identical
-// newline typed into a plain single-line input does not -- not just
-// that both tags reach the same generic wiring path (already proven by
-// TestTextareaHandlesRealClickFocusAndTyping/
-// TestTextInputHandlesRealClickFocusAndTyping), but that the multi-line
-// case is genuinely distinct, not a no-op flag.
 func TestTextareaPreservesNewlinesUnlikeSingleLineInput(t *testing.T) {
 	w, err := headless.NewWindow(200, 80)
 	if err != nil {
@@ -320,14 +284,6 @@ func TestTextareaPreservesNewlinesUnlikeSingleLineInput(t *testing.T) {
 	}
 }
 
-// TestClassStyleAppliesBackgroundAndPadding drives Renderer.Styles (the
-// runtime half of mapping a bounded CSS class vocabulary onto real Gio
-// painting -- see the mobile-backend ROADMAP entry for the fuller
-// two-part design) through a real headless-GPU render: a div tagged
-// with a class mapped to a background color renders visibly different
-// pixels than the exact same tree with Renderer.Styles left nil, and
-// the specific color actually painted matches what ClassStyle asked
-// for -- not just "some pixel changed."
 func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 	w, err := headless.NewWindow(120, 60)
 	if err != nil {
@@ -373,9 +329,6 @@ func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 		t.Fatal("frame pixels identical styled vs unstyled: ClassStyle had no visible effect")
 	}
 
-	// The div starts at the frame's own (0,0); a point a few px in on
-	// both axes is well inside the 8dp padding, clear of the "hi"
-	// label's own text glyphs, so it should be pure painted background.
 	got := styled.At(3, 3)
 	r, g, b, a := got.RGBA()
 	if uint8(r>>8) != want.R || uint8(g>>8) != want.G || uint8(b>>8) != want.B || uint8(a>>8) != want.A {
@@ -383,17 +336,6 @@ func TestClassStyleAppliesBackgroundAndPadding(t *testing.T) {
 	}
 }
 
-// TestSelectOpensAndFiresOnChangeOnRealClicks drives select/option
-// support -- the one tag Gio's own widget/material has no native
-// equivalent for, so xango/gio has to build its own dropdown rather than
-// wrap an existing widget -- through real clicks via Renderer.Click,
-// the same "simple programmatic click" mechanism (Gio's own
-// widget.Clickable.Click()) the original button test already
-// established, not a bypass reaching into Renderer's own unexported
-// state. The trigger and each option row share that exact mechanism
-// because layoutSelect stores both in the same clickables map
-// layoutButton already uses (an option row's own key is "<select
-// id>\x00<option value>", documented on layoutSelect itself).
 func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 	w, err := headless.NewWindow(200, 160)
 	if err != nil {
@@ -428,13 +370,8 @@ func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 	var router input.Router
 	var ops op.Ops
 	gtx := layout.Context{
-		Ops:    &ops,
-		Source: router.Source(),
-		// Loose (Min zero, Max the window size), not layout.Exact --
-		// this test compares the closed vs. open dropdown's own
-		// Dimensions to confirm it actually grew, which an Exact
-		// constraint would mask by force-filling the full window
-		// height regardless of real content size.
+		Ops:         &ops,
+		Source:      router.Source(),
 		Constraints: layout.Constraints{Max: image.Pt(200, 160)},
 	}
 
@@ -488,12 +425,6 @@ func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 		t.Fatalf("onChange value = %q, want \"c\"", lastValue)
 	}
 
-	// selected is still "b" in the tree (this test's own node() closure
-	// doesn't update it -- that's the caller's job in response to
-	// onChange, per layoutSelect's own controlled-component doc
-	// comment), so the dropdown should now report itself closed again
-	// (selecting a row closes it) with the same "B ▾" trigger it
-	// started with, back to the closed frame's own dimensions.
 	gtx.Reset()
 	afterDims := renderer.Layout(gtx, th, node())
 	if afterDims != closedDims {
@@ -501,18 +432,6 @@ func TestSelectOpensAndFiresOnChangeOnRealClicks(t *testing.T) {
 	}
 }
 
-// TestSpanWithElementChildrenLaysOutThoseChildren covers a real bug
-// found while wiring OnDesign's own toolbar.xg on native: a <span>
-// (or <p>) whose children include a real element, not just text --
-// toolbar.xg's own "font-picker-wrap" span wraps a button plus a
-// hidden div, exactly this shape -- used to render as an empty
-// material.Label (textOf only concatenates KindText children, silently
-// dropping element children), so nothing inside such a span/p was ever
-// laid out at all: a button entirely inside one would never register a
-// Clickable, and Renderer.Click would report it as never having
-// existed. A span/p with only text children (the overwhelmingly common
-// case -- every other span in this codebase) still renders as a plain
-// Label, unaffected.
 func TestSpanWithElementChildrenLaysOutThoseChildren(t *testing.T) {
 	w, err := headless.NewWindow(120, 60)
 	if err != nil {
@@ -547,16 +466,6 @@ func TestSpanWithElementChildrenLaysOutThoseChildren(t *testing.T) {
 	}
 }
 
-// TestIconButtonRendersRealIconContentAndClicks proves layoutButton's
-// own icon-content path (task #107, Phase 41): a button shaped like
-// editor/ui/toolbar.xg's own iconBtn -- a real <span> icon child plus
-// an empty text label, the exact shape textOf(n) alone would silently
-// reduce to "" -- actually paints something (a real frame diff against
-// a blank button of the same size, the same rigor
-// TestSpanWithElementChildRendersNestedButton's own sibling tests in
-// this file already apply) and still fires its own click handler, the
-// same real click-handling material.Button already gave a plain text
-// button.
 func TestIconButtonRendersRealIconContentAndClicks(t *testing.T) {
 	w, err := headless.NewWindow(120, 60)
 	if err != nil {
@@ -602,15 +511,6 @@ func TestIconButtonRendersRealIconContentAndClicks(t *testing.T) {
 	}
 }
 
-// TestIconButtonExposesAccessibleNameViaSemanticDescription proves
-// accessibleNameOf actually reaches a real Gio semantic tree (task
-// #107, Phase 41): a button with a "title" attribute and an icon span
-// child (the shape iconBtn(id, iconName, title, "") produces whenever
-// its own label argument is "", the overwhelming majority of toolbar
-// buttons) gets a real semantic.Button-class node whose Description
-// equals the title -- input.Router.AppendSemantics, the same public
-// API gioui.org/io/input's own semantic_test.go exercises, not a
-// synthetic ops.Ops read by hand.
 func TestIconButtonExposesAccessibleNameViaSemanticDescription(t *testing.T) {
 	w, err := headless.NewWindow(120, 60)
 	if err != nil {

@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// skewClock lets a test move the page's clock: the Go program reads the time from Date, so a wrapper that
-// adds window.__skew (milliseconds) moves every deadline the page checks.
 const skewClock = `window.__skew = 0;
 (function () {
   const D = Date;
@@ -39,8 +37,6 @@ func checkLink(d *e2etest.Tab, token string) string {
 	return d.Text("#link-result")
 }
 
-// TestShareLinks drives the share links of the People tab: a link has a role and an end that are shown,
-// it works until it expires or is revoked, and "who can see this" is a real list that follows.
 func TestShareLinks(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OnNewDocument(skewClock)
@@ -50,7 +46,6 @@ func TestShareLinks(t *testing.T) {
 	d.OK(d.Count("#who-list li") == 1 && d.Attr("#who-list li", "data-kind") == "owner", "only the owner can see it at first")
 	d.OK(d.Attr("#who-list", "aria-labelledby") == "who-heading" && d.Text("#who-heading") == "Who can see this", "the list is a labelled list")
 
-	// A view link for an hour.
 	viewTok := newLink(d, "viewer", "1h")
 	d.OK(strings.Contains(viewTok, "#share=") && len(viewTok) > 60, "the link carries a long secret: "+viewTok)
 	d.WaitFor("the link in the list", `document.querySelectorAll('#who-list li').length === 2`)
@@ -63,7 +58,6 @@ func TestShareLinks(t *testing.T) {
 	d.OK(len(secret) >= 40 && !strings.Contains(d.Text("#who-list"), secret[:20]), "the list never shows the secret")
 	d.OK(strings.Contains(checkLink(d, viewTok), "This link works: Can view and comment"), "the link works: "+d.Text("#link-result"))
 
-	// An edit link for a week, and one more view link.
 	editTok := newLink(d, "editor", "7d")
 	d.WaitFor("three lines", `document.querySelectorAll('#who-list li').length === 3`)
 	d.OK(d.Count(`#who-list li[data-kind="link"][data-role="editor"]`) == 1 && strings.Contains(d.Text(`#who-list li[data-role="editor"]`), "Can edit"), "an edit link is listed as such")
@@ -71,14 +65,12 @@ func TestShareLinks(t *testing.T) {
 	d.OK(strings.Contains(checkLink(d, "not-a-link"), "does not work"), "a made-up link is refused")
 	d.OK(strings.Contains(checkLink(d, viewTok[:len(viewTok)-1]), "does not work"), "a link with a letter missing is refused")
 
-	// Expiry: two hours later the view link is refused and gone from the list; the weekly edit link stays.
 	d.Eval(`window.__skew = 2 * 3600 * 1000`, nil)
 	d.OK(strings.Contains(checkLink(d, viewTok), "does not work"), "an expired link is refused: "+d.Text("#link-result"))
 	d.WaitFor("the expired link to leave the list", `document.querySelectorAll('#who-list li[data-kind="link"]').length === 1`)
 	d.OK(strings.Contains(checkLink(d, editTok), "This link works"), "the longer link still works")
 	d.Eval(`window.__skew = 0`, nil)
 
-	// Revoke: the link is refused at once and the others are untouched.
 	other := newLink(d, "viewer", "1d")
 	d.WaitFor("three lines again", `document.querySelectorAll('#who-list li').length === 3`)
 	d.OK(strings.Contains(checkLink(d, other), "This link works"), "before revoking")
@@ -87,7 +79,6 @@ func TestShareLinks(t *testing.T) {
 	d.OK(strings.Contains(checkLink(d, other), "does not work"), "a revoked link is refused")
 	d.OK(strings.Contains(checkLink(d, editTok), "This link works"), "another link is unaffected")
 
-	// A named person is listed in the same place, with their role in words.
 	d.Fill(".gj-people-invite-id", "ana@example.com")
 	d.WaitFor("the invite button", `!document.querySelector('.gj-people-invite').disabled`)
 	d.Click(".gj-people-invite")

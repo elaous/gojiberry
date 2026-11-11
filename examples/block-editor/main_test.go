@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// buildDiverged reproduces main's scenario: two replicas edit the
-// same invoice fully offline before ever syncing.
 func buildDiverged() (phone, desktop *crdt.Doc) {
 	phone = crdt.NewDoc("ana-phone")
 	desktop = crdt.NewDoc("ana-desktop")
@@ -41,9 +39,6 @@ func TestReplicasConvergeAfterOfflineEdits(t *testing.T) {
 }
 
 func TestRenderedOutputIdenticalRegardlessOfSyncOrder(t *testing.T) {
-	// Sync phone-first-then-desktop in one run, desktop-first-then-phone
-	// in another; a correct CRDT merge renders byte-identical HTML
-	// either way.
 	renderBoth := func(applyOrder func(a, b *crdt.Doc)) (editorHTML, outputHTML string) {
 		phone, desktop := buildDiverged()
 		applyOrder(phone, desktop)
@@ -94,9 +89,6 @@ func TestOutputDecoupledFromEditorMarkup(t *testing.T) {
 		t.Fatalf("output render: %v", err)
 	}
 
-	// The editor is made of inputs (touch-editable); the output has no
-	// inputs at all, just the clean rendered document -- same source
-	// data, two independent renderings.
 	if !strings.Contains(editorHTML, "<input") {
 		t.Fatalf("expected editor view to contain editable inputs, got: %s", editorHTML)
 	}

@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Three typed lines (a header row, the row of dashes, one row of cells with as many columns) become a table when
-// Enter ends the third; fewer cells in the row leave the text as it is. A cell that starts with = is a formula.
 func TestTypingAMarkdownTableMakesATable(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

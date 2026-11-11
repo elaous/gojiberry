@@ -9,26 +9,6 @@ import (
 	"strings"
 )
 
-// loadJSON handles .json, .jsonc, and .jsonl imports.
-//
-// Without a type annotation: binds Alias to the decoded value as `any`
-// (or `[]any` for .jsonl) and <Alias>Bytes to the raw content, so code
-// needing a concrete type can json.Unmarshal(...Bytes, &v) itself.
-//
-// With `alias.(TypeName) "file.json"`: TypeName must already be
-// declared (by you, elsewhere in the package or an import) -- xango
-// does not generate it or infer its shape. This just decodes directly
-// into that type instead of `any` (or `[]TypeName` for .jsonl), the
-// same as the untyped path's json.Unmarshal(...Bytes, &v) but with
-// the boilerplate written for you. Because xango isn't guessing a shape
-// from sample data, any JSON value (not just a top-level object) is
-// fine, and the only failure mode is the ordinary one of your type
-// not matching your data -- ordinary encoding/json risk, not a
-// xango-specific one.
-//
-// .jsonc allows // and /* */ comments, stripped before parsing (a
-// small string-literal-aware preprocessor, not a jsonc library).
-// .jsonl is one JSON value per line; the bound type becomes a slice.
 func loadJSON(in LoaderInput) (LoaderResult, error) {
 	abs, err := ResolveResourcePath(in)
 	if err != nil {
@@ -48,16 +28,11 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 	if ext == ".jsonc" {
 		data = stripJSONComments(raw)
 	}
-	// Validate at transpile time so a malformed file is a clear xgc
-	// error instead of a runtime panic in generated code.
+	// a malformed file is an xgc error, not a runtime panic
 	if !json.Valid(data) {
 		return LoaderResult{}, fmt.Errorf("xango: JSON import %q: invalid JSON", in.Path)
 	}
 
-	// <alias>Bytes is always parseable JSON: for .jsonc that's the
-	// comment-stripped content, since the original with comments isn't
-	// valid input to encoding/json and no one would want to embed the
-	// unparseable original instead.
 	var decl strings.Builder
 	fmt.Fprintf(&decl, "var %sBytes = []byte(%s)\n", in.Alias, strconv.Quote(string(data)))
 
@@ -70,9 +45,6 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json"}}, nil
 }
 
-// loadJSONL handles one-JSON-value-per-line files, binding Alias to a
-// slice: []TypeName if annotated (TypeName must already be declared),
-// []any otherwise.
 func loadJSONL(in LoaderInput, raw []byte) (LoaderResult, error) {
 	hasContent := false
 	for _, l := range strings.Split(string(raw), "\n") {
@@ -102,8 +74,6 @@ func loadJSONL(in LoaderInput, raw []byte) (LoaderResult, error) {
 	return LoaderResult{Decls: decl.String(), GoImports: []string{"encoding/json", "bytes"}}, nil
 }
 
-// stripJSONComments removes // line comments and /* */ block comments
-// from JSONC content, leaving string literal contents untouched.
 func stripJSONComments(src []byte) []byte {
 	var out []byte
 	i, n := 0, len(src)

@@ -14,12 +14,8 @@ type SpellItem struct {
 	Suggestions []string
 }
 
-// SpellPanelProps configures SpellPanel. It is controlled: the caller checks the
-// text (package spell) and feeds the result back.
+// SpellPanelProps configures SpellPanel.
 type SpellPanelProps struct {
-	// Enabled turns the check on; Language names the dictionary in use
-	// ("English"), and Detected the language the text seems to be in ("" when
-	// unknown). A Detected different from Language is flagged.
 	Enabled            bool
 	Language, Detected string
 	Items              []SpellItem
@@ -28,15 +24,9 @@ type SpellPanelProps struct {
 
 	OnToggle func(enabled bool)
 	// OnPick replaces every occurrence of word with the suggestion.
-	OnPick func(word, suggestion string)
-	// OnIgnore leaves the word alone for now; OnAdd adds it to the user's own
-	// dictionary; OnGoto selects its first occurrence.
+	OnPick                  func(word, suggestion string)
 	OnIgnore, OnAdd, OnGoto func(word string)
 
-	// Dictionaries are the dictionaries to choose from (the English one built in, and those a server offers),
-	// Dictionary the one in use and OnDictionary the choice; fewer than two leave the choice out.
-	// DictionaryNote says what is going on ("Loading the German dictionary…") or why a load failed
-	// (DictionaryFailed), as a status line.
 	Dictionaries     []DocChoice
 	Dictionary       string
 	OnDictionary     func(name string)
@@ -44,8 +34,6 @@ type SpellPanelProps struct {
 	DictionaryFailed bool
 }
 
-// SpellPanel lists the misspelled words with their suggestions, and an
-// "Ignore" and "Add to dictionary" for each.
 func SpellPanel(p SpellPanelProps) xango.Node {
 	box := []xango.Attr{xango.A("type", "checkbox"), xango.A("class", "gj-spell-enable"), xango.A("aria-label", tr("spell.check", "Check spelling")),
 		xango.On("change", func(xango.Event) {

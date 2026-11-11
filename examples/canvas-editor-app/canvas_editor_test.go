@@ -12,20 +12,12 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestCanvasEditorEndToEnd builds the WASM client, serves it, and drives the
-// canvas-rendered editor in a real headless Chromium through real
-// keyboard/mouse/wheel input, asserting on #doc-state (the machine-readable
-// summary main.xg writes after every redraw: there is no DOM text to read a
-// canvas-rendered document's content back from any other way).
 func TestCanvasEditorEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html", e2etest.Options{Width: 900, Height: 700, ConsoleErrors: true})
 	d.Sleep(800)
 	ok := d.OK
 
 	docState := func() string { return d.Text("#doc-state") }
-	// field extracts one key=value pair out of #doc-state. "text" is special:
-	// the document's own text contains spaces and newlines, so it runs up to the
-	// next known field (" cursor=").
 	field := func(name string) string {
 		state := docState()
 		if name == "text" {
@@ -47,14 +39,12 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	click := func(x, y float64) { px, py := at(x, y); d.MouseClick(px, py, 1) }
 	clearAll := func() { d.Press("Control+a"); d.Press("Backspace") }
 
-	// --- Regression: click positions the cursor, typing inserts there ---
 	click(10, 10)
 	clearAll()
 	ok(field("text") == "", "select-all + backspace clears the document")
 	d.Type("hello")
 	ok(field("text") == "hello", "typing after a click inserts at the cursor")
 
-	// --- Regression: drag-select + Bold toolbar button ---
 	x0, y0 := at(10, 20)
 	x1, _ := at(50, 20)
 	d.MouseMove(x0, y0)
@@ -63,27 +53,22 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	d.Click("#toolbar-bold")
 	ok(field("selBold") == "true", "clicking Bold toggled the dragged selection bold")
 
-	// Clicking the toolbar button moved focus off the hidden input; re-focus it
-	// via the canvas's own mousedown handler before any more keyboard assertions.
 	click(10, 10)
 
-	// --- Move line up/down ---
 	clearAll()
 	d.Type("line one\nline two\nline three")
 	ok(field("text") == "line one\nline two\nline three", fmt.Sprintf("typed three lines, got: %q", field("text")))
 
-	d.Press("Home") // cursor was at the end (line three); Home -> start of line three
+	d.Press("Home")
 	d.Press("Alt+ArrowUp")
 	ok(field("text") == "line one\nline three\nline two", fmt.Sprintf("Alt+ArrowUp swapped line three above line two, got: %q", field("text")))
 	d.Press("Alt+ArrowDown")
 	ok(field("text") == "line one\nline two\nline three", fmt.Sprintf("Alt+ArrowDown swapped it back, got: %q", field("text")))
 
-	// --- Duplicate line ---
 	d.Press("Home") // still on "line three"
 	d.Press("Shift+Alt+ArrowDown")
 	ok(field("text") == "line one\nline two\nline three\nline three", fmt.Sprintf("Shift+Alt+ArrowDown duplicated the current line, got: %q", field("text")))
 
-	// --- Word boundary selection + case transform ---
 	clearAll()
 	d.Type("hello world")
 	d.Press("Home")
@@ -97,9 +82,7 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	d.Press("Control+Shift+ArrowLeft")
 	ok(field("sel") == "6-11", `Ctrl+Shift+ArrowLeft from end selected "world" (6-11), got sel=`+field("sel"))
 
-	// --- Copy, cut, undo and redo ---
 	d.GrantClipboard()
-	// The write to the clipboard is asynchronous: read it until it says what is expected.
 	clipboard := func(want string) (got string) {
 		for i := 0; i < 40; i++ {
 			d.Eval(`navigator.clipboard.readText()`, &got)
@@ -110,9 +93,6 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 		}
 		return got
 	}
-	// Chrome's automation does not deliver the keydown of Ctrl+C and Ctrl+X to the page
-	// (it takes them for browser commands), so these two are sent as the event a real key
-	// press makes; everything else here is a real key press.
 	shortcut := func(key string) {
 		d.Eval(`document.getElementById('editor-hidden-input').dispatchEvent(new KeyboardEvent('keydown', {key: `+e2etest.J(key)+`, ctrlKey: true, bubbles: true, cancelable: true}))`, nil)
 	}
@@ -138,7 +118,6 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	d.Press("Control+z")
 	ok(field("text") == "hello world", fmt.Sprintf("typing is one step: Ctrl+Z takes back the whole word, got %q", field("text")))
 
-	// --- Scrolling: auto-follow on typing, manual wheel-scroll, clamping ---
 	clearAll()
 	var lines []string
 	for i := range 60 {
@@ -148,14 +127,12 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	afterTyping, _ := strconv.Atoi(field("scrollY"))
 	ok(afterTyping > 0, fmt.Sprintf("typing past the viewport auto-scrolled (scrollY=%d > 0)", afterTyping))
 	d.Hover("#editor-canvas")
-	d.Wheel(0, -100000) // an unreasonably large delta: clampScroll should still floor it at 0
+	d.Wheel(0, -100000)
 	ok(field("scrollY") == "0", "wheel-scrolling far up clamps to scrollY=0, got "+field("scrollY"))
 	d.Wheel(0, 100000) // and ceil it at the document's actual max scroll
 	atBottom, _ := strconv.Atoi(field("scrollY"))
 	ok(atBottom > afterTyping-50, fmt.Sprintf("wheel-scrolling far down clamps near the bottom, got scrollY=%d", atBottom))
 
-	// --- Multi-cursor: Alt+Click adds a cursor, typing fans out to all of them,
-	// Escape collapses back to one ---
 	clearAll()
 	d.Type("aaaaaaaaaa")
 	click(10, 10)
@@ -181,8 +158,6 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	ok(len(text) == lenBefore+1, fmt.Sprintf(`typing "Y" after Escape inserted only once, got: %q`, text))
 	ok(strings.Count(text, "Y") == 1, fmt.Sprintf("exactly one Y character was inserted, got: %q", text))
 
-	// Chromium's automatic favicon.ico request 404s (this demo serves none) and
-	// is logged as a generic console error with no URL in its text.
 	var real []string
 	for _, e := range d.Errors() {
 		if !strings.Contains(e, "the server responded with a status of 404") {

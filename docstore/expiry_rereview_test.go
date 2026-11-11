@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// --- finding 1: only the docstore's marked 404 is "gone"
-
 func renewAnswering(t *testing.T, h http.HandlerFunc) error {
 	t.Helper()
 	ts := httptest.NewServer(h)
@@ -83,8 +81,6 @@ func TestHTTPAdapterRenewUnsupportedIsLoggedOnceWithAdvice(t *testing.T) {
 	}
 }
 
-// The server's own route says "gone" with the marker; its closed /docs (public mode) and an
-// unknown route do not.
 func TestRenewRouteMarksARealGone(t *testing.T) {
 	ea, _ := newExpiring(NewMemoryAdapter())
 	srv := NewServer(ea, "memory").WithExpiry(ea)
@@ -105,10 +101,6 @@ func TestRenewRouteMarksARealGone(t *testing.T) {
 	}
 }
 
-// --- finding 3: records readable by an older build, and a sweep that survives bad ones
-
-// oldParseRecord is the parser of the build before creation times existed: the whole body is
-// one RFC 3339 time.
 func oldParseRecord(b []byte) (time.Time, error) {
 	return time.Parse(time.RFC3339Nano, strings.TrimSpace(string(b)))
 }
@@ -136,21 +128,18 @@ func TestExpiryRecordsReadableByOldBuild(t *testing.T) {
 			t.Errorf("an older build cannot parse %s = %q: %v", m.ID, d.Data, err)
 		}
 	}
-	// The creation time is a sibling an older build never lists as a deadline.
 	if _, err := inner.Load(ctx, ExpiryCreatedPrefix+"a"); err != nil {
 		t.Fatalf("no creation record: %v", err)
 	}
 	if strings.HasPrefix(ExpiryCreatedPrefix+"a", ExpiryPrefix) {
 		t.Fatal("the creation keyspace is inside the deadline keyspace an older build scans")
 	}
-	// And this build still enforces MaxAge from it.
 	clk.Add(3 * day)
 	if _, err := ea.Load(ctx, "a"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("MaxAge not enforced: %v", err)
 	}
 }
 
-// A pre-release record "deadline\ncreated" still reads, and is rewritten as one line.
 func TestExpiryTwoLineRecordStillReadsAndIsRewritten(t *testing.T) {
 	ctx := context.Background()
 	inner := NewMemoryAdapter()
@@ -169,7 +158,6 @@ func TestExpiryTwoLineRecordStillReadsAndIsRewritten(t *testing.T) {
 	if strings.Contains(string(rec.Data), "\n") {
 		t.Fatalf("not rewritten as one line: %q", rec.Data)
 	}
-	// the cap counted from the old creation time survives: 1 day old, cap 2 days
 	if got := mustExpiry(t, ea, "d"); !got.Equal(created.Add(2*day)) && !got.Equal(clk.Now().Add(day)) {
 		t.Fatalf("deadline after touch = %v", got)
 	}
@@ -186,10 +174,9 @@ func TestSweepSkipsUnreadableRecordsAndHealsThem(t *testing.T) {
 	_ = ea.Save(ctx, "damaged", []byte("1"))
 	_ = ea.Save(ctx, "other", []byte("1"))
 	_ = inner.Save(ctx, "expiry:damaged", []byte("not a time"))
-	_ = inner.Save(ctx, "expiry:ghost", []byte("\x00\x01garbage")) // a damaged record with no document
+	_ = inner.Save(ctx, "expiry:ghost", []byte("\x00\x01garbage"))
 	clk.Add(25 * time.Hour)
 	_ = ea.Save(ctx, "other", []byte("2")) // renewed: lives
-	// Load, Expiry and Save of the damaged document never fail because of it.
 	if _, err := ea.Load(ctx, "damaged"); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -206,7 +193,6 @@ func TestSweepSkipsUnreadableRecordsAndHealsThem(t *testing.T) {
 	if _, err := ea.Load(ctx, "old"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired document kept: %v", err)
 	}
-	// The damaged record was replaced by a full lifetime; the ghost record is gone.
 	if got := mustExpiry(t, ea, "damaged"); !got.Equal(clk.Now().Add(day)) {
 		t.Fatalf("healed deadline = %v", got)
 	}
@@ -216,7 +202,6 @@ func TestSweepSkipsUnreadableRecordsAndHealsThem(t *testing.T) {
 	if c := strings.Count(buf.String(), `unreadable expiry record of "damaged"`); c != 1 {
 		t.Fatalf("logged %d times, want once:\n%s", c, buf.String())
 	}
-	// Save of a document whose record is damaged writes a good one.
 	_ = inner.Save(ctx, "expiry:other", []byte("???"))
 	if err := ea.Save(ctx, "other", []byte("3")); err != nil {
 		t.Fatalf("Save over a damaged record: %v", err)
@@ -243,7 +228,6 @@ func TestCreationRecordLifecycle(t *testing.T) {
 			t.Errorf("%s left after Delete: %v", k, err)
 		}
 	}
-	// A crash between the two writes leaves a creation record with no deadline: the sweep drops it.
 	_ = inner.Save(ctx, "expiry-created:ghost", []byte(clk.Now().UTC().Format(time.RFC3339Nano)))
 	if _, err := ea.Sweep(ctx); err != nil {
 		t.Fatal(err)
@@ -251,14 +235,12 @@ func TestCreationRecordLifecycle(t *testing.T) {
 	if _, err := inner.Load(ctx, "expiry-created:ghost"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dangling creation record kept: %v", err)
 	}
-	// Never inherited: a new document gets its own creation time, whatever was left.
 	_ = inner.Save(ctx, "expiry-created:n", []byte(clk.Now().Add(-100*day).UTC().Format(time.RFC3339Nano)))
 	ea.MaxAge = 2 * day
 	_ = ea.Save(ctx, "n", []byte("1"))
 	if got := mustExpiry(t, ea, "n"); !got.Equal(clk.Now().Add(day)) {
 		t.Fatalf("a stale creation record was inherited: %v", got)
 	}
-	// Reserved from the document API, in any case, and listings do not show them.
 	srv := NewServer(ea, "memory").WithExpiry(ea)
 	for _, id := range []string{"expiry-created:x", "Expiry-Created:x"} {
 		if rec := routeReq(t, srv.Handler(), http.MethodPut, "/docs/"+id); rec.Code != http.StatusBadRequest {
@@ -275,8 +257,6 @@ func TestCreationRecordLifecycle(t *testing.T) {
 		}
 	}
 }
-
-// --- orphan sweep default in public mode
 
 func TestParseExpiryOrphansDefault(t *testing.T) {
 	for _, tc := range []struct {

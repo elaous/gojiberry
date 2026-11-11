@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// pathClient rewrites the body of the answers for one path.
 func pathClient(path string, f func([]byte) []byte) *http.Client {
 	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		res, err := http.DefaultTransport.RoundTrip(r)
@@ -25,8 +24,6 @@ func pathClient(path string, f func([]byte) []byte) *http.Client {
 	})}
 }
 
-// The pseudonym the server reports is held to the client's own entries: a server that points the
-// watcher at another (empty) address is caught, and the pinned one is remembered in the state.
 func TestWatchLogPinsThePseudonymWithTheClientsOwnEntries(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -38,7 +35,6 @@ func TestWatchLogPinsThePseudonymWithTheClientsOwnEntries(t *testing.T) {
 	if len(c.State.Made) != 1 {
 		t.Fatalf("the client's own entry is noted: %+v", c.State)
 	}
-	// Before the first confirmation the watcher runs on the server's word, and says so.
 	liar := &Client{BaseURL: c.BaseURL, Token: c.Token, LogKeys: c.LogKeys, HTTP: pathClient("/directory/log/address", func([]byte) []byte {
 		return []byte(`{"address":"` + strings.Repeat("ab", 32) + `"}`)
 	})}
@@ -57,8 +53,6 @@ func TestWatchLogPinsThePseudonymWithTheClientsOwnEntries(t *testing.T) {
 	if len(c.State.Addresses) != 1 || c.State.Addresses[0] != e.dir.LogAddressFor("ana@x.io") {
 		t.Fatalf("the confirmed pseudonym is pinned: %+v", c.State.Addresses)
 	}
-	// With nothing of its own to confirm any more, a later run still uses the pinned pseudonym
-	// and finds the entries under it.
 	rep, err = c.WatchLog(ctx, "ana@x.io", c.State, WatchOptions{})
 	if err != nil || rep.AddressUnconfirmed || len(c.State.Addresses) != 1 {
 		t.Errorf("%+v %v %+v", rep, err, c.State)

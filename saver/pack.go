@@ -14,63 +14,28 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// PackReason says why a document was left out of an export or an import with a warning.
 type PackReason string
 
-// PackNeedsKey: an end-to-end (confidential) document and no function to seal (export) or
-// open (import) it, or the one given could not. The document is not lost: give the key and
-// run it again.
 const PackNeedsKey PackReason = "needs-key"
 
-// PackIssue is a document an export or import left out with a warning; these never stop the
-// operation.
 type PackIssue struct {
 	ID, Name string
 	Reason   PackReason
-	Err      error // why, when there is more to say (the error of a Seal or Open)
+	Err      error
 }
 
 // PackOptions are the options of ExportPack.
 type PackOptions struct {
-	// Name is the pack's name; "" uses the folder's name, or "documents" for the whole store.
-	Name string
-	// History puts each document's versions in the pack (each record is a .open message,
-	// which can carry them).
+	Name    string
 	History bool
 	// Key signs the pack (Ed25519) when it is not nil.
-	Key ed25519.PrivateKey
-	// Seal encrypts an end-to-end (confidential) document for the pack: plain is its .open
-	// message (with its history, if History is set), the result an envelope the pack stores
-	// as it is, as an encrypted record. The pack's index lists ConfidentialName and no tags
-	// for it; the real name and tags travel inside the envelope. With no Seal such a
-	// document is left out and reported to Warn as PackNeedsKey, never written in the
-	// clear. A Seal that fails stops the export: a pack that quietly lacks the document
-	// would pass for a backup.
-	Seal func(ctx context.Context, docID string, plain []byte) ([]byte, error)
-	// Blur hides a little more about the sealed records the index lists in the clear: their time is
-	// rounded down to the day, and what is sealed is padded to a size bucket (1 KiB, then doubling), so
-	// the size shows only which bucket the document is in. The padding is a field a reader skips, inside
-	// what Seal encrypts, so it is not seen and costs less than the document's size again.
-	Blur bool
-	// Attachments, when above zero, keeps each image of an ordinary (not sealed) document that is at
-	// least this many bytes out of the document: the pack stores it once, by its hash, in a version 2
-	// pack, and the document refers to it. A picture used by several documents or versions is stored
-	// once. A pack with no such image stays version 1, which every reader opens; a version 2 pack is
-	// refused by a version 1 reader rather than shown without its pictures. It costs a second read of
-	// the documents before the first is written, to know which version the pack is. DefaultAttachmentSize
-	// is a good value.
+	Key         ed25519.PrivateKey
+	Seal        func(ctx context.Context, docID string, plain []byte) ([]byte, error)
+	Blur        bool
 	Attachments int
-	// Warn is told of each document left out (PackNeedsKey) when not nil. They are not
-	// counted in the number ExportPack returns.
-	Warn func(PackIssue)
+	Warn        func(PackIssue)
 }
 
-// ExportPack writes the documents of a folder (and the folders under it), or of the whole
-// target when folder is "", as one .opendoc pack (docs/opendoc-format.md) to w: folders by
-// ID, with tags and the trash flag, and returns how many documents it wrote. The documents
-// are read outside the saver's lock, one by one; a document that cannot be read (damaged,
-// with no good copy) stops the export with an error naming it, since a backup that quietly
-// lacks a document is worse than none.
 func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writer, o PackOptions) (int, error) {
 	type item struct {
 		id   string
@@ -181,8 +146,6 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 		return n, err
 	}
 	for _, f := range folders {
-		// A confidential folder is listed under the placeholder; its real name travels
-		// sealed (below), or not at all.
 		if err := pw.AddFolder(pack.Folder{ID: f.ID, Name: f.Name, Parent: f.Parent}); err != nil {
 			return n, err
 		}
@@ -200,13 +163,10 @@ func (s *Saver) ExportPack(ctx context.Context, target, folder string, w io.Writ
 	return n, pw.Close(o.Key)
 }
 
-// packSealed writes an end-to-end document as an encrypted record. The index shows the
-// placeholder name and no tags (the catalog holds none for it either); the folder, the times
-// and the trash flag are not secret.
 func packSealed(ctx context.Context, pw *pack.Writer, o PackOptions, id string, e catalogEntry, doc docfile.Document) error {
 	seal := o.Seal
 	doc.SetID(id)
-	e.withCatalog(&doc) // marks it end to end, and the real name and tags are the file's
+	e.withCatalog(&doc)
 	plain, err := docfile.Open.Marshal(doc)
 	if err != nil {
 		return err
@@ -225,14 +185,9 @@ func packSealed(ctx context.Context, pw *pack.Writer, o PackOptions, id string, 
 	return pw.AddEncrypted(pack.Entry{ID: id, Name: ConfidentialName, Folder: e.Folder, Updated: updated, Trashed: e.Trashed != 0}, env)
 }
 
-// packSealedFolderName writes a confidential folder's real name as an encrypted record whose
-// ID is the folder's: inside the envelope is a small .open message named with the real name.
-// The index shows ConfidentialFolderName. A folder whose name no key here opens is reported
-// (PackNeedsKey) and left under the placeholder; a Seal that fails stops the export.
 func packSealedFolderName(ctx context.Context, pw *pack.Writer, t Target, o PackOptions, f Folder, warn func(PackIssue)) error {
 	name, err := readFolderSecret(ctx, t, f.ID)
 	if errors.Is(err, docstore.ErrLocked) || errors.Is(err, docstore.ErrNotFound) {
-		// No key opens it here, or its record is gone: the folder travels under the placeholder.
 		warn(PackIssue{ID: f.ID, Name: f.Name, Reason: PackNeedsKey, Err: err})
 		return nil
 	}
@@ -260,67 +215,39 @@ func packSealedFolderName(ctx context.Context, pw *pack.Writer, t Target, o Pack
 	return pw.AddEncrypted(pack.Entry{ID: f.ID, Name: ConfidentialFolderName}, env)
 }
 
-// isFolderName says whether an index entry is the sealed name of a folder (see
-// packSealedFolderName) rather than a document.
 func isFolderName(e pack.Entry, folders map[string]pack.Folder) bool {
 	_, ok := folders[e.ID]
 	return ok && e.Encrypted && e.Name == ConfidentialFolderName
 }
 
-// ConflictPolicy says what ImportPack does with a document whose ID is already in the target.
 type ConflictPolicy int
 
 const (
-	// ConflictSkip leaves the document in the target as it is, and reports it skipped.
 	ConflictSkip ConflictPolicy = iota
-	// ConflictReplace saves the pack's document over the one in the target, and takes the
-	// pack's folder, tags and trash flag too (a trashed document replaced by a live one is
-	// restored).
 	ConflictReplace
-	// ConflictCopy imports it as a new document, under a new ID.
 	ConflictCopy
 )
 
 // ImportOptions are the options of ImportPack.
 type ImportOptions struct {
-	// Into is the folder the pack's top level goes into ("" for the top).
 	Into string
 	// Format is how the documents are stored; nil is JSON.
-	Format docfile.Codec
-	// Conflict is what to do with a document that is already there.
+	Format   docfile.Codec
 	Conflict ConflictPolicy
-	// Open decrypts the envelope of an encrypted record (docID is the record's ID) and
-	// returns the .open message inside. With no Open, or when it fails, the record is left
-	// out and reported in ImportReport.NeedsKey: a warning, never an error that stops the
-	// import. A document that comes in this way is saved end to end again (the saver's
-	// ConfidentialCheck, if there is one, must allow it, else it is reported as Failed).
-	Open func(ctx context.Context, docID string, env []byte) ([]byte, error)
+	Open     func(ctx context.Context, docID string, env []byte) ([]byte, error)
 }
 
 // ImportReport says what ImportPack did.
 type ImportReport struct {
-	// Documents and Folders are how many were brought in (a folder already there with the
-	// same ID is reused, not counted).
-	Documents, Folders int
-	// Skipped names the documents left alone because they were already there.
-	Skipped []string
-	// Failed names the documents that could not be read or saved, with why.
-	Failed []string
-	// Warnings are things that went wrong after a document was saved (it is counted in
-	// Documents): its trash flag, its folder or its tags could not be applied.
-	Warnings []string
-	// NeedsKey are the encrypted records left out for want of a working Open (also in
-	// Warnings, in words). The pack is unchanged: import it again with the key.
-	NeedsKey []PackIssue
-	// Signed and SignatureOK say whether the pack carried a signature and it checked out;
-	// Signer is the key. Whether to trust it is for the caller.
+	Documents, Folders  int
+	Skipped             []string
+	Failed              []string
+	Warnings            []string
+	NeedsKey            []PackIssue
 	Signed, SignatureOK bool
 	Signer              []byte
 }
 
-// ImportPack reads a .opendoc pack and saves its documents into target, recreating its
-// folders (by ID, under Into), with tags and the trash flag, and each document's history if
-// the pack holds it. A document that fails is reported and the others still come in.
 func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, size int64, o ImportOptions) (ImportReport, error) {
 	var rep ImportReport
 	rd, err := pack.Open(r, size)
@@ -346,13 +273,11 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	if o.Into != "" && !have[o.Into] {
 		return rep, ErrFolder
 	}
-	// Parents before children.
 	byID := map[string]pack.Folder{}
 	for _, f := range idx.Folders {
 		byID[f.ID] = f
 	}
-	// The sealed names of confidential folders: opened first, so a folder is made
-	// confidential in one step. One that cannot be opened is made under the placeholder.
+	// sealed folder names open first: a failure uses the placeholder
 	realName := map[string]string{}
 	sealed := map[string]bool{} // folders whose name was sealed but could not be read
 	for _, e := range idx.Entries {
@@ -385,10 +310,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			rep.Warnings = append(rep.Warnings, e.Name+": the folder's name is not valid; the folder is made confidential under the placeholder name")
 		}
 	}
-	// A folder and a document must never share an ID: the key records "keys:<ID>" and
-	// "folder-secret/<ID>" would be one (encrypt.DocID), so a pack folder could take over
-	// a document's keys. Folder IDs that are documents (in the target, the trash included,
-	// or in the pack) get a fresh ID here, and so do documents whose ID is a folder's.
+	// a folder and a document must never share an ID
 	docIDs := map[string]bool{}
 	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
 		for id := range cat.Docs {
@@ -442,8 +364,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		if name, ok := realName[f.ID]; ok {
 			made, err = s.createFolderLevel(ctx, target, newID, parent, name, true)
 		} else if sealed[f.ID] || f.Name == ConfidentialFolderName {
-			// Its name was hidden and not sent (or could not be opened): never a plain folder
-			// literally called that, which would drop its confidentiality silently.
+			// hidden name: never create a plain folder of that name
 			made, err = s.createFolderLevel(ctx, target, newID, parent, ConfidentialFolderName, true)
 		} else {
 			made, err = s.createFolder(ctx, target, newID, parent, f.Name)
@@ -508,7 +429,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		}
 		doc.SetFolder(folder)
 		tags := doc.Tags()
-		doc.SetTrashed(0) // the catalog and the file agree: Trash below sets it in both
+		doc.SetTrashed(0) // catalog and file agree: Trash below sets it in both
 		if have[doc.ID()] {
 			doc.SetID(docfile.NewID()) // a folder's ID: never share it (see above)
 		}
@@ -531,8 +452,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 				replacing, prev = true, p
 			}
 		}
-		// A confidential document is written end to end in the one save (never as an
-		// ordinary document first); the ConfidentialCheck runs before anything is overwritten.
+		// end to end in one save, never ordinary first
 		saved, err := s.save(ctx, target, c, doc, secret)
 		if err != nil {
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())
@@ -543,9 +463,6 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			rep.Warnings = append(rep.Warnings, e.Name+": "+what+": "+err.Error())
 		}
 		if replacing {
-			// Save keeps the tags, folder and trash flag of the document it replaces;
-			// the pack's are what was asked for. An end-to-end document keeps its tags
-			// inside it and the catalog has none, so only an ordinary one is set here.
 			if !secret {
 				if err := s.SetTags(ctx, target, saved.ID, tags); err != nil {
 					warn("tags", err)

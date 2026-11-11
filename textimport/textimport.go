@@ -1,10 +1,3 @@
-// Package textimport opens common text formats as they are, for reading: a JSON, YAML, TOML, INI or log file as a code
-// block with its language, a CSV or TSV file as a table. Nothing is converted into another form of the same content: the
-// text stays as written (JSON is indented when it is valid, nothing else is touched), and there is no way back to the file
-// from the document; it is a copy to read, search, quote and print.
-//
-// It reads nothing it should not: a file over MaxBytes, one with NUL bytes (a binary file), or one that is not text in
-// UTF-8, UTF-16 with a byte order mark, or Latin-1 is refused with a reason.
 package textimport
 
 import (
@@ -30,27 +23,22 @@ const (
 
 // Kinds of file.
 const (
-	JSON  = "json"
-	JSONL = "jsonl"
-	JSON5 = "json5"
-	CSV   = "csv"
-	TSV   = "tsv"
-	YAML  = "yaml"
-	TOML  = "toml"
-	INI   = "ini"
-	Log   = "log"
-	XML   = "xml"
-	// Text is any text file as it is (a code block, not painted); HTMLSource is an HTML file shown as its source, not
-	// rendered (the HTML importer reads a page as a document).
+	JSON       = "json"
+	JSONL      = "jsonl"
+	JSON5      = "json5"
+	CSV        = "csv"
+	TSV        = "tsv"
+	YAML       = "yaml"
+	TOML       = "toml"
+	INI        = "ini"
+	Log        = "log"
+	XML        = "xml"
 	Text       = "anytext"
 	HTMLSource = "htmlsource"
 )
 
-// Language is the code language a kind is shown with ("" for none).
 var Language = map[string]string{JSON: "json", JSONL: "json", JSON5: "json5", YAML: "yaml", TOML: "toml", INI: "ini", Log: "", XML: "xml", Text: "", HTMLSource: "html"}
 
-// Decode is the text of a file: UTF-8 (a byte order mark is dropped), UTF-16 with a byte order mark, or, when it is
-// neither, Latin-1 if it has no control characters other than line breaks and tabs.
 func Decode(data []byte) (string, error) {
 	if len(data) > MaxBytes {
 		return "", fmt.Errorf("textimport: the file is larger than %d MB", MaxBytes>>20)
@@ -88,8 +76,7 @@ func clean(s string) (string, error) {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n"), nil
 }
 
-// Import reads data as kind (one of the constants above). The document says which format it is a reading copy of
-// (docfile.SourceFormatKey), so the editor can open it for reading.
+// Import reads data as kind (one of the constants above).
 func Import(kind string, data []byte) (docfile.Document, error) {
 	d, err := read(kind, data)
 	if err == nil {
@@ -137,12 +124,8 @@ func read(kind string, data []byte) (docfile.Document, error) {
 	return code(src, Language[kind], paint), nil
 }
 
-// MaxPaint is the largest text that is painted (a piece of formatting for each change of colour: a larger file is shown
-// in one colour).
 const MaxPaint = 256 << 10
 
-// code is the text as a code block: a paragraph of the Code style with the language, in a monospace font on the usual
-// background (so a document that does not carry the style still looks like code).
 func code(src, lang, paint string) docfile.Document {
 	src = strings.TrimRight(src, "\n") + "\n"
 	mono := canvas.Format{FontFamily: "monospace", Background: "#eceef1"}
@@ -164,7 +147,6 @@ func code(src, lang, paint string) docfile.Document {
 	return docfile.Document{Content: docfile.FromItems(items)}
 }
 
-// table is a CSV or TSV file as a table (the first row is the header), at most MaxRows x MaxCols.
 func table(src string, delim rune) (docfile.Document, bool) {
 	r := csv.NewReader(strings.NewReader(src))
 	r.Comma, r.LazyQuotes, r.FieldsPerRecord, r.ReuseRecord = delim, true, -1, false

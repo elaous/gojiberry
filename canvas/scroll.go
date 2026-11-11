@@ -22,37 +22,17 @@ func DefaultScrollStyle() ScrollStyle {
 	}
 }
 
-// ScrollView is a scroll container: a Width x Height viewport at (X, Y)
-// onto larger content, clipped to the viewport the way CSS overflow
-// clips an element. It has no edit mode.
-//
-// Add canvas objects with Add, saying how big each is; the content is
-// as large as the biggest. Objects draw and are positioned in content
-// coordinates (origin at the content's top-left); the view translates
-// the canvas for them, clips, and maps mouse positions back into
-// content coordinates, so interactive components work inside it
-// unchanged. Scrolling is by wheel, by dragging a scrollbar thumb or
-// clicking its track, or in code with ScrollTo/ScrollBy; every scroll
-// redraws (the Stage redraws whenever a component handles an event).
-//
-// LockH and LockV lock horizontal and vertical scrolling: a locked
-// axis never moves and shows no scrollbar.
+// ScrollView is a scroll container over larger content.
 type ScrollView struct {
 	X, Y, Width, Height float64
 	ScrollX, ScrollY    float64
 	LockH, LockV        bool
 	Style               ScrollStyle
 	// OnScroll is called after the scroll position changes.
-	OnScroll func(*ScrollView)
-	// Typewriter keeps the line being typed at one height of the view (TypewriterAt of it from the top, the middle
-	// when zero) and moves the page instead: the way a typewriter keeps the paper moving under a fixed place. It
-	// applies to typing, the keys and commands, never to a click, which leaves the page where it is. Off by default.
+	OnScroll     func(*ScrollView)
 	Typewriter   bool
 	TypewriterAt float64
-	// TypewriterX, with Typewriter, makes it a carriage: the letter being typed also stays at one place across the view
-	// (the middle), so the page slides left under it as each character goes in and, at a new line, slides back to the
-	// right to bring the start of the line to that place. The page may then be scrolled past its edges, as the paper
-	// of a typewriter runs past the carriage; the moves are made by typing, the keys and commands, never by a click.
+	// TypewriterX makes the typed letter stay put horizontally too.
 	TypewriterX bool
 
 	content *Stage
@@ -61,7 +41,7 @@ type ScrollView struct {
 
 	drag        *scrollDrag
 	hoverBar    byte // 'v', 'h' or 0
-	contentDown bool // a press started in the content, so moves keep going to it
+	contentDown bool
 }
 
 type scrollDrag struct {
@@ -70,15 +50,12 @@ type scrollDrag struct {
 	startScroll float64
 }
 
-// NewScrollView returns an empty scroll view with a w x h viewport at
-// (x, y).
+// NewScrollView returns an empty scroll view at (x, y).
 func NewScrollView(x, y, w, h float64) *ScrollView {
 	return &ScrollView{X: x, Y: y, Width: w, Height: h, Style: DefaultScrollStyle(), content: &Stage{Formats: &FormatClipboard{}}}
 }
 
-// Add puts a canvas object in the content. w and h are the object's
-// extent in content coordinates; the content grows to cover the
-// largest object on each axis.
+// Add puts a canvas object in the content.
 func (sv *ScrollView) Add(obj Drawer, w, h float64) {
 	sv.content.Add(obj)
 	sv.cw, sv.ch = max(sv.cw, w), max(sv.ch, h)
@@ -89,8 +66,7 @@ func (sv *ScrollView) Add(obj Drawer, w, h float64) {
 	}
 }
 
-// SetContent replaces the content components, with the content size w x h
-// (a Size() method on a component, if you have no better idea).
+// SetContent replaces the content components, sized w x h.
 func (sv *ScrollView) SetContent(ds []Drawer, w, h float64) {
 	sv.content.Components = nil
 	for _, d := range ds {
@@ -99,8 +75,7 @@ func (sv *ScrollView) SetContent(ds []Drawer, w, h float64) {
 	sv.SetContentSize(w, h)
 }
 
-// SetContentSize overrides the content size (to grow or shrink it
-// after objects changed size) and re-clamps the scroll position.
+// SetContentSize overrides the content size.
 func (sv *ScrollView) SetContentSize(w, h float64) {
 	sv.cw, sv.ch = w, h
 	sv.ScrollTo(sv.ScrollX, sv.ScrollY)
@@ -112,7 +87,6 @@ func (sv *ScrollView) ContentSize() (w, h float64) { return sv.cw, sv.ch }
 // SetContentMode puts every content component in mode m.
 func (sv *ScrollView) SetContentMode(m Mode) { sv.content.SetMode(m) }
 
-// SetPainter implements PainterSetter.
 func (sv *ScrollView) SetPainter(p ImagePainter) {
 	sv.painter = p
 	sv.content.SetPainter(p)
@@ -122,14 +96,13 @@ func (sv *ScrollView) maxScroll() (mx, my float64) {
 	return max(sv.cw-sv.Width, 0), max(sv.ch-sv.Height, 0)
 }
 
-// ScrollTo scrolls to (x, y), clamped to the content and ignoring a
-// locked axis. It reports whether the position changed.
+// ScrollTo scrolls to (x, y), clamped to the content.
 func (sv *ScrollView) ScrollTo(x, y float64) bool {
 	mx, my := sv.maxScroll()
 	nx, ny := sv.ScrollX, sv.ScrollY
 	loX, hiX, loY, hiY := 0.0, mx, 0.0, my
 	lockH, lockV := sv.LockH, sv.LockV
-	if sv.carriage() { // the page runs past its edges so the caret can stay in its place; both axes are free
+	if sv.carriage() { // Typewriter lets the page run past its edges.
 		loX, hiX = -sv.Width*sv.typewriterAt(), mx+sv.Width*(1-sv.typewriterAt())
 		loY, hiY = -sv.Height*sv.typewriterAt(), my+sv.Height*(1-sv.typewriterAt())
 		lockH, lockV = false, false
@@ -155,12 +128,9 @@ func (sv *ScrollView) ScrollBy(dx, dy float64) bool {
 	return sv.ScrollTo(sv.ScrollX+dx, sv.ScrollY+dy)
 }
 
-// --- scrollbars ----------------------------------------------------
-
 func (sv *ScrollView) showV() bool { return !sv.LockV && sv.ch > sv.Height }
 func (sv *ScrollView) showH() bool { return !sv.LockH && sv.cw > sv.Width }
 
-// bar returns the track and thumb rectangles (x, y, w, h) of a scrollbar.
 func (sv *ScrollView) bar(vertical bool) (track, thumb [4]float64) {
 	s := sv.Style
 	mx, my := sv.maxScroll()
@@ -190,7 +160,6 @@ func (sv *ScrollView) bar(vertical bool) (track, thumb [4]float64) {
 	return track, [4]float64{track[0] + pos, track[1], tl, s.BarSize}
 }
 
-// barAt returns 'v' or 'h' if (x, y) is over a visible scrollbar.
 func (sv *ScrollView) barAt(x, y float64) byte {
 	if sv.showV() {
 		if t, _ := sv.bar(true); inRect(x, y, t) {
@@ -205,8 +174,6 @@ func (sv *ScrollView) barAt(x, y float64) byte {
 	return 0
 }
 
-// scrollForThumbPos converts a thumb's leading edge position within its
-// track into a scroll offset.
 func (sv *ScrollView) scrollForThumbPos(vertical bool, pos float64) float64 {
 	track, thumb := sv.bar(vertical)
 	mx, my := sv.maxScroll()
@@ -224,23 +191,17 @@ func (sv *ScrollView) scrollForThumbPos(vertical bool, pos float64) float64 {
 	return min(max(pos/room, 0), 1) * mx
 }
 
-// --- events --------------------------------------------------------
-
 func (sv *ScrollView) inside(x, y float64) bool {
 	return inRect(x, y, [4]float64{sv.X, sv.Y, sv.Width, sv.Height})
 }
 
-// toContent maps viewport-space (canvas) coordinates into content space.
 func (sv *ScrollView) toContent(x, y float64) (float64, float64) {
 	return x - sv.X + sv.ScrollX, y - sv.Y + sv.ScrollY
 }
 
-// MouseDown grabs a scrollbar thumb, jumps along a track, or hands the
-// press to the content (only if it is inside the viewport).
 func (sv *ScrollView) MouseDown(x, y float64) bool { return sv.MouseDownMods(x, y, Mods{}) }
 
-// MouseDownMods is MouseDown with the modifier keys, passed on to the
-// content.
+// MouseDownMods is MouseDown with modifier keys passed to the content.
 func (sv *ScrollView) MouseDownMods(x, y float64, m Mods) bool {
 	switch sv.barAt(x, y) {
 	case 'v':
@@ -270,10 +231,9 @@ func (sv *ScrollView) MouseDownMods(x, y float64, m Mods) bool {
 	return changed
 }
 
-// EditTarget implements Editable by asking the content.
+// EditTarget returns the content's edit target.
 func (sv *ScrollView) EditTarget() EditTarget { return sv.content.EditTarget() }
 
-// DoubleClick hands a double click to the content (inside the viewport).
 func (sv *ScrollView) DoubleClick(x, y float64) bool {
 	if !sv.inside(x, y) || sv.barAt(x, y) != 0 {
 		return false
@@ -282,9 +242,7 @@ func (sv *ScrollView) DoubleClick(x, y float64) bool {
 	return sv.content.DoubleClick(cx, cy)
 }
 
-// MouseMove drags a thumb, tracks the hovered bar, and passes movement
-// to the content while the pointer is over the viewport or a press that
-// began in it is still held.
+// MouseMove drags a thumb, tracks hover, and passes movement on.
 func (sv *ScrollView) MouseMove(x, y float64) bool {
 	if d := sv.drag; d != nil {
 		track, thumb := sv.bar(d.vertical)
@@ -316,7 +274,7 @@ func (sv *ScrollView) MouseMove(x, y float64) bool {
 	return changed
 }
 
-// MouseUp ends a thumb drag and passes the release to the content.
+// MouseUp ends a thumb drag and passes the release on.
 func (sv *ScrollView) MouseUp(x, y float64) bool {
 	changed := sv.drag != nil
 	sv.drag, sv.contentDown = nil, false
@@ -337,10 +295,7 @@ func (sv *ScrollView) MouseLeave() bool {
 	return changed
 }
 
-// MouseWheel scrolls when the pointer is over the viewport. Content
-// that scrolls itself (a nested ScrollView) gets the first chance, and
-// only a wheel that actually moved something counts as handled, so an
-// outer view or the page takes over once an inner one hits its end.
+// MouseWheel scrolls when the pointer is over the viewport.
 func (sv *ScrollView) MouseWheel(x, y, dx, dy float64) bool {
 	if !sv.inside(x, y) {
 		return false
@@ -405,7 +360,6 @@ func (sv *ScrollView) WantsFocus() bool { return sv.content.WantsFocus() }
 // SetCaretVisible forwards the blink phase to the content.
 func (sv *ScrollView) SetCaretVisible(on bool) bool { return sv.content.SetCaretVisible(on) }
 
-// CSSCursor implements CursorProvider.
 func (sv *ScrollView) CSSCursor() string {
 	if sv.hoverBar != 0 || sv.drag != nil {
 		return "default"
@@ -416,10 +370,6 @@ func (sv *ScrollView) CSSCursor() string {
 	return ""
 }
 
-// --- drawing -------------------------------------------------------
-
-// Draw paints the content clipped to the viewport, then the frame and
-// scrollbars.
 func (sv *ScrollView) Draw() {
 	p := sv.painter
 	for _, c := range sv.content.Components {
@@ -454,10 +404,8 @@ func (sv *ScrollView) Draw() {
 	}
 }
 
-// carriage says the view works as a typewriter carriage (Typewriter with TypewriterX).
 func (sv *ScrollView) carriage() bool { return sv.Typewriter && sv.TypewriterX }
 
-// typewriterAt is where in the view (0 to 1, from the top and from the left) the typewriter keeps the caret.
 func (sv *ScrollView) typewriterAt() float64 {
 	if sv.TypewriterAt <= 0 || sv.TypewriterAt >= 1 {
 		return 0.5

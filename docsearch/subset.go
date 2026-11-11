@@ -7,10 +7,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Subset is a view of store that holds only the given keys: List names just those (that exist), Load and
-// Save work for them, and any other key is not found. The saver keeps old versions, a catalog and other
-// bookkeeping in the same store as the documents; searching or replacing through a Subset of the
-// documents' own keys cannot touch those.
 func Subset(store docstore.Adapter, keys []string) docstore.Adapter {
 	return subset{store: store, keys: slices.Clone(keys)}
 }

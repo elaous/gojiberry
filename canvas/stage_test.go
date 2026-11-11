@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// spy is a component that records what a Stage sends it.
 type spy struct {
 	name  string
 	log   *[]string
@@ -35,7 +34,6 @@ func (s *spy) InsertText(string) bool { *s.log = append(*s.log, s.name+":text");
 func (s *spy) WantsFocus() bool       { return s.focus }
 func (s *spy) CSSCursor() string      { return s.css }
 
-// plain is a Component with no optional interfaces.
 type plain struct{ drawn *int }
 
 func (plain) Mode() Mode        { return ModeView }
@@ -150,7 +148,6 @@ func TestStageDrivesRealComponentsTogether(t *testing.T) {
 	if tv.Painter == nil || im.Painter == nil || flow.Painter == nil {
 		t.Fatal("painters not distributed")
 	}
-	// Press on the image body: only the image reacts.
 	if !s.MouseDown(120, 70) || !im.Dragging() {
 		t.Fatal("image should start dragging")
 	}

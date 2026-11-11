@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestPackDownloadAndImport downloads a folder as one .opendoc pack, deletes the folder's
-// document and the folder, imports the pack and finds both again.
 func TestPackDownloadAndImport(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Click(`button[data-tab="save"]`)
@@ -30,7 +28,6 @@ func TestPackDownloadAndImport(t *testing.T) {
 	name, pack := d.Download(func() { d.Click(".gj-doclist-folder-pack") })
 	d.OK(name == "Work.opendoc" && strings.HasPrefix(string(pack), "OPENDOC\x00"), "a pack of the folder: "+name)
 
-	// Remove the document and the folder, then bring them back from the pack.
 	d.Click(".gj-doclist-folder-open")
 	d.WaitFor("inside", "document.querySelector('.gj-doclist-item')")
 	d.Click(".gj-doclist-trash")

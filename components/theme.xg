@@ -17,30 +17,11 @@ const (
 
 // ThemeProps configures Theme.
 type ThemeProps struct {
-	// Mode selects a built-in palette: "" or ThemeLight restates
-	// :root's own values (letting a Theme re-light a subtree nested
-	// inside a dark one), ThemeDark switches to components/base.css's
-	// own .gj-theme-dark overrides.
 	Mode ThemeMode
-	// Custom overrides individual --gj-* tokens on top of Mode's own
-	// palette, e.g. Custom: map[string]string{"--gj-accent": "#10b981"}
-	// for a single custom brand color without a whole new Mode.
 	Custom   map[string]string
 	Children []xango.Node
 }
 
-// Theme scopes which --gj-* design-token palette applies to its own
-// Children -- requires components/base.css, which carries both
-// palettes (:root/.gj-theme-light's own light values, .gj-theme-dark's
-// own dark overrides). This needs no Go-level context
-// machinery of its own the way ContextProvider's own open design
-// question describes: it's a plain wrapping <div> carrying a class (or
-// inline custom-property overrides), and CSS custom properties already
-// cascade to every descendant element regardless of DOM depth --
-// exactly the same body.dark class-toggle idea OnDesign's own
-// applyConfig uses (see that repo's editor/index.html), just scoped to
-// this wrapper instead of body, so it composes: a Theme nested inside
-// another Theme re-scopes from that point down.
 func Theme(props ThemeProps) xango.Node {
 	class := "gj-theme-light"
 	if props.Mode == ThemeDark {
@@ -53,10 +34,6 @@ func Theme(props ThemeProps) xango.Node {
 	return xango.El("div", attrs, props.Children...)
 }
 
-// themeCustomPropertyStyle renders overrides as an inline
-// "--k: v; --k2: v2;" style string, sorted by key so the generated
-// markup (and anything asserting against it) is deterministic
-// regardless of Go's own randomized map iteration order.
 func themeCustomPropertyStyle(overrides map[string]string) string {
 	keys := make([]string, 0, len(overrides))
 	for k := range overrides {

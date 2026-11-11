@@ -7,13 +7,9 @@ import (
 	"syscall/js"
 )
 
-// Await blocks the calling goroutine until the JS Promise p settles,
-// without blocking the rest of the WASM runtime: Go's js/wasm scheduler
-// keeps servicing the JS event loop (and other goroutines) while this
-// one waits on the channel. Shared by domrt/browser and domrt/sw so
-// both bridge JS Promises the same way.
+// Await blocks the calling goroutine until the JS Promise settles.
 func Await(p js.Value) (js.Value, error) {
-	// A value that is not a promise is its own result (as `await` treats it).
+	// a non-promise value is its own result, as await treats it
 	if (p.Type() != js.TypeObject && p.Type() != js.TypeFunction) || p.Get("then").Type() != js.TypeFunction {
 		return p, nil
 	}
@@ -45,10 +41,7 @@ func Await(p js.Value) (js.Value, error) {
 	}
 }
 
-// ToPromise returns a JS Promise that settles once work returns,
-// running work on its own goroutine so the calling event handler can
-// return the Promise immediately (as event.waitUntil/respondWith
-// require) while the real work happens asynchronously.
+// ToPromise returns a JS Promise that settles when work returns.
 func ToPromise(work func() (js.Value, error)) js.Value {
 	executor := js.FuncOf(func(this js.Value, args []js.Value) any {
 		resolve, reject := args[0], args[1]
@@ -66,9 +59,6 @@ func ToPromise(work func() (js.Value, error)) js.Value {
 	return js.Global().Get("Promise").New(executor)
 }
 
-// rejectionMessage describes a rejection's reason. Not every value can be
-// turned into a string (an object with a null prototype throws), so a failure
-// to do so falls back to a plain message instead of crashing the program.
 func rejectionMessage(args []js.Value) (msg string) {
 	msg = "promise rejected"
 	if len(args) == 0 || args[0].IsUndefined() || args[0].IsNull() {

@@ -18,8 +18,6 @@ import (
 
 const folderSecret = "Layoffs 2026 xango"
 
-// rawHolds lists the stored items (read straight from the inner store, as whoever runs it
-// would) that contain s in the clear.
 func rawHolds(t *testing.T, a docstore.Adapter, s string) []string {
 	t.Helper()
 	metas, err := a.List(context.Background())
@@ -56,7 +54,6 @@ func TestFolderSecretRecordIsNotSkippedAndBelongsToItsFolder(t *testing.T) {
 	}
 }
 
-// folderWorld is newWorld with a folder tree: Work > secretFolder > a document.
 func folderWorld(t *testing.T) (w *world, top, sec, doc string) {
 	t.Helper()
 	ctx := context.Background()
@@ -90,7 +87,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 	if err := w.saver.SetFolderProtection(ctx, "m", sec, saver.ProtectionE2EE, false); err != nil {
 		t.Fatal(err)
 	}
-	// The store holds no real folder name, anywhere: not the catalog, not the folder record.
 	if got := rawHolds(t, w.inner, folderSecret); len(got) != 0 {
 		t.Fatalf("the store holds the real name: %v", got)
 	}
@@ -98,7 +94,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 	if err != nil || !IsEncrypted(raw.Data) {
 		t.Fatalf("the record is ciphertext: %v", err)
 	}
-	// Wrapped for people's keys only, never the server's (which is also among the owners here).
 	if !w.opens(sec, saver.FolderSecretKey(sec), w.ana.id) {
 		t.Error("the owner opens it")
 	}
@@ -108,7 +103,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 	if c, err := w.ring.IsConfidential(ctx, sec); err != nil || !c {
 		t.Errorf("%v %v", c, err)
 	}
-	// The ordinary folder is untouched, and the document inside is not made confidential.
 	if n, _ := w.saver.RevealFolder(ctx, "m", top); n != "Work" {
 		t.Errorf("%q", n)
 	}
@@ -119,7 +113,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 		t.Errorf("%q %v", n, err)
 	}
 
-	// Rename: the new name goes into the record, still wrapped for people only.
 	if err := w.saver.RenameFolder(ctx, "m", sec, "Hiring xango2"); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +126,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 		t.Errorf("%q", n)
 	}
 
-	// Move keeps the shape visible and the name hidden; breadcrumbs show the placeholder.
 	other, _ := w.saver.CreateFolder(ctx, "m", "", "Other")
 	if err := w.saver.MoveFolder(ctx, "m", sec, other.ID); err != nil {
 		t.Fatal(err)
@@ -144,7 +136,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 		t.Errorf("%+v", path)
 	}
 
-	// A stranger (no key at all) lists, rebuilds and verifies; sees the placeholder in its place.
 	stranger := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: New(w.inner, Static{})}}}
 	if err := stranger.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
@@ -163,7 +154,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 	if e, err := stranger.Get(ctx, "m", doc); err != nil || e.Folder != sec || e.Name != "Plan" {
 		t.Errorf("%+v %v", e, err)
 	}
-	// Search, listings and a session's props over the stranger's view leak no name.
 	ss := saver.NewSession(stranger, func() docfile.Document { return docfile.Document{} }, nil)
 	ss.Pending.Inline = true
 	if err := ss.SetTarget(ctx, "m"); err != nil {
@@ -191,7 +181,6 @@ func TestConfidentialFolderNameIsInsideTheEnvelopeForPeopleOnly(t *testing.T) {
 		}
 	}
 
-	// A rebuild by the owner, then delete (the document leaves first): the record goes too.
 	if err := w.saver.Rebuild(ctx, "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +201,6 @@ func TestConfidentialFolderBackToServerAndRecursive(t *testing.T) {
 	if err := w.saver.SetFolderProtection(ctx, "m", top, saver.ProtectionE2EE, true); err != nil {
 		t.Fatal(err)
 	}
-	// The documents inside went confidential too, wrapped for people only.
 	w.assertOnly(t, doc, "recursive", []age.Identity{w.ana.id}, []age.Identity{w.server})
 	for _, id := range []string{top, sec} {
 		if w.opens(id, saver.FolderSecretKey(id), w.server) || !w.opens(id, saver.FolderSecretKey(id), w.ana.id) {
@@ -267,7 +255,6 @@ func TestOwnerOpensAConfidentialFolderWithPasskeyAloneOrRecoveryAlone(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A passkey alone is not enough to make it confidential (C.3): the check is the same.
 	s.ConfidentialCheck = ConfidentialCheck(sh, pk)
 	if err := s.SetFolderProtection(ctx, "m", f.ID, saver.ProtectionE2EE, false); !errors.Is(err, ErrNeedSecondRecipient) {
 		t.Fatalf("%v", err)
@@ -292,7 +279,6 @@ func TestOwnerOpensAConfidentialFolderWithPasskeyAloneOrRecoveryAlone(t *testing
 	if _, err := srv.RevealFolder(ctx, "m", f.ID); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("the server key: %v", err)
 	}
-	// A rename by the owner holding only the recovery key still writes for people only.
 	recOnly := New(inner, ConfidentialKeyring{
 		People: StoreKeyring{Store: inner, Owners: []age.Recipient{pk.Key, rec.Key}, Keys: []age.Identity{recID},
 			OwnerSigners: []ed25519.PublicKey{sg.Public()}},

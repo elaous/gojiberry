@@ -15,8 +15,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestRefusedChangeIsAnnounced: an editor whose role is taken away while the page is open types, the
-// server refuses the change, and the live region says so (and keeps saying how many).
 func TestRefusedChangeIsAnnounced(t *testing.T) {
 	var demoted atomic.Bool
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
@@ -46,7 +44,6 @@ func TestRefusedChangeIsAnnounced(t *testing.T) {
 	d.WaitFor("the refusal is said", `(document.querySelector('.gj-announcer') || {textContent: ''}).textContent.includes('could not be applied')`)
 }
 
-// In a shared session a saved version is by the person who saved it, not by the page's placeholder address.
 func TestLiveVersionAuthorIsThePerson(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -72,8 +69,6 @@ func TestLiveVersionAuthorIsThePerson(t *testing.T) {
 	}
 }
 
-// TestChangedUnderYouIsSaid: two people type in one paragraph a moment apart; the one whose paragraph was
-// changed by the other hears who did it and that both changes were kept.
 func TestChangedUnderYouIsSaid(t *testing.T) {
 	h := hub.New(hub.Config{KeepAlive: 500 * time.Millisecond, Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))

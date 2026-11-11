@@ -6,19 +6,14 @@ import (
 	"strings"
 )
 
-// Skipped counts what a .docx file holds that Import does not bring into the document: the elements it has no
-// place for. Import never fails on them, it leaves them out; Inspect says how many there were, so a person is
-// told before the file is trusted as a copy of the original (the import side of the fidelity report).
-//
-// Where the content of an element is text that Import does read in another way (a field's shown result, the
-// text of a text box's neighbours) only the element's own job is counted, not the text.
+// Skipped counts what a .docx holds that Import leaves out.
 type Skipped struct {
 	HeaderFoots int // headers and footers that hold text
 	TextBoxes   int // text boxes: their text is not read
 	Drawings    int // shapes, charts and diagrams that are not pictures
 	Endnotes    int // endnote references (only footnotes are read)
-	Fields      int // fields (page number, cross reference, contents): their last shown text stays, the field is gone
-	Bookmarks   int // bookmarks (links to one are kept as "#name", the place they point at is not)
+	Fields      int
+	Bookmarks   int
 	Columns     int // sections laid out in columns
 	Layout      int // paragraphs with an indent or spacing of their own
 }
@@ -28,8 +23,6 @@ func (s Skipped) Total() int {
 	return s.HeaderFoots + s.TextBoxes + s.Drawings + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
 }
 
-// Inspect counts what Import would leave out of a .docx file. It reads the same parts under the same limits, and
-// returns ErrNotDocx for what is not a Word document.
 func Inspect(data []byte) (Skipped, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -56,7 +49,6 @@ func Inspect(data []byte) (Skipped, error) {
 	return s, nil
 }
 
-// scan counts the elements of one part.
 func (s *Skipped) scan(n *node) {
 	for _, k := range n.kids {
 		switch k.name {
@@ -67,9 +59,9 @@ func (s *Skipped) scan(n *node) {
 			case k.find("blip") == nil && k.find("imagedata") == nil:
 				s.Drawings++
 			}
-			continue // what is inside a shape is not the document's text
+			continue
 		case "oMath", "oMathPara":
-			continue // read as an equation (omml.go), so not counted as left out
+			continue
 		case "endnoteReference":
 			s.Endnotes++
 		case "fldSimple":

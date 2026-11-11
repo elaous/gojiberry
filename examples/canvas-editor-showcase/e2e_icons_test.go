@@ -8,10 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestIconsDrawInTheBrowser: the sidebar tabs, the Edit menu and the document
-// buttons show Material Symbols; they are masked spans (an <svg> built by the DOM
-// runtime would not draw), so check the browser really applies the mask and gives
-// them a size, and that the names of the buttons are unchanged.
 func TestIconsDrawInTheBrowser(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OK(d.Count(`button[data-tab="save"] .gj-material`) == 1, "a tab has an icon")

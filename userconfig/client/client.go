@@ -1,8 +1,3 @@
-// Package client is the device side of per-person settings (package userconfig): it keeps a local copy
-// of every item so the settings work offline, queues changes made while the server is out of reach
-// or the person is signed out, and sends them when it can, merging with what another device wrote
-// in between. It uses net/http only, so it runs in the browser's wasm too; where the copy is kept
-// (localStorage, a file) is the Cache the app gives it.
 package client
 
 import (
@@ -21,21 +16,18 @@ import (
 
 // Entry is one item as this device has it.
 type Entry struct {
-	Data []byte `json:"data,omitempty"`
-	// Rev is the server's revision this copy was based on (0: the server has no such item yet).
-	Rev int `json:"rev"`
-	// Dirty means the device changed it and the server has not heard; Deleted means the change is a removal.
-	Dirty   bool `json:"dirty,omitempty"`
-	Deleted bool `json:"deleted,omitempty"`
+	Data    []byte `json:"data,omitempty"`
+	Rev     int    `json:"rev"`
+	Dirty   bool   `json:"dirty,omitempty"`
+	Deleted bool   `json:"deleted,omitempty"`
 }
 
-// Cache keeps the device's copy between runs. Save is given the whole map each time.
+// Cache keeps the device's copy between runs.
 type Cache interface {
 	Load() map[string]Entry
 	Save(map[string]Entry)
 }
 
-// MemoryCache is a Cache that lives as long as the process.
 type MemoryCache struct {
 	mu sync.Mutex
 	m  map[string]Entry
@@ -63,16 +55,11 @@ func (c *MemoryCache) Save(m map[string]Entry) {
 }
 
 var (
-	// ErrOffline means the server could not be reached; the changes stay queued.
-	ErrOffline = errors.New("userconfig client: the server could not be reached")
-	// ErrSignedOut means the server did not know who is asking (401); the changes stay queued.
+	ErrOffline   = errors.New("userconfig client: the server could not be reached")
 	ErrSignedOut = errors.New("userconfig client: sign in to sync settings")
-	// ErrNotFound is returned by Get for an item this device does not have.
-	ErrNotFound = errors.New("userconfig client: no such item")
+	ErrNotFound  = errors.New("userconfig client: no such item")
 )
 
-// Merge decides the data when this device and the server both changed an item: local is what this
-// device wants, remote what the server holds now. The default keeps the local change.
 type Merge func(name string, local, remote []byte) []byte
 
 // Client syncs one person's items. Use New.
@@ -80,8 +67,7 @@ type Client struct {
 	// BaseURL is the server ("https://host"), Prefix the route (default "/me/config").
 	BaseURL, Prefix string
 	// HTTP is the client to use (nil: http.DefaultClient).
-	HTTP *http.Client
-	// Header adds the credentials to a request (Authorization: Bearer ...); may be nil.
+	HTTP   *http.Client
 	Header func(*http.Request)
 	// Merge resolves conflicts; nil keeps the local change.
 	Merge Merge
@@ -109,7 +95,6 @@ func (c *Client) base() string {
 
 func (c *Client) save() { c.cache.Save(c.items) }
 
-// Get returns the device's copy of an item; it works with no connection.
 func (c *Client) Get(name string) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -147,8 +132,6 @@ func (c *Client) Pending() int {
 	return n
 }
 
-// Set changes an item on this device at once (so it works offline) and queues it for the server.
-// Call Sync to send it.
 func (c *Client) Set(name string, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -158,7 +141,6 @@ func (c *Client) Set(name string, data []byte) {
 	c.save()
 }
 
-// Delete removes an item on this device and queues the removal.
 func (c *Client) Delete(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -175,9 +157,6 @@ func (c *Client) Delete(name string) {
 	c.save()
 }
 
-// Sync sends the queued changes, then pulls what other devices wrote. It stops at the first
-// network failure with ErrOffline (nothing is lost; call again later) and at a 401 with
-// ErrSignedOut.
 func (c *Client) Sync(ctx context.Context) error {
 	if err := c.push(ctx); err != nil {
 		return err
@@ -249,8 +228,6 @@ func (c *Client) pushOne(ctx context.Context, name string) error {
 	return fmt.Errorf("userconfig client: %q keeps changing on another device", name)
 }
 
-// resolve fetches the server's copy and merges the local change into it, so the next try is based
-// on the server's revision.
 func (c *Client) resolve(ctx context.Context, name string, local Entry) error {
 	resp, err := c.do(ctx, http.MethodGet, "/"+name, nil, "")
 	if err != nil {
@@ -266,7 +243,7 @@ func (c *Client) resolve(ctx context.Context, name string, local Entry) error {
 			merged = c.Merge(name, local.Data, resp.body)
 		}
 		cur.Data, cur.Rev = merged, revOf(resp.etag)
-		if local.Deleted { // a removal against a newer item: the newer item wins, the removal is dropped
+		if local.Deleted {
 			cur.Data, cur.Dirty, cur.Deleted = resp.body, false, false
 		}
 	case http.StatusNotFound: // it was removed elsewhere: our change recreates it
@@ -284,8 +261,6 @@ func (c *Client) resolve(ctx context.Context, name string, local Entry) error {
 	return nil
 }
 
-// pull brings in items other devices changed and drops local copies the server no longer has
-// (unless this device changed them).
 func (c *Client) pull(ctx context.Context) error {
 	resp, err := c.do(ctx, http.MethodGet, "", nil, "")
 	if err != nil {

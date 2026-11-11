@@ -2,10 +2,6 @@ package canvas
 
 import "testing"
 
-// 200x100 bitmap shown at natural size at (40, 60): the visible
-// rectangle is x 40..240, y 60..160. Toolbar buttons sit at y 32..54,
-// x = 40 + 56*i, 52 wide.
-
 func newImg() (*Image, *fakePainter) {
 	p := &fakePainter{}
 	im := NewImage(fakeImage{200, 100}, 40, 60)
@@ -54,7 +50,7 @@ func TestMoveDragSnapsToFive(t *testing.T) {
 	if !im.MouseDown(100, 100) {
 		t.Fatal("press on the image starts a move")
 	}
-	im.MouseMove(113, 140) // +13 px right, and a vertical move that must be ignored
+	im.MouseMove(113, 140)
 	if im.X != 55 || im.Y != 60 {
 		t.Fatalf("X,Y = %g,%g, want 55,60", im.X, im.Y)
 	}
@@ -191,7 +187,6 @@ func TestClipDrawsGhostOfCroppedPart(t *testing.T) {
 func TestAlphaSliderSnapsToFivePercent(t *testing.T) {
 	im, _ := newImg()
 	im.SetTool(ToolAlpha)
-	// Track: x 40..240, y 170..178.
 	if !im.MouseDown(40+100, 172) || im.Alpha != 0.5 {
 		t.Fatalf("alpha = %g, want 0.5", im.Alpha)
 	}
@@ -294,8 +289,6 @@ func TestHoverCursor(t *testing.T) {
 	}
 }
 
-// --- wrap-around ---
-
 func TestExclusion(t *testing.T) {
 	im, _ := newImg()
 	if _, _, ok := im.Exclusion(60, 160); ok {
@@ -332,8 +325,6 @@ func wrapSetup(wrap bool) (*Image, *TextFlow) {
 	return im, f
 }
 
-// overlaps reports whether any laid-out line intrudes on the x0..x1 by
-// y0..y1 rectangle.
 func overlaps(l Layout, lineH, x0, x1, y0, y1 float64) bool {
 	for _, ln := range l.Lines {
 		if ln.Y < y1 && ln.Y+lineH > y0 && ln.X < x1 && ln.X+ln.W > x0 {
@@ -354,7 +345,6 @@ func TestWrapAroundKeepsTextOffTheImage(t *testing.T) {
 	if len(lay.Lines) < 2 {
 		t.Fatalf("text should have wrapped: %+v", lay.Lines)
 	}
-	// Image is x 300..400, y 10..54; with the 8px margin: 292..408, 2..62.
 	if overlaps(lay, 22, 292, 408, 2, 62) {
 		t.Fatalf("text overlaps the image: %+v", lay.Lines)
 	}
@@ -438,7 +428,6 @@ func TestImageLegendIsDrawnUnderThePictureAndTakesRoom(t *testing.T) {
 	if _, h := im.Measure(p, 400, 400); h != h0 {
 		t.Fatal("a blank legend is none")
 	}
-	// A floating picture's legend is drawn under it and text keeps away from it.
 	fl := NewImage(fakeImage{w: 100, h: 50}, 0, 0)
 	fl.Painter = p
 	fl.Wrap = true

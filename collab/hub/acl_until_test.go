@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// A grant with an end that has passed opens nothing on the live-editing hub either.
 func TestACLRolesHonourTheEndOfAGrant(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
 	now := time.Now()

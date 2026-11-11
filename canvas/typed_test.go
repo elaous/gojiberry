@@ -33,7 +33,6 @@ func TestTypedRangesAreDrawnInThePeersColour(t *testing.T) {
 	}
 }
 
-// Right to left text is drawn with the first characters at the right end: what was typed is coloured where it stands.
 func TestTypedRangesInRightToLeftText(t *testing.T) {
 	f, p := newFlow("אבגד", 400, 200)
 	f.TypedRanges = []TypedRange{{From: 0, To: 2, Name: "Ana", Color: "#ff0000"}}
@@ -60,13 +59,11 @@ func TestTypedRangesInRightToLeftText(t *testing.T) {
 			}
 		}
 	}
-	// the first two characters are the rightmost 16px of the 32px run
 	if typedAt != x0+16 || restAt != x0 {
 		t.Errorf("pieces at %v and %v, want %v and %v", typedAt, restAt, x0+16, x0)
 	}
 }
 
-// In vertical text the characters stand along the column: what was typed is coloured there too.
 func TestTypedRangesInVerticalText(t *testing.T) {
 	f, p := verticalFlow("abcdef")
 	f.TypedRanges = []TypedRange{{From: 2, To: 4, Name: "Ana", Color: "#ff0000"}}
@@ -88,7 +85,6 @@ func TestTypedRangesInVerticalText(t *testing.T) {
 	}
 }
 
-// An object somebody just put in or changed has an outline in their colour for the moment text would be coloured.
 func TestAnObjectSomebodyChangedIsOutlinedInTheirColour(t *testing.T) {
 	f := NewTextFlow("", 10, 30, 400, 200)
 	p := &fakePainter{}

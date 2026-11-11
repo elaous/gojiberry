@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// TestPageAndSecurityMiddleware drives the exact Echo instance main.go
-// serves (newRouter, in router.go) through a real net/http client
-// against a real httptest.Server -- no mocked request/response, no
-// direct calls into handler functions -- and checks all three
-// middlewares actually do something, not just that they're registered.
 func TestPageAndSecurityMiddleware(t *testing.T) {
 	srv := httptest.NewServer(newRouter())
 	defer srv.Close()
@@ -45,11 +40,6 @@ func TestPageAndSecurityMiddleware(t *testing.T) {
 			}
 		}
 
-		// Unlike gin-contrib/secure (see ../gin-ssr-demo), Echo's own
-		// Secure middleware only emits Strict-Transport-Security over a
-		// connection it considers actually secure -- sending HSTS over
-		// plain HTTP is meaningless, so Echo correctly omits it here
-		// since httptest.NewServer has no TLS.
 		if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
 			t.Errorf("Strict-Transport-Security = %q over plain HTTP, want empty (Echo should only set it over a secure connection)", got)
 		}
@@ -95,10 +85,6 @@ func TestPageAndSecurityMiddleware(t *testing.T) {
 	})
 
 	t.Run("rate limiter genuinely rejects a client that exceeds it", func(t *testing.T) {
-		// A fresh server/client pair so the burst-of-3 limiter (see
-		// router.go's RateLimiterMemoryStoreConfig{Rate: 2, Burst: 3})
-		// starts full, unaffected by the requests the earlier subtests
-		// already made.
 		limSrv := httptest.NewServer(newRouter())
 		defer limSrv.Close()
 

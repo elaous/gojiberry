@@ -6,8 +6,6 @@ import (
 	"sort"
 )
 
-// NeverSent lists what no sink ever gets, in words, for the admin route and the docs. A test fuzzes
-// requests to hold the code to it.
 var NeverSent = []string{
 	"IP addresses or any other network address",
 	"user, document, key, share or session identifiers",
@@ -17,9 +15,6 @@ var NeverSent = []string{
 	"free text of any kind, including error messages",
 }
 
-// Description is what GET /admin/observe answers: the allowlist, which sinks are on and, for the sinks
-// that send, the shape of the last thing they sent, so an operator can see what would leave before
-// enabling anything. It holds no secret.
 type Description struct {
 	Enabled     bool                `json:"enabled"`
 	Sinks       []string            `json:"sinks"`
@@ -35,8 +30,7 @@ type Description struct {
 	Usage       map[string][]string `json:"usage_allowlist,omitempty"`
 }
 
-// Describe reports the configuration and allowlist. It works on a nil Observer (observability off),
-// which is how an operator inspects it before turning it on.
+// Describe reports the configuration and allowlist.
 func (o *Observer) Describe() Description {
 	d := Description{
 		Available: Registered(),
@@ -74,8 +68,7 @@ func (o *Observer) Describe() Description {
 	return d
 }
 
-// WriteAdmin writes the description as JSON. The caller has already checked that the request comes
-// from the operator.
+// WriteAdmin writes the description as JSON.
 func WriteAdmin(w http.ResponseWriter, o *Observer) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

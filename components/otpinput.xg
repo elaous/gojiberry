@@ -8,22 +8,13 @@ import (
 
 // OTPInputProps configures OTPInput.
 type OTPInputProps struct {
-	// ID is a base id; each box gets fmt.Sprintf("%s-%d", ID, i). Like
-	// FileUploaderProps.InputID, this exists so a caller can reach a
-	// specific box through domrt/html: xango.Event carries no reference
-	// to the input element itself, so advancing focus to the next box
-	// after a digit is typed (or back after a backspace on an empty
-	// one) is done by the consuming app, calling html.Element.Focus()
-	// on the box with the next/previous id from inside OnChange.
 	ID       string
 	Length   int
 	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
 	Disabled bool
-	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+	OnChange func(index int, value string) // called with box index and new value ("" after backspace)
 }
 
-// OTPInput renders Length single-character text boxes for entering a
-// one-time-passcode/verification code.
 func OTPInput(props OTPInputProps) xango.Node {
 	var boxes []xango.Node
 	for i := 0; i < props.Length; i++ {

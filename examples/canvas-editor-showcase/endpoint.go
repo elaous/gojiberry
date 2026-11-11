@@ -5,13 +5,6 @@ import (
 	"strings"
 )
 
-// allowedEndpoint decides whether an address given in the page's query string
-// (?hub=, ?driveapi=, ?graphapi=, ?translate=, ?grammar=) may be used, and returns it
-// ready to use. These knobs exist for development and for self-hosting a backend, but
-// a link can set them: without a check, a crafted link sends the document text (or the
-// access token typed into the Migrate tab) to whatever host it names. So an address is
-// taken only if it is a path on the page's own origin, or at the page's own origin, or
-// at a loopback host (a backend on the developer's machine); anything else is refused.
 func allowedEndpoint(raw, pageOrigin string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

@@ -9,10 +9,6 @@ type BreadcrumbItem struct {
 	Label string
 	Href  string // "" renders a plain (non-link) span instead of an <a>
 
-	// OnClick fires alongside a real navigation to Href -- e.g. to
-	// drive client-side routing (see domrt/browser.Router) instead of
-	// a full page load. Call e.PreventDefault() in it to suppress the
-	// browser's own navigation.
 	OnClick xango.EventHandler
 }
 
@@ -21,9 +17,6 @@ type BreadcrumbsProps struct {
 	Items []BreadcrumbItem
 }
 
-// Breadcrumbs renders a trail of links with the last item marked as
-// the current page (aria-current, and rendered as plain text even if
-// it has an Href -- you're already there).
 func Breadcrumbs(props BreadcrumbsProps) xango.Node {
 	var items []xango.Node
 	for i, it := range props.Items {

@@ -15,21 +15,10 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Read aloud: the selection or the document, said one sentence at a time, in the order and wording of the accessible
-// copy. What says it is an engine behind the port of package voice/read: the voices the browser offers (the device
-// engine below) or a downloaded Piper voice that runs in the page (readpiper.go); the Player of that package walks the
-// sentences over whichever is chosen. Nothing is sent by this page unless the person allowed voices that use the
-// internet; whether a voice runs on the device is the browser's (voices that run there are preferred, and the menu
-// says so).
-
-// readMark shows the sentence and the word being read in the document (nil: nowhere to show it); reveal says to scroll
-// to the sentence (when a new one starts).
 var readMark func(sentFrom, sentTo, wordFrom, wordTo int, reveal bool)
 
-// readRender draws the page again; it is the renderUI of the latest menu or bar built.
 var readRender = func() {}
 
-// reader is the Player and the engines it can use.
 var reader = newReader()
 
 type readerSet struct {
@@ -57,8 +46,6 @@ func newReader() *readerSet {
 	return r
 }
 
-// engine is what reads now: the downloaded voices when the person chose them and the page can run them, else the
-// voices of the device.
 func (r *readerSet) engine() read.Engine {
 	if curPrefs.Reader == "piper" && piperUI.engine != nil && piperUI.engine.Available() {
 		return piperUI.engine
@@ -69,7 +56,6 @@ func (r *readerSet) engine() read.Engine {
 	return r.device
 }
 
-// voiceFor is the ID of the voice the person chose for the engine in use ("" for its own pick).
 func (r *readerSet) voiceFor(string) string {
 	if r.engine() == read.Engine(r.device) {
 		return curPrefs.Voice
@@ -80,7 +66,6 @@ func (r *readerSet) voiceFor(string) string {
 	return curPrefs.PVoice
 }
 
-// readErrorWords says why reading stopped.
 func readErrorWords(err error) string {
 	switch {
 	case errors.Is(err, errNoPiperRuntime):
@@ -101,7 +86,6 @@ func speechAPI() js.Value {
 
 func speechSupported() bool { return !speechAPI().IsUndefined() }
 
-// speechRate is the speed the person chose: 0.75, 1 or 1.5.
 func speechRate() float64 {
 	switch curPrefs.Speed {
 	case "slow":
@@ -112,12 +96,8 @@ func speechRate() float64 {
 	return 1
 }
 
-// networkVoices says whether the person allowed voices that may send the text to a speech service on the
-// internet (Preferences > Typing and reading aloud). It is off unless chosen.
 func networkVoices() bool { return curPrefs.Voices == "net" }
 
-// webSpeechEngine is the adapter for the browser's speech synthesis (read.Engine): the voices the device has, and,
-// when allowed, those that use a speech service.
 type webSpeechEngine struct{ funcs []js.Func }
 
 func (e *webSpeechEngine) ID() string      { return "device" }
@@ -139,7 +119,6 @@ func (e *webSpeechEngine) Voices() []read.Voice {
 	return out
 }
 
-// release lets go of the callbacks handed to the browser.
 func (e *webSpeechEngine) release() {
 	for _, f := range e.funcs {
 		f.Release()
@@ -184,8 +163,6 @@ func (e *webSpeechEngine) Speak(u read.Utterance, h read.Handler) read.Speech {
 	} else if h.OnStart != nil {
 		h.OnStart("")
 	}
-	// the engine says where it is in the text: the word being said is reported (browsers that do not send
-	// boundary events leave the sentence marked)
 	units := utf16Index(u.Text)
 	boundary := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if h.OnWord == nil || len(args) == 0 || args[0].Get("name").String() != "word" {
@@ -205,7 +182,7 @@ func (e *webSpeechEngine) Speak(u read.Utterance, h read.Handler) read.Speech {
 	})
 	end := js.FuncOf(func(js.Value, []js.Value) any {
 		if h.OnEnd != nil {
-			h.OnEnd() // an error ends the sentence too: reading goes on with the next
+			h.OnEnd()
 		}
 		return nil
 	})
@@ -217,9 +194,6 @@ func (e *webSpeechEngine) Speak(u read.Utterance, h read.Handler) read.Speech {
 	return webSpeech{e}
 }
 
-// pickVoice is the voice for lang: the one the person named when it is one to offer, else one running on the device
-// first, a network voice only when the person allowed them; undefined when there is none (the browser's default
-// voice for the language is then used).
 func pickVoice(lang, name string) js.Value {
 	api := speechAPI()
 	if lang == "" {
@@ -255,9 +229,9 @@ func pickVoice(lang, name string) js.Value {
 		}
 		if !v.Get("localService").Truthy() {
 			if !networkVoices() {
-				continue // a voice that is not on the device is not picked unless the person allowed it
+				continue
 			}
-			score-- // and a voice on the device is preferred to it for the same language
+			score--
 			if score == 0 {
 				continue
 			}
@@ -269,8 +243,6 @@ func pickVoice(lang, name string) js.Value {
 	return best
 }
 
-// voiceMenu is the choice of reader: the browser's own pick, or one of the voices offered for the document's language,
-// each described by its accent and gender (American, British; female, male).
 func voiceMenu(u *ui, renderUI func()) components.MenuItem {
 	piperOn := reader.engine() != read.Engine(reader.device)
 	choose := func(name string) func() {
@@ -314,10 +286,8 @@ func voiceMenu(u *ui, renderUI func()) components.MenuItem {
 	return components.MenuItem{Label: T("read.voice", "Reader voice"), Items: items}
 }
 
-// stopReading ends the reading.
 func stopReading() { reader.player.Stop() }
 
-// startReading says the chunks from the first, with the engine the person chose.
 func startReading(chunks []read.Chunk, renderUI func()) {
 	readRender = renderUI
 	reader.player.Engine = reader.engine()
@@ -326,10 +296,8 @@ func startReading(chunks []read.Chunk, renderUI func()) {
 
 func pauseReading(renderUI func()) { readRender = renderUI; reader.player.Pause() }
 
-// skipReading moves to the previous (-1) or next (1) sentence.
 func skipReading(by int, renderUI func()) { readRender = renderUI; reader.player.Skip(by) }
 
-// readerChoice is the entry that picks the engine.
 func readerMenu(u *ui, renderUI func()) components.MenuItem {
 	pick := func(value, say string) func() {
 		return func() {
@@ -359,7 +327,6 @@ func readerMenu(u *ui, renderUI func()) components.MenuItem {
 	}}
 }
 
-// readMenu is the read-aloud entries of the Tools-like menu.
 func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuItem {
 	readRender = renderUI
 	if !speechSupported() && curPrefs.Reader != "piper" {
@@ -413,7 +380,6 @@ func readMenu(u *ui, flow *canvas.TextFlow, renderUI func()) []components.MenuIt
 	}
 }
 
-// readBar is the controls and the sentence being spoken, shown while reading.
 func readBar(u *ui, renderUI func()) xango.Node {
 	readRender = renderUI
 	cur, ok := reader.player.Current()
@@ -437,8 +403,6 @@ func readBar(u *ui, renderUI func()) xango.Node {
 	)
 }
 
-// publishRead puts the sentence and the word being read on the root element (data-gj-read-sentence and
-// data-gj-read-word, "from-to" in stream offsets), for the page's own tests and for tools that watch it.
 func publishRead(sf, st, wf, wt int) {
 	root := js.Global().Get("document").Get("documentElement")
 	set := func(name string, from, to int) {
@@ -452,7 +416,6 @@ func publishRead(sf, st, wf, wt int) {
 	set("data-gj-read-word", wf, wt)
 }
 
-// showRead marks the chunk being read (and the word of it, when wordFrom is not negative).
 func showRead(c read.Chunk, wordFrom, wordTo int, reveal bool) {
 	sf, st, ok := c.Span()
 	if !ok {
@@ -464,7 +427,6 @@ func showRead(c read.Chunk, wordFrom, wordTo int, reveal bool) {
 	}
 }
 
-// utf16Index lists, for each rune of s, the index of its first UTF-16 unit: the engine counts characters that way.
 func utf16Index(s string) []int {
 	var at []int
 	n := 0
@@ -479,7 +441,6 @@ func utf16Index(s string) []int {
 	return at
 }
 
-// runeIndexAt is the index of the rune that holds UTF-16 unit u (the last rune if u is past the text).
 func runeIndexAt(units []int, u int) int {
 	for i := len(units) - 1; i >= 0; i-- {
 		if units[i] <= u {
@@ -489,7 +450,6 @@ func runeIndexAt(units []int, u int) int {
 	return 0
 }
 
-// voiceNote says which voices are chosen, in words.
 func voiceNote() string {
 	if networkVoices() {
 		return T("read.noteNetwork", "Voices on this device first; others may send the text to a speech service")
@@ -497,7 +457,6 @@ func voiceNote() string {
 	return T("read.note", "Only voices that run on this device are chosen")
 }
 
-// voiceWords says what is speaking.
 func voiceWords(kind string) string {
 	switch kind {
 	case "device":

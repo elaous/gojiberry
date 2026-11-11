@@ -21,8 +21,6 @@ func (q *memQueue) Load() []crdt.Op  { q.mu.Lock(); defer q.mu.Unlock(); return 
 func (q *memQueue) Save(o []crdt.Op) { q.mu.Lock(); q.ops = o; q.mu.Unlock() }
 func (q *memQueue) len() int         { q.mu.Lock(); defer q.mu.Unlock(); return len(q.ops) }
 
-// Ops sent while the server is down are kept in the Queue, and a new
-// connection (the tab was closed and opened again) delivers them.
 func TestQueueSurvivesARestart(t *testing.T) {
 	var mu sync.Mutex
 	var got []crdt.Op

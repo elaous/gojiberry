@@ -6,41 +6,28 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// ConsoleLine is one line of the console's log: what was typed (Kind "cmd"), what came back ("out") or an
-// error ("err").
 type ConsoleLine struct {
 	Text string
 	Kind string
 }
 
-// ConsoleProps configures ConsolePanel, the command line inside the editor (console.Session fills it in).
-// Every operation is a plain callback: a nil one leaves its control out.
 type ConsoleProps struct {
-	// Lines is the log, oldest first; Prompt precedes the input ("Work/Reports>").
-	Lines  []ConsoleLine
-	Prompt string
-	// Input is the text being typed; OnInput reports each change; OnSubmit runs it. OnHistory is told
-	// -1 (the key Up: an older command) or +1 (Down: a newer one) and puts that command in Input.
+	Lines     []ConsoleLine
+	Prompt    string
 	Input     string
 	OnInput   func(text string)
 	OnSubmit  func()
 	OnHistory func(dir int)
 	// OnClear empties the log.
-	OnClear func()
-	// OnAddFiles opens the chooser for files that import and unpack can read; Inbox are the files
-	// added so far, by name.
+	OnClear    func()
 	OnAddFiles func()
 	Inbox      []string
-	// Question, when set, is a command waiting for a yes or no (purge, rebuild); OnAnswer gives it.
-	Question string
-	OnAnswer func(yes bool)
+	Question   string
+	OnAnswer   func(yes bool)
 	// Busy is set while a command runs.
 	Busy bool
 }
 
-// ConsolePanel is the console in the editor: a log that screen readers announce as it grows, a line to type a
-// command on (Enter runs it, Up and Down walk the commands already run), a question with Yes and No buttons when
-// a command needs one, and a button to add the files import reads.
 func ConsolePanel(p ConsoleProps) xango.Node {
 	var lines []xango.Node
 	for _, l := range p.Lines {

@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// OneDrive is a Source over Microsoft Graph: the Word files (.docx) in a person's
-// OneDrive and the folders holding them.
 type OneDrive struct {
 	// Token is an OAuth access token with the Files.Read scope.
 	Token string
@@ -76,8 +74,7 @@ func (o *OneDrive) Fetch(ctx context.Context, item Item) ([]byte, error) {
 	return getBytes(ctx, o.Client, o.Token, o.base()+"/me/drive/items/"+url.PathEscape(item.ID)+"/content")
 }
 
-// sameHost says whether two addresses are at one host: a next-page link is followed
-// with the access token, so it must not lead anywhere else.
+// next-page links carry the token: never leave the host
 func sameHost(a, b string) bool {
 	ua, err1 := url.Parse(a)
 	ub, err2 := url.Parse(b)

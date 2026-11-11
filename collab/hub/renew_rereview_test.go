@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// editOK posts one accepted edit and waits for the renewal it starts.
 func editOK(t *testing.T, h *Hub, e edit, id, op string) {
 	t.Helper()
 	if s := e.post(t, id, "editor", "", "r", textOps(t, op, "x")); s != http.StatusNoContent {
@@ -23,10 +22,6 @@ func editOK(t *testing.T, h *Hub, e edit, id, op string) {
 	h.waitRenewals()
 }
 
-// --- finding 1: a transient or foreign 404 never kills a live room
-
-// A reverse proxy that answers a plain 404 (no marker) in front of the docstore after one good
-// renewal: the room stays open, its state is kept, nothing answers 410.
 func TestProxy404WithoutMarkerKeepsTheRoomAlive(t *testing.T) {
 	var proxyDown atomic.Bool
 	ds := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +51,6 @@ func TestProxy404WithoutMarkerKeepsTheRoomAlive(t *testing.T) {
 	}
 }
 
-// A docstore older than the renew route (every /renew is a plain 404) never closes a room, even
-// though an earlier call (a success from a newer instance during a rolling deploy) came first.
 func TestOlderDocstoreWithoutRenewRouteNeverClosesARoom(t *testing.T) {
 	var calls atomic.Int32
 	ds := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +75,6 @@ func TestOlderDocstoreWithoutRenewRouteNeverClosesARoom(t *testing.T) {
 	}
 }
 
-// A genuine "gone" (the docstore's marked 404) closes the room, but only after a second "gone".
 func TestGenuineGoneClosesTheRoomOnlyAfterConfirmation(t *testing.T) {
 	var calls atomic.Int32
 	h, e := newRenewHub(t, Config{RenewInterval: -1, GoneConfirmDelay: 20 * time.Millisecond, Renewer: rf(func(context.Context, string) error {
@@ -105,7 +97,6 @@ func TestGenuineGoneClosesTheRoomOnlyAfterConfirmation(t *testing.T) {
 	}
 }
 
-// One "gone" followed by a success (a failover, a recreated document) leaves the room open.
 func TestSingleGoneAnswerDoesNotCloseTheRoom(t *testing.T) {
 	var calls atomic.Int32
 	store := docstore.NewMemoryAdapter()
@@ -129,8 +120,6 @@ func TestSingleGoneAnswerDoesNotCloseTheRoom(t *testing.T) {
 	}
 }
 
-// --- finding 2: a tombstone does not outlive the document's return
-
 func TestRecreatedDocumentClearsTheTombstone(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -138,19 +127,16 @@ func TestRecreatedDocumentClearsTheTombstone(t *testing.T) {
 	h, e := newRenewHub(t, Config{Store: ea, Renewer: ea, RenewInterval: -1, Now: clk.Now})
 	_ = ea.Save(ctx, "doc", []byte("v1"))
 	editOK(t, h, e, "doc", "c1")
-	// The document is deleted (not merely expired) while the room is open.
 	if err := ea.Delete(ctx, "doc"); err != nil {
 		t.Fatal(err)
 	}
-	editOK(t, h, e, "doc", "c2") // gone (twice): the room is closed
+	editOK(t, h, e, "doc", "c2")
 	if s := e.post(t, "doc", "editor", "", "r", textOps(t, "c3", "x")); s != http.StatusGone {
 		t.Fatalf("closed room: %d, want 410", s)
 	}
-	// Still deleted: still 410, for a reader too.
 	if s := e.get(t, "/docs/doc/snapshot", "viewer"); s != http.StatusGone {
 		t.Fatalf("snapshot of the dead document: %d", s)
 	}
-	// Recreated under the same id: an editor can use it at once.
 	_ = ea.Save(ctx, "doc", []byte("v2"))
 	if s := e.get(t, "/docs/doc/snapshot", "viewer"); s != http.StatusGone {
 		t.Fatalf("a viewer cannot clear the tombstone (it cannot renew): %d", s)
@@ -166,8 +152,6 @@ func TestRecreatedDocumentClearsTheTombstone(t *testing.T) {
 		t.Fatalf("health = %+v", got)
 	}
 }
-
-// --- finding 4: a hub-only document is logged once per room
 
 func TestHubOnlyDocumentIsLoggedOncePerRoom(t *testing.T) {
 	lb := captureLog(t)
@@ -192,11 +176,6 @@ func TestHubOnlyDocumentIsLoggedOncePerRoom(t *testing.T) {
 	}
 }
 
-// --- public sessions never reach a public document through the hub
-
-// The hub refuses a document id with a slash, so a room can never be named "pubdoc/<id>" and a
-// hub edit can never renew a public document; and a public session token is no sign-in, so on a
-// document with an access list it is nobody.
 func TestHubCannotAddressPublicDocuments(t *testing.T) {
 	var renewed atomic.Int32
 	h, e := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error { renewed.Add(1); return nil })})
@@ -219,8 +198,6 @@ func TestHubCannotAddressPublicDocuments(t *testing.T) {
 	}
 }
 
-// The mark of a closed document is in the store: a new process (a restart, another replica) refuses
-// the id too, and an editor of a document that is live again clears it.
 func TestClosedDocumentStaysRefusedAcrossARestart(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
 	var calls atomic.Int32
@@ -231,7 +208,7 @@ func TestClosedDocumentStaysRefusedAcrossARestart(t *testing.T) {
 		return docstore.ErrNotFound
 	})})
 	editOK(t, h1, e1, "d", "c1")
-	editOK(t, h1, e1, "d", "c2") // gone, confirmed: the room is closed
+	editOK(t, h1, e1, "d", "c2")
 	if !exists(t, store, goneKey("d")) {
 		t.Fatal("no mark in the store")
 	}
@@ -258,8 +235,6 @@ func TestClosedDocumentStaysRefusedAcrossARestart(t *testing.T) {
 	}
 }
 
-// The hub's keys are not documents: they are not listed as one and never get an expiry deadline of
-// their own. docstore lists the prefixes; this pins the hub's two to that list.
 func TestHubKeysAreSystemKeysNotDocuments(t *testing.T) {
 	for _, k := range []string{StoreKey("doc"), goneKey("doc"), StoreKey("a b"), goneKey("a/b")} {
 		if docstore.IsDocumentKey(k) {
