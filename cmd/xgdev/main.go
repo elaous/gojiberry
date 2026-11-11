@@ -1,4 +1,3 @@
-// Command xgdev is a generic front end for devwatch.Run.
 package main
 
 import (
