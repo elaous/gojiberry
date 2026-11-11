@@ -41,12 +41,10 @@ func TestStoreSessionsLifecycle(t *testing.T) {
 	if err != nil || !ok || got != s {
 		t.Fatalf("Get on the other replica: %+v %v %v", got, ok, err)
 	}
-	// the store holds the hash, not the token
 	metas, _ := docstore.ListPrefix(ctx, store, SessionKeyPrefix)
 	if len(metas) != 1 || strings.Contains(metas[0].ID, "secret-token") || metas[0].ID != SessionKeyPrefix+key {
 		t.Errorf("records: %+v", metas)
 	}
-	// one document per session, whichever replica sets it
 	if ok, err := a.SetDoc(ctx, key, "", "doc1", t0); !ok || err != nil {
 		t.Fatalf("first SetDoc: %v %v", ok, err)
 	}
@@ -56,7 +54,6 @@ func TestStoreSessionsLifecycle(t *testing.T) {
 	if got, _, _ := b.Get(ctx, key, t0); got.DocID != "doc1" {
 		t.Errorf("DocID = %q", got.DocID)
 	}
-	// extending moves the expiry later, never earlier
 	if err := b.Extend(ctx, key, t0.Add(3*time.Hour), t0); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +63,6 @@ func TestStoreSessionsLifecycle(t *testing.T) {
 	if got, ok, _ := a.Get(ctx, key, t0.Add(2*time.Hour)); !ok || !got.Expires.Equal(t0.Add(3*time.Hour)) {
 		t.Errorf("after Extend: %+v %v", got, ok)
 	}
-	// expired: absent, and the methods that need a session say so
 	late := t0.Add(4 * time.Hour)
 	if _, ok, _ := a.Get(ctx, key, late); ok {
 		t.Error("an expired session was found")
@@ -77,7 +73,6 @@ func TestStoreSessionsLifecycle(t *testing.T) {
 	if err := a.Extend(ctx, key, late.Add(time.Hour), late); err != ErrNoSession {
 		t.Errorf("Extend on an expired session: %v", err)
 	}
-	// Delete ends it on every replica, and deleting a missing one is fine
 	if err := a.Delete(ctx, key); err != nil {
 		t.Fatal(err)
 	}
@@ -157,8 +152,6 @@ func TestStoreSessionsCaps(t *testing.T) {
 	if err := create("f3", mk("I", "N7", "W5", time.Hour), t0, caps); err != ErrSessionsFull {
 		t.Fatalf("global: %v", err)
 	}
-	// a session that expired no longer counts once the counts are rebuilt (a minute on, a1 is gone),
-	// and Reap deletes it
 	later := t0.Add(2 * time.Minute)
 	if n, err := st.Reap(ctx, later); err != nil || n != 1 {
 		t.Fatalf("Reap = %d %v, want 1", n, err)
@@ -187,7 +180,6 @@ func TestStoreSessionsReserveKeepsRoomForNewNetworks(t *testing.T) {
 	}
 }
 
-// Two replicas that have not recounted may each let a cap's worth in; the next recount sees both.
 func TestStoreSessionsReplicasOvershootByWhatTheyWriteBetweenRecounts(t *testing.T) {
 	ctx := context.Background()
 	store := docstore.NewMemoryAdapter()
@@ -199,11 +191,9 @@ func TestStoreSessionsReplicasOvershootByWhatTheyWriteBetweenRecounts(t *testing
 			t.Fatal(err)
 		}
 	}
-	// b counted before a wrote? No: b's first Create counts the store, so it already sees 3.
 	if err := b.Create(ctx, TokenKey("b0"), mk(), t0, SessionCaps{}); err != ErrSessionsFull {
 		t.Fatalf("b recounts on its first Create and sees the store full: %v", err)
 	}
-	// but once both have counted, what each writes is unseen by the other until the next recount
 	c := newStoreSessions(t, store, 5)
 	c.Refresh = time.Hour
 	if err := c.Create(ctx, TokenKey("c0"), mk(), t0, SessionCaps{}); err != nil { // counts 3, writes the 4th
@@ -226,8 +216,6 @@ func TestStoreSessionsNeedConditionalWrites(t *testing.T) {
 // plainAdapter hides the conditional methods of the adapter it wraps.
 type plainAdapter struct{ docstore.Adapter }
 
-// Two services over one store share the anonymous sessions: a session begun on one writes its
-// document through the other.
 func TestTwoServicesShareAnonymousSessionsThroughTheStore(t *testing.T) {
 	var sessionsA *StoreSessions
 	e := newEnv(t, func(o *Options) {
@@ -236,7 +224,6 @@ func TestTwoServicesShareAnonymousSessionsThroughTheStore(t *testing.T) {
 	})
 	token, _ := e.session()
 
-	// a second service over the same store, with its own StoreSessions
 	o := Options{Store: e.store, Now: e.clk.Now, Config: e.svc.cfg, Sessions: newStoreSessions(t, e.store, 0)}
 	svc2, err := New(o)
 	if err != nil {
@@ -252,14 +239,11 @@ func TestTwoServicesShareAnonymousSessionsThroughTheStore(t *testing.T) {
 	if d.ID == "" {
 		t.Fatalf("no document: %+v", d)
 	}
-	// and the first replica sees that the session now has its document
 	if r := e.do("POST", "/public/doc", token, []byte("a second one")); r.StatusCode == 201 {
 		t.Errorf("a second document on the same session was accepted: %d %s", r.StatusCode, r.body)
 	}
 }
 
-// With a PriorityQuota two services over one store share each reporter's allowance of priority reports; the
-// per-process count lets each use it.
 func TestPriorityAllowanceIsSharedByReplicasThroughTheStore(t *testing.T) {
 	ctx := context.Background()
 	var a *Service
@@ -288,7 +272,6 @@ func TestPriorityAllowanceIsSharedByReplicasThroughTheStore(t *testing.T) {
 	if !a.allowPriority(ctx, "rep2") {
 		t.Error("another reporter has an allowance of its own")
 	}
-	// without it each process counts for itself
 	c, d := &Service{cfg: Config{MaxPriorityReportsPerReporter: 1}, now: e.clk.Now}, &Service{cfg: Config{MaxPriorityReportsPerReporter: 1}, now: e.clk.Now}
 	if !c.allowPriority(ctx, "rep1") || !d.allowPriority(ctx, "rep1") {
 		t.Error("per-process counts are independent")

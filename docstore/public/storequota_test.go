@@ -41,7 +41,6 @@ func TestStoreQuotaIsSharedByTwoReplicasOverOneStore(t *testing.T) {
 	if ok, _, _ := b.Take(ctx, "1.2.3.4", 40); !ok {
 		t.Error("the rest of the budget is usable")
 	}
-	// A refund within the window gives bytes back, from either replica; a late one is dropped.
 	_, win, _, _ := a.TakeIn(ctx, "9.9.9.9", 10)
 	b.RefundIn(ctx, "9.9.9.9", 10, win)
 	if ok, _, _ := a.Take(ctx, "9.9.9.9", 100); !ok {
@@ -52,7 +51,6 @@ func TestStoreQuotaIsSharedByTwoReplicasOverOneStore(t *testing.T) {
 	if ok, _, _ := a.Take(ctx, "9.9.9.9", 100); !ok {
 		t.Error("a new window starts full")
 	}
-	// The store holds no address, and Sweep drops the windows that ended.
 	metas, _ := docstore.ListPrefix(ctx, store, QuotaPrefix)
 	for _, m := range metas {
 		if strings.Contains(m.ID, "1.2.3.4") {

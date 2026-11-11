@@ -36,8 +36,6 @@ func (c *fakeClock) Add(d time.Duration) {
 
 const hour = time.Hour
 
-// env is a public offer over an expiring memory store, served through docstore.Server (so the
-// generic /docs routes are there too), with a clock all of its parts share.
 type env struct {
 	t     *testing.T
 	clk   *fakeClock
@@ -49,8 +47,6 @@ type env struct {
 
 const adminToken = "s3cret-admin-token"
 
-// testReportKey keys the reporter hashes of the test services, so that two of them over one store
-// agree (a service without a key makes one of its own).
 var testReportKey = deriveReportKey([]byte("test report key material"))
 
 func newEnv(t *testing.T, mod func(*Options)) *env {
@@ -64,7 +60,6 @@ func newEnv(t *testing.T, mod func(*Options)) *env {
 		Config: Config{
 			AdminToken: adminToken, TermsURL: "https://example.org/terms", NoProxy: true, ReportKey: testReportKey,
 			SessionTTL: 48 * hour, SessionMaxAge: 96 * hour,
-			// roomy rate limits unless a test narrows them
 			SessionsPerHour: 100000, MaxSessionsPerAddress: 100000, WritesPerMinute: 1000, WritesPerMinutePerAddress: 100000, ViewsPerMinute: 1000, ReportsPerMinute: 1000,
 		},
 	}
@@ -159,8 +154,6 @@ func (e *env) keys(prefix string) []string {
 	return out
 }
 
-// The whole flow: session, create, edit (renews), view link (read-only, never renews, reveals
-// nothing), the generic API cannot reach any of it, report, expiry by the fake clock, sweep.
 func TestFlow(t *testing.T) {
 	e := newEnv(t, nil)
 	token, sr := e.session()
@@ -173,7 +166,6 @@ func TestFlow(t *testing.T) {
 		t.Fatalf("an e-mail field in %s", sr.body)
 	}
 
-	// create: the 24 h promise and the terms are in the response
 	r := e.want(e.do("POST", "/public/doc", token, []byte("v1 content")), 201)
 	var d docResponse
 	_ = json.Unmarshal(r.body, &d)
@@ -205,7 +197,6 @@ func TestFlow(t *testing.T) {
 	}
 	editDeadline := expires(t, r)
 
-	// the view link: read-only, never renews, never reveals the token, the owner or the doc id
 	e.clk.Add(5 * hour)
 	r = e.want(e.do("GET", "/public/view/"+d.ViewID, "", nil), 200)
 	if string(r.body) != "v2 content" {
@@ -228,7 +219,6 @@ func TestFlow(t *testing.T) {
 		t.Fatal("a second view moved the deadline")
 	}
 
-	// the owner's download: always there, no renewal
 	r = e.want(e.do("GET", "/public/doc", token, nil), 200)
 	if string(r.body) != "v2 content" || !strings.Contains(r.Header.Get("Content-Disposition"), "attachment") {
 		t.Fatalf("download %q %v", r.body, r.Header)
@@ -237,7 +227,6 @@ func TestFlow(t *testing.T) {
 		t.Fatal("the download renewed")
 	}
 
-	// the generic /docs API cannot reach the document, the records or the reports
 	for _, id := range []string{"pubdoc/" + d.ID, "public/doc/" + d.ID, "public/view/" + d.ViewID, "report/x", "public/tomb/" + d.ViewID} {
 		for _, m := range []string{"GET", "PUT", "DELETE"} {
 			if r := e.do(m, "/docs/"+id, "", []byte("x")); r.StatusCode != 400 {
@@ -257,7 +246,6 @@ func TestFlow(t *testing.T) {
 		t.Fatalf("reports: %v", e.keys("report/"))
 	}
 
-	// expiry: 24 h after the last edit the document and the view link are gone at once
 	e.clk.Add(24*hour - 5*hour - time.Second) // just before
 	e.want(e.do("GET", "/public/view/"+d.ViewID, "", nil), 200)
 	e.clk.Add(2 * time.Second)
@@ -265,14 +253,12 @@ func TestFlow(t *testing.T) {
 	e.want(e.do("GET", "/public/doc", token, nil), 404)
 	e.want(e.do("PUT", "/public/doc", token, []byte("zombie")), 404)
 
-	// the view request cleaned its records lazily; the sweeps do the rest; reports stay
 	if _, err := e.store.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// (the reporter salt is the one record that stays: it keys the reporter hashes of reports)
 	if k := e.keys("public/"); len(k) != 1 || k[0] != "public/salt" {
 		t.Fatalf("records left after expiry: %v", k)
 	}
@@ -283,7 +269,6 @@ func TestFlow(t *testing.T) {
 		t.Fatal("the report must outlive the document")
 	}
 
-	// the session survived (48 h): the expired document frees it for a new one
 	d2 := e.create(token, "second document")
 	if d2.ID == d.ID || d2.ViewID == d.ViewID {
 		t.Fatal("ids reused")
@@ -343,7 +328,6 @@ func TestTakedown(t *testing.T) {
 	// idempotent
 	e.want(e.do("DELETE", path, "", nil, AdminHeader, adminToken), 204)
 
-	// tombstones and reports survive document expiry and its sweep ...
 	e.clk.Add(48 * hour)
 	if _, err := e.store.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
@@ -355,7 +339,6 @@ func TestTakedown(t *testing.T) {
 	if len(e.keys(TombstonePrefix)) != 1 || len(e.keys("report/")) != 1 {
 		t.Fatalf("tombstones %v reports %v", e.keys(TombstonePrefix), e.keys("report/"))
 	}
-	// ... and go after their own TTL (30 days by default)
 	e.clk.Add(30 * 24 * hour)
 	n, err := e.svc.Sweep(context.Background())
 	if err != nil || n != 2 {
@@ -381,7 +364,6 @@ func TestNoAdminTokenNoAdminRoute(t *testing.T) {
 	e.want(e.do("DELETE", "/admin/takedown/"+d.ViewID, "", nil, AdminHeader, ""), 404)
 	e.want(e.do("DELETE", "/admin/takedown/"+d.ViewID, "", nil, AdminHeader, adminToken), 404)
 	e.want(e.do("GET", "/public/view/"+d.ViewID, "", nil), 200)
-	// and a guard that allows nobody refuses even when mounted by hand
 	if (TokenAdmin("")).Allow(httptest.NewRequest("DELETE", "/", nil)) {
 		t.Fatal("empty token allowed")
 	}
@@ -431,7 +413,6 @@ func TestVersionCap(t *testing.T) {
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v2")), 204)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v3")), 204)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v4")), 403)
-	// the download still works: the limit never traps the content
 	if r := e.want(e.do("GET", "/public/doc", tok, nil), 200); string(r.body) != "v3" {
 		t.Fatalf("body %q", r.body)
 	}
@@ -462,20 +443,16 @@ func TestIPDailyByteBudget429(t *testing.T) {
 	})
 	a, _ := e.session()
 	e.want(e.do("POST", "/public/doc", a, bytes.Repeat([]byte("a"), 60), "X-Forwarded-For", "203.0.113.5"), 201)
-	// a second session from the same address shares the budget
 	b, _ := e.session("X-Forwarded-For", "203.0.113.5")
 	r := e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 60), "X-Forwarded-For", "203.0.113.5"), 429)
 	if r.Header.Get("Retry-After") == "" {
 		t.Fatal("no Retry-After")
 	}
-	// the refused write was not stored and not charged: a smaller one fits
 	e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 40), "X-Forwarded-For", "203.0.113.5"), 201)
 	// another address has its own budget
 	c, _ := e.session()
 	e.want(e.do("POST", "/public/doc", c, bytes.Repeat([]byte("c"), 60), "X-Forwarded-For", "198.51.100.9"), 201)
-	// a day later the budget is back
 	e.clk.Add(24 * hour)
-	// (the first document expired meanwhile, so a new session starts a new one)
 	f, _ := e.session("X-Forwarded-For", "203.0.113.5")
 	e.want(e.do("POST", "/public/doc", f, bytes.Repeat([]byte("a"), 90), "X-Forwarded-For", "203.0.113.5"), 201)
 }
@@ -498,7 +475,6 @@ func TestSessionRatePerIP(t *testing.T) {
 	e.session(hdr...)
 }
 
-// Without trusted proxies a caller cannot pick its own limiter key with X-Forwarded-For.
 func TestForwardedForIgnoredWithoutTrustedProxies(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.SessionsPerHour = 1 })
 	e.session("X-Forwarded-For", "1.1.1.1")
@@ -578,7 +554,6 @@ type challengeFunc func(*http.Request) error
 
 func (f challengeFunc) Verify(r *http.Request) error { return f(r) }
 
-// The public routes are refused unless the store expires documents: the 24 h promise.
 func TestRefusesAStoreWithoutExpiry(t *testing.T) {
 	_, err := New(Options{Store: docstore.NewMemoryAdapter()})
 	if !errors.Is(err, ErrExpiryRequired) {
@@ -589,7 +564,6 @@ func TestRefusesAStoreWithoutExpiry(t *testing.T) {
 	}
 }
 
-// A policy that skips public documents would keep them for ever: refused at the first create.
 func TestRefusesToKeepADocumentWithoutDeadline(t *testing.T) {
 	ea := docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.ExpiryPolicyFunc(func(string, time.Time) (time.Duration, bool) { return 0, false }))
 	svc, err := New(Options{Store: ea})
@@ -638,8 +612,6 @@ func TestPublicKeyspacesAreNotDocumentsButPublicDocumentsExpire(t *testing.T) {
 	}
 }
 
-// A public document is reachable only through its routes even by a server that mounts them
-// without Hide: HiddenPrefixes names what Mount hides.
 func TestHiddenPrefixes(t *testing.T) {
 	if h := HiddenPrefixes(); len(h) != 1 || h[0] != docKeyPrefix {
 		t.Fatalf("HiddenPrefixes = %v", h)
@@ -675,7 +647,6 @@ func TestReportCapPerDocument(t *testing.T) {
 	if n := len(e.keys("report/")); n != maxReportsOfDoc {
 		t.Fatalf("stored reports: %d, want %d", n, maxReportsOfDoc)
 	}
-	// by document id too, and a long reason is cut
 	long := strings.Repeat("é", 3000)
 	tok2, _ := e.session()
 	d2 := e.create(tok2, "y")
@@ -700,10 +671,8 @@ func TestFailedAdminAuthIsRateLimitedAndSuccessBypassesTheLimiter(t *testing.T) 
 	for i := 0; i < 2; i++ {
 		e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, "guess"), 403)
 	}
-	// the failures have used the budget up: more wrong guesses are 429 ...
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, "guess"), 429)
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, ""), 429)
-	// ... but the operator, with the token, is not counted and gets in
 	e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, adminToken), 202)
 	for i := 0; i < 5; i++ { // idempotent: 204 from then on
 		e.want(e.do("DELETE", "/admin/takedown/"+id, "", nil, AdminHeader, adminToken), 204)
@@ -737,8 +706,6 @@ func TestCurrentUserIsAnonymousAuthUser(t *testing.T) {
 	}
 }
 
-// A signed-in-style bearer of the same server (the /docs ACL API) does not know anonymous
-// tokens: they open nothing outside /public.
 func TestSessionTokenOpensNothingElse(t *testing.T) {
 	e := newEnv(t, nil)
 	tok, _ := e.session()
@@ -755,7 +722,6 @@ func TestSweepKeepsRecordsOfLiveDocumentsAndFreshOrphans(t *testing.T) {
 	if n, err := e.svc.Sweep(context.Background()); err != nil || n != 0 {
 		t.Fatalf("Sweep = %d, %v", n, err)
 	}
-	// an orphan record younger than the grace period is left (a create in progress)
 	_ = e.inner.Delete(context.Background(), docKey(d.ID))
 	_ = e.inner.Delete(context.Background(), docstore.ExpiryPrefix+docKey(d.ID))
 	if n, _ := e.svc.Sweep(context.Background()); n != 0 {

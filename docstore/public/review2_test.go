@@ -14,9 +14,6 @@ import (
 	"time"
 )
 
-// ---- 1. the in-flight bytes have a share per client and per network, and slow uploads cost quota
-
-// holdUploadAs is holdUpload for a client behind the trusted proxy (X-Forwarded-For).
 func holdUploadAs(t *testing.T, e *env, token string, n int, ip string) net.Conn {
 	t.Helper()
 	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
@@ -44,23 +41,18 @@ func TestSlowWritersFromSeveralAddressesCannotUseUpTheInflightCap(t *testing.T) 
 		tok, _ := e.session(xff(ip)...)
 		return tok
 	}
-	// six attackers, each in its own network, each slowly sending a declared 1000 bytes
 	attackers := []string{"203.0.113.1", "198.51.100.1", "192.0.2.1", "100.64.0.1", "100.65.0.1", "2001:db8:a::1"}
 	for _, ip := range attackers {
 		holdUploadAs(t, e, tokenFor(ip), 1000, ip)
 	}
 	waitFor(t, "the six uploads to be admitted", func() bool { return e.svc.flight.held() == 6000 })
-	// an attacker that opens a second connection finds its share used (429), not the global cap
 	r := e.want(e.do("POST", "/public/doc", tokenFor("203.0.113.1"), bytes.Repeat([]byte("x"), 1000), xff("203.0.113.1")...), 429)
 	if r.Header.Get("Retry-After") == "" {
 		t.Fatal("no Retry-After")
 	}
-	// a second address in the same /24 still has the network's share (2000) ...
 	holdUploadAs(t, e, tokenFor("203.0.113.2"), 1000, "203.0.113.2")
 	waitFor(t, "the seventh upload", func() bool { return e.svc.flight.held() == 7000 })
-	// ... a third does not (429): the network holds 2000
 	e.want(e.do("POST", "/public/doc", tokenFor("203.0.113.3"), bytes.Repeat([]byte("x"), 1000), xff("203.0.113.3")...), 429)
-	// and everybody else's writes still go through: the global cap was never used up
 	e.want(e.do("POST", "/public/doc", tokenFor("100.99.0.1"), bytes.Repeat([]byte("y"), 1000), xff("100.99.0.1")...), 201)
 	if got := e.svc.flight.held(); got != 7000 {
 		t.Fatalf("%d bytes in flight, want the attackers' 7000", got)
@@ -119,7 +111,6 @@ func TestATimedOutOrAbandonedUploadStaysChargedButServerFailuresAreRefunded(t *t
 		o.Config.RequestTimeout = 300 * time.Millisecond
 	})
 	tok, _ := e.session()
-	// a body that stops arriving: 408, and the declared 1000 bytes were paid for
 	st, answered := rawRequest(t, e, "POST", "/public/doc", tok, 1000, "abc", 5*time.Second)
 	if !answered || !strings.Contains(st, "408") {
 		t.Fatalf("slow create: %q (answered %v)", st, answered)
@@ -128,13 +119,11 @@ func TestATimedOutOrAbandonedUploadStaysChargedButServerFailuresAreRefunded(t *t
 		t.Fatalf("a timed-out upload left %d bytes charged, want the declared 1000", used)
 	}
 	waitFor(t, "the claim to end", func() bool { return e.svc.flight.held() == 0 })
-	// a client that goes away in the middle pays too
 	conn := holdUpload(t, e, tok, 2000)
 	waitFor(t, "the upload to be admitted", func() bool { return e.svc.flight.held() == 2000 })
 	_ = conn.Close() // the point of the test: the client goes away
 	waitFor(t, "the claim to end", func() bool { return e.svc.flight.held() == 0 })
 	waitFor(t, "the charge", func() bool { return quotaUsed(e, "ip:127.0.0.1") == 3000 })
-	// a daily budget that is used up this way refuses the next upload up front
 	for i := 0; i < 7; i++ {
 		rawRequest(t, e, "POST", "/public/doc", tok, 1000, "abc", 5*time.Second)
 	}
@@ -149,8 +138,6 @@ func TestSlowUploadsAreCutOffAtTheMinimumRate(t *testing.T) {
 		o.Config.MinUploadRate = 1000000
 	})
 	tok, _ := e.session()
-	// a client that sends 3 bytes of a declared 100,000 and then nothing is answered 408 right
-	// after the grace, not after the request timeout
 	start := time.Now()
 	st, answered := rawRequest(t, e, "POST", "/public/doc", tok, 100000, "abc", 10*time.Second)
 	if !answered || !strings.Contains(st, "408") {
@@ -162,7 +149,6 @@ func TestSlowUploadsAreCutOffAtTheMinimumRate(t *testing.T) {
 	if used := quotaUsed(e, "ip:127.0.0.1"); used != 100000 {
 		t.Fatalf("charged %d, want the declared 100000", used)
 	}
-	// a trickle (100 bytes every 50 ms) is far below 1 MB/s: cut off early too
 	conn, err := net.Dial("tcp", strings.TrimPrefix(e.srv.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
@@ -195,17 +181,13 @@ loop:
 			}
 		}
 	}
-	// a client at speed is not affected, and small bodies are left to the request timeout
 	e.want(e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 100000)), 201)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("small")), 204)
-	// a negative rate turns the minimum off
 	e2 := newEnv(t, func(o *Options) { o.Config.MinUploadRate = -1 })
 	if e2.svc.cfg.MinUploadRate >= 0 {
 		t.Fatal("negative rate not kept")
 	}
 }
-
-// ---- 2. admin: a minimum token length, failures per network and in all, a cooldown, a burst log
 
 func TestAdminTokenMustBeLongEnoughUnlessExplicitlyAllowed(t *testing.T) {
 	mk := func(token string, allow bool) error {
@@ -253,8 +235,6 @@ func adminGuess(e *env, ip, token string) int {
 
 func TestAdminFailuresAreAlsoCountedPerNetwork(t *testing.T) {
 	e := newEnv(t, behindProxy)
-	// one attacker holds a /48 (65,536 /64s) and guesses once from each of 200 of them: no /64 is
-	// near its own 20, the /48 as a whole has 60
 	got := map[int]int{}
 	for i := 0; i < 200; i++ {
 		got[adminGuess(e, fmt.Sprintf("2001:db8:aaaa:%x::1", i), fmt.Sprint("guess", i))]++
@@ -262,13 +242,11 @@ func TestAdminFailuresAreAlsoCountedPerNetwork(t *testing.T) {
 	if got[403] != 60 || got[429] != 140 {
 		t.Fatalf("the /48 got %v, want 60 failures and the rest limited", got)
 	}
-	// the operator is never held back, from that network or any other
 	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("D", 22), "", nil, append(xff("2001:db8:aaaa:ffff::1"), AdminHeader, adminToken)...), 202)
 	// another network has its own budget
 	if st := adminGuess(e, "2001:db8:bbbb::1", "nope"); st != 403 {
 		t.Fatalf("another network: %d", st)
 	}
-	// an IPv4 /24 is the same: 80 hosts, 60 failures
 	got = map[int]int{}
 	for i := 1; i <= 80; i++ {
 		got[adminGuess(e, fmt.Sprintf("198.51.100.%d", i), "nope")]++
@@ -287,7 +265,6 @@ func TestAdminGlobalFailureBudgetPutsWrongTokensIntoACooldown(t *testing.T) {
 			t.Fatalf("failure %d: %d", i, st)
 		}
 	}
-	// the 301st failure anywhere finds the global budget used up: cooldown
 	r := e.do("DELETE", "/admin/takedown/"+strings.Repeat("C", 22), "", nil, append(xff(fresh(300)), AdminHeader, "guess")...)
 	if r.StatusCode != 429 || r.Header.Get("Retry-After") == "" {
 		t.Fatalf("after the global budget: %d", r.StatusCode)
@@ -295,19 +272,15 @@ func TestAdminGlobalFailureBudgetPutsWrongTokensIntoACooldown(t *testing.T) {
 	if !strings.Contains(logs.String(), "ALARM: failed admin authentications") {
 		t.Fatalf("no alarm in the log: %s", logs.String())
 	}
-	// during the cooldown every wrong token is 429, even from a network that never failed ...
 	if st := adminGuess(e, "172.16.5.5", "other guess"); st != 429 {
 		t.Fatalf("new network during the cooldown: %d", st)
 	}
-	// ... but a matching token is never throttled
 	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("E", 22), "", nil, append(xff("172.16.5.5"), AdminHeader, adminToken)...), 202)
 	e.want(e.do("GET", "/admin/health", "", nil, append(xff(fresh(1)), AdminHeader, adminToken)...), 200)
-	// the budget refills at 5 a second, but the cooldown holds for its 30 seconds
 	e.clk.Add(10 * time.Second)
 	if st := adminGuess(e, "172.16.7.7", "guess"); st != 429 {
 		t.Fatalf("10 seconds into the cooldown: %d", st)
 	}
-	// 30 seconds after it began the route answers wrong tokens 403 again
 	e.clk.Add(AdminCooldown)
 	if st := adminGuess(e, "172.16.9.9", "guess"); st != 403 {
 		t.Fatalf("after the cooldown: %d", st)
@@ -337,8 +310,6 @@ func TestAdminFailureBurstIsLogged(t *testing.T) {
 	}
 }
 
-// ---- 3. a client that goes away must not fail the first reconcile for everybody
-
 func TestClientDisconnectDuringTheFirstReconcileDoesNotFailItForEveryone(t *testing.T) {
 	logs := captureLog(t)
 	e, hs := envWith(t, nil)
@@ -348,7 +319,6 @@ func TestClientDisconnectDuringTheFirstReconcileDoesNotFailItForEveryone(t *test
 		once.Do(func() {
 			close(entered)
 			<-release
-			// a store that honours its context notices the client's departure a moment later
 			select {
 			case <-ctx.Done():
 			case <-time.After(300 * time.Millisecond):
@@ -379,16 +349,12 @@ func TestClientDisconnectDuringTheFirstReconcileDoesNotFailItForEveryone(t *test
 	cancel()  // and its client leaves
 	time.Sleep(100 * time.Millisecond)
 	close(release)
-	// the reconcile was not the departing client's: another client's write goes through at once
-	// (a reconcile that died with its client would have put everyone into a 15 second backoff)
 	e.want(e.do("POST", "/public/doc", b, []byte("hello")), 201)
 	if strings.Contains(logs.String(), "writes are refused") {
 		t.Fatalf("the first reconcile failed: %s", logs.String())
 	}
 }
 
-// The same through ensureCounters itself: the request that happens to start the reconcile is
-// cancelled (an HTTP/2 stream reset, or a body already read and the connection gone).
 func TestCancellingTheRequestThatStartedTheFirstReconcileDoesNotFailItForOthers(t *testing.T) {
 	logs := captureLog(t)
 	e, hs := envWith(t, nil)
@@ -461,8 +427,6 @@ func TestWaitersOnTheFirstReconcileAreBoundedByTheirOwnContext(t *testing.T) {
 	}
 }
 
-// ---- 4. a third prefix level and a reserve judged at the coarsest
-
 func TestWideKey(t *testing.T) {
 	for in, want := range map[string]string{
 		"203.0.113.5":             "203.0.0.0/16",
@@ -487,8 +451,6 @@ func TestSlash32FloodCannotFillTheGlobalCap(t *testing.T) {
 		o.Config.MaxSessionsPerNet = 6
 		o.Config.MaxSessionsPerWide = 20
 	})
-	// an attacker holding 2001:db8::/32 starts a session from each of 100 different /48s: no /48
-	// is near its cap of 6, the /32 as a whole has 20
 	got := map[int]int{}
 	for i := 0; i < 100; i++ {
 		got[sessionStatus(e, fmt.Sprintf("2001:db8:%x::1", 0x100+i))]++
@@ -537,7 +499,6 @@ func TestTheReserveIsJudgedAtTheCoarsestLevel(t *testing.T) {
 		o.Config.MaxSessionsPerNet = 6
 		o.Config.MaxSessionsPerWide = 50 // no third-level cap in the way: the reserve alone is under test
 	})
-	// the open 40 are used by an attacker in 2001:db8::/32 across seven /48s
 	for p := 0; p < 7; p++ {
 		for i := 0; i < 6 && sessions.Len() < 40; i++ {
 			sessionStatus(e, fmt.Sprintf("2001:db8:%x:%x::1", 0x100+p, i))
@@ -546,17 +507,14 @@ func TestTheReserveIsJudgedAtTheCoarsestLevel(t *testing.T) {
 	if sessions.Len() != 40 {
 		t.Fatalf("%d sessions", sessions.Len())
 	}
-	// a /48 of its own, inside the same /32, is not a newcomer: the reserve is not for it
 	if st := sessionStatus(e, "2001:db8:ffff::1"); st != 503 {
 		t.Fatalf("a fresh /48 of a /32 that holds sessions got %d in the reserve, want 503", st)
 	}
-	// a visitor from another /32 (or another /16) is
 	for _, ip := range []string{"2001:dc9::1", "198.51.100.1", "203.0.113.1"} {
 		if st := sessionStatus(e, ip); st != 201 {
 			t.Fatalf("a newcomer from %s got %d", ip, st)
 		}
 	}
-	// the same at the store: a session with only a Net is judged by its Net
 	ctx := context.Background()
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st := NewMemorySessionStore(10)
@@ -577,13 +535,10 @@ func TestTheReserveIsJudgedAtTheCoarsestLevel(t *testing.T) {
 	}
 }
 
-// ---- 7. version snapshots are counted when they are written
-
 func TestVersionSnapshotsAreCountedAtWriteTime(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.MaxTotalBytes = 100 })
 	a, _ := e.session()
 	d := e.create(a, strings.Repeat("a", 60))
-	// a snapshot of the document is saved through the store (as the saver does): no sweep follows
 	if err := e.store.Save(context.Background(), versionsKeyPrefix+d.ID+"/1.open", bytes.Repeat([]byte("v"), 40)); err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +547,6 @@ func TestVersionSnapshotsAreCountedAtWriteTime(t *testing.T) {
 	}
 	b, _ := e.session()
 	e.want(e.do("POST", "/public/doc", b, []byte("x")), 503) // the budget is used up, before any sweep
-	// a sweep that lists it agrees, and discarding the document takes its snapshots off the count
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -603,7 +557,6 @@ func TestVersionSnapshotsAreCountedAtWriteTime(t *testing.T) {
 	if got := e.svc.Health().StorageBytes; got != 0 {
 		t.Fatalf("after the discard %d, want 0", got)
 	}
-	// keys that are not snapshots of a public document are ignored
 	e.svc.NoteVersionWrite("versions/other/xx", 50)
 	e.svc.NoteVersionWrite("pubdoc/"+d.ID, 50)
 	e.svc.NoteVersionWrite(versionsKeyPrefix+"not-an-id/1", 50)
@@ -635,8 +588,6 @@ func TestSnapshotWrittenWhileAReconcileListsIsNotLost(t *testing.T) {
 		t.Fatalf("used %d", used)
 	}
 }
-
-// ---- 9. the session store does not scan under its lock on a refusal
 
 func TestRefusedCreatesDoNotScanTheSessionStore(t *testing.T) {
 	ctx := context.Background()
@@ -688,7 +639,6 @@ func TestMemorySessionStoreExpiresThroughItsHeap(t *testing.T) {
 	if n := st.Len(); n != 2 {
 		t.Fatalf("%d sessions", n)
 	}
-	// a create reaps what has expired, so expired sessions never count against the caps
 	if err := st.Create(ctx, "d", Session{Client: "c", Net: "n", Wide: "w", Expires: later.Add(time.Hour)}, now.Add(4*time.Hour), SessionCaps{PerClient: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -704,8 +654,6 @@ func TestMemorySessionStoreExpiresThroughItsHeap(t *testing.T) {
 	}
 }
 
-// A snapshot that would pass the byte budget is refused, one that fits is counted, and a deleted
-// one comes off the count at once (no reconcile needed).
 func TestVersionSnapshotIsRefusedOverTheBudgetAndSubtractedWhenDeleted(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.MaxTotalBytes = 100 })
 	a, _ := e.session()
@@ -741,7 +689,6 @@ func TestVersionSnapshotIsRefusedOverTheBudgetAndSubtractedWhenDeleted(t *testin
 	}
 }
 
-// A store that wraps the ExpiringAdapter and names it (ExpiringHolder) gets the snapshot hooks too.
 type holder struct{ *docstore.ExpiringAdapter }
 
 func (h holder) Expiring() *docstore.ExpiringAdapter { return h.ExpiringAdapter }
