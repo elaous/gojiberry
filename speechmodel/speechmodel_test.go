@@ -131,7 +131,6 @@ func TestFederatedAveragingWithClippingAndNoise(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// u1 clipped is (0.6, 0.8) with weight 1; u2 is (1, 1) with weight 3: mean = (0.9, 0.95)
 	if d := avg.Layers[0].Data; math.Abs(float64(d[0])-0.9) > 1e-5 || math.Abs(float64(d[1])-0.95) > 1e-5 || avg.Weight != 4 {
 		t.Errorf("aggregate: %v %v", d, avg.Weight)
 	}
@@ -140,7 +139,6 @@ func TestFederatedAveragingWithClippingAndNoise(t *testing.T) {
 		t.Errorf("apply: %v %v (the global adapter must not change in place)", next, err)
 	}
 
-	// Noise: reproducible with a seed, zero-mean in the large, and none for sigma 0.
 	z := &Update{Base: base, Layers: []Tensor{{Name: "n", Shape: []int{10000}, Data: make([]float32, 10000)}}}
 	z.AddNoise(0, rand.New(rand.NewPCG(1, 2)))
 	if z.Norm() != 0 {
