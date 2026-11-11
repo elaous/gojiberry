@@ -26,8 +26,6 @@ func TestRepoScanGroupsByFamily(t *testing.T) {
 	writeTestFont(t, dir, "sans/Regular.ttf", "Test Sans", "Regular")
 	writeTestFont(t, dir, "sans/Bold.ttf", "Test Sans", "Bold")
 	writeTestFont(t, dir, "serif/Regular.otf", "Test Serif", "Regular")
-	// Not a font at all, and not a recognized extension -- both must be
-	// skipped without failing the whole scan.
 	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +73,8 @@ func TestRepoOpenRejectsPathsOutsideScan(t *testing.T) {
 	for _, bad := range []string{
 		"../a.ttf",
 		"../../etc/passwd",
-		"b.ttf",          // never scanned
-		"a.ttf/../a.ttf", // resolves to a scanned path by string trickery, but isn't the literal scanned Path
+		"b.ttf", // never scanned
+		"a.ttf/../a.ttf",
 	} {
 		if _, ok := repo.Open(bad); ok {
 			t.Errorf("Open(%q) = found, want rejected (not an exact scanned path)", bad)

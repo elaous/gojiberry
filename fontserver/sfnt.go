@@ -5,14 +5,6 @@ import (
 	"fmt"
 )
 
-// nameFamily/nameSubfamily are the legacy (nameID 1/2) name-table
-// entries every font must carry; namePreferredFamily/
-// namePreferredSubfamily (16/17) are the modern "typographic name"
-// entries some fonts add instead of ever growing a legacy family name
-// past what old Mac/Windows font menus could group by weight (e.g. a
-// "Roboto Condensed Bold" family with no separate weight axis in its
-// legacy name). We prefer 16/17 when present, matching what a real
-// font menu (including Google Fonts' own) shows.
 const (
 	nameFamily             = 1
 	nameSubfamily          = 2
@@ -20,10 +12,6 @@ const (
 	namePreferredSubfamily = 17
 )
 
-// platformWindows/platformMac/platformUnicode are the sfnt 'name'
-// table's platform IDs we know how to decode. Symbol and other exotic
-// platforms are skipped -- a font that only carries those has no name
-// we can safely read as text.
 const (
 	platformUnicode    = 0
 	platformMac        = 1
@@ -32,14 +20,6 @@ const (
 	langWindowsEnUS    = 0x0409
 )
 
-// findSfntTable walks data's sfnt table directory looking for tag
-// (a four-character table name like "name" or "cmap"), returning that
-// table's own offset/length within data -- shared by sfntNames and
-// sfntCmapRanges, both of which otherwise duplicated this exact walk.
-// Bounds-checks the directory itself and the returned table's own
-// extent against data's length, but (like sfntNames always has) never
-// validates table checksums -- those matter for rendering
-// correctness, not for reading a table's own bytes.
 func findSfntTable(data []byte, tag string) (offset, length uint32, err error) {
 	if len(data) < 12 {
 		return 0, 0, fmt.Errorf("fontserver: file too short to be an sfnt font")
@@ -65,14 +45,6 @@ func findSfntTable(data []byte, tag string) (offset, length uint32, err error) {
 	return 0, 0, fmt.Errorf("fontserver: no '%s' table", tag)
 }
 
-// sfntNames extracts the sfnt 'name' table's family/subfamily strings
-// from a raw TrueType/OpenType font file (.ttf/.otf; not woff/woff2,
-// which wrap this same table format in a compressed container we
-// don't unpack). It reads only the table directory and the 'name'
-// table -- never glyph outlines -- so it works the same whether the
-// font is TrueType- or CFF-flavored (sfntVersion 0x00010000 vs
-// 'OTTO'), and does not validate table checksums, which matter for
-// rendering correctness but not for reading a handful of strings.
 func sfntNames(data []byte) (family, subfamily string, err error) {
 	nameOff, nameLen, err := findSfntTable(data, "name")
 	if err != nil {
@@ -101,13 +73,6 @@ func sfntNames(data []byte) (family, subfamily string, err error) {
 	return family, subfamily, nil
 }
 
-// parseNameTable reads every name record in an sfnt 'name' table
-// (format 0 or 1 -- the two share the same record layout, format 1
-// just adds language-tag records we don't need between the name
-// records and the string storage, which the stored stringOffset
-// already accounts for) and picks, for each nameID, the best
-// available string: a Windows/Unicode-BMP/US-English record if one
-// exists, else the first decodable record of any platform.
 func parseNameTable(table []byte) (map[uint16]string, error) {
 	if len(table) < 6 {
 		return nil, fmt.Errorf("fontserver: 'name' table too short")
@@ -154,12 +119,6 @@ func parseNameTable(table []byte) (map[uint16]string, error) {
 	return out, nil
 }
 
-// decodeNameString decodes one name record's raw bytes. Windows and
-// Unicode-platform records are UTF-16BE; Macintosh records are
-// treated as MacRoman restricted to its ASCII-identical range, which
-// covers every family/style name we expect to see (both are Latin
-// script by convention). Anything else is reported as empty rather
-// than guessed at.
 func decodeNameString(platformID, encodingID uint16, raw []byte) string {
 	switch platformID {
 	case platformWindows, platformUnicode:

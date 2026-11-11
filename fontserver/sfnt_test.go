@@ -7,18 +7,12 @@ import (
 	"unicode/utf16"
 )
 
-// buildTestSFNT constructs a minimal, otherwise-empty sfnt file
-// carrying only an offset table, a one-entry table directory pointing
-// at a 'name' table, and that 'name' table itself -- exactly what
-// sfntNames reads, and nothing a real font also carries (glyphs,
-// cmap, etc.) that would only add noise to this test.
 func buildTestSFNT(t *testing.T, records []nameRecordSpec) []byte {
 	t.Helper()
 
 	nameTable := buildNameTable(records)
 
 	var buf bytes.Buffer
-	// Offset table: sfntVersion, numTables=1, searchRange/entrySelector/rangeShift (unused by our parser).
 	_ = binary.Write(&buf, binary.BigEndian, uint32(0x00010000))
 	_ = binary.Write(&buf, binary.BigEndian, uint16(1))
 	_ = binary.Write(&buf, binary.BigEndian, uint16(0))
@@ -170,10 +164,6 @@ func TestSfntNamesRejectsNonSfnt(t *testing.T) {
 }
 
 func TestDecodeUTF16SurrogatePair(t *testing.T) {
-	// U+1F600 GRINNING FACE, encoded as a surrogate pair -- a family
-	// name would never realistically contain this, but the decoder
-	// should still assemble it correctly rather than emit two bogus
-	// runes.
 	pair := utf16.Encode([]rune{0x1F600})
 	if len(pair) != 2 {
 		t.Fatalf("test setup: expected a surrogate pair, got %d units", len(pair))
