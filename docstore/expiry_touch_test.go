@@ -115,7 +115,6 @@ func TestTouchIgnoresAnOrphanRecord(t *testing.T) {
 	ctx := context.Background()
 	inner := NewMemoryAdapter()
 	ea, clk := newExpiring(inner)
-	// The crash leftover: a record whose document is missing.
 	if err := inner.Save(ctx, "expiry:ghost", []byte(clk.Now().Add(day).Format(time.RFC3339Nano))); err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +133,6 @@ func TestTouchOrderAndFailure(t *testing.T) {
 	old := mustExpiry(t, ea, "doc")
 	clk.Add(time.Hour)
 
-	// A failure writing the record: the old deadline stands, the document is intact, the
-	// error is reported (so the caller retries).
 	inner.failOn = "expiry:doc"
 	inner.reset()
 	if err := ea.Touch(ctx, "doc"); err == nil {
@@ -147,9 +144,6 @@ func TestTouchOrderAndFailure(t *testing.T) {
 	if d, err := ea.Load(ctx, "doc"); err != nil || string(d.Data) != "v1" {
 		t.Fatalf("document after a failed Touch: %q, %v", d.Data, err)
 	}
-	// Crash after the record and before "the document" cannot hurt: Touch has no document
-	// write at all, so the only state it can leave is old or new deadline, both with a live
-	// document; and a document is never present without a record.
 	inner.failOn = ""
 	inner.reset()
 	if err := ea.Touch(ctx, "doc"); err != nil {
@@ -174,7 +168,6 @@ func TestTouchPolicyAndKeyspaces(t *testing.T) {
 	if err := ea.Touch(ctx, ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Touch(\"\") = %v", err)
 	}
-	// A system key lives until deleted: Touch is a no-op that gives it no deadline.
 	if err := ea.Save(ctx, "collab:x", []byte("[]")); err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +177,6 @@ func TestTouchPolicyAndKeyspaces(t *testing.T) {
 	if _, ok, _ := ea.Expiry(ctx, "collab:x"); ok {
 		t.Fatal("a system key got a deadline")
 	}
-	// A document without a record (written before the store was wrapped) is live and is
-	// given a full lifetime.
 	inner := NewMemoryAdapter()
 	_ = inner.Save(ctx, "old", []byte("x"))
 	ea2, clk := newExpiring(inner)
@@ -244,7 +235,6 @@ func TestSweepRemovesHubStateWithItsDocument(t *testing.T) {
 	if _, err := inner.Load(ctx, "collab:other"); err != nil {
 		t.Fatalf("collab:other of a live document was removed: %v", err)
 	}
-	// Deleting a document directly takes the hub state with it too.
 	if err := ea.Delete(ctx, "other"); err != nil {
 		t.Fatal(err)
 	}
@@ -285,8 +275,6 @@ func TestTouchRaceWithSaveAndSweep(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-// ---- POST /docs/{id}/renew
 
 func renewReq(t *testing.T, h http.Handler, id, token string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -356,7 +344,6 @@ func TestRenewRouteNeedsWriteRole(t *testing.T) {
 	if !mustExpiry(t, ea, "doc1").After(seeded) {
 		t.Fatal("authorized renewals did not move the deadline")
 	}
-	// Not found / expired, reserved ids, wrong method.
 	if rec := renewReq(t, h, "nothere", owner); rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
 		t.Fatalf("renew of an unknown document = %d", rec.Code)
 	}
@@ -378,7 +365,6 @@ func TestRenewRouteNeedsWriteRole(t *testing.T) {
 }
 
 func TestRenewRouteOnAnOpenDocumentAndNoExpiry(t *testing.T) {
-	// No auth at all (as for a write): open. A store that does not expire: 501.
 	ea, _ := newExpiring(NewMemoryAdapter())
 	_ = ea.Save(context.Background(), "d", []byte("x"))
 	h := NewServer(ea, "memory").Handler()

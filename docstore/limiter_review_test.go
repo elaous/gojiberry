@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// A replica whose clock is far ahead must not lock the others out of a shared budget.
+// A replica whose clock is far ahead is clamped.
 func TestStoreLimiterBoundsARecordFromAFarFutureClock(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -32,8 +32,7 @@ func TestStoreLimiterBoundsARecordFromAFarFutureClock(t *testing.T) {
 	}
 }
 
-// flakyStore fails reads of the records whose id contains bad, and lets a test act between the
-// sweeper's read and its delete (beforeDelete) or its claiming write (beforeSave).
+// flakyStore fails reads on demand.
 type flakyStore struct {
 	*MemoryAdapter
 	bad          string
@@ -125,8 +124,6 @@ func TestSweepRateLimitsDeletesOnlyTheRecordItRead(t *testing.T) {
 	}
 }
 
-// A store with a conditional write but no conditional delete: the record is claimed with a
-// conditional write first, so a caller who came back in between is not deleted either.
 func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 	ctx := context.Background()
 	inner := &flakyStore{MemoryAdapter: NewMemoryAdapter()}
@@ -161,7 +158,7 @@ func TestSweepRateLimitsWithoutAConditionalDelete(t *testing.T) {
 	}
 }
 
-// noDeleteIf is a conditional store that cannot delete conditionally.
+// noDeleteIf is a conditional store without DeleteIf.
 type noDeleteIf struct{ f *flakyStore }
 
 func (n noDeleteIf) Save(ctx context.Context, id string, d []byte) error { return n.f.Save(ctx, id, d) }
@@ -276,7 +273,7 @@ func (refuses) SaveIf(context.Context, string, []byte, string) error {
 	return ErrConditionalUnsupported
 }
 
-// fakeConditional has SaveIf and ignores the condition: it must not pass for a conditional store.
+// fakeConditional has SaveIf for tests.
 type fakeConditional struct{ *MemoryAdapter }
 
 func (f fakeConditional) SaveIf(ctx context.Context, id string, data []byte, _ string) error {

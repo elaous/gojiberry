@@ -64,7 +64,7 @@ func TestStoreLimiterNoRefillBudget(t *testing.T) {
 	}
 }
 
-// Two limiters (two replicas) over one store share the budget: it is spent once, not twice.
+// Two limiters (two replicas) over one store share budgets.
 func TestStoreLimiterSharedBudgetAcrossInstances(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -166,7 +166,6 @@ func TestStoreLimiterFallsBackToMemory(t *testing.T) {
 	}
 }
 
-// failing makes the store's reads or conditional writes fail.
 type failing struct {
 	*MemoryAdapter
 	failLoad, failSave bool

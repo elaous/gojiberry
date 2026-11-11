@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// At the table's capacity the least recently used key is dropped, not an arbitrary one: a busy
-// caller that keeps being used survives a flood of new keys, the key nobody touched goes.
+// At the table's capacity the least recently used key is dropped.
 func TestRateLimiterEvictsTheLeastRecentlyUsedKey(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0)
@@ -36,7 +35,7 @@ func TestRateLimiterEvictsTheLeastRecentlyUsedKey(t *testing.T) {
 	}
 }
 
-// A new key at capacity must not scan the table: the cost of one Allow is constant.
+// A new key at capacity must not scan the table.
 func TestRateLimiterDoesNotScanTheTableForANewKey(t *testing.T) {
 	ctx := context.Background()
 	now := time.Unix(1_700_000_000, 0)
@@ -45,8 +44,6 @@ func TestRateLimiterDoesNotScanTheTableForANewKey(t *testing.T) {
 	for i := range maxBuckets {
 		l.Allow(ctx, fmt.Sprintf("k%d", i))
 	}
-	// Everything has refilled by now, so a sweep would empty the table: only one that runs on
-	// every new key at capacity would be visible as the table shrinking at once.
 	now = now.Add(time.Hour)
 	l.lastSweep = now // a sweep ran just now
 	l.Allow(ctx, "fresh")

@@ -7,9 +7,7 @@ import (
 	"time"
 )
 
-// Over the cap, the sweep deletes what is cheapest to lose: buckets that are full again first (nothing is
-// lost), then the ones with the least spent budget, never a slow, live caller just because it was written
-// first.
+// Over the cap, the sweep deletes the least recently used keys.
 func TestSweepEvictsRefilledBucketsBeforeLiveOnes(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
@@ -64,7 +62,7 @@ func TestSweepEvictsTheLeastSpentLiveBucketsFirstAndCountsThem(t *testing.T) {
 	}
 }
 
-// A sweep that evicts nothing live reports zero, and the plain SweepRateLimitsMax counts as before.
+// A sweep that evicts nothing live keeps everything.
 func TestSweepStatsMatchSweepRateLimitsMax(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAdapter()
