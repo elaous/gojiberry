@@ -1,9 +1,4 @@
-// Package audit is the operator's log of what happened to a store, written so that it cannot hold
-// personal data: an Event has no free text. Every field is a number, a time or a member of a closed
-// set, so a name, an address, a document id or a piece of content has no field to go in, and
-// a value outside the sets is refused rather than written. The operator can still follow one
-// subject through the log with Pseudonym, a keyed hash that only the holder of the key can
-// compute and that cannot be turned back into the id.
+// Package audit logs store events without personal data: no free-text fields.
 package audit
 
 import (
@@ -20,7 +15,7 @@ import (
 // Kind is what happened.
 type Kind string
 
-// The kinds of event. Adding one is a reviewed change here, not a string at a call site.
+// The kinds of event; add new ones here, not at call sites.
 const (
 	KeyEnrolled     Kind = "key.enrolled"
 	KeyRevoked      Kind = "key.revoked"
@@ -36,7 +31,7 @@ const (
 	BackupMade      Kind = "backup.made"
 	BackupRestored  Kind = "backup.restored"
 	ConfigChanged   Kind = "config.changed"
-	// TelemetryRefused is a usage report refused for being outside the allowlist (package telemetry).
+	// TelemetryRefused: a usage report refused by the allowlist.
 	TelemetryRefused Kind = "telemetry.refused"
 )
 
@@ -50,7 +45,7 @@ const (
 	Failed Outcome = "error"
 )
 
-// Actor is the class of the one who did it, never who they are.
+// Actor is the class of who acted, never their identity.
 type Actor string
 
 // The actor classes.
@@ -78,16 +73,16 @@ const (
 	Unavailable  Reason = "unavailable"
 )
 
-// Event is one line of the log. It deliberately has no string that an application can fill freely.
+// Event is one log line with no free-form string fields.
 type Event struct {
 	Time    time.Time `json:"time"`
 	Kind    Kind      `json:"kind"`
 	Outcome Outcome   `json:"outcome"`
 	Actor   Actor     `json:"actor"`
 	Reason  Reason    `json:"reason,omitempty"`
-	// Count is how many things the event covers (documents restored, requests refused); 0 is omitted.
+	// Count is how many things the event covers; 0 is omitted.
 	Count int `json:"count,omitempty"`
-	// Ref is a Pseudonym, to follow one subject through the log without naming it.
+	// Ref is a Pseudonym, identifying a subject without naming it.
 	Ref Ref `json:"ref,omitempty"`
 }
 
@@ -129,16 +124,14 @@ func (e Event) Valid() bool {
 	return true
 }
 
-// Pseudonym is a stable stand-in for a subject (an address, a document id): the first 8 bytes of
-// HMAC-SHA256 of it under key, in hex. The same subject gives the same Ref while the operator keeps
-// the key; without the key it cannot be computed or checked, and it cannot be reversed.
+// Pseudonym is a keyed, stable, 8-byte HMAC-SHA256 of a subject, in hex.
 func Pseudonym(key []byte, subject string) Ref {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte(subject))
 	return Ref(hex.EncodeToString(m.Sum(nil)[:8]))
 }
 
-// Logger writes events as JSON lines. It is safe for concurrent use.
+// Logger writes events as JSON lines; safe for concurrent use.
 type Logger struct {
 	mu       sync.Mutex
 	w        io.Writer
@@ -146,10 +139,10 @@ type Logger struct {
 	rejected int
 }
 
-// NewLogger writes to w. The time of an event without one is the logger's clock, in UTC.
+// NewLogger writes to w; untimed events use the logger's UTC clock.
 func NewLogger(w io.Writer) *Logger { return &Logger{w: w, now: time.Now} }
 
-// Log writes e, or returns ErrNotAllowed and writes nothing (the refusal is counted, see Rejected).
+// Log writes e, or returns ErrNotAllowed and writes nothing.
 func (l *Logger) Log(e Event) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -169,8 +162,7 @@ func (l *Logger) Log(e Event) error {
 	return err
 }
 
-// Rejected is how many events were refused: a call site that sends something off the allowlist shows
-// here instead of leaking.
+// Rejected counts events refused by the allowlist.
 func (l *Logger) Rejected() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
