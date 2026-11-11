@@ -1,11 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-image-demo shows canvas.Image together with a
-// canvas.TextFlow on one canvas (a canvas.Stage). In edit mode the
-// image's toolbar picks Move (drag left/right, snapping to 5px), Clip
-// (drag an edge handle to crop), Alpha (drag the slider) or toggles Wrap
-// (text flows around the picture). #state mirrors the state as JSON (the
-// e2e test reads it).
 package main
 
 import (
@@ -17,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/domrt/browser"
 )
 
-// The picture is an inline SVG so the demo needs no asset files.
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
 <stop offset="0" stop-color="#ff7a59"/><stop offset="1" stop-color="#3b2bd9"/></linearGradient></defs>
