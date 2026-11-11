@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// counting counts every call that reaches the store.
 type counting struct {
 	*docstore.MemoryAdapter
 	loads, deletes, deleteIfs, lists, sessionLists, saveIfs atomic.Int64
@@ -48,7 +47,6 @@ func (c *counting) ListPrefix(ctx context.Context, prefix string) ([]docstore.Me
 	return c.MemoryAdapter.ListPrefix(ctx, prefix)
 }
 
-// A token that is not one of ours never reaches the store, whatever it holds after the dot.
 func TestMalformedTokensNeverReachTheStore(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	s, _ := New(c)
@@ -75,15 +73,12 @@ func TestMalformedTokensNeverReachTheStore(t *testing.T) {
 	if n := c.loads.Load() + c.deletes.Load() + c.deleteIfs.Load() + c.saveIfs.Load() + c.lists.Load(); n != 0 {
 		t.Fatalf("malformed tokens made %d store calls (loads %d, deletes %d)", n, c.loads.Load(), c.deletes.Load())
 	}
-	// A well-formed token does reach the store (the control of the test).
 	_, _, _ = s.GetSession(ctx, "abc.5")
 	if c.loads.Load() != 1 {
 		t.Fatalf("a well-formed token must be looked up: %d loads", c.loads.Load())
 	}
 }
 
-// lenientDelete is a store whose plain Delete of a missing record is not an error (as on S3,
-// where a DELETE of a missing key succeeds), so only a conditional step can tell winner from loser.
 type lenientDelete struct {
 	*docstore.MemoryAdapter
 	deletes atomic.Int64
@@ -97,7 +92,6 @@ func (l *lenientDelete) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// conditionalOnlyLenient exposes the ConditionalAdapter methods only, with the lenient Delete.
 type conditionalOnlyLenient struct {
 	docstore.ConditionalAdapter
 	l *lenientDelete
@@ -143,7 +137,6 @@ func TestConcurrentTakeHasOneWinnerOnAStoreWhosePlainDeleteNeverFails(t *testing
 				if wins.Load() != 1 {
 					t.Fatalf("round %d: %d winners, want exactly 1", round, wins.Load())
 				}
-				// DeleteIf mode never uses the plain Delete; the marker path uses it once, by the winner.
 				want := int64(0)
 				if mode == "used mark" {
 					want = 1
@@ -159,8 +152,6 @@ func TestConcurrentTakeHasOneWinnerOnAStoreWhosePlainDeleteNeverFails(t *testing
 	}
 }
 
-// Seconds, not nanoseconds: a very long TTL neither overflows the bucket nor makes a token that
-// is issued but never validates.
 func TestVeryLongTTLStillValidates(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	s, _ := New(mem)
@@ -174,13 +165,11 @@ func TestVeryLongTTLStillValidates(t *testing.T) {
 			t.Fatalf("ttl %v: a token that was issued does not validate: %v %v", ttl, ok, err)
 		}
 	}
-	// The bucket arithmetic itself, past the year 2262 where UnixNano overflows.
 	far := time.Date(2400, 1, 1, 0, 30, 0, 0, time.UTC)
 	b := sessionKind.bucketOf(far)
 	if b <= 0 || !sessionKind.bucketEnd(b).Equal(time.Date(2400, 1, 1, 1, 0, 0, 0, time.UTC)) {
 		t.Fatalf("bucket %d ends %v", b, sessionKind.bucketEnd(b))
 	}
-	// A fractional second rounds up, and a name beyond any real time is left alone by the sweep.
 	if sessionKind.bucketOf(time.Unix(3600, 1)) != 2 || sessionKind.bucketOf(time.Unix(3600, 0)) != 1 {
 		t.Fatal("rounding")
 	}
@@ -190,8 +179,6 @@ func TestVeryLongTTLStillValidates(t *testing.T) {
 	}
 }
 
-// The sessions are listed at the first sweep, when the hour changes and every ten minutes; the
-// login states at every sweep.
 func TestSweepScheduleListsSessionsRarely(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	s, _ := New(c)
@@ -238,7 +225,6 @@ func TestSweepScheduleListsSessionsRarely(t *testing.T) {
 	if c.sessionLists.Load() != before+1 {
 		t.Fatalf("the hour changed: %d listings, want %d", c.sessionLists.Load(), before+1)
 	}
-	// A clock that goes back lists again rather than waiting.
 	now = now.Add(-time.Hour)
 	s.step(ctx, &sched)
 	if c.sessionLists.Load() != before+2 {
@@ -246,7 +232,6 @@ func TestSweepScheduleListsSessionsRarely(t *testing.T) {
 	}
 }
 
-// A failed listing of the sessions is retried at the next sweep, not in ten minutes.
 func TestSweepScheduleRetriesAFailedSessionListing(t *testing.T) {
 	c := &counting{MemoryAdapter: docstore.NewMemoryAdapter()}
 	f := &failList{counting: c}
@@ -277,7 +262,6 @@ func (f *failList) ListPrefix(ctx context.Context, prefix string) ([]docstore.Me
 	return n, err
 }
 
-// The sessions an hour-old sweep missed are still deleted once the schedule lists them.
 func TestScheduledSweepStillDeletesDeadSessions(t *testing.T) {
 	mem := docstore.NewMemoryAdapter()
 	s, _ := New(mem)

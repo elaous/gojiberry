@@ -21,7 +21,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// fakeProvider is an OpenID Connect provider with a /token endpoint (as in package auth's tests).
 type fakeProvider struct {
 	srv   *httptest.Server
 	priv  *rsa.PrivateKey
@@ -75,8 +74,6 @@ func do(h http.Handler, method, target, token string) *httptest.ResponseRecorder
 	return w
 }
 
-// Two Managers on one store: a login begun on A is finished on B, the session works on both, a
-// logout on either ends it on both, and the state cannot be replayed on either.
 func TestTwoManagersShareLoginSessionAndLogout(t *testing.T) {
 	f := newFakeProvider(t)
 	mem := docstore.NewMemoryAdapter()
@@ -103,7 +100,6 @@ func TestTwoManagersShareLoginSessionAndLogout(t *testing.T) {
 			t.Fatalf("/auth/me = %d %s", me.Code, me.Body.String())
 		}
 	}
-	// Replay of the state on the replica that began the login, and on the one that finished it.
 	for _, r := range []*auth.Manager{a, b} {
 		if w := do(r.Routes(), "GET", cb, ""); w.Code != http.StatusBadRequest {
 			t.Fatalf("replayed state = %d, want 400", w.Code)
@@ -117,7 +113,6 @@ func TestTwoManagersShareLoginSessionAndLogout(t *testing.T) {
 			t.Fatalf("/auth/me after logout = %d", me.Code)
 		}
 	}
-	// A session started the way a passkey sign-in starts one is shared too.
 	pk, err := a.StartSession(auth.User{ID: "passkey:1", Name: "Bo"})
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +128,6 @@ func TestTwoManagersShareLoginSessionAndLogout(t *testing.T) {
 	}
 }
 
-// A store that cannot answer signs nobody in, and a logout it cannot do is an error.
 func TestManagerFailsClosedOnStoreErrors(t *testing.T) {
 	f := newFakeProvider(t)
 	fl := &failing{ConditionalAdapter: docstore.NewMemoryAdapter()}
