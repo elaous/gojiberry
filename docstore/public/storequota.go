@@ -13,40 +13,23 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// QuotaPrefix is where a StoreQuota keeps its counters: "public/quota/<window>/<hash of the key>".
-// The window is the number of the fixed window the counter belongs to (Unix seconds divided by the
-// window length), so a window ends for every replica at the same moment and a sweep can drop a
-// window by its name alone. Reserved with the rest of PublicPrefix.
+// QuotaPrefix is where a StoreQuota keeps its counters.
 const QuotaPrefix = docstore.PublicPrefix + "quota/"
 
-// storeQuotaRetries bounds the compare-and-set loop of one charge.
+// storeQuotaRetries bounds the compare-and-set loop of a counter.
 const storeQuotaRetries = 8
 
-// StoreQuota is a Quota (with QuotaRefunder and WindowQuota) over a store with conditional writes,
-// so the replicas that share the store share each client's daily byte budget. The key is hashed
-// before it is stored: the store holds no address.
-//
-// The window is a fixed calendar window of Window (a day by default) counted from the Unix epoch,
-// the same for all replicas, not one that starts at the key's first charge as MemoryQuota's does:
-// that is what lets the counters be found by name and swept without reading them. A caller can
-// therefore spend a full budget just before a window ends and another just after it; the same is
-// true of any fixed window.
-//
-// A counter is read and written back with a conditional write, a few attempts (a charge that loses
-// every attempt is an error, which the service answers with 503; a Quota error never lets the
-// bytes through). Records are small (a number), one per key per window; Sweep deletes the windows
-// that ended.
+// StoreQuota is a Quota kept in the store.
 type StoreQuota struct {
 	Store docstore.Adapter
 	Limit int64
-	// Window is the length of a window (a day if 0).
+	// Window is the length of a window; a day if zero.
 	Window time.Duration
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 }
 
-// NewStoreQuota makes a quota of limit bytes per window over store, which must be a
-// docstore.ConditionalAdapter (docstore.SupportsConditional says whether it really is).
+// NewStoreQuota makes a quota of limit bytes per window.
 func NewStoreQuota(store docstore.Adapter, limit int64, window time.Duration) (*StoreQuota, error) {
 	if _, ok := store.(docstore.ConditionalAdapter); !ok {
 		return nil, errors.New("public: a StoreQuota needs a store with conditional writes")
@@ -85,8 +68,7 @@ type quotaRecord struct {
 	Used int64 `json:"used"`
 }
 
-// charge adds delta (negative: a refund, never below 0) to the counter of key in window win, if
-// the result fits in Limit (a refund always fits). It reports whether it did.
+// charge adds delta; a negative delta is a refund, never below zero.
 func (q *StoreQuota) charge(ctx context.Context, key string, delta, win int64) (bool, error) {
 	cas, ok := q.Store.(docstore.ConditionalAdapter)
 	if !ok {
@@ -100,7 +82,7 @@ func (q *StoreQuota) charge(ctx context.Context, key string, delta, win int64) (
 		case err == nil:
 			prev = docstore.Digest(doc.Data)
 			if json.Unmarshal(doc.Data, &rec) != nil {
-				rec = quotaRecord{} // a damaged counter starts again from nothing: the budget is advice, not money
+				rec = quotaRecord{}
 			}
 		case errors.Is(err, docstore.ErrNotFound):
 		default:
@@ -135,7 +117,7 @@ func (q *StoreQuota) Take(ctx context.Context, key string, n int64) (bool, time.
 	return ok, retry, err
 }
 
-// TakeIn implements WindowQuota: the window id is the window's number.
+// TakeIn implements WindowQuota: the window id is the window.
 func (q *StoreQuota) TakeIn(ctx context.Context, key string, n int64) (bool, int64, time.Duration, error) {
 	now := q.now()
 	win := q.number(now)
@@ -147,21 +129,19 @@ func (q *StoreQuota) TakeIn(ctx context.Context, key string, n int64) (bool, int
 	return true, win, 0, nil
 }
 
-// Refund implements QuotaRefunder: it credits the current window.
+// Refund implements QuotaRefunder: it credits the key's count.
 func (q *StoreQuota) Refund(ctx context.Context, key string, n int64) {
 	_, _ = q.charge(ctx, key, -n, q.number(q.now()))
 }
 
-// RefundIn implements WindowQuota: it credits the window the charge was made in, and nothing once
-// that window has ended.
+// RefundIn implements WindowQuota: it credits the window's count.
 func (q *StoreQuota) RefundIn(ctx context.Context, key string, n int64, window int64) {
 	if window == q.number(q.now()) {
 		_, _ = q.charge(ctx, key, -n, window)
 	}
 }
 
-// Sweep deletes the counters of the windows that ended. It lists QuotaPrefix and reads no record; a
-// name that is not "<window>/<64 hex>" is left alone. It returns how many it deleted.
+// Sweep deletes the counters of the windows that ended.
 func (q *StoreQuota) Sweep(ctx context.Context) (int, error) {
 	metas, err := docstore.ListPrefix(ctx, q.Store, QuotaPrefix)
 	if err != nil {

@@ -19,9 +19,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// blockedPrefix is where the SHA-256 of a document that was taken down is kept (one record per digest, named by
-// it, holding only the date and the operator's reason). The record is what keeps the same bytes from being
-// stored again, after a restart too: it does not expire and the sweep leaves it alone.
+// blockedPrefix is where the SHA-256 of a taken-down document is kept.
 const blockedPrefix = docstore.PublicPrefix + "blocked/"
 
 type blockedRecord struct {
@@ -29,7 +27,7 @@ type blockedRecord struct {
 	Reason string    `json:"reason,omitempty"`
 }
 
-// chainBlocklist asks each list in turn; the first that refuses (or fails) decides.
+// chainBlocklist asks each list in turn; the first that blocks wins.
 type chainBlocklist []Blocklist
 
 // Blocked implements Blocklist.
@@ -42,7 +40,7 @@ func (c chainBlocklist) Blocked(ctx context.Context, content []byte) (bool, erro
 	return false, nil
 }
 
-// loadTaken reads the digests of the documents taken down into the list the service checks.
+// loadTaken reads the digests of the documents taken down.
 func (s *Service) loadTaken(ctx context.Context) error {
 	metas, err := docstore.ListPrefix(ctx, s.store, blockedPrefix)
 	if err != nil {
@@ -54,13 +52,11 @@ func (s *Service) loadTaken(ctx context.Context) error {
 	return nil
 }
 
-// learnHash remembers the content of a document that is being taken down, so the same bytes are refused when a
-// session sends them again. Only the digest is kept, never the content. A failure is logged and does not stop
-// the takedown: removing the document comes first.
+// learnHash remembers the content of a document that was taken down.
 func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	d, err := s.store.Load(ctx, docKey(docID))
 	if err != nil {
-		return // already gone, or unreadable: nothing to learn
+		return
 	}
 	sum := sha256.Sum256(d.Data)
 	h := hex.EncodeToString(sum[:])
@@ -70,7 +66,7 @@ func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	}
 }
 
-// tell hands a kept report to Options.Notify; a panic there is caught.
+// tell hands a kept report to Options.Notify.
 func (s *Service) tell(rep Report) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -80,13 +76,10 @@ func (s *Service) tell(rep Report) {
 	s.notify(rep)
 }
 
-// ReportListMax is the most reports one GET /admin/reports answers.
+// ReportListMax is the most reports one GET /admin/reports returns.
 const ReportListMax = 200
 
-// handleAdminReports serves GET /admin/reports?limit=N&category=csam: the stored reports for the operator, those on the
-// priority list first, then the newest first. It is behind the admin guard. A report holds the view ID the
-// operator takes down by (DELETE /admin/takedown/<id>); the content of the document is not in it, and the
-// reporter is a keyed hash. The reason is the reporter's free text.
+// handleAdminReports serves GET /admin/reports.
 func (s *Service) handleAdminReports(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, "GET")
@@ -140,10 +133,7 @@ func (s *Service) handleAdminReports(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "reports": reps})
 }
 
-// WebhookNotify returns an Options.Notify that posts each kept report to url as JSON: {id, view, category, priority,
-// at}. The reason (the reporter's free text) and the reporter's hash are not sent: a chat channel or a mail relay
-// is not where abusive text belongs, and the operator reads it behind the admin guard (GET /admin/reports). The
-// address must be https (http is allowed for a loopback address); a failed post is logged and not retried.
+// WebhookNotify returns an Options.Notify that posts to a webhook.
 func WebhookNotify(url string) (func(Report), error) {
 	u, err := neturl.Parse(url)
 	if err != nil || u.Host == "" {

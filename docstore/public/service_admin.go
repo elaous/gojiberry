@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// AdminHandler serves DELETE /admin/takedown/<id> and GET /admin/health.
+// AdminHandler serves DELETE /admin/takedown/<id>.
 func (s *Service) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/takedown/", s.handleTakedown)
@@ -16,21 +16,7 @@ func (s *Service) AdminHandler() http.Handler {
 	return s.headers(mux)
 }
 
-// ---- takedown
-
-// adminAllowed is the admin guard in front of the admin routes. The token is checked first (in
-// constant time); a request that passes is never counted and never held back, so wrong guesses
-// from an address, a network or everyone behind one shared address cannot lock the operator out.
-// Only failures are counted: per client (a /64, Limiters.Admin), per network (a /48 or /24,
-// Limiters.AdminNet) and in all (Limiters.AdminGlobal); past the first two a failure answers 429
-// with Retry-After instead of 403, and once the global budget is used up every wrong token gets 429
-// for AdminCooldown. A burst of failures is logged (adminFailed).
-//
-// What the limits are for: they slow a guesser down, bound the work it can ask for and make a
-// burst visible. They cannot make guessing safe by themselves, because a right guess is answered
-// at once however many wrong ones came before it, and wrong guesses cost the guesser nothing but
-// a request: the safety is the token's length, which is why the server will not start with fewer
-// than MinAdminTokenLength characters (Config.AllowShortAdminToken is the explicit override).
+// adminAllowed is the admin guard in front of the admin routes.
 func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
 	if s.admin != nil && s.admin.Allow(r) {
 		return true
@@ -63,11 +49,10 @@ func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// adminBurst is how many failed admin authentications in a minute are worth a log line.
+// adminBurst is how many failed admin authentications are allowed.
 const adminBurst = 10
 
-// adminFailed counts a failed admin authentication and logs once per minute in which there were
-// adminBurst or more.
+// adminFailed counts a failed admin authentication.
 func (s *Service) adminFailed(now time.Time) {
 	s.adminMu.Lock()
 	defer s.adminMu.Unlock()
@@ -80,10 +65,7 @@ func (s *Service) adminFailed(now time.Time) {
 	}
 }
 
-// handleTakedown serves DELETE /admin/takedown/<id> (a view ID or a document ID): the document,
-// its view ID and its records are deleted and a tombstone is written, so the view ID answers 410
-// from then on and the owner's session cannot create another document. The call is idempotent
-// (a second one on a removed ID is 204 too). ?reason= is kept on the tombstone.
+// handleTakedown serves DELETE /admin/takedown/<id>.
 func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		methodNotAllowed(w, "DELETE")
@@ -119,13 +101,6 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		// No record names this ID: the document expired and its records were swept (its session,
-		// which keeps the document ID, must still be banned), or it is being created right now.
-		// The ban is the tombstone of the view ID, which the session's check derives from its
-		// document ID, so it is written for both readings of the ID (as a view ID, and as a
-		// document ID whose view ID follows) before anything else, and then looked up once more:
-		// a create in flight sees the tombstone when it finishes (createDoc), or has left records
-		// this finds now.
 		if err := tomb(id); err != nil {
 			s.fail(w, err)
 			return
@@ -146,8 +121,6 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 	}
 	unlock := s.lock(docID)
 	defer unlock()
-	// The tombstone first: from this write on the view ID answers 410, whatever fails below
-	// (a retry finishes the deletion).
 	if err := tomb(view); err != nil {
 		s.fail(w, err)
 		return

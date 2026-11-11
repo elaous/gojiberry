@@ -11,16 +11,12 @@ import (
 	"time"
 )
 
-// ExpiringHolder is implemented by a store that wraps an *docstore.ExpiringAdapter (to count, log or
-// encrypt around it): the public service puts its snapshot hooks (Guard, OnDelete) on the adapter it
-// returns, as it does on a bare *docstore.ExpiringAdapter. Without it a wrapper gets no hooks, and the
-// service logs that snapshots are then counted only when Sweep lists the store.
+// ExpiringHolder is implemented by a store that wraps an ExpiringAdapter.
 type ExpiringHolder interface {
 	Expiring() *docstore.ExpiringAdapter
 }
 
-// expiringOf finds the ExpiringAdapter behind a store: the store itself or the one an ExpiringHolder
-// names; nil if there is none, which is logged.
+// expiringOf finds the ExpiringAdapter behind a store.
 func expiringOf(store docstore.Adapter) *docstore.ExpiringAdapter {
 	switch v := store.(type) {
 	case *docstore.ExpiringAdapter:
@@ -34,18 +30,14 @@ func expiringOf(store docstore.Adapter) *docstore.ExpiringAdapter {
 	return nil
 }
 
-// NoteVersionWrite tells the byte budget that a version snapshot of a public document was written:
-// key is the snapshot's store key ("versions/pubdoc/<docID>/<name>") and size its length; any other
-// key is ignored. A Service over an *docstore.ExpiringAdapter wires this to its OnSave hook itself;
-// a deployment whose snapshots are written some other way calls it from there. Without it the
-// snapshots are counted only when Sweep lists the store.
+// NoteVersionWrite tells the byte budget that a version was written.
 func (s *Service) NoteVersionWrite(key string, size int64) {
 	if id, ok := versionDoc(key); ok {
 		s.bytes.addExtra(id, size)
 	}
 }
 
-// versionDoc is the public document a version snapshot key belongs to ("versions/pubdoc/<id>/..."), or false.
+// versionDoc is the public document a version snapshot belongs to.
 func versionDoc(key string) (string, bool) {
 	rest, ok := strings.CutPrefix(key, versionsKeyPrefix)
 	if !ok {
@@ -55,22 +47,10 @@ func versionDoc(key string) (string, bool) {
 	return id, validID(id)
 }
 
-// ---- sweep
-
-// recordGrace is how long a document record may exist without its document before the sweep
-// calls it an orphan: creation writes the records first.
+// recordGrace is how long a document record may exist past its deadline.
 const recordGrace = time.Minute
 
-// Sweep removes what the ExpiringAdapter does not: the records of documents that expired or are
-// gone (metadata and view-ID records, which are in a system keyspace and so never expire by
-// themselves), the reports and tombstones past their own TTL, and the reports over the global
-// bound (oldest first); it reaps expired sessions, and reconciles the byte and report counters
-// with the store. It returns how many records it deleted. Run calls it on an interval.
-//
-// Cost. Its listings are by prefix, so with a PrefixLister they cost what the public data costs
-// (live documents, records, reports, tombstones: all bounded by the caps). Over a store without
-// prefix listing every listing is the whole store, so the listing part runs at most every
-// Config.FullSweepInterval there; the other calls only reap sessions.
+// Sweep removes what the ExpiringAdapter does not.
 func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	done := observe.Default().Sweep("public")
 	defer func() { done(removed, err) }()
@@ -98,7 +78,6 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	if sq, ok := s.quota.(interface {
 		Sweep(context.Context) (int, error)
 	}); ok {
-		// The counters of a shared quota: the windows that ended.
 		if _, err := sq.Sweep(ctx); err != nil {
 			note(err)
 		}
@@ -140,7 +119,7 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		s.bytes.abort(bytesWin)
 		return 0, err
 	}
-	s.bytes.set(bytesWin, listed) // version snapshots count with their documents
+	s.bytes.set(bytesWin, listed)
 	live := make(map[string]bool, len(listed))
 	for id, e := range listed {
 		if e.doc > 0 {
@@ -151,7 +130,7 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	known := map[string]bool{} // views of document records that stay
+	known := map[string]bool{}
 	for _, m := range docs {
 		docID := strings.TrimPrefix(m.ID, docRecordPrefix)
 		if live[docID] {
@@ -213,7 +192,6 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		ok := json.Unmarshal(raw, &r) == nil
 		return r.At, reportInfo{reporter: r.Reporter, doc: r.DocID, priority: r.Priority, at: r.At}, ok
 	}, del, note, func(key string, info reportInfo) {
-		// a report past its TTL leaves its document's record too
 		s.dropRef(ctx, info.doc, strings.TrimPrefix(key, docstore.ReportPrefix))
 	})
 	if kept != nil {
@@ -238,9 +216,7 @@ type swept struct {
 	info  map[string]reportInfo
 }
 
-// sweepOld deletes the records under prefix whose own timestamp is older than ttl; one that
-// cannot be read as a record is deleted too once it is, by its adapter timestamp, that old. It
-// returns the records that stay, with what at read from them (nil if the listing failed).
+// sweepOld deletes the records under prefix whose deadline passed.
 func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, reportInfo, bool), del func(string) bool, note func(error), onDeleted func(key string, info reportInfo)) *swept {
 	metas, err := docstore.ListPrefix(ctx, s.store, prefix)
 	if err != nil {
@@ -275,8 +251,7 @@ func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration
 	return out
 }
 
-// Run sweeps now and then every interval until ctx is done (the first sweep reconciles the
-// counters, so the byte budget is right from the start); errors go to the log.
+// Run sweeps now and then every interval until ctx ends.
 func (s *Service) Run(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = DefaultSweepInterval
