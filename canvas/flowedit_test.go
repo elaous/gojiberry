@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// editFlow is selFlow in edit mode with the caret placed at offset o of
-// the first line (the press lands in the first line's text area).
+// editFlow is selFlow in edit mode, caret at offset o.
 func editFlow(t *testing.T, o int, items ...Item) (*TextFlow, *Stage) {
 	t.Helper()
 	f, p := selFlow(items...)
@@ -401,7 +400,7 @@ func TestFlowOnChangeAndSelectionDraw(t *testing.T) {
 	}
 }
 
-// Two cursors at the same offset of a page break: one in front, one behind. Typing keeps each on its own side.
+// Two cursors at a page break: one before, one after it.
 func TestMultiCursorKeepsItsSideOfABreak(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "ab"}, Break{Kind: BreakPage}, Chars{Text: "cd"})
 	f.SetCursors([]Cursor{At(2), {Anchor: 2, Caret: 2, After: true}, At(0)})
@@ -468,7 +467,7 @@ func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
 	}
 }
 
-// Typing $x^2$ makes an inline formula when the closing $ is typed; prices and spaced dollars stay text.
+// Typing $x^2$ makes an inline formula; prices stay text.
 func TestTypingDollarsMakesAnInlineFormula(t *testing.T) {
 	typeAll := func(s string) *TextFlow {
 		f, st := editFlow(t, 0, Chars{Text: ""})

@@ -6,34 +6,25 @@ import (
 	"unicode"
 )
 
-// Paragraph formatting in a TextFlow: see ParaFormat. The format of a
-// paragraph is an item of the content stream sitting at its start;
-// ApplyParagraph creates it when needed and removes it again when it
-// ends up empty.
+// Paragraph formatting is set by ParaFormat items.
 
-// ParagraphEditor is implemented by a target that has paragraphs with
-// formats (a TextFlow); the paragraph features need it.
+// ParagraphEditor is implemented by targets with paragraph formats.
 type ParagraphEditor interface {
-	// ApplyParagraph applies fn to the format of every paragraph the
-	// cursors touch, and reports whether any changed.
+	// ApplyParagraph applies fn to the paragraphs the cursors touch.
 	ApplyParagraph(fn func(*ParaFormat)) bool
-	// ParagraphFormats returns the format of every paragraph the cursors
-	// touch, in order.
+	// ParagraphFormats returns the format of each touched paragraph.
 	ParagraphFormats() []ParaFormat
 }
 
 var _ ParagraphEditor = (*TextFlow)(nil)
 
-// paraBounds returns the paragraph around offset o: its start, and the
-// offset of its '\n' (or the end of the text).
+// paraBounds returns the paragraph around offset o: start and end.
 func paraBounds(rs []rune, o int) (ps, pe int) {
 	o = min(max(o, 0), len(rs))
 	return lineStart(rs, o), lineEnd(rs, o)
 }
 
-// touchedParagraphs lists the start offsets of the paragraphs the
-// cursors touch (a selection ending at the very start of a paragraph
-// does not touch it).
+// touchedParagraphs lists start offsets of paragraphs the cursors touch.
 func touchedParagraphs(rs []rune, cs []Cursor) []int {
 	var starts []int
 	for _, c := range normalize(cs) {
@@ -55,7 +46,6 @@ func touchedParagraphs(rs []rune, cs []Cursor) []int {
 	return starts
 }
 
-// ParagraphFormats implements ParagraphEditor.
 func (f *TextFlow) ParagraphFormats() []ParaFormat {
 	d := f.flatten()
 	var out []ParaFormat
@@ -73,8 +63,7 @@ func (f *TextFlow) ParagraphAt(o int) ParaFormat {
 	return d.paraIn(ps, pe)
 }
 
-// paraIndex returns the index in f.Items of the ParaFormat of the
-// paragraph [ps, pe], or -1.
+// paraIndex returns the index of the paragraph's ParaFormat, or -1.
 func (f *TextFlow) paraIndex(ps, pe int) int {
 	off := 0
 	for i, it := range f.Items {

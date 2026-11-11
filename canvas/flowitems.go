@@ -3,12 +3,10 @@ package canvas
 import "unicode"
 
 // Format overrides a TextFlow's base TextStyle for a run of characters.
-// Zero fields inherit from the base style.
 type Format struct {
 	FontFamily string
 	FontSize   float64
-	// Scale multiplies the resulting font size (and line height), e.g.
-	// 2 for a heading twice the base size; zero means 1.
+	// Scale multiplies the font size and line height, e.g. 2 for double.
 	Scale      float64
 	FontWeight int
 	FontStyle  string
@@ -21,30 +19,21 @@ type Format struct {
 	Subscript   bool
 	Background  string
 
-	// Case changes how the letters are displayed -- upper, lower, title
-	// case, small caps -- without changing the text itself.
+	// Case changes letter display: upper, lower, title or small caps.
 	Case CaseKind
-	// Style names a character style (see StyleDef) whose formatting this
-	// text gets, under anything set directly here.
+	// Style names a character style whose formatting this text gets.
 	Style string
-	// Link makes the text a link to this URL: drawn as a link (link
-	// color, underlined), with the URL shown on hover.
+	// Link makes the text a link to this URL.
 	Link string
 	// Comment is the ID of a comment (see CommentSet) on this text.
 	Comment string
 	// Bookmark names this text as a place a link ("#name") can jump to.
 	Bookmark string
-	// Index marks this text as an entry of the alphabetical index, under
-	// this term (see IndexObject).
+	// Index marks this text as an index entry under this term.
 	Index string
-	// Lang is the language of this text as a BCP 47 tag ("fr", "pt-BR"), "" for the
-	// document's own. It is what a screen reader switches voice by (the
-	// reading copy carries it as a lang attribute) and what an HTML export
-	// writes; it does not change how the text is drawn.
+	// Lang is the BCP 47 language of this text; "" inherits the document's.
 	Lang string
-	// Proposal marks this text as part of a suggested change (see ProposalMark): text a person
-	// proposed to add, or proposed to remove, until someone accepts or rejects it. It is not
-	// formatting, and is kept when formatting is applied or copied.
+	// Proposal marks text that is part of a suggested change.
 	Proposal string
 }
 
@@ -65,11 +54,10 @@ const LinkColor = "#1a5fb4"
 // IsZero reports whether f changes nothing.
 func (f Format) IsZero() bool { return f == Format{} }
 
-// Resolve applies f over base: the style text with this format is drawn in.
+// Resolve applies f over base.
 func (f Format) Resolve(base TextStyle) TextStyle { return f.resolve(base) }
 
-// resolve applies f over base. If the size changes and the base has an
-// explicit line height, the line height scales with it.
+// resolve applies f over base; size changes adjust a set line height.
 func (f Format) resolve(base TextStyle) TextStyle {
 	s := base
 	if f.FontFamily != "" {
@@ -115,10 +103,7 @@ func (f Format) resolve(base TextStyle) TextStyle {
 	return s
 }
 
-// displayRune is how the letter r is shown under case kind c: the rune
-// itself or its replacement (always one rune, so offsets stay put), and
-// whether it is a small capital. prevLetter says whether the previous
-// character was part of a word (title case capitalises word starts).
+// displayRune returns the letter as shown under case kind c.
 func displayRune(c CaseKind, r rune, prevLetter bool) (rune, bool) {
 	switch c {
 	case CaseUpper:
@@ -138,23 +123,18 @@ func displayRune(c CaseKind, r rune, prevLetter bool) (rune, bool) {
 	return r, false
 }
 
-// Item is one element of a TextFlow's content stream: Chars,
-// ColumnConfig or Break.
+// Item is one element of the content stream: Chars, ColumnConfig or Break.
 type Item interface{ flowItem() }
 
-// Chars is a run of text with one Format. '\n' starts a new paragraph.
+// Chars is a run of text with one Format;
+//
+//	starts a paragraph.
 type Chars struct {
 	Text   string
 	Format Format
 }
 
-// ColumnConfig sets the column layout from this point on, until the
-// next ColumnConfig: Widths are the column widths left to right (empty
-// means one full-width column) separated by Gap. A new config starts a
-// new band of the page directly below the text so far (below the tallest
-// column of the previous band), like a continuous section break. If the
-// widths plus gaps are wider than the page's text area they are scaled
-// down to fit.
+// ColumnConfig sets the column layout from this point on.
 type ColumnConfig struct {
 	Widths []float64
 	// Count, with no Widths, makes that many equal columns.
@@ -166,16 +146,11 @@ type ColumnConfig struct {
 type BreakKind int
 
 const (
-	// BreakNatural is the break the layout itself makes when text would
-	// overflow a page. It appears in Layout.Breaks; as an input item it
-	// is ignored.
+	// BreakNatural is a layout-made break at a full page.
 	BreakNatural BreakKind = iota
-	// BreakPage is a user-set page break: the flow stops and continues
-	// at the top of the next page.
+	// BreakPage is a user-set page break.
 	BreakPage
-	// BreakColumn is a user-set column break: the flow continues at the
-	// top of the next column, or -- in the last column of a page's text
-	// area -- of the next page (like BreakPage).
+	// BreakColumn is a user-set column break.
 	BreakColumn
 )
 
@@ -196,17 +171,11 @@ func (Chars) flowItem()        {}
 func (ColumnConfig) flowItem() {}
 func (Break) flowItem()        {}
 
-// Transform turns source text -- Markdown, say -- into a TextFlow's
-// content stream: Chars with Formats, Inline objects (tables, images,
-// rules), ColumnConfigs and Breaks. It is how patterns in the source
-// pick the right text format or component. See TextFlow.Transform and
-// Markdown.
+// Transform turns source text, such as Markdown, into content items.
 type Transform interface {
 	Transform(src string) []Item
 }
 
-// TransformFunc adapts a function to Transform.
 type TransformFunc func(src string) []Item
 
-// Transform implements Transform.
 func (f TransformFunc) Transform(src string) []Item { return f(src) }

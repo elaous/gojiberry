@@ -2,13 +2,9 @@ package canvas
 
 import "strings"
 
-// Links in a TextFlow: text with Format.Link set is drawn as a link and
-// shows its URL in a small tip on hover. A click opens it (OnLink) in
-// view mode; in edit mode a plain click puts the caret there and
-// Ctrl/Cmd+click opens it.
+// Links: Format.Link text is drawn as a link and shows its URL.
 
-// linkAt returns the URL of the link at (x, y) and the run's rectangle,
-// or "".
+// linkAt returns the URL of the link at (x, y), or "".
 func (f *TextFlow) linkAt(x, y float64) (url string, rect [4]float64) {
 	for _, ln := range f.Layout().Lines {
 		if y < ln.Y || y >= ln.Y+ln.H {
@@ -26,8 +22,7 @@ func (f *TextFlow) linkAt(x, y float64) (url string, rect [4]float64) {
 // HoveredLink returns the URL under the pointer, or "".
 func (f *TextFlow) HoveredLink() string { return f.hoverLink }
 
-// updateLinkHover tracks the link under the pointer, and says whether
-// anything to redraw changed.
+// updateLinkHover tracks the hovered link; reports if a redraw is needed.
 func (f *TextFlow) updateLinkHover(x, y float64) bool {
 	cid, crect := f.commentAt(x, y)
 	commentChanged := f.setHoverComment(cid, crect)
@@ -47,8 +42,7 @@ func (f *TextFlow) updateLinkHover(x, y float64) bool {
 	return true
 }
 
-// openLinkAt opens the link at (x, y), if there is one and something is
-// listening.
+// openLinkAt opens the link at (x, y), if one is listening.
 func (f *TextFlow) openLinkAt(x, y float64) bool {
 	url, _ := f.linkAt(x, y)
 	if name, ok := strings.CutPrefix(url, "#"); ok {
@@ -70,7 +64,6 @@ func (f *TextFlow) openLinkAt(x, y float64) bool {
 	return true
 }
 
-// DrawOverlay implements Overlayer: the tip showing the hovered link's URL.
 func (f *TextFlow) DrawOverlay() {
 	if f.sugg != nil && f.mode == ModeEdit {
 		f.sugg.Draw()
@@ -103,13 +96,10 @@ func (f *TextFlow) DrawOverlay() {
 
 var _ Overlayer = (*TextFlow)(nil)
 
-// SetLinkHandler implements LinkHandlerSetter: the Stage opens links
-// unless OnLink is set.
+// SetLinkHandler sets the handler the Stage uses to open links.
 func (f *TextFlow) SetLinkHandler(open func(url string)) { f.stageLink = open }
 
-// SafeLinkURL reports whether a link may be opened or shown as an href: a
-// relative reference, #bookmark, or an http, https, mailto or tel URL. Other
-// schemes (javascript:, data:, ...) in a document's links are not followed.
+// SafeLinkURL reports whether a link may be opened or shown as href.
 func SafeLinkURL(u string) bool {
 	u = strings.TrimSpace(u)
 	i := strings.IndexAny(u, ":/?#")

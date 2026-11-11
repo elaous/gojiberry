@@ -4,11 +4,7 @@ import (
 	"strings"
 )
 
-// The outline is the document's headings as a list: paragraphs in a
-// "Heading 1".."Heading 6" or "Title" style, or text that is big and bold
-// the way Markdown headings come out (Scale and weight 700). It is derived
-// from the content, so it follows edits; a DOM component (components.Outline)
-// shows it and GotoOffset takes the reader there.
+// Outline lists the document's headings, from heading styles.
 
 // OutlineEntry is one heading.
 type OutlineEntry struct {
@@ -18,12 +14,11 @@ type OutlineEntry struct {
 	Text string
 	// Start and End are the stream range of the paragraph.
 	Start, End int
-	// Style is the paragraph style that made it a heading, "" when it is
-	// recognised by its look.
+	// Style is the paragraph style that made it a heading, if any.
 	Style string
 }
 
-// styleLevel returns the outline level of a paragraph style name, or 0.
+// styleLevel returns the outline level of a style name, or 0.
 func styleLevel(style string) int {
 	switch style {
 	case "Title":
@@ -44,8 +39,7 @@ func styleLevel(style string) int {
 	return 0
 }
 
-// scaleLevel is the level of text that is bold and scaled like a Markdown
-// heading, or 0.
+// scaleLevel returns the heading level of bold, scaled text, or 0.
 func scaleLevel(fm Format) int {
 	if fm.FontWeight < 700 {
 		return 0
@@ -63,8 +57,7 @@ func scaleLevel(fm Format) int {
 	return 0
 }
 
-// charFormats lists the format of every character of items (an object
-// has none).
+// charFormats lists the format of every character of items.
 func charFormats(items []Item) []Format {
 	var out []Format
 	for _, it := range items {
@@ -105,8 +98,7 @@ func (f *TextFlow) Outline() []OutlineEntry {
 	return out
 }
 
-// OutlineIndexAt returns the index in Outline of the heading the offset
-// is under (the last one that starts at or before it), or -1.
+// OutlineIndexAt returns the index of the heading covering offset.
 func (f *TextFlow) OutlineIndexAt(o int) int {
 	idx := -1
 	for i, e := range f.Outline() {
@@ -117,17 +109,13 @@ func (f *TextFlow) OutlineIndexAt(o int) int {
 	return idx
 }
 
-// GotoOffset puts the caret at stream offset o and asks the scroll view
-// around the flow to bring it to the top of the view (ScrollView does so
-// after the event it is handling, or when RevealPending is called). It
-// works in view mode too.
+// GotoOffset moves the caret to stream offset o and scrolls it into view.
 func (f *TextFlow) GotoOffset(o int) {
 	f.SetCursors([]Cursor{At(o)})
 	f.revealAt, f.revealPending = o, true
 }
 
-// TakeReveal returns where the offset passed to the last GotoOffset is
-// (x, top y and line height in the flow's coordinates) and forgets it.
+// TakeReveal returns the position of the last GotoOffset.
 func (f *TextFlow) TakeReveal() (x, y, h float64, ok bool) {
 	if !f.revealPending {
 		return 0, 0, 0, false
@@ -137,20 +125,15 @@ func (f *TextFlow) TakeReveal() (x, y, h float64, ok bool) {
 	return f.physicalCaret(x, y, h, ok, f.revealAt)
 }
 
-// Revealer is implemented by components that can ask for a position to be
-// scrolled to.
+// Revealer is implemented by components that scroll to a position.
 type Revealer interface {
 	TakeReveal() (x, y, h float64, ok bool)
 }
 
-// flowBinder is implemented by inline objects that show the flow's own
-// structure (a table of contents): the flow hands itself over each time
-// it reads its content.
+// flowBinder is implemented by inline objects that show the flow's structure.
 type flowBinder interface{ bindFlow(f *TextFlow) }
 
-// SectionRange returns the stream range of the section that heading i of Outline opens: from the heading to the next
-// heading of the same level or a higher one (a lower level number), or to the end of the text. Its subsections are
-// inside it.
+// SectionRange returns the stream range of the section opened by heading i.
 func (f *TextFlow) SectionRange(i int) (from, to int, ok bool) {
 	es := f.Outline()
 	if i < 0 || i >= len(es) {
@@ -166,9 +149,7 @@ func (f *TextFlow) SectionRange(i int) (from, to int, ok bool) {
 	return es[i].Start, to, true
 }
 
-// MoveSection moves the section that heading i opens (with its subsections) in front of heading before of Outline;
-// before == len(Outline) moves it to the end. Moving a section into itself does nothing and reports false. The caret
-// goes to the moved heading. It is the editing under the outline panel's move buttons and its drag and drop.
+// MoveSection moves a section, with its subsections, before another heading.
 func (f *TextFlow) MoveSection(i, before int) bool {
 	es := f.Outline()
 	from, to, ok := f.SectionRange(i)
@@ -187,7 +168,7 @@ func (f *TextFlow) MoveSection(i, before int) bool {
 	moved := f.Slice(from, to)
 	delFrom := from
 	if to == n && (n == 0 || runes[n-1] != '\n') && from > 0 {
-		// The last section has no paragraph end of its own: it takes the one before it along.
+		// The last section takes the preceding paragraph end.
 		moved = append(moved, Chars{Text: "\n"})
 		delFrom = from - 1
 	}
@@ -199,7 +180,7 @@ func (f *TextFlow) MoveSection(i, before int) bool {
 	if dest > to {
 		start = dest - (to - delFrom)
 		if delFrom < from {
-			start++ // the leading newline carried along is not part of the heading
+			start++ // The carried newline is not heading text.
 		}
 	}
 	f.GotoOffset(max(start, 0))

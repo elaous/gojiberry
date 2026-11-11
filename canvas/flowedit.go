@@ -5,30 +5,12 @@ import (
 	"strings"
 )
 
-// A TextFlow is editable in edit mode: click in the text to put the
-// caret there, then type. The arrow keys, Home, End, Backspace, Delete
-// and Enter work as in an editor (Shift extends the selection), text can
-// be cut, copied and pasted, and the formatting commands (bold, italic,
-// ... and the color palette's SetTextColor) apply to the selection or to
-// the text typed next. Page and column breaks and column configs are
-// part of the content: Delete in front of one removes it.
-//
-// The first edit turns the content into Items (a flow whose content came
-// from Source and a Transform, or from Text, stops using them: the
-// Markdown tables, images and so on become items the flow owns). Read the
-// result with ContentItems; OnChange is called after every edit. The
-// registered Features (multi-cursor, line operations, Markdown clipboard)
-// work on a flow through its EditTarget.
-//
-// Known limits: typing at the offset where a break sits goes in front of
-// the break; auto-closing brackets and completion are FloatingText's.
+// TextFlow is editable in edit mode; clicking places the caret.
 
-// ContentItems returns the content stream now: the Items (or what the
-// Transform made of Source).
+// ContentItems returns the content stream as Items.
 func (f *TextFlow) ContentItems() []Item { return slices.Clone(f.items()) }
 
-// ResetContent forgets edits, so Source, Text and Items are the content
-// again; call it after setting them.
+// ResetContent discards edits, restoring content from Source.
 func (f *TextFlow) ResetContent() {
 	f.edited, f.derivedOK = false, false
 	f.sel, f.extra = flowSel{}, nil
@@ -69,16 +51,10 @@ func (f *TextFlow) notify() {
 	}
 }
 
-// Subscribe registers fn to be called after every edit, alongside OnChange.
-// Unlike OnChange it is not replaced when an xango tree sets the flow's props,
-// so code that watches a flow for its whole life (the collab bridge) uses
-// it.
+// Subscribe registers fn to run after every edit, like OnChange.
 func (f *TextFlow) Subscribe(fn func(*TextFlow)) { f.listeners = append(f.listeners, fn) }
 
-// --- EditTarget ---------------------------------------------------------
-
-// EditTarget implements Editable: the flow itself while the caret is in
-// it, else nil.
+// EditTarget returns the flow while the caret is in it, else nil.
 func (f *TextFlow) EditTarget() EditTarget {
 	if f.Editing() {
 		return f
@@ -86,19 +62,15 @@ func (f *TextFlow) EditTarget() EditTarget {
 	return nil
 }
 
-// HoldsObjects implements ObjectHolder.
 func (f *TextFlow) HoldsObjects() bool { return true }
 
-// EditText implements EditTarget: the text stream, each inline object a
-// placeholder rune.
+// EditText returns the text, with each inline object as one rune.
 func (f *TextFlow) EditText() string { return string(f.flatten().runes) }
 
-// Cursors implements EditTarget: the primary cursor first.
 func (f *TextFlow) Cursors() []Cursor {
 	return append([]Cursor{{Anchor: f.sel.anchor, Caret: f.sel.caret, After: f.sel.after}}, f.extra...)
 }
 
-// SetCursors implements EditTarget.
 func (f *TextFlow) SetCursors(cs []Cursor) {
 	if len(cs) == 0 {
 		return
@@ -113,8 +85,7 @@ func (f *TextFlow) SetCursors(cs []Cursor) {
 	f.pending, f.caretOff = Format{}, false
 }
 
-// Slice implements EditTarget: the runes [from, to) with their
-// formatting, inline objects as Inline items.
+// Slice returns runes [from, to) with their formatting.
 func (f *TextFlow) Slice(from, to int) []Item {
 	d := f.flatten()
 	from, to = min(max(from, 0), len(d.runes)), min(max(to, 0), len(d.runes))
@@ -145,7 +116,6 @@ func (f *TextFlow) Slice(from, to int) []Item {
 	return items
 }
 
-// Replace implements EditTarget.
 func (f *TextFlow) Replace(edits []Edit) {
 	f.materialize()
 	es := slices.Clone(edits)
@@ -173,10 +143,7 @@ func (f *TextFlow) clampCursors() {
 	}
 }
 
-// replaceRange swaps the stream range [from, to) of f.Items for ins.
-// Breaks and column configs strictly inside the range go with it; ones
-// at its ends stay. ins goes in front of any break at offset from, or
-// behind them with after.
+// replaceRange swaps stream range [from, to) of Items for ins.
 func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 	n := len(f.flatten().runes)
 	from, to = min(max(from, 0), n), min(max(to, 0), n)
@@ -237,8 +204,7 @@ func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 	f.Items = mergeChars(out)
 }
 
-// mergeChars joins neighbouring Chars with the same Format and drops
-// empty ones.
+// mergeChars joins neighbouring Chars with equal formats.
 func mergeChars(items []Item) []Item {
 	var out []Item
 	for _, it := range items {
@@ -257,8 +223,7 @@ func mergeChars(items []Item) []Item {
 	return out
 }
 
-// opAt returns the index in f.Items of a break or column config sitting
-// at stream offset o, or -1.
+// opAt returns the index of the break or column config at o, or -1.
 func (f *TextFlow) opAt(o int) int {
 	off := 0
 	for i, it := range f.Items {
@@ -277,26 +242,20 @@ func (f *TextFlow) opAt(o int) int {
 	return -1
 }
 
-// --- typing -----------------------------------------------------------
-
-// typeFormat is the format text typed at offset o takes: the pending one
-// if set, else that of the character before (or after, at the start).
+// typeFormat is the format text typed at offset o takes.
 func (f *TextFlow) typeFormat(d *flowData, o int) Format {
 	fm := f.typeFormatRaw(d, o)
-	fm.Proposal = "" // new text is not part of a suggestion unless suggesting says so
+	fm.Proposal = "" // New text is a proposal only while suggesting.
 	return fm
 }
 
-// CaretFormat is the format text typed at the first caret would take: the pending format (Ctrl+B with
-// nothing selected), else that of the character before the caret. A screen reader host uses it to say
-// "Bold on" when the formatting at the caret changes.
+// CaretFormat is the format text typed at the caret takes.
 func (f *TextFlow) CaretFormat() Format {
 	f.Layout()
 	return f.typeFormat(f.data, f.Cursors()[0].Caret)
 }
 
-// CaretFormatLast is CaretFormat from the layout of the latest draw, without working one out again: for a host
-// that wants the state of a formatting button after every draw. It is the empty format before the first draw.
+// CaretFormatLast is CaretFormat from the latest draw, without recomputing.
 func (f *TextFlow) CaretFormatLast() Format {
 	if f.data == nil {
 		return Format{}
@@ -317,8 +276,7 @@ func (f *TextFlow) typeFormatRaw(d *flowData, o int) Format {
 	return Format{}
 }
 
-// InsertText types s at every cursor, replacing selections (while the
-// caret is in the text).
+// InsertText types s at every cursor, replacing selections.
 func (f *TextFlow) InsertText(s string) bool {
 	s = strings.ReplaceAll(s, "\r", "")
 	if !f.Editing() || s == "" {
@@ -330,7 +288,7 @@ func (f *TextFlow) InsertText(s string) bool {
 		f.histKind = "type"
 	}
 	if rs := []rune(s); len(rs) == 1 && rs[0] != '\n' && f.AutoClose != nil && !f.proposalsOn() {
-		f.typePaired(d, rs[0]) // (not while suggesting: a proposal does not close brackets by itself)
+		f.typePaired(d, rs[0]) // No bracket auto-closing while suggesting.
 	} else {
 		editCursors(f, func(c Cursor, _ []rune) (int, int, []Item) {
 			from, to := c.Range()
@@ -350,8 +308,7 @@ func (f *TextFlow) InsertText(s string) bool {
 	return true
 }
 
-// PasteText inserts clipboard text as it is: one line per cursor when the
-// counts match, else all of it at each.
+// PasteText inserts clipboard text as given, one line per cursor.
 func (f *TextFlow) PasteText(text string) bool {
 	text = strings.ReplaceAll(text, "\r", "")
 	if !f.Editing() || text == "" {
@@ -374,8 +331,7 @@ func (f *TextFlow) PasteText(text string) bool {
 	return true
 }
 
-// CopyText implements Copier: the selected text (every cursor's, one per
-// line).
+// CopyText returns the selected text, one line per cursor.
 func (f *TextFlow) CopyText() (string, bool) {
 	if len(f.extra) == 0 {
 		if !f.HasSelection() {
@@ -395,7 +351,6 @@ func (f *TextFlow) CopyText() (string, bool) {
 	return strings.Join(parts, "\n"), len(parts) > 0
 }
 
-// CutText implements Cutter.
 func (f *TextFlow) CutText() (string, bool) {
 	if !f.Editing() {
 		return "", false
@@ -411,10 +366,7 @@ func (f *TextFlow) CutText() (string, bool) {
 	return text, true
 }
 
-// --- keys -------------------------------------------------------------
-
-// HandleKey implements KeyHandler: the editing keys while the caret is in
-// the text; Escape otherwise clears the selection.
+// HandleKey handles editing keys while the caret is in the text.
 func (f *TextFlow) HandleKey(key string, shift bool) bool {
 	if f.Editing() && f.suggestKey(key) {
 		return true
@@ -508,8 +460,7 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 		})
 	case "Backspace", "Delete":
 		f.materialize()
-		// Delete removes a break in front of the caret; Backspace one
-		// behind it (a caret placed after a break).
+		// Delete removes a break before the caret; Backspace one behind it.
 		if len(f.extra) == 0 && !f.HasSelection() && (key == "Delete" || f.sel.after) {
 			if i := f.opAt(f.sel.caret); i >= 0 {
 				f.sel.after = false
@@ -556,18 +507,15 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 	return true
 }
 
-// SetCaretVisible implements Blinker.
 func (f *TextFlow) SetCaretVisible(on bool) bool {
 	f.caretOff = !on
 	return f.Editing()
 }
 
-// WantsFocus implements Focuser: a selection needs the keyboard so Copy
-// (and Select all) reach it, and so does the caret.
+// WantsFocus: a selection needs the keyboard for Copy and Select all.
 func (f *TextFlow) WantsFocus() bool { return f.HasSelection() || f.Editing() }
 
-// MouseDownMods implements ModMouseDowner: Ctrl/Cmd+click in the text
-// adds a cursor.
+// MouseDownMods: Ctrl/Cmd+click adds a cursor.
 func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
 	x, y = f.vpt(x, y)
 	if (m.Ctrl || m.Meta) && f.mode == ModeEdit && f.openLinkAt(x, y) {
@@ -581,7 +529,7 @@ func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
 	return f.mouseDown(x, y)
 }
 
-// drawCarets draws a caret at every cursor (while editing).
+// drawCarets draws a caret at every cursor while editing.
 func (f *TextFlow) drawCarets() {
 	if !f.Editing() || f.caretOff || f.Painter == nil {
 		return
@@ -592,7 +540,7 @@ func (f *TextFlow) drawCarets() {
 		}
 		if x, y, h, ok := f.caretRect(c); ok {
 			if f.StrongCaret {
-				// a bar that stands out against any text colour: dark, with a light edge, and thicker
+				// The caret is a dark bar with a light edge.
 				f.Painter.SetFillStyle(StrongCaretEdge)
 				f.Painter.FillRect(x-1.5, y+1, 5, h-2)
 				f.Painter.SetFillStyle(StrongCaretColor)
@@ -604,8 +552,6 @@ func (f *TextFlow) drawCarets() {
 		}
 	}
 }
-
-// --- formatting -------------------------------------------------------
 
 // current returns the styles the selections (or the carets) cover.
 func (f *TextFlow) current() []TextStyle {
@@ -626,9 +572,7 @@ func (f *TextFlow) current() []TextStyle {
 	return out
 }
 
-// ApplyFormat applies fn to the format of the selected characters; with
-// no selection it changes the format of the text typed next. It reports
-// whether anything changed.
+// ApplyFormat applies fn to selected characters, or the next typed text.
 func (f *TextFlow) ApplyFormat(fn func(*Format)) bool {
 	cs := normalize(f.Cursors())
 	any := false
@@ -676,15 +620,12 @@ func (f *TextFlow) ApplyFormat(fn func(*Format)) bool {
 	return changed
 }
 
-// SetTextColor colors the selected text (or the text typed next); ""
-// returns it to the default color.
+// SetTextColor colors the selection or next text; "" resets it.
 func (f *TextFlow) SetTextColor(css string) bool {
 	return f.ApplyFormat(func(fm *Format) { fm.Color = css })
 }
 
-// ValidLang reports whether s can be a language tag: letters and digits in groups of up to eight
-// separated by hyphens ("fr", "pt-BR", "zh-Hant-TW"), at most 35 characters. The empty string is
-// valid: it means the document's own language.
+// ValidLang reports whether s is a valid language tag.
 func ValidLang(s string) bool {
 	if s == "" {
 		return true
@@ -712,8 +653,7 @@ func ValidLang(s string) bool {
 	return true
 }
 
-// SetLanguage tags the selected text (or the text typed next) as written in the language with this
-// tag; "" returns it to the document's own. A tag that is not valid is refused.
+// SetLanguage tags the selection or next text with a BCP 47 language.
 func (f *TextFlow) SetLanguage(tag string) bool {
 	if !ValidLang(tag) {
 		return false
@@ -756,8 +696,7 @@ func (f *TextFlow) ToggleItalic() bool {
 	})
 }
 
-// ToggleUnderline, ToggleStrike, ToggleSuperscript and ToggleSubscript
-// switch a decoration: on unless it is on everywhere already.
+// ToggleUnderline, Strike, Superscript and Subscript toggle decorations.
 func (f *TextFlow) ToggleUnderline() bool {
 	return f.toggle(func(s TextStyle) bool { return s.Underline }, func(fm *Format, on bool) { fm.Underline = on })
 }
@@ -784,8 +723,7 @@ func (f *TextFlow) ToggleSubscript() bool {
 	})
 }
 
-// PasteFormat gives the selected text exactly format fm; with no
-// selection it applies to the text typed next.
+// PasteFormat gives the selection format fm.
 func (f *TextFlow) PasteFormat(fm Format) bool {
 	return f.ApplyFormat(func(x *Format) {
 		// The target keeps its own comment, bookmark and index marks.
@@ -795,9 +733,7 @@ func (f *TextFlow) PasteFormat(fm Format) bool {
 	})
 }
 
-// HandleCommand implements Commander. While the caret is in the text the
-// formatting commands, select-all and the format painter work; with just
-// a selection (view mode too) select-all and copy-format do.
+// HandleCommand runs editing and formatting commands.
 func (f *TextFlow) HandleCommand(cmd Command) bool {
 	if f.Editing() {
 		switch cmd {
@@ -860,8 +796,7 @@ func (f *TextFlow) commonOfSelection() Format {
 	return f.typeFormat(f.flatten(), f.sel.caret)
 }
 
-// caretRect is CaretRect for a cursor: with After it is on the line that
-// starts at its offset (after a break) when there is one.
+// caretRect returns the caret rectangle for a cursor.
 func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
 	if c.After {
 		for _, ln := range f.Layout().Lines {
@@ -873,7 +808,7 @@ func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
 	return f.CaretRect(c.Caret)
 }
 
-// hasOpAt reports whether a break or column config sits at offset o.
+// hasOpAt reports whether a break or column config is at o.
 func (d *flowData) hasOpAt(o int) bool {
 	for _, op := range d.ops {
 		if op.at == o {
