@@ -1,4 +1,3 @@
-// Command docsh is a command line for a document store.
 package main
 
 import (

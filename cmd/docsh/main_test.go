@@ -72,7 +72,6 @@ func TestOpenStoreEveryKind(t *testing.T) {
 	}
 }
 
-// A server store sends the token as a bearer token.
 func TestOpenStoreSendsTheToken(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
