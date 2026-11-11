@@ -6,8 +6,6 @@ import (
 )
 
 func TestCharCRDTConcurrentEditsToDifferentPartsBothSurvive(t *testing.T) {
-	// Unlike MergeLWW, editing different, disjoint parts of the same
-	// block concurrently should NOT throw either edit away.
 	seed := NewDocWithStrategy("seed", MergeCharCRDT)
 	seed.Put(Block{ID: "note", Kind: "paragraph", Content: "the quick fox", Order: 0})
 	seedOp := seed.Drain()[0]
@@ -17,10 +15,6 @@ func TestCharCRDTConcurrentEditsToDifferentPartsBothSurvive(t *testing.T) {
 	phone.Apply(seedOp)
 	tablet.Apply(seedOp)
 
-	// phone prepends, tablet appends -- concurrently, neither having
-	// seen the other's edit. The two edits touch opposite ends of the
-	// text, so there's no shared anchor point for them to conflict
-	// over.
 	phone.Put(Block{ID: "note", Kind: "paragraph", Content: "well, the quick fox", Order: 0})
 	tablet.Put(Block{ID: "note", Kind: "paragraph", Content: "the quick fox jumps", Order: 0})
 
@@ -40,16 +34,6 @@ func TestCharCRDTConcurrentEditsToDifferentPartsBothSurvive(t *testing.T) {
 }
 
 func TestCharCRDTKnownInterleavingAnomalyForOverlappingReplacements(t *testing.T) {
-	// Text uses the classic single-origin RGA (see its doc comment),
-	// which is known to interleave concurrent edits that both replace
-	// most of the SAME overlapping text in a way neither user
-	// intended, when the diff happens to find a small coincidental
-	// character match between the two unrelated replacements. This
-	// test documents that trade-off rather than hiding it: both
-	// replicas must still converge to the identical result (the CRDT
-	// correctness property this package guarantees), even though that
-	// result isn't the clean "goodbye universe" a person would expect
-	// from replacing two unrelated words in the same phrase.
 	seed := NewDocWithStrategy("seed", MergeCharCRDT)
 	seed.Put(Block{ID: "note", Content: "hello world", Order: 0})
 	seedOp := seed.Drain()[0]
@@ -185,12 +169,6 @@ func TestCharCRDTSnapshotOnboardsNewReplicaMergeably(t *testing.T) {
 		t.Fatalf("expected onboarded content %q, got %+v (ok=%v)", "hello world", got, ok)
 	}
 
-	// The onboarded replica must be able to merge a *future* concurrent
-	// edit against the right character-level structure, not just carry
-	// the flattened string. Uses disjoint prepend/append edits, like
-	// TestCharCRDTConcurrentEditsToDifferentPartsBothSurvive, so this
-	// is testing onboarding correctness and not also exercising RGA's
-	// documented interleaving-anomaly trade-off.
 	seed.Put(Block{ID: "note", Content: "well, hello world", Order: 0})
 	fresh.Put(Block{ID: "note", Content: "hello world indeed", Order: 0})
 
@@ -224,8 +202,6 @@ func TestCharCRDTSnapshotCarriesTombstones(t *testing.T) {
 }
 
 func TestCharCRDTBlockLevelDeleteStillTombstonesWhole(t *testing.T) {
-	// Doc.Delete is a block-level tombstone independent of per-char
-	// merging -- it must still behave like MergeLWW's version.
 	a := NewDocWithStrategy("a", MergeCharCRDT)
 	b := NewDocWithStrategy("b", MergeCharCRDT)
 
@@ -244,14 +220,11 @@ func TestCharCRDTBlockLevelDeleteStillTombstonesWhole(t *testing.T) {
 }
 
 func TestCharCRDTOutOfOrderDeleteBeforeInsertConverges(t *testing.T) {
-	// Exercise Text's pending-tombstone path directly: a delete for an
-	// id that hasn't been inserted locally yet must not be lost, and
-	// must correctly suppress the character once its insert arrives.
+	// Exercises the pending-tombstone path directly.
 	var text Text
 	insertOp := CharOp{Kind: CharInsert, ID: Timestamp{Counter: 1, Replica: "a"}, Value: 'x'}
 	deleteOp := CharOp{Kind: CharDelete, ID: Timestamp{Counter: 1, Replica: "a"}}
 
-	// Delivered out of causal order: delete arrives first.
 	text.apply(deleteOp)
 	text.apply(insertOp)
 
@@ -272,8 +245,7 @@ func TestDocStrategySwitch(t *testing.T) {
 	}
 }
 
-// randomEdit returns s with one small random insertion or deletion
-// applied at a random position.
+// randomEdit returns s with one small random insertion or deletion.
 func randomEdit(rng *rand.Rand, s string) string {
 	runes := []rune(s)
 	pos := rng.Intn(len(runes) + 1)
@@ -301,14 +273,7 @@ func randomEdit(rng *rand.Rand, s string) string {
 	return string(out)
 }
 
-// TestCharCRDTRandomizedConvergence stress-tests convergence across
-// many rounds of concurrent, independently-generated edits, building
-// up progressively deeper nested subtree structures in Text -- the
-// exact shape of bug that let a losing sibling's insert splice into
-// the middle of a winning sibling's already-grown subtree instead of
-// landing after all of it (see insert's doc comment). A handful of
-// hand-picked examples wouldn't reliably catch a regression here;
-// many random trials are much more likely to.
+// TestCharCRDTRandomizedConvergence checks random edits converge.
 func TestCharCRDTRandomizedConvergence(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 
@@ -348,7 +313,6 @@ func TestSnapshotKeepsDeletesThatArrivedBeforeTheirInsert(t *testing.T) {
 	b := Timestamp{Counter: 2, Replica: "a"}
 	var text Text
 	text.apply(CharOp{Kind: CharInsert, ID: a, Value: 'r'})
-	// 'z' is deleted before it (or its origin) has arrived.
 	z := Timestamp{Counter: 4, Replica: "a"}
 	text.apply(CharOp{Kind: CharDelete, ID: z})
 	text.apply(CharOp{Kind: CharInsert, ID: z, Origin: b, Value: 'z'}) // its origin b is missing: parked

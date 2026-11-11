@@ -1,31 +1,15 @@
-// Package crdt is the offline-first sync engine behind gojiberry's
-// block editor: one register per block, keyed by block ID, resolved
-// by either of two interchangeable MergeStrategy algorithms --
-// MergeLWW (last-writer-wins, the default) or MergeCharCRDT
-// (per-character merging via an RGA; see Text). Two replicas that
-// never see the same network at the same time can each mutate their
-// own copy freely; exchanging the small set of Ops produced since the
-// last sync (a "delta", not the whole document) merges into an
-// identical result on both sides regardless of delivery order,
-// duplication, or which side went first — the three properties
-// (commutative, associative, idempotent) that make a CRDT safe to
-// sync over an unreliable, metered mobile connection.
+// Package crdt is an offline-first sync engine for block documents.
 package crdt
 
 import "sort"
 
-// Timestamp totally orders writes across replicas without a shared
-// clock: Counter is a Lamport clock (bumped past the highest value
-// this replica has seen, locally or received), and Replica breaks ties
-// between two writes with the same Counter deterministically.
+// Timestamp totally orders writes across replicas.
 type Timestamp struct {
 	Counter uint64
 	Replica string
 }
 
-// after reports whether t happened after other, using Replica only to
-// break an exact Counter tie so every replica resolves conflicts to
-// the same winner without communicating further.
+// after reports whether t happened after other.
 func (t Timestamp) after(other Timestamp) bool {
 	if t.Counter != other.Counter {
 		return t.Counter > other.Counter
@@ -33,43 +17,30 @@ func (t Timestamp) after(other Timestamp) bool {
 	return t.Replica > other.Replica
 }
 
-// Block is one unit of the document: a heading, paragraph, list item,
-// or table row — the "vertical block" the mobile UI edits and renders,
-// as opposed to a position on a fixed printable page.
+// Block is one unit of the document: a heading, paragraph or similar.
 type Block struct {
 	ID      string
 	Kind    string
 	Content string
-	// Order is a fractional index: inserting a block between two
-	// existing ones only needs a value between their Orders, never a
-	// renumbering pass across the whole document (see OrderBetween).
+	// Order is a fractional index that positions the block.
 	Order   float64
 	Deleted bool
 }
 
-// Op is a single mutation and the unit exchanged between replicas —
-// the "micro-data packet" a delta-sync transfers instead of the whole
-// document.
+// Op is one mutation, exchanged between replicas.
 type Op struct {
 	Block Block
 	TS    Timestamp
-	// CharOps carries the per-character CRDT edits that produced
-	// Block.Content, present only when the originating Doc's
-	// MergeStrategy is MergeCharCRDT. Applying CharOps (rather than
-	// replacing Content wholesale) is what lets two concurrent edits
-	// to different parts of the same block's text both survive.
+	// CharOps carries per-character CRDT edits for the block's text.
 	CharOps []CharOp
 }
 
-// OrderBetween returns a fractional position strictly between before
-// and after, for inserting a block between two existing ones without
-// touching either neighbor's Order.
+// OrderBetween returns a fractional position between a and b.
 func OrderBetween(before, after float64) float64 {
 	return before + (after-before)/2
 }
 
-// OrderEnd returns a position after every block currently in blocks
-// (0 if empty), for appending a new block at the end of the list.
+// OrderEnd returns a position after every current block.
 func OrderEnd(blocks []Block) float64 {
 	max := 0.0
 	found := false
@@ -85,9 +56,7 @@ func OrderEnd(blocks []Block) float64 {
 	return max + 1
 }
 
-// sortBlocks orders visible blocks for rendering: by Order, then ID as
-// a stable tiebreaker so equal-Order blocks (which shouldn't normally
-// occur) still render deterministically on every replica.
+// sortBlocks orders visible blocks for rendering.
 func sortBlocks(blocks []Block) {
 	sort.Slice(blocks, func(i, j int) bool {
 		if blocks[i].Order != blocks[j].Order {
