@@ -1,15 +1,12 @@
 package canvas
 
-// cellRange is a block of cells selected by extending from the active cell
-// (Shift+click, Shift+arrows): the anchor is where it started, the head the
-// end that moves.
+// cellRange is a block of cells selected by extending from the active cell.
 type cellRange struct {
 	on                       bool
 	anchorR, anchorC, hr, hc int
 }
 
-// SelectRange selects the block of cells between the two corners (in either
-// order), as Shift+click does, and makes the first the active cell.
+// SelectRange selects the block of cells between two corners.
 func (v *TableView) SelectRange(r0, c0, r1, c1 int) {
 	t := v.Table
 	if !t.InRange(r0, c0) || !t.InRange(r1, c1) {
@@ -21,9 +18,7 @@ func (v *TableView) SelectRange(r0, c0, r1, c1 int) {
 	v.sel = Selection{}
 }
 
-// Range returns the block of cells the commands (merge, style) act on: the
-// Shift-selected block, grown to hold the merges it cuts through, or else the
-// active cell. ok is false when no cell is active.
+// Range returns the block the commands act on.
 func (v *TableView) Range() (r0, c0, r1, c1 int, ok bool) {
 	t := v.Table
 	if !v.rng.on {
@@ -52,8 +47,7 @@ func (v *TableView) Range() (r0, c0, r1, c1 int, ok bool) {
 	return r0, c0, r1, c1, true
 }
 
-// extendRange moves the head of the selection by (dr, dc), starting one from the
-// active cell.
+// extendRange moves the selection head by (dr, dc).
 func (v *TableView) extendRange(dr, dc int) {
 	t := v.Table
 	if !v.rng.on {
@@ -66,8 +60,7 @@ func (v *TableView) extendRange(dr, dc int) {
 	}
 }
 
-// MergeSelection merges the selected block (see Range) into one cell; it
-// reports whether anything merged.
+// MergeSelection merges the selected block into one cell.
 func (v *TableView) MergeSelection() bool {
 	r0, c0, r1, c1, ok := v.Range()
 	if !ok || !v.Table.MergeRange(r0, c0, r1, c1) {
@@ -79,7 +72,7 @@ func (v *TableView) MergeSelection() bool {
 	return true
 }
 
-// SplitSelection splits the merged cell the active cell is part of.
+// SplitSelection splits the merged cell holding the active cell.
 func (v *TableView) SplitSelection() bool {
 	r0, c0, _, _, ok := v.Range()
 	if !ok || !v.Table.Unmerge(r0, c0) {
@@ -90,8 +83,7 @@ func (v *TableView) SplitSelection() bool {
 	return true
 }
 
-// StyleSelection changes the style of every cell in the selected block with
-// fn (covered cells are left to their owners).
+// StyleSelection styles every cell in the selected block.
 func (v *TableView) StyleSelection(fn func(*CellStyle)) bool {
 	r0, c0, r1, c1, ok := v.Range()
 	if !ok {
@@ -111,8 +103,7 @@ func (v *TableView) StyleSelection(fn func(*CellStyle)) bool {
 	return true
 }
 
-// MouseDownMods implements ModMouseDowner: Shift+click on a cell extends the
-// selection from the active cell to it.
+// MouseDownMods: Shift+click extends the selection.
 func (v *TableView) MouseDownMods(x, y float64, m Mods) bool {
 	if v.mode == ModeEdit && m.Shift && v.editing && v.menu != nil && !v.menu.IsOpen() {
 		if h := v.HitTest(x, y); h.Kind == HitCell {
@@ -146,8 +137,7 @@ func (v *TableView) drawRange(g geometry) {
 	p.StrokeRect(x0+1, y0+1, x1+w1-x0-2, y1+h1-y0-2)
 }
 
-// cellMenu is the part of the table handle's menu for the active cell or
-// block: merge and split, and the cell's own look.
+// cellMenu is the cell part of the table handle's menu.
 func (v *TableView) cellMenu() []MenuItem {
 	r0, c0, r1, c1, ok := v.Range()
 	merged := false

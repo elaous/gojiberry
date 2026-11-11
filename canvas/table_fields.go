@@ -1,13 +1,8 @@
 package canvas
 
-// A form field in a table cell works like a formula there: the table has two views (the switch at its top right, the eye
-// or f(x)). In the calculated view the cell shows what was filled in and a press fills it in (TableView.OnFieldFill); in
-// the formula view the cell shows what the field is (its kind and label) and a press changes it (OnFieldEdit), unless the
-// field is locked. The text of the cell is the field's words (label: value), kept up to date by SyncFields, so every
-// export, the reading copy and Markdown carry it as text; Markdown has nothing to say that a cell is a field. A formula
-// that points at a field cell reads the value that was filled in.
+// A form field in a table cell holds a value a person fills in.
 
-// SetField makes the cell a form field (the owner, for a covered one). The cell's text becomes the field's words.
+// SetField makes a cell a form field.
 func (t *Table) SetField(row, col int, f *FormFieldObject) {
 	if !t.InRange(row, col) || f == nil {
 		return
@@ -26,8 +21,7 @@ func (t *Table) FieldAt(row, col int) *FormFieldObject {
 	return t.Fields[CellPos{row, col}]
 }
 
-// RemoveField turns the cell back into an ordinary cell holding the field's words as text; it reports whether there was
-// a field.
+// RemoveField turns a field cell back into an ordinary cell.
 func (t *Table) RemoveField(row, col int) bool {
 	row, col = t.Owner(row, col)
 	if _, ok := t.Fields[CellPos{row, col}]; !ok {
@@ -50,7 +44,7 @@ func (t *Table) FieldList() []*FormFieldObject {
 	return out
 }
 
-// SyncFields rewrites the text of every field cell from its field; call it after a field changed.
+// SyncFields rewrites every field cell's text from its field.
 func (t *Table) SyncFields() {
 	for p, f := range t.Fields {
 		if t.InRange(p.Row, p.Col) {
@@ -117,15 +111,13 @@ func (t *Table) HasFormulaOrField() bool {
 	return false
 }
 
-// switchRect is where the switch of a table in the text is, relative to the object: the grip of an editable table's
-// HitFormulaSwitch, beside the top right corner, in the pad around the table.
+// switchRect is the table switch's rectangle, relative to the flow.
 func (o *TableObject) switchRect() [4]float64 {
 	hs := o.View.Style.HandleSize
 	return [4]float64{o.pad + o.tableW + o.View.Style.BarGap, 0, hs, hs}
 }
 
-// ShowTableFormulas puts every table of the flow in the formula view ("edit all": formulas as typed, fields as what
-// they are, a press on a field changes it) or the calculated view ("see all"). It is a view setting and is not saved.
+// ShowTableFormulas shows formulas in every table of the flow.
 func (f *TextFlow) ShowTableFormulas(on bool) {
 	for _, o := range f.Tables() {
 		o.View.SetShowFormulas(on)

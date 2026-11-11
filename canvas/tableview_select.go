@@ -5,8 +5,7 @@ import (
 	"strconv"
 )
 
-// selectHandle selects what the clicked handle stands for and opens its
-// context menu just below/right of the handle.
+// selectHandle selects what the clicked handle stands for.
 func (v *TableView) selectHandle(h Hit) {
 	v.editing = false
 	g := v.layout()
@@ -34,7 +33,7 @@ func (v *TableView) selectHandle(h Hit) {
 	v.menu.OpenWithin(items, mx, my, bounds)
 }
 
-// apply wraps a table mutation from a menu item: it then fires OnChange.
+// apply runs a table change from a menu and fires OnChange.
 func (v *TableView) apply(fn func(t *Table)) func() {
 	return func() {
 		fn(v.Table)
@@ -122,8 +121,7 @@ func (v *TableView) drawSelection(g geometry) {
 	p.StrokeRect(x0+1, y0+1, x1-x0-2, y1-y0-2)
 }
 
-// drawHandles paints the grip above each column, left of each row, and
-// the table icon in the corner.
+// drawHandles paints the grip above each column and beside each row.
 func (v *TableView) drawHandles(g geometry) {
 	s := v.Style
 	hs, gap := s.HandleSize, s.BarGap
@@ -136,7 +134,6 @@ func (v *TableView) drawHandles(g geometry) {
 			v.hover == Hit{Kind: HitRowHandle, Row: r}, v.sel == Selection{SelRow, r}, strconv.Itoa(r+1))
 	}
 
-	// Formula switch, top right: an eye while the values are shown, f(x) while the formulas are.
 	if v.showSwitch || !v.penSwitch {
 		p := v.Painter
 		x, y := g.right()+gap, v.Y-gap-hs
@@ -199,8 +196,7 @@ func (v *TableView) iconColor(selected bool) string {
 	return v.Style.HandleIconColor
 }
 
-// fillPill fills a rounded pill (a rectangle with its corners cut by
-// the painter's rectangles, radius 4): the grip look of Obsidian's tables.
+// fillPill fills a rounded pill shape.
 func (v *TableView) fillPill(x, y, w, h float64, hovered, selected bool) {
 	p, s := v.Painter, v.Style
 	switch {
@@ -225,8 +221,7 @@ func (v *TableView) fillPill(x, y, w, h float64, hovered, selected bool) {
 	p.FillRect(x, y+r, w, h-2*r)
 }
 
-// drawHandle paints one column or row handle: a small pill centered on
-// the edge, with the name a formula uses for the column (A, B, ...) or the row (1, 2, ...).
+// drawHandle paints one column or row handle.
 func (v *TableView) drawHandle(x, y, w, h float64, hovered, selected bool, label string) {
 	column := w > h
 	pw, ph := 26.0, h-4

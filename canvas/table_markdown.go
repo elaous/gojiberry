@@ -2,15 +2,7 @@ package canvas
 
 import "strings"
 
-// TableFromMarkdown reads a pipe table:
-//
-//	| Item | Qty | Price | Total   |
-//	| :--- | --: | ----: | ------: |
-//	| Pens | 3   | 1.5   | =B2*C2  |
-//
-// The first row is the header, the second the separator (its colons give each column's alignment), and a cell keeps
-// its text as written, so a cell that starts with = is a formula (see Values) and \| is a bar inside a cell. It reports
-// false when the text is not a table (no header, or no separator row).
+// TableFromMarkdown reads a pipe table into a Table.
 func TableFromMarkdown(md string) (*Table, bool) {
 	var rows [][]string
 	var aligns []Align
@@ -56,7 +48,7 @@ func TableFromMarkdown(md string) (*Table, bool) {
 	return t, true
 }
 
-// splitPipes cuts a table line at its bars, not at \|, and drops the bars at the two ends.
+// splitPipes cuts a table line at bars, not escaped bars.
 func splitPipes(line string) []string {
 	line = strings.TrimSpace(line)
 	var cells []string
