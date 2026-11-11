@@ -127,7 +127,6 @@ func TestTokenHeader(t *testing.T) {
 	if do(g, "GET", "/x", map[string]string{"X-Gojiberry-Token": "tok"}).Code != 200 {
 		t.Fatal("custom header")
 	}
-	// The Authorization header is left alone for a server's own sign-in.
 	if do(g, "GET", "/x", map[string]string{"Authorization": "Bearer tok"}).Code != 401 {
 		t.Fatal("Authorization must not satisfy a custom-header guard")
 	}
