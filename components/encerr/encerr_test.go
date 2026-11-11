@@ -56,8 +56,6 @@ func TestExplainErrorGroupsEverySentinel(t *testing.T) {
 	}
 }
 
-// Every message id the groups can say, and the two labels of the disclosure, has a German, French and
-// Spanish text.
 func TestEveryMessageIsInEveryPack(t *testing.T) {
 	ids := []string{"err.details", "err.copy", "err.rolledBack", "err.locked", "err.conflict", "err.storageFull", "err.offline", "err.unknown"}
 	for _, g := range Groups() {
