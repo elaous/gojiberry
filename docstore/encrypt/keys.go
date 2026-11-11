@@ -12,24 +12,19 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Recipient is a key a document is encrypted to, as the people lists show it: a label (an
-// e-mail or a name; it says who the key is meant for, and is not what makes it trusted) and a
-// fingerprint, which is what the owner confirms when adding it.
+// Recipient is a key a document is encrypted to.
 type Recipient struct {
 	Label       string
 	Type        string // "ssh-ed25519", "ssh-rsa" or "age-x25519"
 	Fingerprint string // "SHA256:..." for an SSH key, the key itself for an age key
 	Key         age.Recipient
-	// Text is the public key as it was read ("ssh-ed25519 AAAA..." or "age1..."), what is kept
-	// in a document's recipient list.
+	// Text is the public key as it was read.
 	Text string
-	// Hint is, for a passkey key, the credential ID (base64url) to ask when opening.
+	// Hint is, for a passkey key, the credential ID.
 	Hint string
 }
 
-// ParseSSHRecipient reads an SSH public key as an authorized_keys or .pub file holds it
-// ("ssh-ed25519 AAAA... label"); the comment becomes the label. Only ssh-ed25519 and ssh-rsa
-// are supported (the keys age can encrypt to).
+// ParseSSHRecipient reads an SSH public key as a recipient.
 func ParseSSHRecipient(line string) (Recipient, error) {
 	line = strings.TrimSpace(line)
 	if strings.ContainsAny(line, "\r\n") {
@@ -47,9 +42,7 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: fp, Key: sshKeyed{Recipient: r, fp: fp}, Text: line}, nil
 }
 
-// sshKeyed is an SSH age recipient that remembers the SHA-256 fingerprint of its full public key.
-// agessh's recipient has no key accessor and puts only a 4-byte tag in its stanza, so two distinct
-// keys can share a tag; recipientID uses this to tell them apart. Wrapping is unchanged.
+// sshKeyed is an SSH age recipient that remembers its fingerprint.
 type sshKeyed struct {
 	age.Recipient
 	fp string
@@ -57,7 +50,7 @@ type sshKeyed struct {
 
 func (s sshKeyed) keyFingerprint() string { return s.fp }
 
-// keyFingerprinter is implemented by a recipient that knows its full key's fingerprint.
+// keyFingerprinter is implemented by recipients that know their fingerprint.
 type keyFingerprinter interface{ keyFingerprint() string }
 
 // ParseAgeRecipient reads an age public key ("age1...").
@@ -74,8 +67,7 @@ func ParseAgeRecipient(s string) (Recipient, error) {
 	return Recipient{Type: "age-x25519", Fingerprint: "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), Key: r, Text: r.String()}, nil
 }
 
-// ParseSSHIdentity reads an unencrypted SSH private key (the PEM of an ed25519 or RSA key).
-// A key protected by a passphrase must be opened by the caller first.
+// ParseSSHIdentity reads an unencrypted SSH private key.
 func ParseSSHIdentity(pem []byte) (age.Identity, error) {
 	id, err := agessh.ParseIdentity(pem)
 	if err != nil {
@@ -88,8 +80,7 @@ func ParseSSHIdentity(pem []byte) (age.Identity, error) {
 	return id, nil
 }
 
-// GenerateRecoveryKey makes an age key pair for a recovery recipient: show the secret once,
-// to be kept offline; the public part goes in the keyring.
+// GenerateRecoveryKey makes an age key pair for recovery.
 func GenerateRecoveryKey() (public string, secret string, err error) {
 	id, err := age.GenerateX25519Identity()
 	if err != nil {

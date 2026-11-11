@@ -14,23 +14,17 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// DeviceUse says when a key of the store last unlocked it, and from which device, as that device named
-// itself (a label the person gave it, such as "work laptop"; "" when none). It is kept in the store, so
-// every device sees the others' use: the keys list can say "last used on the phone, 3 days ago", which
-// helps tell a key that is still in use from one that can be removed. It is kept for that and nothing
-// else, and it is encrypted to the store's keys like a document, so the server learns only that a key
-// has a record and when the record was written.
+// DeviceUse says when a key of the store last unlocked it.
 type DeviceUse struct {
 	Fingerprint string    `json:"fp"`
 	Device      string    `json:"device,omitempty"`
 	At          time.Time `json:"at"`
 }
 
-// MaxDeviceLabel is the longest device label kept, in characters.
+// MaxDeviceLabel is the longest device label kept.
 const MaxDeviceLabel = 60
 
-// deviceUseID is the file of one key's record: named by a hash of the fingerprint, so whatever the
-// fingerprint holds (colons, a long text) never becomes part of a file name.
+// deviceUseID is the file of one key's record.
 func deviceUseID(fp string) (string, error) {
 	if fp == "" || len(fp) > 256 || strings.TrimSpace(fp) != fp || strings.ContainsFunc(fp, unicode.IsControl) {
 		return "", errors.New("encrypt: not a key fingerprint")
@@ -39,9 +33,7 @@ func deviceUseID(fp string) (string, error) {
 	return docstore.DeviceUsePrefix + hex.EncodeToString(sum[:16]), nil
 }
 
-// RecordDeviceUse writes that the key fp unlocked the store now, from the device named device (cut to
-// MaxDeviceLabel characters, control characters dropped). The file is written through the adapter, so
-// it is encrypted to the store's keys; the record of one key is replaced, never appended to.
+// RecordDeviceUse writes that a key unlocked the store.
 func (a *Adapter) RecordDeviceUse(ctx context.Context, fp, device string, now time.Time) error {
 	id, err := deviceUseID(fp)
 	if err != nil {
@@ -54,8 +46,7 @@ func (a *Adapter) RecordDeviceUse(ctx context.Context, fp, device string, now ti
 	return a.Save(ctx, id, data)
 }
 
-// DeviceUses reads every key's record. A record that cannot be opened or read is left out (it may be
-// from a key that was removed and re-encrypted away); the list is by key, in no order.
+// DeviceUses reads every key's record.
 func (a *Adapter) DeviceUses(ctx context.Context) ([]DeviceUse, error) {
 	metas, err := a.Inner.List(ctx)
 	if err != nil {
@@ -80,13 +71,13 @@ func (a *Adapter) DeviceUses(ctx context.Context) ([]DeviceUse, error) {
 	return out, nil
 }
 
-// deviceUseNamed says whether a file is the record of the key it claims to be for.
+// deviceUseNamed says whether a file is a device-use record.
 func deviceUseNamed(fp, id string) bool {
 	want, err := deviceUseID(fp)
 	return err == nil && want == id
 }
 
-// cleanDeviceLabel keeps a device label to printable text of at most MaxDeviceLabel characters.
+// cleanDeviceLabel keeps a device label printable and short.
 func cleanDeviceLabel(s string) string {
 	var b strings.Builder
 	n := 0
