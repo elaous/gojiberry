@@ -1,4 +1,3 @@
-// Command syncserver runs the delta-sync relay.
 package main
 
 import (
