@@ -1,9 +1,4 @@
-// Package docdiff compares two versions of a document. The comparison is by block (a paragraph, a
-// heading, a list item, a table cell, a picture) and, inside a block that was edited, by word, so that
-// a changed sentence shows which words went and which came. The result is plain data, with a
-// description in words for a screen reader (Describe), so the view built on it is not only coloured
-// text. It is the diff of text and structure (a heading that became a paragraph is a change); formatting
-// within a run (bold, a colour) is not compared.
+// Package docdiff compares two versions of a document, block by block.
 package docdiff
 
 import (
@@ -41,16 +36,15 @@ type Change struct {
 	Kind export.BlockKind
 	// Level is the heading or list level of the block.
 	Level int
-	// Text is the block's text (the newer one for Equal and Edit, the older for Delete).
+	// Text is the block's text.
 	Text string
-	// OldKind is the older block's kind for an Edit whose kind changed (a paragraph made a heading).
+	// OldKind is the older block's kind.
 	OldKind export.BlockKind
 	// Runs, for an Edit, is the text word by word.
 	Runs []Run
 }
 
-// maxCells bounds the work of the block comparison (blocks in the older times blocks in the newer,
-// after the common start and end are set aside); past it, the middle is reported as deleted and inserted.
+// maxCells bounds the work of the block comparison.
 const maxCells = 4_000_000
 
 type blockText struct {
@@ -84,7 +78,7 @@ func blocksOf(d docfile.Document) []blockText {
 
 func (b blockText) key() string { return fmt.Sprintf("%d/%d/%s", b.kind, b.level, b.text) }
 
-// Compare returns the blocks of the two documents in order, each marked Equal, Insert, Delete or Edit.
+// Compare returns the blocks of two documents, compared.
 func Compare(older, newer docfile.Document) []Change {
 	return CompareBlocks(blocksOf(older), blocksOf(newer))
 }
@@ -114,7 +108,7 @@ func equal(b blockText) Change {
 	return Change{Op: Equal, Kind: b.kind, Level: b.level, Text: b.text}
 }
 
-// step is one position of the edit script before pairing.
+// step is one position of the edit script.
 type step struct {
 	op Op
 	a  blockText // for Delete
@@ -177,9 +171,7 @@ func middle(a, b []blockText) []step {
 	return out
 }
 
-// pair turns a run of deletes followed by inserts into edits where the blocks correspond one to one
-// (the n-th deleted with the n-th inserted), so a reworded paragraph is one edit, not a delete and an
-// insert.
+// pair turns a run of deletes and inserts into changes.
 func pair(steps []step) []Change {
 	var out []Change
 	for i := 0; i < len(steps); {
@@ -216,7 +208,7 @@ func pair(steps []step) []Change {
 	return out
 }
 
-// similar says two blocks are one block edited: they share at least a third of their words (or one is empty).
+// similar says two blocks are one block edited.
 func similar(a, b blockText) bool {
 	wa, wb := words(a.text), words(b.text)
 	if len(wa) == 0 || len(wb) == 0 {
@@ -235,7 +227,7 @@ func edit(a, b blockText) Change {
 	return Change{Op: Edit, Kind: b.kind, OldKind: a.kind, Level: b.level, Text: b.text, Runs: wordRuns(words(a.text), words(b.text))}
 }
 
-// words splits text into words, each keeping the space after it, so that joining them gives the text.
+// words splits text into words, keeping their spacing.
 func words(s string) []string {
 	var out []string
 	start := 0
@@ -254,8 +246,7 @@ func words(s string) []string {
 	return out
 }
 
-// wordRuns compares two word lists and returns runs of equal, deleted and inserted words, equal
-// neighbours joined.
+// wordRuns compares two word lists and returns runs.
 func wordRuns(a, b []string) []Run {
 	n, m := len(a), len(b)
 	if n*m > maxCells {
@@ -334,8 +325,7 @@ func Summarize(changes []Change) Summary {
 // Changed reports whether anything differs.
 func (s Summary) Changed() bool { return s.Inserted+s.Deleted+s.Edited > 0 }
 
-// Describe says a change in words, for a screen reader or a plain-text report: "Inserted paragraph:
-// …", "Deleted heading 2: …", "Edited paragraph: removed 'old', added 'new'". Unchanged blocks are "".
+// Describe says a change in words, for a screen reader.
 func Describe(c Change) string {
 	if c.Op == Equal {
 		return ""
@@ -369,7 +359,7 @@ func Describe(c Change) string {
 	return strings.TrimSuffix(out, ";")
 }
 
-// KindName is the English name of a block kind ("heading 2", "bullet item", "paragraph").
+// KindName is the English name of a block kind.
 func KindName(k export.BlockKind) string { return kindName(k, 0) }
 
 func kindName(k export.BlockKind, level int) string {

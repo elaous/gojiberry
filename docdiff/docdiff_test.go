@@ -9,7 +9,7 @@ import (
 	"github.com/elaous/gojiberry/export"
 )
 
-// doc builds a document from paragraphs; a leading "# " makes a heading 1.
+// doc builds a document from paragraphs.
 func doc(paras ...string) docfile.Document {
 	var items []docfile.Item
 	for _, p := range paras {

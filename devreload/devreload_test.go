@@ -74,14 +74,7 @@ func TestHandlerNilReloaderIs404(t *testing.T) {
 	}
 }
 
-// TestEndToEndDifferentVersionsTriggerReload proves the actual contract
-// two independent Reloader instances (i.e. two separate process runs)
-// rely on: Wrap embeds one version, Handler serves a different one, and
-// that's the exact condition the injected script's own `t !== v` check
-// treats as "reload". This doesn't run the JS itself (no browser here),
-// but confirms the two halves genuinely disagree across a real HTTP
-// round trip when they're from different Reloaders, and agree when
-// they're the same one.
+// End-to-end: a different version reloads the page.
 func TestEndToEndDifferentVersionsTriggerReload(t *testing.T) {
 	oldProcess := New()
 	newProcess := New()

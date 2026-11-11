@@ -1,21 +1,4 @@
-// Package devwatch is the process-supervision half of xango's dev loop:
-// watch a source tree, and on a relevant change, rebuild and restart a
-// managed server subprocess. Pair it with the sibling devreload package
-// for the browser-side half (reloading a tab once the restarted
-// process is listening again).
-//
-// This began as examples/canvas-app's own cmd/devwatch, hardcoded to
-// that app's `make generate`/`make wasm`/cmd/devserver specifics; this
-// package is that same watch/debounce/rebuild/restart loop generalized
-// behind a Config so any xango project's own thin cmd/devwatch (or
-// cmd/xgdev, for a project with no Go code of its own to add) can
-// reuse it instead of re-deriving fsnotify wiring and subprocess
-// lifecycle management from scratch. It is not real hot module
-// replacement -- a compiled binary (or .wasm blob) is one opaque unit,
-// not a set of hot-swappable modules -- just a fast watch/rebuild/
-// restart/reload loop, an acceptable tradeoff for any xango app whose
-// server holds no unrecoverable in-memory state a full restart would
-// lose (canvas-app's own state lives in Postgres, for instance).
+// Package devwatch supervises a process and restarts it on file changes.
 package devwatch
 
 import (
@@ -33,52 +16,26 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// Config configures Run. Root, Rebuild, and Command are required; the
-// rest have workable zero values.
+// Config configures Run.
 type Config struct {
-	// Root is the directory tree to watch, recursively.
+	// Root is the directory tree to watch.
 	Root string
 
-	// Ignore reports whether a changed path should never trigger a
-	// rebuild. Combine with DefaultIgnore to keep its universal skips
-	// (VCS metadata, generated *.xg.go files) alongside a project's
-	// own build-output paths, e.g.:
-	//
-	//	Ignore: func(p string) bool {
-	//		return devwatch.DefaultIgnore(p) || strings.Contains(p, "/static/")
-	//	}
-	//
-	// A nil Ignore is equivalent to DefaultIgnore alone.
+	// Ignore reports whether a changed path should be skipped.
 	Ignore func(path string) bool
 
-	// Rebuild runs the project's build steps (regenerating .go from
-	// .xg, compiling a WASM client, building the server binary this
-	// Config's Command runs, ...), streaming their own output as they
-	// go. It reports whether the build succeeded; false leaves whatever
-	// server is currently running alone rather than restarting it into
-	// a known-broken state.
+	// Rebuild runs the project's build steps before each restart.
 	Rebuild func() bool
 
-	// Command and Args launch the built server binary. Run executes it
-	// directly (not through a shell), so a signal sent to stop it
-	// reaches the real server process, not an intermediary.
+	// Command and Args launch the built server.
 	Command string
 	Args    []string
 
-	// Env, if non-nil, replaces the managed process's environment
-	// entirely; leave nil to inherit Run's own environment unchanged.
+	// Env, if non-nil, replaces the managed process environment.
 	Env []string
 }
 
-// DefaultIgnore reports whether path should never trigger a rebuild
-// regardless of project: VCS metadata (.git) and xgc's own generated
-// *.xg.go files (edit the .xg source instead -- watching the file
-// xgc itself just wrote would create a feedback loop). A project's own
-// build-output directories (a WASM static/ dir, a temp binary path, ...)
-// are not covered here since there's no universal convention for them;
-// combine with Config.Ignore for those. (A rebuild that writes files under
-// Root -- generated code, a bundle -- triggers another rebuild unless Ignore
-// covers them.) Editors' scratch files are ignored too.
+// DefaultIgnore reports whether path should never be watched.
 func DefaultIgnore(path string) bool {
 	path = filepath.ToSlash(path)
 	switch {
@@ -93,9 +50,7 @@ func DefaultIgnore(path string) bool {
 	}
 }
 
-// isEditorTemp matches the scratch files editors write beside the file being
-// saved (vim's swap files and its "4913" write probe, emacs lock files and
-// backups): they are not source and would only cause pointless rebuilds.
+// isEditorTemp matches the scratch files editors create.
 func isEditorTemp(name string) bool {
 	switch {
 	case name == "4913", strings.HasPrefix(name, ".#"), strings.HasSuffix(name, "~"),
@@ -105,15 +60,13 @@ func isEditorTemp(name string) bool {
 	return false
 }
 
-// skipDirs are directories that are never worth watching: dependency and
-// build-output trees hold thousands of subdirectories and would exhaust the
-// system's watch limit.
+// skipDirs are directories never watched.
 var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, ".hg": true, ".svn": true}
 
 func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// One unreadable entry must not stop the whole watch.
+			// An unreadable entry is skipped.
 			log.Printf("devwatch: not watching %s: %v", path, err)
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
@@ -130,8 +83,7 @@ func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	})
 }
 
-// managedProcess owns the single subprocess Run restarts on every
-// successful rebuild.
+// managedProcess owns the single subprocess Run manages.
 type managedProcess struct {
 	mu   sync.Mutex
 	cmd  *exec.Cmd
@@ -158,15 +110,13 @@ func (p *managedProcess) start() error {
 	p.cmd = cmd
 	done := make(chan struct{})
 	p.done = done
-	// Wait at once, whoever stops it: a process that exits on its own is
-	// reported and reaped instead of lingering as a zombie until the next
-	// change.
+	// Wait at once, whoever stops the process.
 	go func() {
 		err := cmd.Wait()
 		p.mu.Lock()
 		current := p.cmd == cmd
 		p.mu.Unlock()
-		if current { // not one stop() is already tearing down
+		if current { // Only one stop() tears the process down.
 			log.Printf("devwatch: the process exited (%v); it restarts after the next successful rebuild", err)
 		}
 		close(done)
@@ -174,9 +124,7 @@ func (p *managedProcess) start() error {
 	return nil
 }
 
-// stop sends SIGTERM and waits up to 5 seconds before escalating to
-// SIGKILL, so a restart never leaves an orphaned process holding the
-// port the new one needs.
+// stop sends SIGTERM and waits up to 5 seconds.
 func (p *managedProcess) stop() {
 	p.mu.Lock()
 	cmd, done := p.cmd, p.done
@@ -194,13 +142,7 @@ func (p *managedProcess) stop() {
 	}
 }
 
-// Run performs cfg.Rebuild once, starts the managed process, then
-// watches cfg.Root: on a relevant change (debounced 200ms so a burst of
-// saves triggers one rebuild, not several), it reruns cfg.Rebuild and,
-// if that succeeds, restarts the managed process. It blocks until
-// SIGINT/SIGTERM, cleaning up the managed process before returning nil.
-// A failed initial build is returned as an error rather than started at
-// all, since there would be nothing working yet to fall back to.
+// Run builds once, starts the process, and restarts it on changes.
 func Run(cfg Config) error {
 	ignore := cfg.Ignore
 	if ignore == nil {
@@ -247,8 +189,7 @@ func Run(cfg Config) error {
 				if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 					continue
 				}
-				// A newly created directory needs its own watch, or
-				// files written inside it would go unnoticed.
+				// A newly created directory needs its own watch.
 				if ev.Op&fsnotify.Create != 0 {
 					if info, statErr := os.Stat(ev.Name); statErr == nil && info.IsDir() {
 						_ = addRecursive(watcher, ev.Name) // a failure here just means that one subdirectory goes unwatched
@@ -293,8 +234,7 @@ func Run(cfg Config) error {
 	}
 }
 
-// buildError is returned by Run when the initial build fails, before
-// anything is running to fall back to.
+// buildError is returned by Run when the initial build fails.
 type buildError struct{}
 
 func (*buildError) Error() string {
