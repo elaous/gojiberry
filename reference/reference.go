@@ -1,10 +1,3 @@
-// Package reference formats citations and bibliographies in the styles of publications: APA, MLA, Chicago
-// (author-date), IEEE, Harvard, Vancouver and ABNT. A Source is what the writer typed once (an author, a title, a
-// year); the style decides how it is written in the text and in the list at the end. The output is plain runs, with the
-// parts a style sets in italics marked, so any editor can write it with its own formatting.
-//
-// The styles are the common forms for the four kinds of source below (book, article, web page, report), not the whole
-// of any style guide: a source with a part missing is written without it, and nothing is made up.
 package reference
 
 import (
@@ -27,7 +20,7 @@ const (
 type Source struct {
 	ID        string   `json:"id"`
 	Kind      Kind     `json:"kind"`
-	Authors   []string `json:"authors,omitempty"` // "Last, First Middle"; a name without a comma (an organisation) is kept whole
+	Authors   []string `json:"authors,omitempty"`
 	Title     string   `json:"title"`
 	Container string   `json:"container,omitempty"` // the journal, or the web site
 	Publisher string   `json:"publisher,omitempty"`
@@ -63,10 +56,8 @@ var Styles = []struct {
 	{APA, "APA 7"}, {MLA, "MLA 9"}, {Chicago, "Chicago (author-date)"}, {IEEE, "IEEE"}, {Harvard, "Harvard"}, {Vancouver, "Vancouver"}, {ABNT, "ABNT"},
 }
 
-// Numbered says whether the style cites by number (and lists in order of first citation) rather than by author and year.
 func (s Style) Numbered() bool { return s == IEEE || s == Vancouver }
 
-// A Run is a piece of text; Italic marks what the style sets in italics (a title, a journal).
 type Run struct {
 	Text   string
 	Italic bool
@@ -121,7 +112,6 @@ func persons(s Source) []person {
 	return out
 }
 
-// lastNames is the in-text author part: "Silva", "Silva and Costa" (joiner), "Silva et al.".
 func lastNames(ps []person, joiner string, etAlFrom int) string {
 	switch {
 	case len(ps) == 0:
@@ -141,8 +131,6 @@ func lastNames(ps []person, joiner string, etAlFrom int) string {
 	return strings.Join(names[:len(names)-1], ", ") + ", " + joiner + " " + names[len(names)-1]
 }
 
-// Citation is the mark in the text for the source: "(Silva, 2020)" or "[3]". n is its number in the list for the
-// numbered styles; page, when given, is added where the style writes it.
 func Citation(st Style, s Source, n int, page string) string {
 	ps := persons(s)
 	who := ""
@@ -235,9 +223,6 @@ func short(title string) string {
 	return strings.Join(w, " ")
 }
 
-// Bibliography orders the sources the way the style lists them and writes each one. Author-date styles are in
-// alphabetical order of the first author (or the title); numbered styles keep the order given, which is the order of
-// first citation. Number is the 1-based position in the returned list.
 func Bibliography(st Style, sources []Source) [][]Run {
 	list := append([]Source(nil), sources...)
 	if !st.Numbered() {
@@ -257,7 +242,6 @@ func sortKey(s Source) string {
 	return strings.ToLower(s.Title)
 }
 
-// Order gives the position (1-based) each source has in Bibliography's list, by ID.
 func Order(st Style, sources []Source) map[string]int {
 	list := append([]Source(nil), sources...)
 	if !st.Numbered() {
@@ -270,14 +254,12 @@ func Order(st Style, sources []Source) map[string]int {
 	return m
 }
 
-// builder collects runs and drops the separators of parts that are missing.
 type builder struct{ runs []Run }
 
 func (b *builder) add(text string)  { b.runs = append(b.runs, Run{Text: text}) }
 func (b *builder) ital(text string) { b.runs = append(b.runs, Run{Text: text, Italic: true}) }
 func (b *builder) last() string     { return Text(b.runs) }
 
-// stop makes sure the entry so far ends with a full stop (or ?, !) before the next part.
 func (b *builder) stop() {
 	t := strings.TrimRight(b.last(), " ")
 	if t == "" || strings.HasSuffix(t, ".") || strings.HasSuffix(t, "?") || strings.HasSuffix(t, "!") || strings.HasSuffix(t, ":") {
@@ -298,7 +280,6 @@ func link(s Source) string {
 
 func dash(p string) string { return strings.ReplaceAll(p, "-", "–") }
 
-// Entry writes one source for the list at the end; n is its number for the numbered styles.
 func Entry(st Style, s Source, n int) []Run {
 	ps := persons(s)
 	b := &builder{}
