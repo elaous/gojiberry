@@ -9,8 +9,7 @@ import (
 	"time"
 )
 
-// Collector is the client side. It starts with consent off, and while it is off Record keeps nothing
-// and Flush sends nothing: there is no queue to leak later.
+// Collector is the client side.
 type Collector struct {
 	mu      sync.Mutex
 	on      bool
@@ -19,17 +18,14 @@ type Collector struct {
 	counts  map[Event]int
 	now     func() time.Time
 	sent    int
-	// sampling: a visit is in the sample with probability 1/oneIn, decided once when consent is given
-	// (and again when the rate changes), so a visit is sent whole or not at all.
 	oneIn   int
 	sampled bool
 	rnd     func(n int) int
-	// the local log (log.go) of what would be, or was, sent
-	logOn bool
-	log   []LogEntry
+	logOn   bool
+	log     []LogEntry
 }
 
-// NewCollector is a Collector with consent off. now is the clock (time.Now if nil).
+// NewCollector is a Collector with consent off.
 func NewCollector(now func() time.Time) *Collector {
 	if now == nil {
 		now = time.Now
@@ -37,10 +33,6 @@ func NewCollector(now func() time.Time) *Collector {
 	return &Collector{counts: map[Event]int{}, now: now, oneIn: 1, sampled: true, rnd: rand.IntN}
 }
 
-// SetSampling sends from about one visit in oneIn (1 or less: every visit). The draw is made now and
-// again each time consent is turned on; rnd(n) returns a number in [0, n) (math/rand if nil). A visit
-// that is not in the sample records and sends nothing, exactly as if consent were off, except that
-// with the local log on it still counts, for the log only (see SetLog).
 func (c *Collector) SetSampling(oneIn int, rnd func(n int) int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -56,14 +48,11 @@ func (c *Collector) SetSampling(oneIn int, rnd func(n int) int) {
 
 func (c *Collector) drawLocked() { c.sampled = c.oneIn <= 1 || c.rnd(c.oneIn) == 0 }
 
-// Sampled reports whether this visit is in the sample (always true at one in one).
 func (c *Collector) Sampled() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.sampled }
 
-// SampleOneIn is the sampling rate as set: 1 means every visit.
 func (c *Collector) SampleOneIn() int { c.mu.Lock(); defer c.mu.Unlock(); return c.oneIn }
 
-// BrowserSignals tells the collector what the browser asks for. With Do Not Track or Global Privacy
-// Control set, consent is turned off and cannot be turned on.
+// BrowserSignals tells the collector what the browser asks for.
 func (c *Collector) BrowserSignals(doNotTrack, globalPrivacyControl bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,8 +66,7 @@ func (c *Collector) BrowserSignals(doNotTrack, globalPrivacyControl bool) {
 // Blocked reports whether a browser signal keeps telemetry off.
 func (c *Collector) Blocked() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.blocked }
 
-// SetConsent turns sending on or off. Turning it off drops everything not yet sent. It returns
-// ErrNoConsent when the browser asks not to be tracked.
+// SetConsent turns sending on or off.
 func (c *Collector) SetConsent(on bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -90,13 +78,11 @@ func (c *Collector) SetConsent(on bool) error {
 	}
 	c.on = on
 	if !on {
-		c.dropLocked(false) // the crash codes stay if they were agreed to on their own
+		c.dropLocked(false)
 	}
 	return nil
 }
 
-// dropLocked forgets the counts held: those of crashes too when crashes is true. With neither consent left, the
-// log goes as well.
 func (c *Collector) dropLocked(crashes bool) {
 	for e := range c.counts {
 		if crashes || e.Name != Crash {
@@ -104,13 +90,10 @@ func (c *Collector) dropLocked(crashes bool) {
 		}
 	}
 	if !c.on && !c.crashOn {
-		c.log = nil // nothing is kept about a person who chose to send nothing
+		c.log = nil
 	}
 }
 
-// SetCrashConsent turns the sending of crash codes on or off, apart from the usage counts: the two are chosen
-// separately. Turning it off drops the crash codes not yet sent. It returns ErrNoConsent when the browser asks
-// not to be tracked.
 func (c *Collector) SetCrashConsent(on bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -133,9 +116,7 @@ func (c *Collector) CrashConsent() bool { c.mu.Lock(); defer c.mu.Unlock(); retu
 // Consent reports whether the person opted in.
 func (c *Collector) Consent() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.on }
 
-// Record counts an event. An event outside the allowlist is refused with ErrNotAllowed whether or not
-// consent is on (a call site that sends one is a bug to see); with consent off a valid event is
-// dropped without a trace.
+// Record counts an event.
 func (c *Collector) Record(name Name, value string) error {
 	e := Event{name, value}
 	if !e.Valid() {
@@ -152,7 +133,6 @@ func (c *Collector) Record(name Name, value string) error {
 	return nil
 }
 
-// Batch is what would be sent now (ok is false when there is nothing).
 func (c *Collector) Batch() (b Batch, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -162,7 +142,6 @@ func (c *Collector) Batch() (b Batch, ok bool) {
 	return c.pendingLocked()
 }
 
-// pendingLocked is the batch of the counts held, whether or not this visit is in the sample.
 func (c *Collector) pendingLocked() (b Batch, ok bool) {
 	if (!c.on && !c.crashOn) || len(c.counts) == 0 {
 		return Batch{}, false
@@ -180,8 +159,6 @@ func (c *Collector) pendingLocked() (b Batch, ok bool) {
 	return b, true
 }
 
-// Preview is the pending batch indented for the person to read, or nil when there is nothing to
-// send. It decodes to exactly the batch Body sends.
 func (c *Collector) Preview() []byte {
 	b, ok := c.Batch()
 	if !ok {
@@ -191,7 +168,6 @@ func (c *Collector) Preview() []byte {
 	return out
 }
 
-// Body is the request body Flush sends (nil when there is nothing).
 func (c *Collector) Body() []byte {
 	b, ok := c.Batch()
 	if !ok {
@@ -201,16 +177,11 @@ func (c *Collector) Body() []byte {
 	return out
 }
 
-// Sent is how many batches were accepted by the send function.
 func (c *Collector) Sent() int { c.mu.Lock(); defer c.mu.Unlock(); return c.sent }
 
-// Flush sends the pending counts with send (one call, a POST body) and returns how many events it
-// covered. It does nothing, and does not call send, when consent is off or nothing is pending.
-// The counts are cleared only when send succeeds; a failure keeps them for the next try. Counts
-// recorded while send ran are kept.
 func (c *Collector) Flush(ctx context.Context, send func(ctx context.Context, body []byte) error) (int, error) {
 	c.mu.Lock()
-	if !c.sampled { // not in the sample: nothing is sent; with the log on, say what would have been
+	if !c.sampled {
 		c.withholdLocked(OutcomeNotSampled)
 		c.mu.Unlock()
 		return 0, nil

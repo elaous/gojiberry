@@ -162,7 +162,6 @@ func TestCollectorSendsNothingUnlessOptedIn(t *testing.T) {
 	if c.Preview() != nil || c.Body() != nil {
 		t.Fatal("nothing is kept while consent is off")
 	}
-	// Turning on does not send what was recorded before: it was never kept.
 	if err := c.SetConsent(true); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +171,6 @@ func TestCollectorSendsNothingUnlessOptedIn(t *testing.T) {
 	_ = c.Record(Feature, "find")
 	_ = c.Record(Feature, "find")
 	_ = c.Record(Locale, "de")
-	// Turning off drops what is pending and sends nothing.
 	if err := c.SetConsent(false); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +197,6 @@ func TestCollectorPreviewIsWhatIsSent(t *testing.T) {
 	if c.Body() != nil {
 		t.Fatal("sent counts are cleared")
 	}
-	// The preview shown before sending decodes to the same batch as the body.
 	_ = c.Record(Feature, "find")
 	prev, body := c.Preview(), c.Body()
 	var a, b Batch
@@ -209,7 +206,6 @@ func TestCollectorPreviewIsWhatIsSent(t *testing.T) {
 	if !bytes.Contains(prev, []byte("\n")) {
 		t.Fatal("the preview is meant to be read")
 	}
-	// What the client sends is what the receiver accepts.
 	r, counters := receiver()
 	if rec := post(r, string(body)); rec.Code != http.StatusNoContent || total(counters, 1) != 1 {
 		t.Fatalf("receiver: %d", rec.Code)
@@ -236,7 +232,6 @@ func TestCollectorKeepsCountsWhenSendFailsAndRefusesBadEvents(t *testing.T) {
 	if c.Body() == nil || c.Sent() != 0 {
 		t.Fatal("a failed send must keep the counts")
 	}
-	// Opted out, an event outside the allowlist is still an error for the caller.
 	_ = c.SetConsent(false)
 	if err := c.Record(Feature, "free text"); !errors.Is(err, ErrNotAllowed) {
 		t.Fatal("bad events are reported with consent off too")
@@ -264,7 +259,6 @@ func TestDoNotTrackAndGlobalPrivacyControlKeepItOff(t *testing.T) {
 }
 
 func TestTheWireFormatHasNoRoomForAnIdentifier(t *testing.T) {
-	// Every field of the wire types is a name from the allowlist, a value from it, a count or a day.
 	b, _ := json.Marshal(Batch{Day: "2030-05-01", Counts: []Count{{Feature, "find", 1}}})
 	var generic map[string]any
 	_ = json.Unmarshal(b, &generic)
@@ -319,9 +313,6 @@ func TestBatchHookSeesOnlyAcceptedBatches(t *testing.T) {
 	}
 }
 
-// Crash codes have a consent of their own: with only it on, crash codes are kept and sent and a usage count is not;
-// with only the usage consent on, a crash code is dropped; turning one off leaves the other alone; Do Not Track
-// turns both off. Nothing outside the part and kind words is accepted.
 func TestCrashCodesHaveTheirOwnConsent(t *testing.T) {
 	c := NewCollector(func() time.Time { return time.Date(2030, 5, 1, 12, 0, 0, 0, time.UTC) })
 	_ = c.Record(Crash, "editor_trap")

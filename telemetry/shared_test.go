@@ -7,13 +7,11 @@ import (
 	"time"
 )
 
-// memShared is a SharedStore in memory with a version that changes on every write.
 type memShared struct {
-	mu   sync.Mutex
-	data []byte
-	ver  int
-	has  bool
-	// beforeSave, if set, runs once inside SaveIf before the check (to let another process write first).
+	mu         sync.Mutex
+	data       []byte
+	ver        int
+	has        bool
 	beforeSave func()
 }
 
@@ -59,8 +57,6 @@ func batchOf(n int) Batch {
 	return Batch{Day: "2030-05-01", Counts: []Count{{Feature, "find", n}}}
 }
 
-// Two processes on one store each count their own batches and neither loses the other's: the store holds the sum,
-// and each, after a Sync, reports the sum.
 func TestProcessesOnOneStoreAddUp(t *testing.T) {
 	now := func() time.Time { return time.Date(2030, 5, 1, 12, 0, 0, 0, time.UTC) }
 	st := &memShared{}
@@ -88,7 +84,6 @@ func TestProcessesOnOneStoreAddUp(t *testing.T) {
 			t.Errorf("process %s counts %d, want 7", name, got)
 		}
 	}
-	// counting again adds only the new batch, not the old ones a second time
 	a.Add(batchOf(2), now())
 	_ = a.Sync(ctx, now)
 	_ = b.Sync(ctx, now)
@@ -102,7 +97,6 @@ func TestProcessesOnOneStoreAddUp(t *testing.T) {
 	}
 }
 
-// A write that loses the race is read again and added again: nothing is lost and nothing is counted twice.
 func TestSharedWriteRetriesAfterAConflict(t *testing.T) {
 	now := func() time.Time { return time.Date(2030, 5, 1, 12, 0, 0, 0, time.UTC) }
 	st := &memShared{}
@@ -126,7 +120,6 @@ func TestSharedWriteRetriesAfterAConflict(t *testing.T) {
 	}
 }
 
-// Counts that arrive while a sync is running are kept for the next one.
 func TestCountsDuringASyncAreKept(t *testing.T) {
 	now := func() time.Time { return time.Date(2030, 5, 1, 12, 0, 0, 0, time.UTC) }
 	st := &memShared{}

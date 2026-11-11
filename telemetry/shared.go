@@ -9,30 +9,17 @@ import (
 	"time"
 )
 
-// Several server processes on one store (roadmap 57). Each process counts the batches it receives; the store holds
-// the sum. A process does not overwrite the record with its own totals (the last write would win and the others'
-// counts would be lost): it adds what it counted since it last looked, to what the store holds now, and writes the
-// sum only if the record is still the one it read (a conditional write); if another process wrote in between it
-// reads again and adds again. What it has counted but not written is its delta against the totals it last saw.
-
-// ErrConflict is returned by SharedStore.SaveIf when the record is no longer the version that was read.
 var ErrConflict = errors.New("telemetry: the stored totals changed")
 
-// SharedStore is a Store whose write is conditional, so processes sharing it can add to each other's totals.
 type SharedStore interface {
 	Store
-	// LoadVersion reads the record and a token for the version read ("" when there is none).
 	LoadVersion(ctx context.Context) (data []byte, version string, found bool, err error)
-	// SaveIf writes data if the record is still at version (version "" means: if there is no record yet),
-	// else it writes nothing and returns ErrConflict.
 	SaveIf(ctx context.Context, data []byte, version string) error
 }
 
 const syncTries = 8
 
-// PersistShared is Persist for several processes on one store. The totals are loaded at once; after a change they
-// are added to the store's after at most delay (a burst is one write), and Sync does the same on request, so that a
-// report can show the other processes' counts too.
+// PersistShared is Persist for several processes on one store.
 func (c *Counters) PersistShared(ctx context.Context, st SharedStore, delay time.Duration, now func() time.Time) error {
 	if now == nil {
 		now = time.Now
@@ -68,8 +55,6 @@ func (c *Counters) PersistShared(ctx context.Context, st SharedStore, delay time
 	return loadErr
 }
 
-// Sync adds what this process counted since the last time to the shared store and takes the store's totals as its
-// own, so the next report includes the other processes. Without PersistShared it does nothing.
 func (c *Counters) Sync(ctx context.Context, now func() time.Time) error {
 	if now == nil {
 		now = time.Now
@@ -77,7 +62,6 @@ func (c *Counters) Sync(ctx context.Context, now func() time.Time) error {
 	return c.syncShared(ctx, now)
 }
 
-// Shared says whether the totals are kept in a store several processes may count into.
 func (c *Counters) Shared() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.shared != nil }
 
 func (c *Counters) syncShared(ctx context.Context, now func() time.Time) error {
@@ -118,7 +102,6 @@ func (c *Counters) syncShared(ctx context.Context, now func() time.Time) error {
 				return err
 			}
 		}
-		// adopt the sum; what was counted while this ran is added on top of it
 		c.mu.Lock()
 		now2 := cloneDecoded(&decoded{days: c.days, accepted: c.accepted, refused: c.refused})
 		during := mergeDelta(&decoded{days: map[string]map[Event]int{}}, now2, local)
@@ -147,8 +130,6 @@ func cloneDecoded(d *decoded) *decoded {
 	return out
 }
 
-// mergeDelta is remote plus what local gained over base (a total that is lower than its base, because a day was
-// dropped by the retention, gains nothing). The result is a new value.
 func mergeDelta(remote, local, base *decoded) *decoded {
 	out := cloneDecoded(remote)
 	if remote.seed != nil {
