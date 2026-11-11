@@ -1,8 +1,3 @@
-// Package tokens is the design-token set that themes the editor and its exports: named colours, a
-// type scale and a spacing scale. A Set is checked when it is edited (Validate), not when somebody
-// finds the page unreadable: the text colours must reach the WCAG 2 contrast of 4.5:1 on their
-// backgrounds, the type scale must grow and not start below a readable size, and every colour must
-// be one the rest of the system can read. CSS turns a valid set into custom properties.
 package tokens
 
 import (
@@ -25,7 +20,6 @@ const (
 	Danger     = "danger"      // errors, as text on the page
 )
 
-// pairs are the colour pairs that are read as text, each needing minRatio.
 var pairs = []struct{ fg, bg string }{
 	{Text, Background}, {Muted, Background}, {Link, Background}, {AccentText, Accent}, {Danger, Background},
 }
@@ -37,16 +31,13 @@ const (
 
 // Set is one theme.
 type Set struct {
-	Name string `json:"name"`
-	// Colors maps a colour name to a CSS colour ("#rrggbb", "#rgb", "rgb(r, g, b)" or a basic name).
-	Colors map[string]string `json:"colors"`
-	// TypeScale is the font sizes in px, smallest first; the first is the body size.
-	TypeScale []float64 `json:"typeScale"`
+	Name      string            `json:"name"`
+	Colors    map[string]string `json:"colors"`
+	TypeScale []float64         `json:"typeScale"`
 	// Spacing is the spacing steps in px, smallest first.
 	Spacing []float64 `json:"spacing"`
 }
 
-// Problem is one thing wrong with a Set, in words a person can act on.
 type Problem struct {
 	// Field is where: "colors.text", "typeScale", "spacing".
 	Field   string
@@ -66,7 +57,6 @@ func Default() Set {
 	}
 }
 
-// Validate lists what is wrong with s, in a fixed order; none means the set is fit to apply.
 func (s Set) Validate() []Problem {
 	var out []Problem
 	add := func(field, format string, a ...any) { out = append(out, Problem{field, fmt.Sprintf(format, a...)}) }
@@ -118,9 +108,6 @@ func (s Set) Validate() []Problem {
 	return out
 }
 
-// CSS writes the set as custom properties on :root, for the page and the exports to share:
-// --gj-color-<name>, --gj-font-<step> (1-based, px) and --gj-space-<step>. A set with problems is
-// refused so a theme that cannot be read never reaches a page.
 func (s Set) CSS() (string, error) {
 	if ps := s.Validate(); len(ps) > 0 {
 		return "", fmt.Errorf("tokens: the set has %d problem(s), the first: %s", len(ps), ps[0].Message)
@@ -145,8 +132,6 @@ func (s Set) CSS() (string, error) {
 	return b.String(), nil
 }
 
-// cssName keeps a token name to what is safe inside a custom property name, so a name from a stored
-// file cannot end the declaration early.
 func cssName(n string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(n) {
@@ -178,9 +163,6 @@ func slicesContains(list []string, s string) bool {
 	return false
 }
 
-// FromCSS reads back what CSS wrote: one :root block of --gj-color-<name>, --gj-font-<n> and --gj-space-<n>
-// properties. It is for a theme kept with a document; the set is not checked here (Validate says what is
-// wrong with it). ok is false when the text is not such a block or holds nothing of ours.
 func FromCSS(css string) (s Set, ok bool) {
 	body, found := strings.CutPrefix(strings.TrimSpace(css), ":root{")
 	if !found {
@@ -218,7 +200,6 @@ func FromCSS(css string) (s Set, ok bool) {
 	return s, true
 }
 
-// step reads "3" and "18px" as step 3, 18.
 func step(idx, val string) (int, float64, bool) {
 	i, err := strconv.Atoi(idx)
 	if err != nil || i < 1 {

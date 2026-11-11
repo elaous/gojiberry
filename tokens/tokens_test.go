@@ -46,7 +46,6 @@ func TestContrastIsChecked(t *testing.T) {
 	if !strings.Contains(msg, "muted-text on background") || !strings.Contains(msg, "4.5:1 is needed") {
 		t.Fatalf("%q", msg)
 	}
-	// exactly at the line passes: #767676 on white is 4.54:1
 	ok := Default()
 	ok.Colors[Muted] = "#767676"
 	if ps := ok.Validate(); len(ps) != 0 {
