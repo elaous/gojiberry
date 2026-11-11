@@ -102,8 +102,6 @@ func TestFloatingTextAnchoredAndReanchoredAcrossPages(t *testing.T) {
 	}
 }
 
-// --- inline images ---
-
 func inlineImage(t *testing.T) (*Image, *TextFlow, *fakePainter) {
 	t.Helper()
 	p := &fakePainter{}
@@ -145,7 +143,7 @@ func TestInlineImageDrawAt(t *testing.T) {
 	im.Alpha = 0.5
 	im.Clip = Insets{Left: 20, Top: 10}
 	f.Draw()
-	// Visible nominal 180x90 -> scale 100/180 -> 100 x 50; source rect is in natural pixels.
+	// Scale 100/180 gives 100 x 50; source rect is natural pixels.
 	if !p.has("alpha 0.5") || !p.has("drawImage 20 10 180 90 -> 10 ") {
 		t.Fatalf("calls: %v", p.calls)
 	}
@@ -204,7 +202,7 @@ func TestInlineImageClipDragWorksInDisplayedPixels(t *testing.T) {
 	im.MouseUp(0, 0)
 	f.Layout()
 	f.Draw()
-	if _, _, w, _ := im.Visible(); w != 80 { // (200-40) x 0.5... re-fitted to a 100px column at scale 0.625
+	if _, _, w, _ := im.Visible(); w != 80 { // Re-fitted to the 100px column at scale 0.625.
 		if w != 100 {
 			t.Fatalf("visible width after the clip = %g", w)
 		}

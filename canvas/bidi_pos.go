@@ -1,11 +1,8 @@
 package canvas
 
-// Positions on a line of bidirectional text. In a line with only left-to-right text the x of a caret is the
-// width of the text before it; in a Bidi line the runs are not in the order of the text, so a position is found
-// through the run it is in: measured from the left edge of a left-to-right run, and from the right edge of a
-// right-to-left one.
+// Caret and selection positions on lines with mixed bidirectional text.
 
-// piece is a run or an inline object of a line, with where it is (relative to the line's X).
+// piece is a run or inline object on a line, with its X offset.
 type piece struct {
 	start, end int
 	x, w       float64
@@ -14,7 +11,7 @@ type piece struct {
 
 func (p piece) rtl() bool { return p.level%2 == 1 }
 
-// pieces lists the line's runs and objects in the order of the text.
+// pieces lists a line's runs and objects in text order.
 func (ln Line) pieces() []piece {
 	var out []piece
 	base := uint8(0)
@@ -36,7 +33,7 @@ func (ln Line) pieces() []piece {
 	return out
 }
 
-// at is the x (relative to the line) of offset o, which is between p.start and p.end.
+// pieceX is the x of offset o within piece p.
 func (f *TextFlow) pieceX(p piece, o int) float64 {
 	var w float64
 	switch {
@@ -55,7 +52,7 @@ func (f *TextFlow) pieceX(p piece, o int) float64 {
 	return p.x + w
 }
 
-// lineX is the x of a caret at offset on the line.
+// lineX is the caret x at offset on the line.
 func (f *TextFlow) lineX(ln Line, offset int) float64 {
 	if !ln.Bidi {
 		return ln.X + f.data.measure(ln.Start, min(max(offset, ln.Start), ln.End))
@@ -91,15 +88,14 @@ func (f *TextFlow) lineX(ln Line, offset int) float64 {
 	case after == nil:
 		return ln.X + f.pieceX(*before, offset)
 	}
-	// Between two pieces: the caret goes at the piece that has the direction of the paragraph (where the text
-	// being typed would continue); two of the other direction: the one before.
+	// Between two pieces the caret goes to the paragraph's direction side.
 	if before.rtl() != ln.RTL && after.rtl() == ln.RTL {
 		return ln.X + f.pieceX(*after, offset)
 	}
 	return ln.X + f.pieceX(*before, offset)
 }
 
-// lineOffsetAt is the offset on the line whose caret is nearest to x.
+// lineOffsetAt returns the offset whose caret is nearest x.
 func (f *TextFlow) lineOffsetAt(ln Line, x float64) int {
 	ps := ln.pieces()
 	best, bestD := ln.Start, 1e18
@@ -121,8 +117,7 @@ func abs(v float64) float64 {
 	return v
 }
 
-// lineRects are the x ranges (absolute, left edge first) that the offsets s..e of the line cover. In a line of
-// one direction that is one range; in a Bidi line a selection can be several, with unselected text between.
+// lineRects returns the x ranges covered by offsets s..e of the line.
 func (f *TextFlow) lineRects(ln Line, s, e int) [][2]float64 {
 	s, e = max(s, ln.Start), min(e, ln.End)
 	if s >= e {
@@ -161,10 +156,7 @@ func (f *TextFlow) lineRects(ln Line, s, e int) [][2]float64 {
 	return out
 }
 
-// visualStep is the offset a caret moves to when the person presses the right (or left) arrow: the nearest
-// place on the line that is to the right (left) of it on the screen. In text of one direction that is the
-// next (or previous) character; in right-to-left text it is the other way round, and at the edge of the line
-// the caret goes on to the previous or the next line.
+// visualStep returns the offset the arrow key moves the caret to.
 func (f *TextFlow) visualStep(caret int, right bool) int {
 	lines := f.Layout().Lines
 	idx := -1
@@ -181,7 +173,7 @@ func (f *TextFlow) visualStep(caret int, right bool) int {
 		return caret - 1
 	}
 	ln := lines[idx]
-	// The step by the text, which is the step by the screen in a line of one direction.
+	// The step by text equals the step by screen in one-direction lines.
 	forward := right != ln.RTL // the arrow goes towards the end of the text
 	if ln.Bidi {
 		x := f.lineX(ln, caret)
@@ -198,8 +190,7 @@ func (f *TextFlow) visualStep(caret int, right bool) int {
 		if best >= 0 {
 			return best
 		}
-		// The edge of the line: on to the line that follows in the text if the arrow points to the end of
-		// the paragraph's direction, else back to the one before.
+		// At a line's edge the arrow moves to the adjacent line in text order.
 		switch {
 		case forward && idx+1 < len(lines):
 			return lines[idx+1].Start

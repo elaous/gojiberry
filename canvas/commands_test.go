@@ -58,7 +58,7 @@ func TestCommonFormat(t *testing.T) {
 	if got := CommonFormat(bold, other); got != (Format{}) {
 		t.Fatalf("nothing in common: %+v", got)
 	}
-	// Partial overlap: only what all share survives; decorations need to be on everywhere.
+	// Partial overlap keeps only what all share.
 	a := Format{FontWeight: 700, Color: "#f00", Underline: true, Strike: true}
 	b := Format{FontWeight: 700, Color: "#00f", Underline: true}
 	c := Format{FontWeight: 700, Underline: true, Strike: true}

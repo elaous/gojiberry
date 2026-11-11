@@ -7,12 +7,7 @@ import (
 	"time"
 )
 
-// Comments are notes attached to a stretch of text. The text carries the
-// comment's ID in Format.Comment (so the anchor follows the text through
-// edits, like a link does); the comment itself -- author, Markdown body,
-// replies -- is in a CommentSet. Hovering commented text shows a tip with
-// the summary; the Comments feature adds, edits, resolves and deletes
-// them.
+// Comments are notes on text; the text carries the comment ID in Format.Comment.
 
 // Reply is a follow-up to a comment.
 type Reply struct {
@@ -26,20 +21,16 @@ type Comment struct {
 	ID string
 	// Author is a user name or e-mail address.
 	Author string
-	// Text is Markdown, and may mention people with @username or an
-	// e-mail address (see Mentions).
+	// Text is Markdown; @username and e-mail addresses are mentions.
 	Text     string
 	Created  time.Time
 	Resolved bool
 	Replies  []Reply
 }
 
-// CommentSet holds a document's comments. A TextFlow's Comments field is
-// one; share it with the DOM side to list them.
+// CommentSet holds a document's comments.
 type CommentSet struct {
-	// IDPrefix, when set, starts every ID Add makes ("ana-c3"). Replicas of a
-	// shared document each use their own, so two people commenting at once
-	// never mint the same ID.
+	// IDPrefix starts every ID Add makes, so replicas do not collide.
 	IDPrefix string
 	// Roster, when set, keeps e-mail addresses out of comments (see Roster).
 	Roster Roster
@@ -57,8 +48,7 @@ func NewCommentSet(comments ...Comment) *CommentSet {
 	return s
 }
 
-// Add stores c, giving it an ID ("c1", "c2", ...) if it has none, and
-// returns it. An existing ID replaces that comment.
+// Add stores c, assigning an ID if it has none; an existing ID is replaced.
 func (s *CommentSet) Add(c Comment) Comment {
 	if c.ID == "" {
 		for {
@@ -134,8 +124,6 @@ func (s *CommentSet) Len() int {
 	return len(s.list)
 }
 
-// --- mentions and summaries ---------------------------------------------
-
 // MentionKind says what a Mention names.
 type MentionKind int
 
@@ -147,8 +135,7 @@ const (
 // Mention is a person named in a comment.
 type Mention struct {
 	Kind MentionKind
-	// Text is what was written ("@ana" or "ana@example.com"); Name is the
-	// user name without the @ or the address itself.
+	// Text is the written form; Name is the user name without the @.
 	Text, Name string
 	// Start and End are the byte range of Text in the comment.
 	Start, End int
@@ -159,8 +146,7 @@ var (
 	reHandle = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
 	reLinkMD = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
 	reMarks  = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
-	// Emphasis markers are only syntax at the edge of a word: snake_case and
-	// 2*3 keep theirs.
+	// Emphasis markers count only at word edges, so snake_case stays.
 	reEmphLead  = regexp.MustCompile(`(^|[^\w*_])[*_]+`)
 	reEmphTrail = regexp.MustCompile(`[*_]+([^\w*_]|$)`)
 	reSpaces    = regexp.MustCompile(`\s+`)
@@ -194,9 +180,7 @@ func Mentions(text string) []Mention {
 	return out
 }
 
-// StripMarkdown returns text without Markdown syntax: emphasis marks,
-// headings, quotes and list markers, code fences and the targets of
-// links (their text stays).
+// StripMarkdown returns text without Markdown syntax.
 func StripMarkdown(text string) string {
 	text = reLinkMD.ReplaceAllString(text, "$1")
 	text = reMarks.ReplaceAllString(text, "")
@@ -205,9 +189,7 @@ func StripMarkdown(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// CommentSummary is the plain one-line form of a comment's Markdown for a
-// tip: syntax stripped, whitespace collapsed, cut at max characters with
-// an ellipsis.
+// CommentSummary is a one-line plain form of a comment's Markdown.
 func CommentSummary(text string, max int) string {
 	s := reSpaces.ReplaceAllString(StripMarkdown(text), " ")
 	if rs := []rune(s); max > 0 && len(rs) > max {
@@ -216,8 +198,7 @@ func CommentSummary(text string, max int) string {
 	return s
 }
 
-// A character can carry several comments: Format.Comment holds their IDs
-// separated by commas (IDs never contain one; see CommentSet.IDPrefix).
+// Format.Comment holds comma-separated IDs; IDs never contain commas.
 
 // commentList splits a Format.Comment value into IDs.
 func commentList(s string) []string {

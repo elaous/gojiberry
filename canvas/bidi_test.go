@@ -23,7 +23,7 @@ func TestBidiLevels(t *testing.T) {
 		{heb + " ab", true, []uint8{1, 1, 1, 1, 1, 2, 2}},                   // Latin text in a right-to-left paragraph is one level up
 		{heb + " 123", true, []uint8{1, 1, 1, 1, 1, 2, 2, 2}},               // so is a number
 		{arab + " 123", true, []uint8{1, 1, 1, 1, 1, 1, 2, 2, 2}},           // an Arabic number after Arabic letters
-		{heb + ", 12", true, []uint8{1, 1, 1, 1, 1, 1, 2, 2}},               // the comma and the space between two right-to-left sides are right to left
+		{heb + ", 12", true, []uint8{1, 1, 1, 1, 1, 1, 2, 2}},               // comma and space between right-to-left sides are right-to-left.
 		{"1,000 " + heb, true, []uint8{2, 2, 2, 2, 2, 1, 1, 1, 1, 1}},       // a separator between digits belongs to the number
 		{"x" + heb + "." + "y", false, []uint8{0, 1, 1, 1, 1, 0, 0}},        // a full stop between the two directions takes the paragraph's
 		{"(" + heb + ")", true, []uint8{1, 1, 1, 1, 1, 1}},                  // brackets round right-to-left text
@@ -58,8 +58,7 @@ func TestVisualOrder(t *testing.T) {
 	}
 }
 
-// rtlFlow is a right-to-left paragraph of a Hebrew word and a Latin word, in a column 400 wide at x 10, each
-// letter 8 wide: the Latin word is to the left of the Hebrew one, and the line is at the right edge.
+// rtlFlow lays out a Hebrew word and a Latin word, right-to-left.
 func rtlFlow(t *testing.T) (*TextFlow, Line) {
 	t.Helper()
 	f, _ := newFlow(heb+" abc", 400, 100)
@@ -75,7 +74,7 @@ func TestRightToLeftParagraphIsLaidOutFromTheRight(t *testing.T) {
 	if !ln.RTL || !ln.Bidi {
 		t.Fatalf("line RTL %v Bidi %v", ln.RTL, ln.Bidi)
 	}
-	// "שלום " is 5 runes = 40 wide, "abc" 24: the line is 64 wide and ends at the column's right edge (410).
+	// Hebrew 40 plus Latin 24 gives a 64-wide line ending at 410.
 	if ln.W != 64 || ln.X+ln.W != 410 {
 		t.Errorf("line X %v W %v: it should end at 410", ln.X, ln.W)
 	}
@@ -106,7 +105,7 @@ func TestCaretAndClicksInBidirectionalText(t *testing.T) {
 	f, ln := rtlFlow(t)
 	left := ln.X // 346
 	caretX := func(o int) float64 { x, _, _, _ := f.CaretRect(o); return x }
-	// Start of the paragraph: the right edge. Inside the Hebrew word: moving left as the offset grows.
+	// Paragraph start is the right edge; the caret moves left as offset grows.
 	if got := caretX(0); got != left+64 {
 		t.Errorf("caret at 0 = %v, want %v", got, left+64)
 	}
@@ -123,8 +122,7 @@ func TestCaretAndClicksInBidirectionalText(t *testing.T) {
 	if got := caretX(8); got != left+24 {
 		t.Errorf("caret at the end = %v, want %v (the right edge of the Latin word)", got, left+24)
 	}
-	// Clicks find the same places.
-	// (Offsets 5 and 8 are at one place, the two words meeting: a click there finds the first.)
+	// Clicks find the same places as carets.
 	for _, o := range []int{0, 1, 2, 3, 4, 6, 7} {
 		if got := f.OffsetAt(caretX(o), ln.Y+1); got != o {
 			t.Errorf("a click at the caret of %d finds %d", o, got)
@@ -138,8 +136,7 @@ func TestCaretAndClicksInBidirectionalText(t *testing.T) {
 func TestSelectionInBidirectionalTextCanBeTwoRanges(t *testing.T) {
 	f, ln := rtlFlow(t)
 	left := ln.X
-	// The last Hebrew letter and the space (3..5), and the first Latin letter (5..6): the Hebrew word is at the
-	// right of the line, its end at the left of it; the Latin word is at the left of the line.
+	// Hebrew letters at the right, Latin at the left.
 	rects := f.lineRects(ln, 3, 6)
 	if len(rects) != 2 {
 		t.Fatalf("rects %v", rects)
@@ -147,7 +144,7 @@ func TestSelectionInBidirectionalTextCanBeTwoRanges(t *testing.T) {
 	if rects[0] != [2]float64{left + 24, left + 24 + 16} || rects[1] != [2]float64{left, left + 8} {
 		t.Errorf("rects %v, want the Hebrew part %v and the Latin %v", rects, [2]float64{left + 24, left + 40}, [2]float64{left, left + 8})
 	}
-	// The whole of it from one side to the other is one range.
+	// The whole line is one range.
 	if r := f.lineRects(ln, 0, 8); len(r) != 1 || r[0][0] != left || r[0][1] != left+64 {
 		t.Errorf("whole line %v", r)
 	}
@@ -159,7 +156,7 @@ func TestSelectionInBidirectionalTextCanBeTwoRanges(t *testing.T) {
 
 func TestArrowKeysMoveByWhatIsSeen(t *testing.T) {
 	f, ln := rtlFlow(t)
-	// In the Hebrew word, the left arrow goes to the next letter in the text.
+	// In the Hebrew word, left goes to the next letter in text.
 	if got := f.visualStep(1, false); got != 2 {
 		t.Errorf("left from 1 = %d, want 2", got)
 	}
@@ -170,14 +167,14 @@ func TestArrowKeysMoveByWhatIsSeen(t *testing.T) {
 	if got := f.visualStep(6, true); got != 7 {
 		t.Errorf("right from 6 = %d, want 7", got)
 	}
-	// Left of the Latin word's last letter is before it; the left edge of the line has nothing further.
+	// Left of the last Latin letter; the line edge has nothing further.
 	if got := f.visualStep(8, false); got != 7 {
 		t.Errorf("left from 8 = %d, want 7", got)
 	}
 	if got := f.visualStep(6, false); got != 6 {
 		t.Errorf("left at the left edge of the only line stays: %d", got)
 	}
-	// Right from the right edge of a right-to-left line has nothing before it, either.
+	// Right from an RTL line's right edge: nothing further.
 	if got := f.visualStep(0, true); got != 0 {
 		t.Errorf("right at the right edge of the only line stays: %d", got)
 	}
@@ -202,8 +199,7 @@ func TestRightToLeftParagraphAlignmentAndMarker(t *testing.T) {
 	}
 }
 
-// Right-to-left runs are drawn with the painter in that direction (so the spaces and punctuation at their ends
-// go where the text has them), and set back after.
+// RTL runs are drawn right to left.
 func TestRightToLeftRunsAreDrawnInTheirDirection(t *testing.T) {
 	f, p := newFlow(heb+" abc", 400, 100)
 	f.Draw()

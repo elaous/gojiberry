@@ -57,7 +57,7 @@ func TestCaretBoxNotEditing(t *testing.T) {
 	}
 }
 
-// In typewriter mode the line being typed stays at one height and the page moves; a click does not move the page.
+// Typewriter mode keeps the typed line at one height.
 func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 	f, p := selFlow(Chars{Text: strings.Repeat("line\n", 60)})
 	f.SetMode(ModeEdit)
@@ -114,8 +114,7 @@ func TestTypewriterKeepsTheLineAtOneHeight(t *testing.T) {
 	}
 }
 
-// A typewriter carriage: the letter being typed stays at one place across the view, so the page slides left as the
-// line grows and, on a carriage return, slides back right and a line up; the page may run past its edges.
+// A typewriter carriage keeps the typed letter at one place.
 func TestTypewriterCarriageKeepsTheLetterInOnePlace(t *testing.T) {
 	f, p := selFlow(Chars{Text: "start"})
 	f.SetMode(ModeEdit)
@@ -151,7 +150,7 @@ func TestTypewriterCarriageKeepsTheLetterInOnePlace(t *testing.T) {
 	if sv.ScrollX >= 0 {
 		t.Fatalf("at the start of a line the page is past its left edge: %v", sv.ScrollX)
 	}
-	// without the carriage the page stays put for a short line
+	// Without the carriage the page stays put.
 	sv.TypewriterX = false
 	sv.ScrollTo(0, 0)
 	if sv.ScrollX != 0 {

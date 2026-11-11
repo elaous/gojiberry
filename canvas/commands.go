@@ -6,12 +6,10 @@ import (
 	"unicode"
 )
 
-// Command is the name of something a key chord can ask a component to do.
+// Command names an action a key chord can request.
 type Command string
 
-// The built-in commands. Copy, cut and paste are not here: they go
-// through the browser's own clipboard events (see Copier, Cutter and
-// Paster), which is how a page is allowed to touch the system clipboard.
+// Built-in commands; copy, cut and paste use browser clipboard events.
 const (
 	CmdSelectAll   Command = "select-all"
 	CmdBold        Command = "bold"
@@ -24,14 +22,10 @@ const (
 	CmdPasteFormat Command = "paste-format"
 )
 
-// Keymap binds key chords to commands. A chord is written
-// "Mod+Alt+Shift+Key": Mod is Ctrl (or Cmd on a Mac), letters are
-// upper-case ("Mod+B"), other keys use their DOM names ("Mod+Enter",
-// "Mod+."). Use Chord to build one from a key event.
+// Keymap binds chords such as Mod+Alt+Shift+Key to commands.
 type Keymap map[string]Command
 
-// DefaultKeymap is the usual word-processor bindings; format copying and
-// pasting use Google Docs' Ctrl+Alt+C and Ctrl+Alt+V.
+// DefaultKeymap is the usual word-processor bindings.
 func DefaultKeymap() Keymap {
 	return Keymap{
 		"Mod+A":       CmdSelectAll,
@@ -46,9 +40,7 @@ func DefaultKeymap() Keymap {
 	}
 }
 
-// Chord builds the chord string for a key press. key is the DOM key
-// (KeyboardEvent.key, or the letter from Code for layouts where Alt
-// changes the character).
+// Chord builds the chord string for a key press.
 func Chord(key string, ctrl, shift, alt, meta bool) string {
 	var parts []string
 	if ctrl || meta {
@@ -68,27 +60,20 @@ func Chord(key string, ctrl, shift, alt, meta bool) string {
 	return strings.Join(append(parts, key), "+")
 }
 
-// Commander is implemented by components that run Commands. It reports
-// whether the command applied (a component with no selection, say,
-// declines, so another may take it).
+// Commander runs Commands; it reports whether the command applied.
 type Commander interface{ HandleCommand(Command) bool }
 
-// Copier, Cutter and Paster are the clipboard hooks: the browser's copy,
-// cut and paste events are routed to them (topmost component first).
+// Copier, Cutter and Paster are the clipboard hooks.
 type (
-	// Copier returns the text to put on the clipboard, if it has a
-	// selection.
+	// Copier returns the selected text for the clipboard.
 	Copier interface{ CopyText() (string, bool) }
 	// Cutter returns the selected text and removes it.
 	Cutter interface{ CutText() (string, bool) }
-	// Paster inserts clipboard text; components without it get plain
-	// InsertText.
+	// Paster inserts clipboard text; falls back to InsertText.
 	Paster interface{ PasteText(text string) bool }
 )
 
-// FormatClipboard holds a copied text format (the "format painter"). A
-// Stage has one and shares it with its components, so a format copied
-// from one component can be pasted into another.
+// FormatClipboard holds a copied text format, shared by a Stage.
 type FormatClipboard struct {
 	format Format
 	has    bool
@@ -106,17 +91,13 @@ func (c *FormatClipboard) Clear() { c.format, c.has = Format{}, false }
 // FormatClipboardSetter receives the Stage's FormatClipboard.
 type FormatClipboardSetter interface{ SetFormatClipboard(*FormatClipboard) }
 
-// CommonFormat returns the formatting every one of fs shares: a field
-// is kept where all agree and cleared where they differ, and a
-// decoration is on only if it is on everywhere -- the "minimum common
-// formatting" of a selection spanning mixed text.
+// CommonFormat returns the formatting shared by all of fs.
 func CommonFormat(fs ...Format) Format {
 	if len(fs) == 0 {
 		return Format{}
 	}
 	c := fs[0]
-	// Comments, bookmarks and index entries mark places in the text; they
-	// are not formatting, and copying one onto other text would duplicate it.
+	// Comments, bookmarks and index entries are not formatting and are not copied.
 	c.Comment, c.Bookmark, c.Index, c.Proposal = "", "", "", ""
 	for _, f := range fs[1:] {
 		if f.FontFamily != c.FontFamily {
@@ -169,9 +150,7 @@ func (k Keymap) Chords(cmd Command) []string {
 // Owner returns the command chord is bound to ("" if none).
 func (k Keymap) Owner(chord string) Command { return k[chord] }
 
-// EffectiveKeymap is what the Stage really uses: the Keymap (or
-// DefaultKeymap), plus the chords the registered features bind where it
-// has none. A chord the Keymap maps to "" is unbound and is left out.
+// EffectiveKeymap returns the Keymap or default, plus feature chords.
 func (s *Stage) EffectiveKeymap() Keymap {
 	km := s.Keymap
 	if km == nil {
@@ -194,10 +173,7 @@ func (s *Stage) EffectiveKeymap() Keymap {
 	return out
 }
 
-// Rebind makes chord the (only) key binding of cmd, taking it away from
-// whatever it was bound to, and unbinding cmd's other chords. An empty
-// chord just unbinds cmd. The previous owner of chord, if any, is
-// returned so the caller can tell the user.
+// Rebind makes chord the only binding of cmd, taking it from others.
 func (s *Stage) Rebind(cmd Command, chord string) (previous Command) {
 	eff := s.EffectiveKeymap()
 	if s.Keymap == nil {

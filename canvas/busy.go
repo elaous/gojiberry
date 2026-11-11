@@ -5,12 +5,10 @@ import (
 	"strings"
 )
 
-// Busy marks an inline object somebody is changing: it is drawn with an outline in that person's colour, and, when the
-// person is somebody else, a small rectangle at its top right corner with that colour as its background and the word
-// "busy" in it. (A screen reader is told in words by the host; colour alone is not enough.)
+// Busy marks an inline object being changed by someone, drawn with an outline.
 type Busy struct {
-	Name  string // who
-	Color string // their colour, a CSS hex colour ("#2563eb"); anything else is drawn in grey
+	Name  string
+	Color string // their colour, a CSS hex colour; else grey.
 	Mine  bool   // the person is this one: the outline only
 }
 
@@ -43,7 +41,7 @@ func (f *TextFlow) drawBusy(o PlacedObject) {
 	p.SetTextBaseline("alphabetic")
 }
 
-// safeColor is c when it is a hex colour, grey otherwise (the colour comes from another person's presence).
+// safeColor returns c if it is a hex colour, else grey.
 func safeColor(c string) string {
 	if len(c) == 4 || len(c) == 7 {
 		if _, err := strconv.ParseUint(c[1:], 16, 32); err == nil && c[0] == '#' {
@@ -53,7 +51,7 @@ func safeColor(c string) string {
 	return "#6b7280"
 }
 
-// readableOn is white or black, whichever reads on the hex colour.
+// readableOn returns white or black, whichever reads on c.
 func readableOn(c string) string {
 	h := strings.TrimPrefix(c, "#")
 	if len(h) == 3 {
