@@ -337,7 +337,6 @@ func TestOtherRenewalErrorsCountButDoNotWarnAboutRoles(t *testing.T) {
 	if h.Health().RenewFailures != 1 || h.Health().RenewDenied != 0 || strings.Contains(lb.String(), "WARNING") {
 		t.Fatalf("%+v\n%s", h.Health(), lb.String())
 	}
-	// A document that is just not in the store is not a failure.
 	h2, e2 := newRenewHub(t, Config{RenewInterval: -1, Renewer: rf(func(context.Context, string) error { return docstore.ErrNotFound })})
 	e2.post(t, "d", "editor", "", "r", textOps(t, "c", "x"))
 	h2.waitRenewals()
@@ -346,11 +345,8 @@ func TestOtherRenewalErrorsCountButDoNotWarnAboutRoles(t *testing.T) {
 	}
 }
 
-// --- n1: secrets stay out of the log
-
 func TestRenewalLogsCarryNoCredentials(t *testing.T) {
 	lb := captureLog(t)
-	// A server that fails with a 500 (and one nothing listens on) behind a URL with userinfo.
 	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
@@ -377,8 +373,6 @@ func TestRenewalLogsCarryNoCredentials(t *testing.T) {
 		}
 	}
 }
-
-// --- n2: interval clamp, token refresh, panics
 
 func TestRenewIntervalClampedToAQuarterOfTheTTL(t *testing.T) {
 	lb := captureLog(t)
@@ -410,9 +404,6 @@ func TestRenewIntervalClampedToAQuarterOfTheTTL(t *testing.T) {
 	}
 }
 
-// With a 4-hour TTL and the clamp, a document that is edited every 3 hours stays alive; at the
-// unclamped default of one minute nothing changes. Behaviourally: the interval in force is
-// what rate-limits renewals.
 func TestClampedIntervalRateLimitsRenewals(t *testing.T) {
 	fr := &fakeRenewer{}
 	clk := newClock()
@@ -427,7 +418,6 @@ func TestClampedIntervalRateLimitsRenewals(t *testing.T) {
 	}
 }
 
-// The renewal of a long-lived WebSocket uses a token that is read afresh each time.
 func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 	lb := captureLog(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -439,7 +429,7 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		mu.Lock()
 		seen = append(seen, a)
 		mu.Unlock()
-		if a != "Bearer fresh-2" && a != "Bearer fresh-3" { // the token the socket was opened with has expired
+		if a != "Bearer fresh-2" && a != "Bearer fresh-3" {
 			http.Error(w, "token expired", http.StatusUnauthorized)
 			return
 		}
@@ -469,7 +459,6 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		return h, strings.Join(seen, ",")
 	}
 
-	// Without AuthFunc every renewal carries the upgrade request's token, which is refused.
 	h, got := run(nil)
 	if got != "Bearer opened-with,Bearer opened-with,Bearer opened-with" {
 		t.Fatalf("without AuthFunc the renewals carried %q", got)
@@ -478,7 +467,6 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 		t.Fatalf("denied=%d, want 3 with one warning:\n%s", h.Health().RenewDenied, lb.String())
 	}
 
-	// With AuthFunc each renewal reads the current one: first still stale (1), then fresh.
 	mu.Lock()
 	seen = nil
 	mu.Unlock()
@@ -491,7 +479,7 @@ func TestAuthFuncRefreshesTheTokenOfALongLivedSocket(t *testing.T) {
 	if got != "Bearer fresh-1,Bearer fresh-2,Bearer fresh-3" {
 		t.Fatalf("with AuthFunc the renewals carried %q", got)
 	}
-	if h.Health().RenewDenied != 1 { // fresh-1 was refused, the rest renewed
+	if h.Health().RenewDenied != 1 {
 		t.Fatalf("denied = %d, want 1", h.Health().RenewDenied)
 	}
 }
@@ -508,7 +496,7 @@ func TestPanickingRenewerOrAuthFuncDoesNotCrashTheHub(t *testing.T) {
 			if s := e.post(t, "d", "editor", "", "r", textOps(t, "c"+string(rune('a'+i)), "x")); s != 204 {
 				t.Fatalf("%s: edit %d: %d", name, i, s)
 			}
-			h.waitRenewals() // must return: the in-flight count is released
+			h.waitRenewals()
 		}
 		if got := h.Health().RenewFailures; got != 2 {
 			t.Fatalf("%s: renewFailures = %d", name, got)

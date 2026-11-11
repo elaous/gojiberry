@@ -47,14 +47,14 @@ func (c *clock) Now() time.Time {
 }
 func (c *clock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
-// roleByHeader takes the role from X-Role, the user from X-User.
+// roleByHeader takes the role from X-Role.
 func roleByHeader(r *http.Request, _ string) Role { return Role(r.Header.Get("X-Role")) }
 
 type edit struct {
 	srv *httptest.Server
 }
 
-// post sends ops for document id as role; it returns the status.
+// post sends ops for document id as role.
 func (e edit) post(t *testing.T, id, role, user, replica, body string) int {
 	t.Helper()
 	req, _ := http.NewRequest("POST", e.srv.URL+"/docs/"+id+"/ops?replica="+replica, strings.NewReader(body))
@@ -97,7 +97,7 @@ func newRenewHub(t *testing.T, cfg Config) (*Hub, edit) {
 		cfg.Roles = roleByHeader
 	}
 	if cfg.GoneConfirmDelay == 0 {
-		cfg.GoneConfirmDelay = -1 // confirm at once; the default delay has a test of its own
+		cfg.GoneConfirmDelay = -1
 	}
 	h := New(cfg)
 	srv := httptest.NewServer(h.Handler())
@@ -116,7 +116,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 		}
 	}
 
-	// Joining, watching, cursors, snapshots, role queries: never.
 	e.get(t, "/docs/d/events?replica=r1", "editor")
 	e.get(t, "/docs/d/snapshot", "editor")
 	e.get(t, "/docs/d/role", "owner")
@@ -133,7 +132,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 	}
 	check("an empty batch", 0)
 
-	// Refused: no role, unreadable ops, a viewer's text edit, another user's replica id.
 	if s := e.post(t, "d", "", "ana", "r1", textOps(t, "c1", "x")); s != 403 {
 		t.Fatalf("no role: %d", s)
 	}
@@ -145,7 +143,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 	}
 	check("refused edits", 0)
 
-	// A viewer's comment is accepted but is not an edit of the document.
 	cd := charDoc("cm")
 	cop := cd.Put(crdt.Block{ID: "comment:c1", Kind: "lww:side", Content: `{"author":"vic"}`})
 	cb, _ := json.Marshal([]crdt.Op{cop})
@@ -154,7 +151,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 	}
 	check("a viewer's comment", 0)
 
-	// Another user's replica id is refused after it is bound to ana.
 	if s := e.post(t, "d", "editor", "ana", "r1", textOps(t, "c3", "hello")); s != 204 {
 		t.Fatalf("editor edit: %d", s)
 	}
@@ -164,7 +160,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 	}
 	check("a refused replica", 1)
 
-	// An owner's edit renews too, for the right document.
 	if s := e.post(t, "other", "owner", "ana", "r9", textOps(t, "c5", "x")); s != 204 {
 		t.Fatalf("owner edit: %d", s)
 	}
@@ -217,7 +212,7 @@ func TestRenewIsRateLimitedPerDocument(t *testing.T) {
 	typeOnce("a")
 	want(5)
 
-	// A negative interval renews on every accepted edit; a custom one is honoured.
+	// A negative interval renews on every access.
 	fr2 := &fakeRenewer{}
 	h2, e2 := newRenewHub(t, Config{Renewer: fr2, RenewInterval: 5 * time.Second, Now: clk.Now})
 	for i := 0; i < 3; i++ {
@@ -286,8 +281,6 @@ func TestRenewConcurrentEditsRace(t *testing.T) {
 	if len(got) < len(docs) {
 		t.Fatalf("every document must renew at least once: %v", got)
 	}
-	// 12 workers advance the clock 3 times each by 30s: at most 18 minutes pass, so no
-	// document can renew more than ~19 times.
 	per := map[string]int{}
 	for _, id := range got {
 		per[id]++
