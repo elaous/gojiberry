@@ -46,6 +46,7 @@ func menuItemKey(e xango.Event, choose func()) {
 	if !ok || k.Ctrl || k.Alt || k.Meta {
 		return
 	}
+	// a handled key must not reach the parent entry's handler
 	move := func(step xango.FocusStep) {
 		e.PreventDefault()
 		e.StopPropagation()

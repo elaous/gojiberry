@@ -347,6 +347,7 @@ func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish 
 		return check(firstID(), verifiers)
 	}
 
+	// a link the Config records is a replay as a journal
 	if finish && p.Link != nil && linkRecorded(cfg, *p.Link) {
 		return ErrConfigChanged
 	}
@@ -361,6 +362,7 @@ func (s *Store) authJournal(ctx context.Context, cfg Config, p *Pending, finish 
 				continue
 			}
 			from := lists[len(lists)-1]
+			// the signature covers both digests: no replay for another change
 			signed := p.Link != nil && p.Link.valid() && p.Link.From == p.From && ownersDigest(p.Link.To) == ownersDigest(p.To) && hasSigner(from, p.Link.Signer)
 			if !signed && finish {
 				continue

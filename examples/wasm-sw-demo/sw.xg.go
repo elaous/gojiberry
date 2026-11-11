@@ -50,6 +50,7 @@ func main() {
 			req := e.Request()
 			resp, err := domrt.Await(js.Global().Call("fetch", req))
 			if err == nil {
+				// cache a copy; the page gets the original at once
 				if req.Get("method").String() == "GET" && resp.Get("ok").Bool() {
 					kept := resp.Call("clone")
 					go func() {

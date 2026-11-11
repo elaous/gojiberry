@@ -51,8 +51,9 @@ type encUI struct {
 	firstUse              *encstore.FirstUseError
 	rekeyDone, rekeyTotal int
 	checkRecovery         string
-	checkMsg              string // the answer to the last check
-	checkOK               bool
+	// never kept past the check
+	checkMsg string // the answer to the last check
+	checkOK  bool
 
 	sharedFor       string
 	docConfidential bool

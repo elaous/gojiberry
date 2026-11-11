@@ -110,6 +110,7 @@ func bindingFor(old Config, to []Owner, signers []*encrypt.Signer, jl *Link) (se
 	reaches := func(from string) bool {
 		return slices.ContainsFunc(links, func(l Link) bool { return l.From == from && ownersDigest(l.To) == dst })
 	}
+	// a nonce keeps a repeat of the same lists distinct
 	if jl != nil && jl.valid() && ownersDigest(jl.To) == dst && !linkRecorded(Config{Links: links}, *jl) && (jl.Nonce != "" || !reaches(jl.From)) {
 		links = append(links, *jl)
 	}

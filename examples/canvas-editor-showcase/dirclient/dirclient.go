@@ -115,9 +115,10 @@ type Key struct {
 	Label       string `json:"label"`
 	Type        string `json:"type"`
 	Fingerprint string `json:"fingerprint"`
-	Verified    bool   `json:"verified"`
-	Held        bool   `json:"held"`
-	Attested    bool   `json:"-"`
+	// never inferred client-side: the server's answer only
+	Verified bool `json:"verified"`
+	Held     bool `json:"held"`
+	Attested bool `json:"-"`
 	// OwnerEnrolled: the address has an owner key.
 	OwnerEnrolled, OwnerSigned bool `json:"-"`
 	Owner                      OwnerState

@@ -32,6 +32,7 @@ type DirRow struct {
 
 // RecipientsProps configures Recipients.
 type RecipientsProps struct {
+	// owner keys are shown, never removed
 	Owner, Shared []RecipientRow
 	// Draft is the public key being pasted.
 	Draft, Confirm   string

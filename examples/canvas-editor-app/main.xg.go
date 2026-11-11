@@ -315,6 +315,7 @@ func (ed *editor) wire() {
 		ed.redrawPreservingScroll()
 	})
 
+	// IME or dead key composing: the box holds unfinished text
 	takeInput := func() {
 		v := ed.hidden.GetValue()
 		if v != "" {

@@ -26,12 +26,14 @@ func Modal(props ModalProps) xango.Node {
 		backdropAttrs = append(backdropAttrs, xango.On("click", func(xango.Event) { props.OnClose() }))
 	}
 
+	// tabindex -1: focusable, but Tab does not stop on it
 	boxAttrs := []xango.Attr{xango.A("class", "gj-modal"), xango.A("role", role), xango.A("aria-modal", "true"),
 		xango.A("tabindex", "-1"), xango.A("data-gj-modal", "true"), ModalKeys(props.OnClose)}
 	if props.Label != "" {
 		boxAttrs = append(boxAttrs, xango.A("aria-label", props.Label))
 	}
 
+	// siblings, not nested: a box click never closes the modal
 	return xango.Frag(
 		xango.El("div", backdropAttrs),
 		xango.El("div", boxAttrs, props.Content...),

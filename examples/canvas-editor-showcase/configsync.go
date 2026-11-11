@@ -165,6 +165,7 @@ func (u *ui) importSharedTheme(data []byte, renderUI func()) {
 	renderUI()
 }
 
+// never replaces a theme the person has
 func (u *ui) acceptSharedTheme(renderUI func()) {
 	in, c := u.cfgx.incoming, u.config()
 	if in == nil {

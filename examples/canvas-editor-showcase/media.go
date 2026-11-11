@@ -70,6 +70,7 @@ func syncMediaMarks(fl *canvas.TextFlow) bool {
 	return changed
 }
 
+// allow-list: never a scripting scheme
 func safeMediaURL(u string) bool {
 	u = strings.TrimSpace(strings.ToLower(u))
 	switch {

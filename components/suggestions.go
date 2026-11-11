@@ -132,6 +132,7 @@ func Suggestions(p SuggestionsProps) xango.Node {
 		attrs := []xango.Attr{
 			xango.A("class", class), xango.A("role", "option"), xango.A("id", suggestOptionID(id, i)),
 			xango.A("aria-selected", sel), xango.A("aria-setsize", strconv.Itoa(len(p.State.Words))), xango.A("aria-posinset", strconv.Itoa(i+1)),
+			// editing element keeps focus: a row press must not move it
 			xango.On("mousedown", func(e xango.Event) { e.PreventDefault() }),
 			xango.On("click", func(xango.Event) {
 				if p.OnPick != nil {

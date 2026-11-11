@@ -91,6 +91,7 @@ func statsPanel(st canvas.FlowStats, sheets int) xango.Node {
 	)
 }
 
+// never the sign-in token or the identity
 func shareParams() url.Values {
 	q := js.Global().Get("URLSearchParams").New(js.Global().Get("location").Get("search"))
 	out := url.Values{}

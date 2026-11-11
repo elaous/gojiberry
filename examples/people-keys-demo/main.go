@@ -100,6 +100,7 @@ func newPage() (*page, error) {
 		p.ownerSigning = k
 	}
 	if st, err := directoryclient.ParseWatchState(load("gj-watch-state")); err != nil {
+		// damaged or old: never use half of it
 		store("gj-watch-state", "")
 		p.dirAlerts = append(p.dirAlerts, "The saved record of what this device has seen of the key directory could not be read, so the next check starts from scratch.")
 	} else {
@@ -369,6 +370,7 @@ func (p *page) watchMine(ctx context.Context) error {
 	return nil
 }
 
+// Verified is the directory's answer, never pasted text
 func (p *page) parsed() *components.RecipientRow {
 	if strings.TrimSpace(p.draft) == "" {
 		return nil

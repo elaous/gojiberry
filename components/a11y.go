@@ -308,6 +308,7 @@ func a11yInline(b A11yBlock, id string, known map[string]bool) []xango.Node {
 	return out
 }
 
+// allow-list: never javascript: or data: links
 func a11ySafeHref(u string) bool {
 	u = strings.TrimSpace(u)
 	i := strings.IndexAny(u, ":/?#")

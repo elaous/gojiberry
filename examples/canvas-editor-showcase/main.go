@@ -375,6 +375,7 @@ func main() {
 	u.pub = newPublic(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
 	state.Comments.Roster = u.people
+	// by handle, never an address that is not theirs to show
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
 	u.people.remote = func() (*docstore.HTTPAdapter, string, bool) {
 		if encTarget == "server" || u.saver.Target() != serverTarget || u.saver.ID() == "" {
@@ -388,6 +389,7 @@ func main() {
 		return a, u.saver.ID(), ok
 	}
 	if tok := takeFragment(); tok != "" {
+		// offered in the People tab, never applied by itself
 		u.people.links.incoming, u.tab = tok, "people"
 	}
 	u.speech = newSpeech(func() { renderUI() })

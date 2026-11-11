@@ -94,6 +94,7 @@ func newDirUI() dirUI {
 	if q := js.Global().Get("location").Get("search").String(); q != "" {
 		if v, err := url.ParseQuery(strings.TrimPrefix(q, "?")); err == nil {
 			if u := strings.TrimSpace(v.Get("docstore")); u != "" {
+				// never applied from a link: offered, and the person decides
 				if clean, _, err := checkDirURL(u); err != nil {
 					d.refused = T("dir.refused", "The key directory address %q was not used: %s", u, err.Error())
 				} else if clean != d.url {
@@ -313,6 +314,7 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 	props.PublishNotice = d.notice
 }
 
+// never a recovery key: it stays offline
 func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 	d.notice = ""
 	n := 0
