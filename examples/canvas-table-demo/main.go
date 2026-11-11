@@ -1,10 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-table-demo shows canvas.TableView: an Obsidian-style
-// table drawn entirely on a <canvas>. It starts in view mode; switch to
-// edit mode, then hover the table for the "+" bars and the column/row/
-// table handles. The #state element mirrors the table's state as JSON
-// (the e2e test reads it, since a canvas has no DOM to inspect).
 package main
 
 import (
