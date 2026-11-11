@@ -22,10 +22,7 @@ import (
 	"github.com/elaous/gojiberry/user"
 )
 
-// fakeOIDCProvider mirrors gojiberry/auth's own test helper of the
-// same name (auth/server_test.go) -- duplicated here rather than
-// exported from that package, since it's test-only scaffolding with
-// no real caller outside a test file.
+// fakeOIDCProvider mirrors gojiberry/auth's test provider.
 type fakeOIDCProvider struct {
 	srv        *httptest.Server
 	oidcServer *oidctest.Server
@@ -33,7 +30,7 @@ type fakeOIDCProvider struct {
 	keyID      string
 	nextEmail  string
 	nextSub    string
-	nonce      string // echoed into the id_token, like a real provider
+	nonce      string
 }
 
 func newFakeOIDCProvider(t *testing.T) *fakeOIDCProvider {
@@ -93,12 +90,7 @@ func newTestServerWithAuth(t *testing.T, issuerURL string) *Server {
 	return NewServer(NewMemoryAdapter(), "memory").WithAuth(m)
 }
 
-// sessionTokenFor drives a real login → callback round trip against
-// srv's own mounted /auth/* routes (auth.Manager.Routes, via
-// Server.Handler) to mint a genuine bearer session token for email --
-// the same mechanism a real browser goes through, not a shortcut that
-// only proves the ACL logic works in isolation from the auth it's
-// actually built on.
+// sessionTokenFor logs in and returns the session token.
 func sessionTokenFor(t *testing.T, handler http.Handler, provider *fakeOIDCProvider, email, sub string) string {
 	t.Helper()
 	provider.nextEmail, provider.nextSub = email, sub
@@ -225,7 +217,6 @@ func TestACLEnforcesReadWritePerRole(t *testing.T) {
 	viewerToken := sessionTokenFor(t, handler, provider, "viewer@example.com", "viewer-sub")
 	strangerToken := sessionTokenFor(t, handler, provider, "stranger@example.com", "stranger-sub")
 
-	// Owner saves the document, then shares it.
 	put := withBearer(httptest.NewRequest(http.MethodPut, "/docs/doc1", strings.NewReader("v1")), ownerToken)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, put)
@@ -333,8 +324,6 @@ func TestACLKeyspaceHiddenFromListAndDirectAccess(t *testing.T) {
 		t.Fatalf("direct GET of a reserved id status = %d, want 400", rec.Code)
 	}
 
-	// The shared-editing hub keeps its documents under collab:, behind its
-	// own access control; they are not reachable here.
 	for _, method := range []string{http.MethodGet, http.MethodPut} {
 		rec = httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(method, "/docs/collab:doc1", strings.NewReader("x")))
@@ -377,7 +366,7 @@ func TestACLRoutesRequireAuthConfigured(t *testing.T) {
 	}
 }
 
-// aclFailAdapter fails loading acl: keys other than with ErrNotFound.
+// aclFailAdapter fails loading ACL keys.
 type aclFailAdapter struct {
 	Adapter
 	fail bool
@@ -580,7 +569,7 @@ func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
 	if a.RoleOfPerson(ana) != "editor" || !a.canWrite(ana) || a.owns(ana) {
 		t.Errorf("by subject: %q", a.RoleOfPerson(ana))
 	}
-	// The best role of any identifier counts; the owner is found by e-mail.
+	// The best role of any identifier counts.
 	both := user.Person{ID: "github:7", Email: "bo@gojiberry.io", Username: "ana"}
 	if a.RoleOfPerson(both) != "viewer" || a.canWrite(both) {
 		t.Errorf("%q", a.RoleOfPerson(both))
@@ -594,8 +583,7 @@ func TestACLRecognisesAPersonByAnyOfTheirIdentifiers(t *testing.T) {
 	}
 }
 
-// A username is whatever the person picked at their identity provider, so it never
-// grants access: someone who calls themselves "ana@x.com" is not Ana.
+// A username is whatever the person chose.
 func TestUsernameNeverGrantsAccess(t *testing.T) {
 	acl := ACL{Owner: "ana@x.com", Grants: map[string]Role{"bob@x.com": RoleEditor, "bobby": RoleEditor}}
 	impostor := user.Person{ID: "weak-idp:7", Username: "ana@x.com"}
@@ -605,7 +593,6 @@ func TestUsernameNeverGrantsAccess(t *testing.T) {
 	if r := acl.RoleOfPerson(user.Person{ID: "p:1", Username: "bobby"}); r != "" {
 		t.Errorf("a grant to a bare name is not matched by a username: %q", r)
 	}
-	// The ID and the verified e-mail still do.
 	if r := acl.RoleOfPerson(user.Person{ID: "p:2", Email: "Ana@X.com"}); r != user.Owner {
 		t.Errorf("owner by e-mail: %q", r)
 	}
@@ -614,9 +601,7 @@ func TestUsernameNeverGrantsAccess(t *testing.T) {
 	}
 }
 
-// A catalog lists one person's documents, so with RequireACL each signed-in person
-// uses their own (UserCatalogPrefix) and the shared key is closed; nobody sees
-// another's in a listing.
+// A catalog lists one person's documents.
 func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
@@ -660,7 +645,6 @@ func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
 	if c := do(http.MethodPut, anaKey, ""); c != http.StatusUnauthorized {
 		t.Errorf("anonymous: %d", c)
 	}
-	// A listing shows each person only their own.
 	list := func(token string) string {
 		req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 		withBearer(req, token)
@@ -673,8 +657,6 @@ func TestRequireACLGivesEachPersonTheirOwnCatalog(t *testing.T) {
 	}
 }
 
-// The keys that look like someone's catalog but are not under their prefix are refused,
-// in any case, and a catalog key is not reachable through the ACL routes either.
 func TestCatalogKeyTricksAreRefused(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
@@ -709,8 +691,6 @@ func TestCatalogKeyTricksAreRefused(t *testing.T) {
 			t.Errorf("%s: %q got %d", name, key, c)
 		}
 	}
-	// The ACL route of a catalog key does not give anything either: it can only create an
-	// unrelated acl: record, and access to a catalog key is decided by checkCatalog.
 	other := UserCatalogPrefix("someone:else") + "index"
 	do(http.MethodPut, esc(other)+"/acl", ana)
 	if c := do(http.MethodGet, esc(other), ana); c != http.StatusForbidden {
@@ -718,7 +698,6 @@ func TestCatalogKeyTricksAreRefused(t *testing.T) {
 	}
 }
 
-// A client that could write a record under the session keyspace could forge a sign-in.
 func TestSessionKeyspaceIsReservedFromTheDocumentAPI(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL)

@@ -36,8 +36,6 @@ func kindsOf(es []audit.Event) (ks []audit.Kind) {
 	return
 }
 
-// A document's life is in the log: created (a new document owned by whoever saved it first), shared, unshared
-// and deleted, each with the class of the one who did it and a Ref, and never a name, an address or the id.
 func TestAuditLogFollowsADocumentWithoutNamingIt(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL).WithRequireACL(true)
@@ -96,7 +94,7 @@ func TestAuditLogIsOffUnlessAsked(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/docs/a", strings.NewReader("x"))
 	req.Header.Set("If-None-Match", "*")
-	srv.Handler().ServeHTTP(rec, req) // no logger: nothing to write, and no panic
+	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -130,7 +128,7 @@ func TestAuditLogCountsExpiredDocumentsAndRefusedRequests(t *testing.T) {
 		t.Fatalf("events = %+v", es)
 	}
 
-	// A limiter that refuses logs the refusal, with no key or client.
+	// A limiter that refuses logs the refusal.
 	buf.Reset()
 	f := AuditLimiters(func(string, float64, int) Limiter { return refuseAll{} }, l)
 	if ok, _ := f("dir-publish", 1, 1).Allow(context.Background(), "client-a"); ok {
@@ -146,7 +144,6 @@ type refuseAll struct{}
 
 func (refuseAll) Allow(context.Context, string) (bool, time.Duration) { return false, time.Second }
 
-// Enrolling an owner key and asking for a reset are logged, by the account's Ref and never its address.
 func TestAuditLogRecordsOwnerKeyEvents(t *testing.T) {
 	var buf bytes.Buffer
 	d := newDirRoutes(t, func(s *Server) { s.WithAudit(audit.NewLogger(&buf), []byte("an operator's audit key")) })
@@ -165,7 +162,7 @@ func TestAuditLogRecordsOwnerKeyEvents(t *testing.T) {
 	}
 }
 
-// A sign-in that fails is logged as a refusal with no provider, account or address; one that works is not.
+// A failed sign-in is logged as a refusal.
 func TestAuditLogRecordsFailedSignIns(t *testing.T) {
 	provider := newFakeOIDCProvider(t)
 	srv := newTestServerWithAuth(t, provider.srv.URL)
@@ -188,7 +185,6 @@ func TestAuditLogRecordsFailedSignIns(t *testing.T) {
 	if strings.Contains(buf.String(), "ana") || strings.Contains(buf.String(), "forged") || strings.Contains(buf.String(), "test") {
 		t.Errorf("the line carries something of the request: %s", buf.String())
 	}
-	// Other routes' errors are not sign-in failures.
 	buf.Reset()
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/docs/missing", nil))
 	if strings.TrimSpace(buf.String()) != "" {

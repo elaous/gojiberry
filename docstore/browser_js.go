@@ -13,13 +13,10 @@ import (
 	"time"
 )
 
-// BrowserAdapter keeps documents in the browser's localStorage, under
-// a key prefix: a zero-server place to save to (a few MB at most, per
-// origin). Use it for documents, not for big files like fonts.
+// BrowserAdapter keeps documents in the browser.
 type BrowserAdapter struct{ prefix string }
 
-// NewBrowserAdapter returns an adapter using keys that start with
-// prefix ("gojiberry:" if empty).
+// NewBrowserAdapter returns an adapter using browser storage.
 func NewBrowserAdapter(prefix string) *BrowserAdapter {
 	if prefix == "" {
 		prefix = "gojiberry:"
