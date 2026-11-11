@@ -1,12 +1,5 @@
 //go:build js && wasm
 
-// Command selector is the page-side half of the e2e driver: Playwright-style selectors
-// for the chromedp driver, CSS plus :has-text("x") (case-insensitive substring of an
-// element's text) and :text-is("x") (the whole text, trimmed). It is built to wasm and
-// loaded into every page the tests open (see selector.go in the parent package), where it
-// installs window.__e2e. Each custom pseudo-class is turned into an attribute set on the
-// matching elements for the duration of the query, so it works anywhere in a selector,
-// inside :not() and :has() too.
 package main
 
 import (
@@ -17,7 +10,6 @@ import (
 	"syscall/js"
 )
 
-// failure turns what a panic carried (a JS exception, usually) into an error.
 func failure(r any) error {
 	if e, ok := r.(error); ok {
 		return e
@@ -25,7 +17,6 @@ func failure(r any) error {
 	return errors.New("e2e selector: unexpected failure")
 }
 
-// all returns the elements under root (the document if undefined) matching sel.
 func all(sel string, root js.Value) (out js.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -84,7 +75,6 @@ func visible(el js.Value) bool {
 		st.Get("visibility").String() != "hidden" && st.Get("display").String() != "none"
 }
 
-// list turns a NodeList into a slice.
 func list(nl js.Value) []js.Value {
 	out := make([]js.Value, nl.Length())
 	for i := range out {
@@ -118,8 +108,6 @@ func first(sel string) (js.Value, error) {
 	return js.Null(), nil
 }
 
-// centre is the middle of the first visible match, scrolled into view; null while none
-// is visible or something else covers it.
 func centre(sel string) (res js.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -146,7 +134,6 @@ func centre(sel string) (res js.Value, err error) {
 		r := el.Call("getBoundingClientRect")
 		return r.Get("x").Float() + r.Get("width").Float()/2, r.Get("y").Float() + r.Get("height").Float()/2
 	}
-	// What a pointer there would hit: the element, or something in it.
 	hit := func(x, y float64) bool {
 		e := doc.Call("elementFromPoint", x, y)
 		return !e.IsNull() && !e.IsUndefined() && el.Call("contains", e).Bool()
@@ -165,9 +152,6 @@ func centre(sel string) (res js.Value, err error) {
 	return array([]js.Value{js.ValueOf(x), js.ValueOf(y)}), nil
 }
 
-// wrap makes a JS function of f that returns a string for an error (the loader's shim
-// throws it: a Go function cannot throw into the page). A panic in f is returned the same
-// way, so it cannot take the Go runtime down with it.
 func wrap(f func(args []js.Value) (js.Value, error)) js.Func {
 	return js.FuncOf(func(_ js.Value, args []js.Value) (ret any) {
 		defer func() {
