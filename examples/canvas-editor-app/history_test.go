@@ -30,7 +30,6 @@ func TestTypingIsOneUndoStepAndRedoComesBack(t *testing.T) {
 	if d.Redo() {
 		t.Error("nothing left to redo")
 	}
-	// A new edit forgets the redo steps.
 	d.Undo()
 	d.backspace()
 	if d.Redo() {
@@ -101,7 +100,6 @@ func TestCutIsOneUndoStep(t *testing.T) {
 func TestCutDeletesOnlyTheSelections(t *testing.T) {
 	var d document
 	typeText(&d, "foo bar x")
-	// One cursor selects "foo", another is a bare caret after "x": only "foo" was copied.
 	d.setCursors([]cursor{{Pos: 3, Anchor: 0}, {Pos: 9, Anchor: 9}})
 	if d.selectedText() != "foo" {
 		t.Fatal(d.selectedText())
@@ -133,7 +131,7 @@ func TestMovingTheCaretEndsTheTypingStep(t *testing.T) {
 func TestTheHistoryHasABudget(t *testing.T) {
 	var d document
 	d.insert(string(make([]rune, 1000)))
-	for i := 0; i < 500; i++ { // each Backspace is a step holding a copy of the document
+	for i := 0; i < 500; i++ {
 		d.backspace()
 	}
 	if len(d.hist.undo) > maxUndo {
@@ -146,7 +144,6 @@ func TestTheHistoryHasABudget(t *testing.T) {
 	if total > maxUndoChars+1000 {
 		t.Errorf("%d characters held", total)
 	}
-	// A large document gets fewer steps.
 	var big document
 	big.insert(string(make([]rune, 400_000)))
 	for i := 0; i < 20; i++ {
