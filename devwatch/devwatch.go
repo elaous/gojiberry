@@ -1,4 +1,3 @@
-// Package devwatch supervises a process and restarts it on file changes.
 package devwatch
 
 import (
@@ -50,7 +49,6 @@ func DefaultIgnore(path string) bool {
 	}
 }
 
-// isEditorTemp matches the scratch files editors create.
 func isEditorTemp(name string) bool {
 	switch {
 	case name == "4913", strings.HasPrefix(name, ".#"), strings.HasSuffix(name, "~"),
@@ -60,13 +58,11 @@ func isEditorTemp(name string) bool {
 	return false
 }
 
-// skipDirs are directories never watched.
 var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": true, "target": true, ".hg": true, ".svn": true}
 
 func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// An unreadable entry is skipped.
 			log.Printf("devwatch: not watching %s: %v", path, err)
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
@@ -83,7 +79,6 @@ func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	})
 }
 
-// managedProcess owns the single subprocess Run manages.
 type managedProcess struct {
 	mu   sync.Mutex
 	cmd  *exec.Cmd
@@ -110,7 +105,6 @@ func (p *managedProcess) start() error {
 	p.cmd = cmd
 	done := make(chan struct{})
 	p.done = done
-	// Wait at once, whoever stops the process.
 	go func() {
 		err := cmd.Wait()
 		p.mu.Lock()
@@ -124,7 +118,6 @@ func (p *managedProcess) start() error {
 	return nil
 }
 
-// stop sends SIGTERM and waits up to 5 seconds.
 func (p *managedProcess) stop() {
 	p.mu.Lock()
 	cmd, done := p.cmd, p.done
@@ -137,12 +130,11 @@ func (p *managedProcess) stop() {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		_ = cmd.Process.Kill() // last resort -- nothing left to do if this itself fails
+		_ = cmd.Process.Kill()
 		<-done
 	}
 }
 
-// Run builds once, starts the process, and restarts it on changes.
 func Run(cfg Config) error {
 	ignore := cfg.Ignore
 	if ignore == nil {
@@ -189,7 +181,6 @@ func Run(cfg Config) error {
 				if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 					continue
 				}
-				// A newly created directory needs its own watch.
 				if ev.Op&fsnotify.Create != 0 {
 					if info, statErr := os.Stat(ev.Name); statErr == nil && info.IsDir() {
 						_ = addRecursive(watcher, ev.Name) // a failure here just means that one subdirectory goes unwatched
@@ -234,7 +225,6 @@ func Run(cfg Config) error {
 	}
 }
 
-// buildError is returned by Run when the initial build fails.
 type buildError struct{}
 
 func (*buildError) Error() string {

@@ -29,7 +29,6 @@ func TestDefaultIgnore(t *testing.T) {
 	}
 }
 
-// pollUntil polls cond every 20ms until it holds.
 func pollUntil(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -42,7 +41,6 @@ func pollUntil(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Fatal("condition never became true within timeout")
 }
 
-// readPID reads the PID the managed process wrote.
 func readPID(path string) int {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -55,7 +53,6 @@ func readPID(path string) int {
 	return pid
 }
 
-// TestRunRebuildsAndRestartsOnRealFileChange runs a real rebuild and restart.
 func TestRunRebuildsAndRestartsOnRealFileChange(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(t.TempDir(), "server.pid")
@@ -76,7 +73,6 @@ func TestRunRebuildsAndRestartsOnRealFileChange(t *testing.T) {
 		})
 	}()
 
-	// Wait for the initial build + process start.
 	pollUntil(t, 2*time.Second, func() bool { return rebuilds.Load() >= 1 })
 	pollUntil(t, 2*time.Second, func() bool { return readPID(pidFile) != 0 })
 	firstPID := readPID(pidFile)
@@ -95,7 +91,7 @@ func TestRunRebuildsAndRestartsOnRealFileChange(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "generated.xg.go"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("writing ignored file: %v", err)
 	}
-	time.Sleep(500 * time.Millisecond) // long enough for the 200ms debounce to have fired if it was going to
+	time.Sleep(500 * time.Millisecond)
 	if got := rebuilds.Load(); got != rebuildsBeforeIgnored {
 		t.Errorf("a change to a *.xg.go file triggered a rebuild (count %d -> %d), want no change", rebuildsBeforeIgnored, got)
 	}

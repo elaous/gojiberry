@@ -1,6 +1,5 @@
 package devwatch // import "github.com/elaous/gojiberry/devwatch"
 
-Package devwatch supervises a process and restarts it on file changes.
 
 FUNCTIONS
 
@@ -8,8 +7,6 @@ func DefaultIgnore(path string) bool
     DefaultIgnore reports whether path should never be watched.
 
 func Run(cfg Config) error
-    Run builds once, starts the process, and restarts it on changes.
-
 
 TYPES
 
