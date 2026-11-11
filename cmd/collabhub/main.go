@@ -1,4 +1,3 @@
-// Command collabhub runs the multi-user editing relay.
 package main
 
 import (
@@ -28,7 +27,6 @@ func main() {
 	}
 }
 
-// noACLRole is the role everyone has on documents without an ACL.
 func noACLRole(v string) hub.Role {
 	switch strings.ToLower(v) {
 	case "editor":
@@ -41,7 +39,6 @@ func noACLRole(v string) hub.Role {
 	return hub.Owner
 }
 
-// durationEnv reads a duration setting; ok is false when unset or invalid.
 func durationEnv(name, want string, positive bool) (d time.Duration, ok bool, err error) {
 	v := os.Getenv(name)
 	if v == "" {
@@ -54,14 +51,12 @@ func durationEnv(name, want string, positive bool) (d time.Duration, ok bool, er
 	return d, true, nil
 }
 
-// buildHub makes the hub from the environment.
 func buildHub(ctx context.Context) (*hub.Hub, docstore.Config, error) {
 	cfg := docstore.ConfigFromEnv()
 	adapter, err := docstore.BuildAdapter(ctx, cfg)
 	if err != nil {
 		return nil, cfg, err
 	}
-	// Expiry: GOJIBERRY_DOCSTORE_EXPIRY_TTL enables it.
 	adapter, expiring := docstore.WithConfiguredExpiry(ctx, adapter, cfg)
 	var renewer docstore.Renewer
 	if renewURL := os.Getenv("GOJIBERRY_COLLAB_RENEW_URL"); renewURL != "" {
@@ -89,7 +84,6 @@ func buildHub(ctx context.Context) (*hub.Hub, docstore.Config, error) {
 	} else if ok {
 		hc.PresenceInterval = d
 	}
-	// GOJIBERRY_COLLAB_RENEW_INTERVAL sets the renewal interval.
 	if d, ok, err := durationEnv("GOJIBERRY_COLLAB_RENEW_INTERVAL", "a duration such as 1m", true); err != nil {
 		return nil, cfg, err
 	} else if ok {
@@ -103,7 +97,6 @@ func buildHub(ctx context.Context) (*hub.Hub, docstore.Config, error) {
 	return hub.New(hc), cfg, nil
 }
 
-// run serves the hub until ctx ends, then stops it cleanly.
 func run(ctx context.Context, onListen func(net.Addr)) error {
 	h, cfg, err := buildHub(ctx)
 	if err != nil {
@@ -129,7 +122,6 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 	go func() {
 		defer close(done)
 		<-ctx.Done()
-		// Refuse writes and end event streams before the final save.
 		h.Stop()
 		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -153,7 +145,6 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 	return nil
 }
 
-// remoteRenewer renews leases through the remote docstore.
 func remoteRenewer(baseURL, token string) *docstore.HTTPAdapter {
 	remote := docstore.NewHTTPAdapter(baseURL, &http.Client{Timeout: 10 * time.Second})
 	if token != "" {
@@ -162,7 +153,6 @@ func remoteRenewer(baseURL, token string) *docstore.HTTPAdapter {
 	return remote
 }
 
-// renewStartupMessage is the log line announcing renewal.
 func renewStartupMessage(renewURL string) string {
 	return "collabhub: collaborators' edits renew documents at " + docstore.RedactURL(renewURL)
 }

@@ -96,7 +96,6 @@ func TestBuildHubAcceptsGoodSettings(t *testing.T) {
 	_ = h.Close()
 }
 
-// run serves, answers the health check, and stops on cancel.
 func TestRunServesAndStopsOnCancel(t *testing.T) {
 	t.Setenv("GOJIBERRY_COLLAB_ADDR", "127.0.0.1:0")
 	ctx, cancel := context.WithCancel(context.Background())
