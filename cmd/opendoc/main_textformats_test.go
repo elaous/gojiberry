@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// Text formats are packed as documents too.
 func TestPackTakesTextFormats(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")

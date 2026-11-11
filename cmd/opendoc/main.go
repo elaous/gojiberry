@@ -1,4 +1,3 @@
-// Command opendoc works with .opendoc packs.
 package main
 
 import (
@@ -101,7 +100,6 @@ func keygenCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// esc makes pack text safe to print.
 func esc(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -114,7 +112,6 @@ func esc(s string) string {
 	return b.String()
 }
 
-// output writes a file beside its destination, then renames it.
 type output struct {
 	f   *os.File
 	dst string
@@ -128,7 +125,6 @@ func newOutput(dst string) (*output, error) {
 	return &output{f: f, dst: dst}, nil
 }
 
-// finish closes the file and moves it into place.
 func (o *output) finish(err error) error {
 	if err == nil {
 		err = o.f.Sync()
@@ -147,7 +143,6 @@ func (o *output) finish(err error) error {
 	return err
 }
 
-// sameFile reports whether two paths are the same file.
 func sameFile(a, b string) bool {
 	if filepath.Clean(a) == filepath.Clean(b) {
 		return true
@@ -168,7 +163,6 @@ func registry() *transfer.Registry {
 
 type outWriter interface{ Write([]byte) (int, error) }
 
-// say writes to the command's output.
 func say(out outWriter, format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
 
 func packCmd(args []string, out outWriter) error {
@@ -190,7 +184,6 @@ func packCmd(args []string, out outWriter) error {
 	if err != nil {
 		return err
 	}
-	// The output and what it replaces are never packed.
 	skip := []string{o.f.Name(), dst}
 	done := false
 	defer func() {
@@ -234,7 +227,6 @@ func packCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// addTree adds a file, or a folder's files recursively.
 func addTree(w *pack.Writer, reg *transfer.Registry, root string, skip []string) (added int, skipped []string, err error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -421,7 +413,6 @@ func unpackCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// shortID is the first 8 characters of an ID.
 func shortID(id string) string {
 	if len(id) > 8 {
 		return safe(id[:8])
@@ -444,10 +435,8 @@ func safe(s string) string {
 	return s
 }
 
-// maxName is the longest name safe allows, given the extension.
 const maxName = 240
 
-// truncate cuts s to at most n bytes on a rune boundary.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -614,7 +603,6 @@ func cosignCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// signersText lists the signers by key prefix.
 func signersText(signers []pack.Signer) string {
 	var parts []string
 	for _, s := range signers {
