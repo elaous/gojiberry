@@ -16,6 +16,7 @@ type Anchor struct {
 	Side Side
 }
 
+// ID is unique; a later mark wins where same-key marks overlap
 type Mark struct {
 	ID         Timestamp
 	Key, Value string

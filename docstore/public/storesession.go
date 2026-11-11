@@ -90,10 +90,9 @@ type sessionRecord struct {
 }
 
 func (r sessionRecord) session() Session {
-	return Session(r)
+	return Session(r) // same fields as sessionRecord: adding one stops this compiling
 }
 
-// same fields as Session: a new one breaks the build
 func recordOf(s Session) sessionRecord {
 	return sessionRecord(s)
 }
@@ -169,8 +168,7 @@ func (m *StoreSessions) recount(ctx context.Context, now time.Time, reap bool) (
 	defer m.mu.Unlock()
 	m.refreshing = false
 	if err == nil {
-		for _, d := range m.during {
-			// what this process did while the scan read
+		for _, d := range m.during { // what this process did while the scan read
 			counts.add(d.s, d.sign)
 		}
 		m.counts, m.counted = counts, now

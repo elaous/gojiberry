@@ -188,6 +188,7 @@ func (u *ui) encUnlockSSH() {
 	e := u.enc
 	transfer.PickFile("", func(_ string, data []byte, err error) {
 		e.run(func(ctx context.Context) error {
+			// key file dropped here, not in the async callback
 			defer clear(data)
 			if err != nil {
 				return err

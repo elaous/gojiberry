@@ -4,9 +4,8 @@ import "strings"
 
 type flowSel struct {
 	anchor, caret int
-	after         bool
-	// the caret is after the breaks at its offset (see Cursor.After)
-	dragging bool
+	after         bool // the caret is after the breaks at its offset (see Cursor.After)
+	dragging      bool
 }
 
 // Hitter is implemented by overlapping objects that take presses.

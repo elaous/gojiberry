@@ -9,6 +9,7 @@ import (
 	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/encstore"
 )
 
+// built from the secret here: nothing is sent anywhere
 func printRecoverySheet(label, secret string) {
 	fp, err := encstore.RecoveryFingerprint(secret)
 	if err != nil {

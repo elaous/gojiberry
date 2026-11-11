@@ -200,8 +200,7 @@ func a11yOutline(id string, hs []a11yHeadingRef, onGoto func(string, int, bool))
 		i := from
 		for i < len(hs) && hs[i].level >= level {
 			h := hs[i]
-			if h.level > level {
-				// a deeper heading with no parent here: nest it where it is
+			if h.level > level { // a deeper heading with no parent here: nest it where it is
 				sub, n := build(i, h.level)
 				items = append(items, xango.El("li", nil, xango.El("ul", nil, sub...)))
 				i = n

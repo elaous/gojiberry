@@ -74,8 +74,7 @@ func (b *Bridge) pullSurfaces() {
 		for id, v := range sf.Read() {
 			b.side.synced[id] = v
 		}
-		for id, v := range recs {
-			// records for elements missing here stay as they are
+		for id, v := range recs { // records for elements missing here stay as they are
 			if _, ok := b.side.synced[id]; !ok {
 				b.side.synced[id] = v
 			}

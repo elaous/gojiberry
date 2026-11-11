@@ -63,10 +63,9 @@ type Store struct {
 	reads, cacheHits, missHits atomic.Int64
 
 	sessions, states atomic.Int64
-	sessionsNet      atomic.Int64
-	// never reset: Sweep keeps what moved during its listing
-	statesNet atomic.Int64
-	sweeping  sync.Mutex
+	sessionsNet      atomic.Int64 // never reset: Sweep keeps what moved during its listing
+	statesNet        atomic.Int64
+	sweeping         sync.Mutex
 }
 
 func New(store docstore.Adapter) (*Store, error) {
@@ -221,8 +220,7 @@ func (s *Store) put(ctx context.Context, k kind, expires time.Time, body func() 
 		return "", err
 	}
 	bucket := k.bucketOf(expires)
-	for range 3 {
-		// an existing name is a collision: never overwrite
+	for range 3 { // an existing name is a collision: never overwrite
 		token, err := k.newToken(bucket)
 		if err != nil {
 			return "", err

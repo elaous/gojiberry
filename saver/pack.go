@@ -429,8 +429,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		}
 		doc.SetFolder(folder)
 		tags := doc.Tags()
-		doc.SetTrashed(0)
-		// catalog and file agree: Trash below sets it in both
+		doc.SetTrashed(0) // catalog and file agree: Trash below sets it in both
 		if have[doc.ID()] {
 			doc.SetID(docfile.NewID()) // a folder's ID: never share it (see above)
 		}

@@ -61,8 +61,7 @@ func IsDocumentKey(key string) bool {
 	if key == "" {
 		return false
 	}
-	lower := strings.ToLower(key)
-	// a backend that folds case would alias them
+	lower := strings.ToLower(key) // a backend that folds case would alias them
 	for _, p := range systemPrefixes {
 		if strings.HasPrefix(lower, p) {
 			return false

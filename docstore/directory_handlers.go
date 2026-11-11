@@ -414,6 +414,7 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	// no-store on every answer, errors too
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

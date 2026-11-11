@@ -111,8 +111,7 @@ func (s *Session) typedRanges() []canvas.TypedRange {
 		}
 	}
 	var out []canvas.TypedRange
-	done := map[crdt.Timestamp]bool{}
-	// an object put in and then filled in is shown once
+	done := map[crdt.Timestamp]bool{} // an object put in and then filled in is shown once
 	for _, t := range live {
 		if done[t.id] {
 			continue

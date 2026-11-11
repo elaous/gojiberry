@@ -90,8 +90,7 @@ func (b *Bridge) pushRecords(want map[string]string) {
 		}
 	}
 	for id := range b.side.synced {
-		if _, ok := want[id]; !ok && b.ownsSideRecord(id) && !b.surfaceOwns(id) {
-			// a surface's record is never deleted, only missing from view
+		if _, ok := want[id]; !ok && b.ownsSideRecord(id) && !b.surfaceOwns(id) { // a surface's record is never deleted, only missing from view
 			b.Doc.Delete(id)
 			delete(b.side.synced, id)
 		}

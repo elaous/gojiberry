@@ -179,8 +179,7 @@ func (o objects) Read() map[string]string {
 		for pos, st := range tv.Table.Styles {
 			rec.Styles = append(rec.Styles, styledCell{pos.Row, pos.Col, st})
 		}
-		slices.SortFunc(rec.Styles, func(a, b styledCell) int {
-			// the same record every time for the same table
+		slices.SortFunc(rec.Styles, func(a, b styledCell) int { // the same record every time for the same table
 			if a.Row != b.Row {
 				return a.Row - b.Row
 			}

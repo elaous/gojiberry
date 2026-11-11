@@ -256,6 +256,7 @@ func (s *Store) checkFirstUse(o Owner) error {
 	return &FirstUseError{Digest: d, Fingerprint: ListFingerprint(d)}
 }
 
+// an error leaves nothing changed; unlock need not stop
 func (s *Store) RecordUse(ctx context.Context, o Owner, device string, now time.Time) error {
 	fp := o.Fingerprint()
 	if fp == "" {

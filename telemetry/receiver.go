@@ -87,6 +87,7 @@ type Reported struct {
 	N     int    `json:"n"`
 }
 
+// k applies to the rounded number: a rare value points at none
 func (c *Counters) Report(k int) []Reported {
 	if k < 1 {
 		k = DefaultK

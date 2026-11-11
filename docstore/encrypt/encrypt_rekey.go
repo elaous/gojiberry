@@ -291,8 +291,7 @@ func (a *Adapter) RekeyAll(ctx context.Context) (int, error) {
 	var errs []error
 	for i, g := range order {
 		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
-			// stopped between two documents: none is left half done
+			errs = append(errs, err) // stopped between two documents: none is left half done
 			break
 		}
 		k, err := a.rekeyGroup(ctx, groups[g])

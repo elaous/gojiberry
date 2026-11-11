@@ -108,6 +108,7 @@ func (s *Sharing) Index(ctx context.Context) (Index, error) {
 	return Index{Seq: rec.Seq, Docs: docs}, nil
 }
 
+// idempotent: a failed SetProtection repeats it
 func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64) error {
 	return s.changeIndex(ctx, func(rec *indexRecord) bool {
 		cur, has := rec.Docs[docID]

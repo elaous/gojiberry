@@ -384,7 +384,7 @@ func (d *AdapterDirectory) checkEnrollToken(user auth.User, token string, now ti
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
-	// only the current key: a retired key may have leaked
+	// only the current key: a challenge under a retired key is refused
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, enrollMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}

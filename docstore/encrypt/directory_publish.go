@@ -42,6 +42,7 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	now := d.now()
 	email := normalizeEmail(user.Email)
 
+	// check the request before anything is written or used
 	var att *docstore.DirectoryAttestation
 	if opt.Attestation != nil {
 		if r.Type != "ssh-ed25519" {

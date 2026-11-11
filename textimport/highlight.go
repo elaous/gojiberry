@@ -382,8 +382,7 @@ func xmlTag(s string) ([]span, string) {
 			}
 			out = append(out, span{s[:end], str})
 			s = s[end:]
-		case '<':
-			// a tag never closed: the next one starts here
+		case '<': // a tag never closed: the next one starts here
 			return out, s
 		default:
 			j := 0

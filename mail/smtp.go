@@ -19,6 +19,7 @@ import (
 
 // TLS modes for SMTP.
 const (
+	// no STARTTLS offered: the send fails, no silent downgrade
 	StartTLS = "starttls"
 	// ImplicitTLS is TLS from the first byte (usually port 465).
 	ImplicitTLS = "tls"

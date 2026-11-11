@@ -112,8 +112,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	if s.auth == nil {
 		return true, 0
 	}
-	if strings.HasPrefix(strings.ToLower(id), "catalog:") {
-		// a backend that folds case would alias them
+	if strings.HasPrefix(strings.ToLower(id), "catalog:") { // a backend that folds case would alias them
 		return s.checkCatalog(r, id)
 	}
 	acl, err := s.loadACL(r.Context(), id)

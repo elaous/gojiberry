@@ -35,9 +35,10 @@ const (
 	frameHead   = 16
 	footerSize  = 80
 
-	kindDocument   = 1
-	kindIndex      = 2
-	kindSignature  = 3
+	kindDocument  = 1
+	kindIndex     = 2
+	kindSignature = 3
+	// kindAttachment only in a version 2 pack
 	kindAttachment = 4
 
 	flagEncrypted = 1

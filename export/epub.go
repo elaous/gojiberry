@@ -13,6 +13,7 @@ func (EPUB) Export(snap Snapshot) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
+	// mimetype first entry, stored uncompressed (reader reads fixed offset)
 	if err := zipMimetype(zw, "application/epub+zip"); err != nil {
 		return nil, err
 	}

@@ -14,15 +14,14 @@ import (
 )
 
 var helpState struct {
-	action helper.Action
-	result string
-	busy   bool
-	msg    string
-	from   int // the selection that was asked about
-	to     int
-	whole  string
-	// offsets mean something only in the whole text
-	replace bool // the answer can replace the selection
+	action  helper.Action
+	result  string
+	busy    bool
+	msg     string
+	from    int // the selection that was asked about
+	to      int
+	whole   string // offsets mean something only in the whole text
+	replace bool   // the answer can replace the selection
 }
 
 func helpLabel(a helper.Action) string {

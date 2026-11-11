@@ -101,8 +101,7 @@ type Manager struct {
 	loginLimiter Limiter                    // nil: /auth/{provider}/login is not limited
 	clientIP     func(*http.Request) string // the client's address for loginLimiter (nil: the remote address)
 
-	missLimiter Limiter
-	// nil: a token that is not a session is not counted
+	missLimiter Limiter                    // nil: a token that is not a session is not counted
 	missIP      func(*http.Request) string // the client's address for missLimiter
 	missMu      sync.Mutex
 	missBlocked map[string]time.Time

@@ -102,6 +102,7 @@ func (s *SQLStore) ByHandle(ctx context.Context, handle []byte) (*Account, error
 	return a, err
 }
 
+// primary key or unique handle refuses a second account
 func (s *SQLStore) Create(ctx context.Context, a *Account) error {
 	data, err := json.Marshal(a)
 	if err != nil {

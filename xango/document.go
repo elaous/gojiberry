@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// CSS-import stylesheets go in the head before Head
 type Document struct {
 	Title string
 	Head  []Node

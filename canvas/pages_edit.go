@@ -422,8 +422,7 @@ func (ps *PageSet) updateNumber(i int, fn func(*PageNumberConfig)) {
 	var c PageNumberConfig
 	cfg, n := ps.ResolvedPageNumber(i)
 	switch prev := ps.latestNumberConfig(i); {
-	case cfg != nil:
-		// numbering is on: copy it, numbered so this page keeps its number
+	case cfg != nil: // numbering is on: copy it, numbered so this page keeps its number
 		c = *cfg
 		c.Start = n
 	case prev != nil: // switched off earlier: turning it on again reuses that look

@@ -174,8 +174,7 @@ func (s *StoreChallenges) Put(ctx context.Context, c Challenge) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	for range 3 {
-		// an existing name is a collision: never overwrite
+	for range 3 { // an existing name is a collision: never overwrite
 		token, err := newToken(bucket)
 		if err != nil {
 			return "", err

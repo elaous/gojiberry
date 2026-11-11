@@ -236,7 +236,7 @@ func formsPanel(u *ui, state *State, flow func() *canvas.TextFlow, redraw, rende
 		nodes = append(nodes, xango.El("p", []xango.Attr{xango.A("id", "forms-message"), xango.A("role", "status")}, xango.Text(u.forms.msg)))
 	}
 
-	// the field in use is held, renewed per change
+	// field in use: held, renewed per change, let go on close
 	if t := u.forms.target; t != nil && !u.claim(fieldKey(t.Name), T("lock.field", "form field"), renderUI) {
 		u.forms.target = nil
 	} else if t == nil {

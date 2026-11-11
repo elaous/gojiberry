@@ -64,6 +64,7 @@ type ErrorGroup struct {
 
 var errorGroups []ErrorGroup
 
+// call once before first render; most specific group first
 func RegisterErrorGroups(g ...ErrorGroup) { errorGroups = append(errorGroups, g...) }
 
 // ExplainError sorts err into a group with a translated message.

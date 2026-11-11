@@ -184,6 +184,7 @@ func (u *Update) Norm() float64 {
 	return math.Sqrt(s)
 }
 
+// Clip bounds what any update can reveal or break
 func (u *Update) Clip(max float64) {
 	n := u.Norm()
 	if n <= max || n == 0 || max <= 0 {

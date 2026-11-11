@@ -13,6 +13,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
+// no key read; audit event carries no name or id
 func runOperatorCommand(ctx context.Context, adapter docstore.Adapter, args []string, stdout, stderr io.Writer) (handled bool, code int) {
 	if len(args) == 0 || (args[0] != "backup" && args[0] != "restore") {
 		return false, 0

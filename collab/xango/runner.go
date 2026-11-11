@@ -43,8 +43,7 @@ func (r *runner) do(f func()) {
 }
 
 func (r *runner) loop() {
-	defer func() { r.sess.Close() }()
-	// the loop owns the session, which Repair may replace
+	defer func() { r.sess.Close() }() // the loop owns the session, which Repair may replace
 	interval := 40 * time.Millisecond
 	if iv := r.props.Load().Interval; iv > 0 {
 		interval = iv
@@ -65,11 +64,9 @@ func (r *runner) loop() {
 				return // stopped while waiting for the canvas
 			default:
 			}
-			s := r.sess
-			// Poll may repair the session and replace what is inside it
+			s := r.sess // Poll may repair the session and replace what is inside it
 			changed := s.Poll()
-			if s.Role.CanEdit() {
-				// a viewer's or commenter's surface records would be refused
+			if s.Role.CanEdit() { // a viewer's or commenter's surface records would be refused
 				s.Bridge.SyncSurfaces()
 			}
 			redraw := changed

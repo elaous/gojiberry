@@ -302,8 +302,7 @@ func (s *Service) headers(next http.Handler) http.Handler {
 		if d := s.cfg.RequestTimeout; d > 0 {
 			rc := http.NewResponseController(w)
 			now := time.Now()
-			_ = rc.SetReadDeadline(now.Add(d))
-			// not supported by every writer: server timeouts apply then
+			_ = rc.SetReadDeadline(now.Add(d)) // not supported by every writer: server timeouts apply then
 			_ = rc.SetWriteDeadline(now.Add(2 * d))
 		}
 		h := w.Header()

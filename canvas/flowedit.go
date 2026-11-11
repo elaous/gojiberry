@@ -113,8 +113,7 @@ func (f *TextFlow) Slice(from, to int) []Item {
 func (f *TextFlow) Replace(edits []Edit) {
 	f.materialize()
 	es := slices.Clone(edits)
-	slices.SortStableFunc(es, func(a, b Edit) int {
-		// last first; at one offset the side behind the breaks is later
+	slices.SortStableFunc(es, func(a, b Edit) int { // last first; at one offset the side behind the breaks is later
 		if a.From == b.From && a.AfterOps != b.AfterOps {
 			if a.AfterOps {
 				return -1

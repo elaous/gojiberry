@@ -186,6 +186,7 @@ func parseHunspellCondition(condition string) []hunspellCondMatcher {
 	if condition == "" || condition == "0" {
 		return nil
 	}
+	// iterate by rune, not byte
 	runes := []rune(condition)
 	var out []hunspellCondMatcher
 	for i := 0; i < len(runes); i++ {

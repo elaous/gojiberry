@@ -134,8 +134,7 @@ func (s *Server) handlePresence(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Lock()
 		now := s.now()
-		for id, e := range s.presence {
-			// a poster that never polls must not grow the map
+		for id, e := range s.presence { // a poster that never polls must not grow the map
 			if now.Sub(e.lastSeen) > presenceTTL {
 				delete(s.presence, id)
 			}

@@ -170,8 +170,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 	if vs, err := s.Versions(ctx, target, id); err == nil {
 		kept := 0
 		meta, _ := s.loadMeta(ctx, t, id)
-		for _, v := range vs {
-			// newest first; a pinned snapshot is never dropped or counted
+		for _, v := range vs { // newest first; a pinned snapshot is never dropped or counted
 			if v.Pinned {
 				continue
 			}
@@ -402,8 +401,7 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 		if err := s.touch(ctx, t, cat, id, &e, later, func(d *docfile.Document) { d.SetName(name) }); err != nil {
 			return err
 		}
-		if !e.confidential() {
-			// the catalog lists the placeholder: the name is in the document
+		if !e.confidential() { // the catalog lists the placeholder: the name is in the document
 			e.Name = name
 		}
 		cat.Docs[id] = e

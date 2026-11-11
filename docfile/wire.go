@@ -131,6 +131,7 @@ func unmarshalWire(m *message, b []byte, v reflect.Value) error {
 		case f.kind != kMsg && typ == scalarWire(f.kind):
 			used, err = readScalar(f.kind, typ, b, v.Field(f.index), f.repeated)
 		default:
+			// field of another type: left out like an unknown one
 			used = wire.ConsumeFieldValue(num, typ, b)
 		}
 		if err != nil {

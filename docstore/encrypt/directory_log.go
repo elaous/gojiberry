@@ -88,8 +88,7 @@ func SignLogEntry(s DirectorySigner, e LogEntry) LogEntry {
 func logHash(e LogEntry) string {
 	fields := []any{"gojiberry-directory-log-v2", e.Seq, e.Prev, e.At, e.Op, e.Address, e.Fingerprint, e.Kid,
 		e.Ref, e.OwnerPub, e.OwnerSig, e.ProofSig, e.OpTime, e.OwnerPrev}
-	if e.OwnerV != 0 || e.LabelHash != "" {
-		// entries made before the label was signed keep their hash
+	if e.OwnerV != 0 || e.LabelHash != "" { // entries made before the label was signed keep their hash
 		fields[0] = "gojiberry-directory-log-v3"
 		fields = append(fields, e.OwnerV, e.LabelHash)
 	}
@@ -142,8 +141,7 @@ func logBackoff(lost int) time.Duration {
 }
 
 func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.Time) (int64, error) {
-	lost := 0
-	// rounds lost to another appender; catching up a lagging head is not
+	lost := 0 // rounds lost to another appender; catching up a lagging head is not
 	for lost < maxLogRounds {
 		head, headDigest, err := d.readLogHead(ctx)
 		if err != nil {

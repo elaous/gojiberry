@@ -20,7 +20,7 @@ type Geocoder interface {
 type Nominatim struct {
 	Base      string
 	Client    *http.Client // nil is http.DefaultClient
-	UserAgent string
+	UserAgent string       // a browser cannot change it; the page is the referrer
 }
 
 const maxAnswer = 1 << 20

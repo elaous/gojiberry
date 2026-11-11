@@ -111,8 +111,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.ensureCounters(ctx)
-	// counters are for eviction only: a report is taken regardless
+	s.ensureCounters(ctx) // counters are for eviction only: a report is taken regardless
 	var rep Report
 	notify := false
 	needEvict, stored, err := func() (bool, string, error) {
@@ -199,8 +198,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 			if salt, ok := valid(d.Data); ok {
 				return salt, nil
 			}
-			prev = docstore.Digest(d.Data)
-		// damaged: replace exactly that
+			prev = docstore.Digest(d.Data) // damaged: replace exactly that
 		case errors.Is(err, docstore.ErrNotFound):
 		default:
 			return nil, err

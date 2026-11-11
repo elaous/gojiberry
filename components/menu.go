@@ -107,6 +107,7 @@ func menuItem(it MenuItem, onClose func()) xango.Node {
 			}
 		}
 		attrs = append(attrs, xango.A("tabindex", "0"), xango.On("click", func(xango.Event) { choose() }),
+			// Enter and Space choose: a menu entry is not a button
 			xango.On("keydown", func(e xango.Event) { menuItemKey(e, choose) }))
 	}
 	if it.Checked {

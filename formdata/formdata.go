@@ -95,6 +95,7 @@ func JSON(fields []Field) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// formula-looking cells (= + - @ tab CR) get a leading quote
 func CSV(fields []Field) ([]byte, error) {
 	keys := Keys(fields)
 	row := make([]string, len(fields))

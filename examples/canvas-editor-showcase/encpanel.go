@@ -50,10 +50,9 @@ type encUI struct {
 	restoreRecover        string // the recovery key typed to restore with
 	firstUse              *encstore.FirstUseError
 	rekeyDone, rekeyTotal int
-	checkRecovery         string
-	// never kept past the check
-	checkMsg string // the answer to the last check
-	checkOK  bool
+	checkRecovery         string // never kept past the check
+	checkMsg              string // the answer to the last check
+	checkOK               bool
 
 	sharedFor       string
 	docConfidential bool

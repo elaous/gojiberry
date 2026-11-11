@@ -227,8 +227,7 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 		return ErrSessionsFull
 	}
 	ms := &memSession{Session: s, key: key}
-	if old, ok := m.sessions[key]; ok {
-		// same key again: replace, do not double count
+	if old, ok := m.sessions[key]; ok { // same key again: replace, do not double count
 		m.dropLocked(old.key)
 	}
 	m.sessions[key] = ms

@@ -391,8 +391,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	}
 	stored = true
 	s.set(func() {
-		if s.target == target {
-			// not if the user has moved on to another target meanwhile
+		if s.target == target { // not if the user has moved on to another target meanwhile
 			s.id, s.base = e.ID, e.Updated
 		}
 	})

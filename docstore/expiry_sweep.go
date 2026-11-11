@@ -102,8 +102,7 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 			var found bool
 			found, rerr = e.purgeLocked(ctx, id, true)
 			if errors.Is(rerr, errRenewed) {
-				rerr = nil
-				// another process renewed it: live, not an error
+				rerr = nil // another process renewed it: live, not an error
 			} else if rerr == nil && found {
 				deleted++
 			}

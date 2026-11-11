@@ -112,6 +112,7 @@ func (h *handler) pick(name string, mod time.Time, accept string) (*variant, err
 		if !accepts(accept, c.enc) {
 			continue
 		}
+		// a sibling older than its file is stale: skipped, never served
 		if st, err := fs.Stat(h.fsys, name+c.ext); err == nil && !st.IsDir() && !st.ModTime().Before(mod) {
 			return h.load(name+c.ext, c.enc, ctype, st.ModTime(), nil)
 		}

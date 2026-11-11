@@ -109,8 +109,7 @@ func CaptionEditor(p CaptionEditorProps) xango.Node {
 				xango.El("th", []xango.Attr{xango.A("scope", "col")}, xango.Text(tr("cap.text", "Caption"))))),
 			xango.El("tbody", nil, rows...)))
 	}
-	cur := p.Draft
-	// the three fields share it: typing in one keeps the others
+	cur := p.Draft // the three fields share it: typing in one keeps the others
 	set := func(f func(*CaptionDraft, string)) func(string) {
 		return func(v string) {
 			f(&cur, v)

@@ -161,6 +161,7 @@ func (r *Remote) Load(ctx context.Context, lang string) (*Dictionary, error) {
 	r.flight[lang] = call
 	r.mu.Unlock()
 
+	// load continues if its starter gives up: others may wait
 	go func() {
 		d, err := r.fetch(context.WithoutCancel(ctx), lang)
 		r.mu.Lock()

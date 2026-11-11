@@ -52,8 +52,7 @@ func (t *Table) SyncFields() {
 
 func (t *Table) syncField(row, col int, f *FormFieldObject) {
 	words := f.Words()
-	if isFormula(words) {
-		// a label such as "=x" must not become a formula
+	if isFormula(words) { // a label such as "=x" must not become a formula
 		words = "\\" + words
 	}
 	t.Cells[row][col] = words

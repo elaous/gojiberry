@@ -117,8 +117,7 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		s.bytes.abort(bytesWin)
 		return 0, err
 	}
-	s.bytes.set(bytesWin, listed)
-	// version snapshots count with their documents
+	s.bytes.set(bytesWin, listed) // version snapshots count with their documents
 	live := make(map[string]bool, len(listed))
 	for id, e := range listed {
 		if e.doc > 0 {

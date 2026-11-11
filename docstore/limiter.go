@@ -79,9 +79,8 @@ type RateLimiter struct {
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 
-	mu      sync.Mutex
-	buckets map[string]*list.Element
-	// value *bucket; ordered by last use, newest first
+	mu        sync.Mutex
+	buckets   map[string]*list.Element // value *bucket; ordered by last use, newest first
 	order     *list.List
 	lastSweep time.Time
 }
@@ -416,8 +415,7 @@ func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, max
 			case gone:
 				out.Deleted++
 				out.Evicted++
-				if k.full != math.MaxInt64 && k.full > now.UnixNano() {
-					// an unreadable record's date is unknown: not counted
+				if k.full != math.MaxInt64 && k.full > now.UnixNano() { // an unreadable record's date is unknown: not counted
 					out.EvictedLive++
 				}
 			}

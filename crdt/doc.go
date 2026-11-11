@@ -180,7 +180,7 @@ func (d *Doc) applyLWW(op Op) {
 func (d *Doc) applyCharCRDT(op Op) {
 	text := d.textFor(op.Block.ID)
 	for _, c := range op.CharOps {
-		d.observe(c.ID)
+		d.observe(c.ID) // keep later local writes after everything seen
 		if c.Mark != nil {
 			d.observe(c.Mark.ID)
 		}

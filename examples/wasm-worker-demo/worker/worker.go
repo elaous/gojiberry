@@ -31,6 +31,7 @@ func main() {
 		worker.PostMessage(map[string]any{"n": n, "count": countPrimes(n)})
 	})
 
+	// first PostMessage can arrive before instantiation: signal readiness
 	worker.PostMessage(map[string]any{"ready": true})
 
 	select {} // keep the worker alive to receive further messages

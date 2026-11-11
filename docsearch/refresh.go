@@ -46,7 +46,6 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 				delete(live, m.ID)
 				continue
 			}
-			// never keep stale text for a document that no longer reads
 			r.Skipped = append(r.Skipped, m.ID)
 			continue
 		}
@@ -55,7 +54,7 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 			if _, had := ix.docs[m.ID]; had {
 				r.Gone = append(r.Gone, m.ID)
 			}
-			delete(ix.docs, m.ID)
+			delete(ix.docs, m.ID) // never keep stale text for a document that no longer reads
 			r.Skipped = append(r.Skipped, m.ID)
 			continue
 		}

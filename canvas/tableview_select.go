@@ -59,8 +59,7 @@ func (v *TableView) columnMenu(c int) []MenuItem {
 
 func (v *TableView) rowMenu(r int) []MenuItem {
 	last := v.Table.Rows() - 1
-	header := r == 0
-	// the header cannot move, gain a row above it, or be deleted
+	header := r == 0 // the header cannot move, gain a row above it, or be deleted
 	sel := func(i int) { v.sel = Selection{SelRow, i} }
 	return []MenuItem{
 		{Label: "Insert row above", Disabled: header, Action: v.apply(func(t *Table) { t.InsertRow(r); v.sel = Selection{} })},

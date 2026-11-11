@@ -122,6 +122,7 @@ func run(ctx context.Context, onListen func(net.Addr)) error {
 	go func() {
 		defer close(done)
 		<-ctx.Done()
+		// refuse writes, end streams, finish in-flight, then save
 		h.Stop()
 		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

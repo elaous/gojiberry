@@ -14,6 +14,7 @@ import (
 	"unicode"
 )
 
+// native builds set registerExport
 var registerExport func(*transfer.Registry)
 
 // Shell runs console commands on one target of a Saver.

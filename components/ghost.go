@@ -9,10 +9,9 @@ import (
 type GhostAction int
 
 const (
-	GhostNone GhostAction = iota
-	// the key is not for the ghost text: let it through
-	GhostAccept  // insert Suffix at the caret
-	GhostDismiss // hide it
+	GhostNone    GhostAction = iota // the key is not for the ghost text: let it through
+	GhostAccept                     // insert Suffix at the caret
+	GhostDismiss                    // hide it
 )
 
 // GhostState is the suggestion being shown, if any.

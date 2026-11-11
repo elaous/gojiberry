@@ -391,8 +391,7 @@ func main() {
 		a, ok := t.Adapter.(*docstore.HTTPAdapter)
 		return a, u.saver.ID(), ok
 	}
-	if tok := takeFragment(); tok != "" {
-		// offered in the People tab, never applied by itself
+	if tok := takeFragment(); tok != "" { // offered in the People tab, never applied by itself
 		u.people.links.incoming, u.tab = tok, "people"
 	}
 	u.speech = newSpeech(func() { renderUI() })

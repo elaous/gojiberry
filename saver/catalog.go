@@ -415,7 +415,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		out.Docs[id] = entry
 	}
-	// a folder with no parent, or in a cycle, goes top level
+	// a folder missing its parent, or in a cycle, goes top level
 	for id, f := range out.Folders {
 		if _, ok := out.Folders[f.Parent]; f.Parent != "" && !ok || out.depth(id) > MaxFolderDepth+1 {
 			f.Parent = ""

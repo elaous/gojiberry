@@ -39,6 +39,7 @@ func main() {
 
 	store := canvas.NewStore(db)
 
+	// nil Reloader outside dev: Wrap is a no-op, Handler 404s
 	var reloader *devreload.Reloader
 	if os.Getenv("DEV") == "1" {
 		reloader = devreload.New()

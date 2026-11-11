@@ -25,12 +25,11 @@ type Seal struct {
 }
 
 type Link struct {
-	From  string  `json:"from"` // digest of the list before
-	To    []Owner `json:"to"`   // the list after
-	Nonce string  `json:"nonce,omitempty"`
-	// hex, signed with the lists; empty on links made before it existed
-	Signer string `json:"signer"`
-	Sig    string `json:"sig"`
+	From   string  `json:"from"`            // digest of the list before
+	To     []Owner `json:"to"`              // the list after
+	Nonce  string  `json:"nonce,omitempty"` // hex, signed with the lists; empty on links made before it existed
+	Signer string  `json:"signer"`
+	Sig    string  `json:"sig"`
 }
 
 func ownersDigest(list []Owner) string {

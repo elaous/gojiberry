@@ -374,6 +374,7 @@ func (s *Service) downloadDoc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="document"`)
 	s.setExpires(ctx, w, docID)
+	// edit-link holders may be another browser: the view link is theirs too
 	var meta docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err == nil && found && meta.ViewID != "" {
 		w.Header().Set("X-Gojiberry-View-Id", meta.ViewID)

@@ -644,8 +644,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			writePermissionError(w, status)
 			return
 		}
-		actor := s.auditActor(r, id)
-		// before the delete takes the access list with it
+		actor := s.auditActor(r, id) // before the delete takes the access list with it
 		done := s.opStart(r.Context(), "delete")
 		err := s.adapter.Delete(r.Context(), id)
 		done(err, -1)

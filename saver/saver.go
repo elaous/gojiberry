@@ -179,8 +179,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	history := doc.History
 	doc.History = nil
 	var out Entry
-	forced := false
-	// the in-lock read found a level the first read did not
+	forced := false // the in-lock read found a level the first read did not
 	for attempt := 0; ; attempt++ {
 		prechecked, rekeyed := false, false
 		if s.Rekey != nil {
@@ -216,8 +215,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 		}
 		err := s.saveLocked(ctx, target, c, doc, history, id, e2ee, prechecked, rekeyed, &out)
 		if errors.Is(err, errNeedRekey) && attempt < 2 {
-			forced = true
-			// the level changed since it was read: start over, re-keyed
+			forced = true // the level changed since it was read: start over, re-keyed
 			continue
 		}
 		if errors.Is(err, errNeedRekey) {

@@ -39,6 +39,7 @@ type Document struct {
 	// Styles limits the registered stylesheets: nil means all, empty means none.
 	Styles []string
 }
+    CSS-import stylesheets go in the head before Head
 
 func (d Document) Render() Node
     Render assembles the document into a single <html> Node tree.

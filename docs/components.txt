@@ -182,6 +182,8 @@ func RadioGroup(props RadioGroupProps) xango.Node
 
 func Recipients(p RecipientsProps) xango.Node
 func RegisterErrorGroups(g ...ErrorGroup)
+    call once before first render; most specific group first
+
 func RemovedNotice(files int) string
 func Saver(props SaverProps) xango.Node
 func Search(props SearchProps) xango.Node
@@ -1048,10 +1050,9 @@ type GhostAction int
     GhostAction is what a key did to the ghost text.
 
 const (
-	GhostNone GhostAction = iota
-	// the key is not for the ghost text: let it through
-	GhostAccept  // insert Suffix at the caret
-	GhostDismiss // hide it
+	GhostNone    GhostAction = iota // the key is not for the ghost text: let it through
+	GhostAccept                     // insert Suffix at the caret
+	GhostDismiss                    // hide it
 )
 type GhostState struct {
 	Word, Suffix string
