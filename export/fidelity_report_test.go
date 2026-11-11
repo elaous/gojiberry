@@ -29,7 +29,6 @@ func rawOne(t *testing.T, r *transfer.Registry, format string, d docfile.Documen
 	return data
 }
 
-// everything is one document that uses every feature.
 func everything() docfile.Document {
 	d := docfile.Document{Title: "Everything"}
 	d.SetLanguage("de")
@@ -143,7 +142,6 @@ func TestFidelityReportNamedExamples(t *testing.T) {
 			t.Errorf("%s / %s: got %+v (listed %v), want %s %q", c.format, c.f, l, ok, c.t, c.note)
 		}
 	}
-	// What is kept is not listed.
 	for _, c := range []struct {
 		format string
 		f      Feature
@@ -179,7 +177,7 @@ func TestContentLostMeansTheTextIsNotInTheFile(t *testing.T) {
 		for f, word := range words {
 			e := exportMatrix[format][f]
 			out := string(exportOne(t, r, format, pairs[f].with))
-			if format == "pdf" { // the text of a PDF is drawn in a compressed stream
+			if format == "pdf" {
 				out, _ = pdftext.ExtractBytes(rawOne(t, r, "pdf", pairs[f].with))
 			}
 			has := strings.Contains(out, word)
@@ -217,7 +215,6 @@ func TestAccessibilityDataIsInTheFileWhereTheTableSaysKept(t *testing.T) {
 			}
 		}
 	}
-	// Word keeps them in its parts.
 	docx := string(unzipEntry(t, rawOne(t, r, "docx", pairs[FeatImageAlt].with), "word/document.xml"))
 	if !strings.Contains(docx, `descr="A blue dot"`) {
 		t.Errorf("docx: the alternative text is not in the picture's description: %s", docx)

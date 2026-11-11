@@ -126,13 +126,13 @@ const (
 	NoteGlyph        = "glyph"          // a check box is written as a character
 	NoteRuleLine     = "rule-line"      // a rule is a line of dash characters
 	NoteNotes        = "notes"          // footnotes become numbers with a Notes list at the end
-	NoteBullets      = "bullets"        // list markers are written as characters, not as a real list
-	NoteMediaText    = "media-text"     // a clip is written as a link with its transcript as text, not embedded
-	NoteCaptionWords = "caption-words"  // the caption track is not written; its words are the transcript
+	NoteBullets      = "bullets"        // List markers are written as characters.
+	NoteMediaText    = "media-text"     // A clip is written as a link with its transcript.
+	NoteCaptionWords = "caption-words"  // The caption track is not written.
 	NoteAltText      = "alt-text"       // an equation is written as its text alternative, not typeset
-	NoteLongDescText = "long-desc-text" // a long description is text after the picture, not linked to it
-	NoteFormText     = "form-text"      // a form field is written as its label and what is in it, not as a field
-	NoteFormControl  = "form-control"   // a form field is an HTML control; read back it is its label and value as text
+	NoteLongDescText = "long-desc-text" // A long description is text after the picture.
+	NoteFormText     = "form-text"      // A form field is written as its label and value.
+	NoteFormControl  = "form-control"   // A form field is an HTML control.
 )
 
 type entry struct {

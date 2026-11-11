@@ -27,7 +27,7 @@ func TestFirstPageLayoutRoundTripsThroughMeta(t *testing.T) {
 func TestPDFFirstPageHasItsOwnHeaderAndFooter(t *testing.T) {
 	snap := longSnapshot(3)
 	snap.Header, snap.Footer = "Running", "Page {page} of {pages}"
-	snap.FirstDiffers, snap.FirstHeader = true, "Title page" // no footer on the first page
+	snap.FirstDiffers, snap.FirstHeader = true, "Title page"
 	data, err := PDF{}.Export(snap)
 	if err != nil {
 		t.Fatal(err)

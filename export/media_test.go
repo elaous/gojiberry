@@ -51,7 +51,7 @@ func TestFidelityReportSaysWhereAClipIsNotEmbedded(t *testing.T) {
 		for _, l := range Fidelity(format, d).Losses {
 			got[l.Feature] = l
 		}
-		if format == "html" { // HTML embeds the clip with its caption track: nothing is lost
+		if format == "html" {
 			if _, ok := got[FeatMedia]; ok {
 				t.Errorf("html: media is reported as a loss: %+v", got[FeatMedia])
 			}

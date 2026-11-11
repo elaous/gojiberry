@@ -19,11 +19,10 @@ type DOCX struct{}
 const (
 	docxNS      = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"`
 	docxEMU     = 9525
-	docxMaxEMU  = 6 * 914400 // six inches: a picture is scaled to fit the text width
+	docxMaxEMU  = 6 * 914400
 	docxHeading = "Heading"
 )
 
-// docxBuilder collects the parts of the package.
 type docxBuilder struct {
 	body    strings.Builder
 	rels    []string // relationship elements
@@ -104,7 +103,7 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 		return err
 	}
 	const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n"
-	var hfRels [6]string // the relationship ids of the header, the footer, and those of the first page and the even pages
+	var hfRels [6]string
 	var hfTypes string
 	var hfParts []struct{ name, content string }
 	hfList := []struct{ kind, text, num string }{{"header", snap.Header, "1"}, {"footer", snap.Footer, "1"},
@@ -147,7 +146,6 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` + strings.Join(b.rels, "") + `</Relationships>`},
 	}
 	if th.background != "" || snap.EvenDiffers {
-		// Word draws a page colour only when the document asks for the background.
 		var settings string
 		if th.background != "" {
 			settings += `<w:displayBackgroundShape/>`
@@ -190,7 +188,6 @@ func (DOCX) Export(snap Snapshot) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// docxSection is the section properties.
 func docxSection(snap Snapshot, hf [6]string) string {
 	px := func(v float64) int { return int(v * 15) } // twips
 	refs := ""
@@ -227,13 +224,11 @@ func docxSection(snap Snapshot, hf [6]string) string {
 		refs, px(snap.PageWidth), px(snap.PageHeight), px(snap.MarginTop), px(snap.MarginRight), px(snap.MarginBottom), px(snap.MarginLeft), title)
 }
 
-// docxField is a Word field such as PAGE or NUMPAGES.
 func docxField(instr, cached string) string {
 	return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ` + instr + ` </w:instrText></w:r>` +
 		`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>` + cached + `</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`
 }
 
-// docxDecorRuns writes a header or footer's text as runs.
 func docxDecorRuns(text, title string) string {
 	var sb strings.Builder
 	lit := func(s string) {
@@ -267,7 +262,6 @@ func docxDecorRuns(text, title string) string {
 	return sb.String()
 }
 
-// docxHeaderFooter is the XML of a header or footer part.
 func docxHeaderFooter(snap Snapshot, kind, text string) string {
 	width := int((snap.PageWidth - snap.MarginLeft - snap.MarginRight) * 15)
 	l, c, r := decorParts(text)
@@ -281,7 +275,6 @@ func docxHeaderFooter(snap Snapshot, kind, text string) string {
 		`</w:tabs><w:spacing w:after="0"/></w:pPr>` + runs + `</w:p></w:` + root + `>`
 }
 
-// tableOfContents writes the table of contents.
 func (b *docxBuilder) tableOfContents(snap Snapshot) {
 	if !snap.TOC {
 		return
@@ -316,7 +309,6 @@ func (b *docxBuilder) tableOfContents(snap Snapshot) {
 	w.WriteString(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`)
 }
 
-// numbering is numbering.xml.
 func (b *docxBuilder) numbering() string {
 	var sb strings.Builder
 	sb.WriteString(`<w:numbering ` + docxNS + `>`)
@@ -353,7 +345,6 @@ const docxStyles = `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordpro
 <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>`
 
-// Footnote bookmark ids start here, clear of the others.
 const (
 	noteBookmarkBase = 1 << 20
 	noteRefBookmarks = 1 << 19
@@ -395,7 +386,7 @@ func (b *docxBuilder) block(blk Block) {
 	case BulletItem:
 		ppr = `<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="` + strconv.Itoa(min(blk.Level, 8)) + `"/><w:numId w:val="1"/></w:numPr>`
 	case NumberedItem:
-		if (blk.Level == 0 && blk.NumberedIndex <= 1) || len(b.nums) == 0 { // a new list restarts at 1; a nested item stays in its list
+		if (blk.Level == 0 && blk.NumberedIndex <= 1) || len(b.nums) == 0 { // A new list restarts at 1.
 			b.nextNum++
 			b.nums = append(b.nums, b.nextNum+1) // numId 1 is the bullets
 		}
@@ -560,7 +551,6 @@ func gridSpan(n int) string {
 
 type cellPos struct{ row, col int }
 
-// ownerOf finds the merged cell that covers (r, c).
 func ownerOf(cells []Block, rows, cols, r, c int) cellPos {
 	for or := r; or >= 0; or-- {
 		for oc := c; oc >= 0; oc-- {
@@ -573,7 +563,6 @@ func ownerOf(cells []Block, rows, cols, r, c int) cellPos {
 	return cellPos{r, c}
 }
 
-// picture embeds a data URL image.
 func (b *docxBuilder) picture(blk Block) string {
 	head, b64, ok := strings.Cut(blk.ImageSrc, ",")
 	if !ok || !strings.HasPrefix(head, "data:") || !strings.HasSuffix(head, ";base64") {
@@ -617,7 +606,6 @@ func (b *docxBuilder) picture(blk Block) string {
 		cx, cy, b.docPr, b.docPr, descr, docTitle, b.docPr, name, descr, id, cx, cy)
 }
 
-// hexFill reads "#rrggbb" as six hex digits.
 func hexFill(c string) (string, bool) {
 	c = strings.TrimPrefix(c, "#")
 	if len(c) != 6 {
@@ -631,7 +619,6 @@ func hexFill(c string) (string, bool) {
 	return strings.ToLower(c), true
 }
 
-// docxCoreLanguage is the document language for the properties.
 func docxCoreLanguage(lang string) string {
 	if lang == "" {
 		return ""
@@ -639,7 +626,6 @@ func docxCoreLanguage(lang string) string {
 	return "<dc:language>" + esc(lang) + "</dc:language>"
 }
 
-// docxStylesFor is docxStyles with the document's language.
 func docxStylesFor(lang string, th docTheme) string {
 	out := docxStyles
 	if th.text != "" || th.bodyPt > 0 {
@@ -659,7 +645,6 @@ func docxStylesFor(lang string, th docTheme) string {
 	return out
 }
 
-// docxBackground is the page colour of the theme.
 func docxBackground(th docTheme) string {
 	if th.background == "" {
 		return ""

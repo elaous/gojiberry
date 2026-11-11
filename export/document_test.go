@@ -258,10 +258,9 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 		t.Errorf("docx styles/core lack the language")
 	}
 	pdf, err := PDF{}.Export(snap)
-	if err != nil || !strings.Contains(string(pdf), "/Title <FEFF0052006100700070006F00720074>") { // "Rapport" in UTF-16
+	if err != nil || !strings.Contains(string(pdf), "/Title <FEFF0052006100700070006F00720074>") {
 		t.Errorf("the PDF information has no title: %v", err)
 	}
-	// none set: as before
 	plain := FromDocument(docfile.Document{Title: "T"})
 	if h, _ := (HTML{}).Export(plain); strings.Contains(string(h), "lang=") {
 		t.Errorf("a document with no language gained one:\n%s", h)
@@ -269,7 +268,6 @@ func TestExportsCarryTheDocumentLanguageAndTitle(t *testing.T) {
 	if e, _ := (EPUB{}).Export(plain); !strings.Contains(part(e, "OEBPS/content.opf"), "<dc:language>en</dc:language>") {
 		t.Error("the EPUB default language changed")
 	}
-	// an invalid tag is not kept
 	doc.SetLanguage("not a tag")
 	if doc.Language() != "fr-CA" {
 		t.Errorf("an invalid tag replaced the language: %q", doc.Language())
@@ -407,7 +405,7 @@ func TestHTMLFormFieldsReadBackFromTheirPage(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("read back:\n got %+v\nwant %+v", got, want)
 	}
-	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 { // the send button
+	if _, s, _ := htmlimport.ImportReport(page); s.Forms != 1 {
 		t.Errorf("skipped %+v", s)
 	}
 }

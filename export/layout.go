@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// Print layout shared by the paged formats: the fields of a running header or footer, and the outline
-// a table of contents is made from.
-
-// defaultTOCTitle is the heading of a table of contents when the snapshot names none.
 const defaultTOCTitle = "Contents"
 
 func (s Snapshot) tocTitle() string {
@@ -18,28 +14,23 @@ func (s Snapshot) tocTitle() string {
 	return defaultTOCTitle
 }
 
-// Field values of a header or footer text.
 const (
 	fieldPage  = "{page}"
 	fieldPages = "{pages}"
 	fieldTitle = "{title}"
 )
 
-// FillFields replaces the fields of a header or footer text: {page} by the page number, {pages} by the
-// page count and {title} by the title. Text that is not a field is kept as it is.
+// FillFields replaces the {page}, {pages} and {title} fields.
 func FillFields(text string, page, pages int, title string) string {
 	return strings.NewReplacer(fieldPage, strconv.Itoa(page), fieldPages, strconv.Itoa(pages), fieldTitle, title).Replace(text)
 }
 
-// RunningParts is a header or footer text for one page as its left, centre and right parts, with the
-// fields filled in. A screen that draws the sheets uses it so the page shows what the exports print.
+// RunningParts gives a page's running text as three parts.
 func RunningParts(text string, page, pages int, title string) [3]string {
 	l, c, r := decorParts(text)
 	return [3]string{FillFields(l, page, pages, title), FillFields(c, page, pages, title), FillFields(r, page, pages, title)}
 }
 
-// decorParts splits a header or footer text at its tabs into the left, centre and right parts: one part
-// is the centre, two are left and right, three (or more, the rest joined to the third) are all three.
 func decorParts(text string) (left, centre, right string) {
 	parts := strings.SplitN(text, "\t", 3)
 	switch len(parts) {
@@ -51,16 +42,14 @@ func decorParts(text string) (left, centre, right string) {
 	return parts[0], parts[1], strings.ReplaceAll(parts[2], "\t", " ")
 }
 
-// OutlineEntry is one heading of the document: its level (1 to 3), its plain text and the index of its
-// block in the Snapshot.
+// OutlineEntry is one heading: level, text and block index.
 type OutlineEntry struct {
 	Level int
 	Text  string
 	Block int
 }
 
-// Outline lists the document's headings in order, which a table of contents is made from. A heading with
-// no text is left out.
+// Outline lists the document's headings in order.
 func (s Snapshot) Outline() []OutlineEntry {
 	var out []OutlineEntry
 	for i, b := range s.Blocks {
@@ -88,18 +77,13 @@ func (s Snapshot) Outline() []OutlineEntry {
 	return out
 }
 
-// keepRowWithNext says whether table row r (of rows) is kept on the page of the row after it: the header row never
-// stands alone at the foot of a page, and the last row never alone at the head of one (the row before it goes with it).
 func keepRowWithNext(r, rows int) bool {
 	return rows > 1 && (r == 0 || r == rows-2)
 }
 
-// tocHere says the contents go before block i; tocEnd that they go after the last block (when TOCAt is past it).
 func (s Snapshot) tocHere(i int) bool { return s.TOC && s.TOCAt == i }
 func (s Snapshot) tocEnd() bool       { return s.TOC && s.TOCAt >= len(s.Blocks) }
 
-// tocMarks names the bookmark of each heading the contents list, by block index (prefix + number): the headings
-// are written before or after the contents, so their names cannot wait for the contents to be written.
 func tocMarks(snap Snapshot, name func(block int) string) map[int]string {
 	marks := map[int]string{}
 	if !snap.TOC {

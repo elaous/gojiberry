@@ -27,7 +27,7 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 	pages, err := pdftext.ExtractPagesBytes(data)
 	for i := range pages {
-		pages[i] = lineBreaks.ReplaceAllString(pages[i], "$1\n$2") // the extractor joins lines without a space
+		pages[i] = lineBreaks.ReplaceAllString(pages[i], "$1\n$2")
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestPDFNeverLeavesAWidowOrAnOrphanLine(t *testing.T) {
 	}
 	split := 0
 	for pi, txt := range pages {
-		lines := map[string]int{} // paragraph word -> lines of it on this page
+		lines := map[string]int{}
 		for _, line := range strings.Split(txt, "\n") {
 			if f := strings.Fields(line); len(f) > 0 && strings.HasPrefix(f[0], "w") {
 				lines[f[0]]++

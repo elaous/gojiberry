@@ -6,23 +6,7 @@ import (
 	"strings"
 )
 
-// RTF renders a Snapshot to RTF -- the last plain-text format written
-// by hand: RTF is fundamentally ASCII text with backslash "control
-// words" rather than a binary format, so no third-party dependency is
-// needed. Each block becomes its own `{\pard ... \par}` group -- RTF
-// scopes a formatting control word (`\b`, `\i`, ...) to the enclosing
-// `{}` group, so closing a block's own group already resets its
-// formatting for whatever comes after, with no explicit "\b0"-style
-// reset needed. Unlike Markdown/HTML, list items get no real nesting
-// or native list numbering (RTF's own `\pn` list machinery is real
-// complexity this editor's bullet/numbered blocks don't need): a
-// bullet item is a hanging-indent paragraph with a literal `\bullet`
-// character, and a numbered item writes its own literal "N." the same
-// way Markdown already does, both indented by Level. Image blocks
-// don't embed the actual image data (real RTF image embedding is a
-// hex dump of the raw decoded bytes plus width/height in twips -- a
-// meaningfully separate feature, not attempted here) and fall back to
-// the same "[Image]" placeholder PlainText uses.
+// RTF renders a Snapshot to RTF.
 type RTF struct{}
 
 func (RTF) Export(snap Snapshot) ([]byte, error) {
@@ -42,13 +26,6 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 			body.WriteString(`{\pard\i [Image]` + caption + `\par}` + "\n")
 			continue
 		case TableCell:
-			// See Markdown's own TableCell case (markdown.go) for the
-			// same "read the whole table out of snap.Blocks[i:i+n] the
-			// moment this loop reaches its own first cell" shape --
-			// renderRTFTable's own doc comment has the RTF-table
-			// specifics, including real \clmgf/\clmrg/\clvmgf/\clvmrg
-			// merge support (unlike Markdown/PlainText's own disclosed
-			// "no colspan/rowspan representation" gap).
 			if b.TableRow == 0 && b.TableCol == 0 {
 				n := b.TableRows * b.TableCols
 				if n > 0 && i+n <= len(snap.Blocks) && contentWidthTwips > 0 {
@@ -59,10 +36,6 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 			}
 			continue
 		case Code:
-			// \f1 (the fonttbl's own monospace entry) for the verbatim
-			// text -- no inline-run formatting or escaping-of-syntax,
-			// the same "code is content, not markup" treatment every
-			// other format's own code-block case already takes.
 			body.WriteString(`{\pard\f1 ` + escapeRTFText(rawCodeText(b.Segments)) + `\par}` + "\n")
 			continue
 		}
@@ -96,7 +69,6 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		}
 		inner := rtfInline(b.Segments)
 		if b.Note > 0 {
-			// a footnote: the mark in the text links here (bookmark _fnN), and a link at its end goes back to the mark
 			n := strconv.Itoa(b.Note)
 			inner = `{\*\bkmkstart _fn` + n + `}` + inner + `{\*\bkmkend _fn` + n + `} ` +
 				`{\field{\*\fldinst HYPERLINK \\l _fnref` + n + `}{\fldrslt \u8617?}}`
@@ -109,14 +81,11 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 	if snap.tocEnd() {
 		rtfContents(&body, snap, contentWidthTwips, marks)
 	}
-	// The sheet and margins, and the running header and footer (the page number a PAGE field and the
-	// page count a NUMPAGES field).
 	layout := ""
 	if snap.PageWidth > 0 && snap.PageHeight > 0 {
 		layout = fmt.Sprintf(`\paperw%d\paperh%d\margl%d\margr%d\margt%d\margb%d`+"\n",
 			rtfPxToTwips(snap.PageWidth), rtfPxToTwips(snap.PageHeight), rtfPxToTwips(snap.MarginLeft), rtfPxToTwips(snap.MarginRight), rtfPxToTwips(snap.MarginTop), rtfPxToTwips(snap.MarginBottom))
 	}
-	// With facing pages, \headerr and \footerr are the odd pages' and \headerl and \footerl the even pages'.
 	oddH, oddF := "header", "footer"
 	if snap.EvenDiffers {
 		layout += `\facingp` + "\n"
@@ -135,7 +104,6 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		layout += rtfDecor(oddF, snap.Footer, snap.Title, contentWidthTwips) + "\n"
 	}
 	if snap.FirstDiffers {
-		// \titlepg gives the first page its own header and footer (\headerf, \footerf): bare when empty.
 		layout += `\titlepg` + "\n"
 		if snap.FirstHeader != "" {
 			layout += strings.Replace(rtfDecor("header", snap.FirstHeader, snap.Title, contentWidthTwips), `{\header`, `{\headerf`, 1) + "\n"
@@ -150,10 +118,6 @@ func (RTF) Export(snap Snapshot) ([]byte, error) {
 		layout + body.String() + "}\n"), nil
 }
 
-// rtfContents writes the table of contents that starts the document (when the snapshot asks for one and has
-// headings): the title, then an entry for each heading, linked to a bookmark on it, with a PAGEREF field for
-// its page. Word fills the page numbers in when it opens the file (the fields are marked dirty); the cached
-// number is a dash. The bookmark name of each heading (by block index) is in marks, made beforehand (tocMarks).
 func rtfContents(body *strings.Builder, snap Snapshot, width int, marks map[int]string) {
 	if !snap.TOC {
 		return
@@ -179,8 +143,6 @@ func rtfContents(body *strings.Builder, snap Snapshot, width int, marks map[int]
 	body.WriteString(`{\pard\page\par}` + "\n")
 }
 
-// rtfDecor is a header or footer group ("header" or "footer") for a header text with fields: the left,
-// centre and right parts sit on tab stops at the middle and the right edge of the text.
 func rtfDecor(group, text, title string, width int) string {
 	l, c, r := decorParts(text)
 	part := func(s string) string {
@@ -213,32 +175,10 @@ func rtfDecor(group, text, title string, width int) string {
 	return fmt.Sprintf(`{\%s\pard\tqc\tx%d\tqr\tx%d\fs18 `, group, width/2, width) + part(l) + `\tab ` + part(c) + `\tab ` + part(r) + `\par}`
 }
 
-// rtfPxToTwips converts one of Snapshot's own CSS-px geometry values
-// to RTF's own twip unit (1/1440 inch, RTF's universal length unit for
-// everything from cell boundaries to indents) -- 96 CSS px per inch is
-// the same 96dpi convention pxToPt (pdf.go) already assumes for its
-// own px-to-pt conversion, so 1440/96 = 15 twips per px.
 func rtfPxToTwips(px float64) int {
 	return int(px * 15)
 }
 
-// renderRTFTable renders cells -- one table's own full row-major
-// TableRows*TableCols cell slice -- as a real RTF table: one
-// `\trowd`/`\row` group per row, `\cellx<N>` cell boundaries (N
-// cumulative twips from the row's own left edge, contentWidthTwips
-// split evenly across columns -- Snapshot carries no per-column width
-// fractions to preserve instead, the same equal-split simplification
-// renderPlainTextTable's own doc comment already takes), and real
-// \clmgf/\clmrg/\clvmgf/\clvmrg merge control words for a cell whose
-// own tableMergeGrid entry (tablehelpers.go) spans more than one row
-// or column -- unlike
-// Markdown/PlainText, RTF's own table model supports cell merging
-// natively, so this doesn't need to degrade a merge to a blank
-// covered cell. Every `\cellx` still needs a matching `\cell` in the
-// row body regardless of merge role (Word expects one `\cell` per
-// declared column even for a merged-away continuation cell), so a
-// covered cell contributes an empty `\pard\intbl\cell` rather than
-// being skipped outright.
 func renderRTFTable(cells []Block, contentWidthTwips int) string {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	info := tableMergeGrid(cells)
@@ -288,11 +228,6 @@ func renderRTFTable(cells []Block, contentWidthTwips int) string {
 	return sb.String()
 }
 
-// rtfInline renders segs as RTF inline content, wrapping each run in
-// RTF control words (wrapRTFRun) and RTF-escaping plain text
-// (escapeRTFText). A soft line break becomes `\line`, RTF's own
-// same-paragraph line break (distinct from `\par`, which starts a new
-// paragraph).
 func rtfInline(segs []Segment) string {
 	var sb strings.Builder
 	for _, seg := range segs {
@@ -305,20 +240,12 @@ func rtfInline(segs []Segment) string {
 	return sb.String()
 }
 
-// wrapRTFRun wraps text in f's own formatting control words, each run
-// in its own `{}` group (see RTF.Export's own doc comment for why
-// that makes an explicit reset unnecessary). A link becomes a real
-// RTF hyperlink field (`\field`/`\fldinst HYPERLINK`/`\fldrslt`) with
-// the visible text as its own result, formatted the same way any
-// other run's own Format would be -- so a bold link still renders
-// bold.
 func wrapRTFRun(text string, f Format) string {
 	if text == "" {
 		return text
 	}
 	formatted := wrapRTFRunFormatting(text, f)
 	if f.NoteRef > 0 {
-		// the mark of a footnote: a link to the note (bookmark _fnN), itself the target of the note's way back
 		n := strconv.Itoa(f.NoteRef)
 		return `{\*\bkmkstart _fnref` + n + `}{\field{\*\fldinst HYPERLINK \\l _fn` + n + `}{\fldrslt ` + formatted + `}}{\*\bkmkend _fnref` + n + `}`
 	}
@@ -328,12 +255,6 @@ func wrapRTFRun(text string, f Format) string {
 	return formatted
 }
 
-// wrapRTFRunFormatting wraps text in whichever of f's own bold/
-// italic/underline/strikethrough/superscript control words apply,
-// all inside one shared `{}` group -- RTF control words are
-// space-terminated (or terminated by the group's own closing brace),
-// so `\b \i text` inside one group is bold-and-italic together,
-// unlike Markdown's own nested-nesting-per-attribute syntax.
 func wrapRTFRunFormatting(text string, f Format) string {
 	var prefix string
 	if f.Bold {
@@ -360,18 +281,6 @@ func wrapRTFRunFormatting(text string, f Format) string {
 	return "{" + prefix + text + "}"
 }
 
-// escapeRTFText escapes RTF's own three syntactically-significant
-// ASCII characters (a literal backslash/brace would otherwise be
-// parsed as the start of a control word or a group boundary) and
-// encodes every non-ASCII rune as RTF's own `\uN?` Unicode escape --
-// RTF is fundamentally a 7-bit ASCII format, so a literal "café" or
-// "→" byte sequence isn't valid content at all, only ASCII text and
-// backslash-escapes are. N is the codepoint as a signed 16-bit
-// integer (RTF's own convention, however unintuitive for a codepoint
-// past 32767) followed by a plain "?" fallback character for readers
-// that don't understand \u at all -- editor's own rune-based buffer
-// never stores a codepoint needing a surrogate pair, so \u alone is
-// always sufficient here, no surrogate-pair case to handle.
 func escapeRTFText(s string) string {
 	var sb strings.Builder
 	for _, r := range s {
@@ -388,7 +297,6 @@ func escapeRTFText(s string) string {
 	return sb.String()
 }
 
-// rtfBodySize is the default font size in half-points: 24 (12pt), or the theme's body size.
 func rtfBodySize(th docTheme) string {
 	if th.bodyPt > 0 {
 		return strconv.Itoa(int(th.bodyPt*2 + 0.5))
@@ -396,9 +304,6 @@ func rtfBodySize(th docTheme) string {
 	return "24"
 }
 
-// rtfThemeHead is the colour table (text is colour 1, links colour 2: black and the usual blue unless the
-// theme names them) and the control word that starts the text in colour 1, which only a theme with a text
-// colour writes. Link results are set in colour 2.
 func rtfThemeHead(th docTheme) (table, start string) {
 	text, link := th.text, th.link
 	if text == "" {

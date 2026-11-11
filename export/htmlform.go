@@ -6,8 +6,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// htmlFormControl writes a form field as the HTML control for its kind, inside a label, with what was written in it as
-// its value. Nothing submits it: a reader can fill it in and print or copy the page.
 func htmlFormControl(f docfile.FormFieldItem) string {
 	label := escapeHTMLText(strings.TrimSpace(f.Label))
 	name := escapeHTMLAttr(f.Name)
@@ -56,8 +54,6 @@ func htmlFormControl(f docfile.FormFieldItem) string {
 	return "<label>" + label + " " + control + "</label>"
 }
 
-// htmlFormWrap puts the body in a form with a send button when the snapshot has an address for the answers and a form
-// field in its text.
 func htmlFormWrap(snap Snapshot, body string) string {
 	if snap.FormAction == "" || !strings.Contains(body, "<label>") || !hasFormField(snap) {
 		return body

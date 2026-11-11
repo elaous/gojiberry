@@ -38,7 +38,7 @@ func TestMathMLFromTheLinearNotation(t *testing.T) {
 		{"sqrt{x_1^2}", []string{"<msqrt><mrow><msubsup><mi>x</mi><mn>1</mn><mn>2</mn></msubsup></mrow></msqrt>"}},
 		{"sin x + 3.5pi", []string{"<mi>sin</mi>", "<mi>x</mi>", "<mn>3.5</mn>", "<mi>π</mi>"}},
 		{"sum_{i=1}^{n} i", []string{"<mo>∑</mo>"}},
-		{"ab^2", []string{"<mi>a</mi><msup><mi>b</mi><mn>2</mn></msup>"}}, // the script belongs to the last letter
+		{"ab^2", []string{"<mi>a</mi><msup><mi>b</mi><mn>2</mn></msup>"}},
 		{"a < b & c > \"d\"", []string{"<mo>&lt;</mo>", "<mo>&amp;</mo>", "<mo>&gt;</mo>", `<mo>"</mo>`}},
 	} {
 		got := MathML(tc.formula, "alt")
@@ -65,7 +65,7 @@ func TestEquationHasATextAlternativeInEveryExport(t *testing.T) {
 		Blocks: []Block{
 			{Kind: Paragraph, Segments: []Segment{{Text: "Before."}}},
 			EquationBlock("x^2+y^2=z^2", "x squared plus y squared equals z squared"),
-			EquationBlock("a/b", ""), // no description: the formula is the text
+			EquationBlock("a/b", ""),
 		}}
 	html, err := HTML{}.Export(snap)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestOfficeMathMatricesAndAlignedEquationsReadBack(t *testing.T) {
 				got = it.Equation.Formula
 			}
 		}
-		if got != formula && !strings.HasPrefix(formula, "aligned") { // aligned: spacing round the & may differ
+		if got != formula && !strings.HasPrefix(formula, "aligned") {
 			t.Errorf("%s read back as %q", formula, got)
 		}
 		if MathML(got, "") != MathML(formula, "") {

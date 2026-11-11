@@ -16,7 +16,7 @@ const (
 	Code
 	Image
 	TableCell
-	MediaClip // an audio or video clip, written only by the formats that can embed one (HTML)
+	MediaClip // An audio or video clip, embedded only by HTML.
 )
 
 // Format is one character run's own formatting.
@@ -27,15 +27,15 @@ type Format struct {
 	Comment string
 	// NoteRef is the number of the footnote this run marks.
 	NoteRef int
-	// NoteBack is the number of the footnote a run at a note's end points back to.
+	// NoteBack is the footnote a note's end run points to.
 	NoteBack int
 	// Lang is the run's language tag.
 	Lang string
-	// Formula is the notation of a formula standing in this run.
+	// Formula is the notation of a formula in this run.
 	Formula string
 	// Field is a form field standing in this run's line.
 	Field *docfile.FormFieldItem
-	// Change says the run is a suggested change not yet accepted.
+	// Change says the run is a suggested change.
 	Change ChangeKind
 	Author string
 	Time   int64
@@ -59,7 +59,7 @@ type Segment struct {
 
 // Block is one of a document's blocks, with its metadata.
 type Block struct {
-	// Start is where the block's first rune falls in the edit stream.
+	// Start is the block's first rune in the edit stream.
 	Start, Lead  int
 	Kind         BlockKind
 	Level        int
@@ -86,18 +86,18 @@ type Block struct {
 	// TableBackground is a cell's fill colour.
 	TableBackground string
 	TableAlign      int
-	// TableColW and TableRowH are the widths of the cell's column and row.
+	// TableColW and TableRowH give the cell's column and row sizes.
 	TableColW, TableRowH float64
 	// TableField is the form field in this table cell.
 	TableField    *docfile.FormFieldItem
 	NumberedIndex int
-	// Note is the number of the footnote a list item is the text of.
+	// Note is the footnote number of a list item's text.
 	Note int
 	// CodeLang is the programming language of a code block.
 	CodeLang string
 	// Equation is a formula in a linear notation.
 	Equation string
-	// DescribesImage says a paragraph is the long description of an image.
+	// DescribesImage marks a paragraph as an image's long description.
 	DescribesImage bool
 	Segments       []Segment
 }
@@ -115,10 +115,10 @@ type Snapshot struct {
 
 	// Header and Footer are the running header and footer.
 	Header, Footer string
-	// FirstDiffers gives the first page its own header and footer.
+	// FirstDiffers gives the first page its own running text.
 	FirstDiffers             bool
 	FirstHeader, FirstFooter string
-	// EvenDiffers gives the even pages their own header and footer.
+	// EvenDiffers gives even pages their own running text.
 	EvenDiffers            bool
 	EvenHeader, EvenFooter string
 	TOC                    bool
@@ -126,10 +126,10 @@ type Snapshot struct {
 	// TOCStyle is the table of contents's leader style.
 	TOCStyle string
 	TOCDepth int
-	// TOCAt is the index of the block the contents are written at.
+	// TOCAt is the block index where the contents go.
 	TOCAt int
 
-	// FormAction is the address the HTML export sends answers to.
+	// FormAction is where HTML export sends answers.
 	FormAction, FormButton string
 
 	// Vertical sets the text in vertical lines.

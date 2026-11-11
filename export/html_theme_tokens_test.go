@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/tokens"
 )
 
-// What tokens writes is exactly what the HTML export accepts.
 func TestHTMLAcceptsTheTokensPackagesCSS(t *testing.T) {
 	set := tokens.Default()
 	set.Colors["brand"] = "#336699"

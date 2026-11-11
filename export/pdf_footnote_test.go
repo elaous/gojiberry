@@ -30,7 +30,7 @@ func TestPDFFootnotesLinkBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(data)
-	if n := strings.Count(s, "/Subtype /Link") / 2; n != 4 { // each annotation is found twice: itself and its tag
+	if n := strings.Count(s, "/Subtype /Link") / 2; n != 4 {
 		t.Errorf("%d link annotations, want 4 (a mark and a way back for each of two notes)", n)
 	}
 	if n := len(regexp.MustCompile(`/Dest`).FindAllString(s, -1)); n < 4 {

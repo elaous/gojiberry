@@ -18,7 +18,6 @@ import (
 
 var objHeadRE = regexp.MustCompile(`\n(\d+) 0 obj\n`)
 
-// cidFontObjects returns the number and dictionary of every font.
 func cidFontObjects(raw []byte) (nums []int, bodies [][]byte) {
 	at := 0
 	for {
@@ -59,8 +58,8 @@ const (
 	tagCaption
 	tagTH
 	tagTD
-	tagLink // a = the run's language (index+1 in pdfRunLangs, 0 for none)
-	tagSpan // a = the same
+	tagLink
+	tagSpan
 	tagH4
 	tagH5
 	tagH6
@@ -71,7 +70,6 @@ var tagNames = map[int]string{
 	tagFigure: "Figure", tagCaption: "Caption", tagTH: "TH", tagTD: "TD", tagLink: "Link", tagSpan: "Span", tagH4: "H4", tagH5: "H5", tagH6: "H6",
 }
 
-// pdfTag says what the next marked piece of content is.
 type pdfTag struct{ kind, id, a, b int }
 
 func pdfMarkBegin(pdf *gopdf.GoPdf, t pdfTag) {
@@ -80,26 +78,22 @@ func pdfMarkBegin(pdf *gopdf.GoPdf, t pdfTag) {
 
 func pdfMarkEnd(pdf *gopdf.GoPdf) { pdf.SetCustomLineType([]float64{markEnd}, 0) }
 
-// pdfMarkArtifact starts content that is not part of the document.
 func pdfMarkArtifact(pdf *gopdf.GoPdf) { pdf.SetCustomLineType([]float64{markArtifact}, 0) }
 
 var markRE = regexp.MustCompile(`\[(7777|7778|7779)\.00((?: \d+\.00){0,4})\] 0\.00 d\n`)
 
-// piece is one marked stretch of content.
 type piece struct{ page, mcid int }
 
-// kid is one child of an element in reading order.
 type kid struct {
 	p     piece
 	child *elem
 }
 
 type elem struct {
-	tag    pdfTag
-	pieces []piece
-	kids   []kid
-	node   *node
-	// For a Link: the annotation object, its /StructParent key and its /URI as a PDF string.
+	tag        pdfTag
+	pieces     []piece
+	kids       []kid
+	node       *node
 	annot, key int
 	href       string
 }
@@ -113,7 +107,6 @@ type node struct {
 	numbered bool // a list: its items are numbered
 }
 
-// object is the text of one PDF object in the file.
 func objectText(raw []byte, n int) (string, bool) {
 	head := []byte("\n" + strconv.Itoa(n) + " 0 obj\n")
 	i := bytes.Index(raw, head)
@@ -138,7 +131,6 @@ var (
 	uriRE      = regexp.MustCompile(`/URI\s*(\((?:\\.|[^\\)])*\))`)
 )
 
-// streamOf returns the data of a stream object and its dictionary.
 func streamOf(body string) (dict string, data []byte, ok bool) {
 	i := bytes.Index([]byte(body), []byte("stream\n"))
 	if i < 0 {
@@ -170,7 +162,6 @@ func deflate(b []byte) []byte {
 	return buf.Bytes()
 }
 
-// pdfTextString writes s as a PDF text string.
 func pdfTextString(s string) string {
 	u := utf16.Encode([]rune(s))
 	out := []byte{'<', 'F', 'E', 'F', 'F'}
@@ -180,7 +171,6 @@ func pdfTextString(s string) string {
 	return string(append(out, '>'))
 }
 
-// tagPDF turns the markers in the finished file into a tagged structure.
 func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	pagesObj, ok := objectText(raw, 2)
 	if !ok {
@@ -351,7 +341,6 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 		}
 		return n
 	}
-	// Open lists, outermost first, the items the content is in.
 	type openList struct {
 		l        *node
 		level    int
@@ -581,7 +570,6 @@ func tagPDF(raw []byte, snap Snapshot) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// xmpPacket is the XMP metadata of the file, declaring PDF/UA-1.
 func xmpPacket(snap Snapshot) string {
 	esc := func(s string) string {
 		var b strings.Builder

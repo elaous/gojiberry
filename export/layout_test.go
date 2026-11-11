@@ -111,7 +111,6 @@ func TestPDFHeadersFootersAndPageNumbersOnEveryPage(t *testing.T) {
 	if got, err := pdfua.Check(data); err != nil || len(got) != 0 {
 		t.Fatalf("pdfua: %v, %v", got, err)
 	}
-	// With neither set nothing is added.
 	snap.Header, snap.Footer = "", ""
 	plain, err := PDF{}.Export(snap)
 	if err != nil {

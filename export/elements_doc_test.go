@@ -30,7 +30,7 @@ func TestSavedEquationIsMathMLInHTMLAndWordsEverywhereElse(t *testing.T) {
 	}
 	for _, format := range []string{"docx", "rtf", "markdown", "text", "pdf"} {
 		out := string(exportOne(t, r, format, d))
-		if format == "pdf" { // the PDF text is not plain bytes: the words are found by reading it back
+		if format == "pdf" {
 			out = textOf(importBack(t, r, "pdf", mustExport(t, r, format, d)))
 		}
 		if !strings.Contains(out, "x squared plus y squared equals z squared") {
@@ -39,7 +39,7 @@ func TestSavedEquationIsMathMLInHTMLAndWordsEverywhereElse(t *testing.T) {
 	}
 	bare := docOf(plain("a\n"), docfile.Item{Equation: &docfile.EquationItem{Formula: "x^2"}}, plain("b\n"))
 	for _, format := range []string{"docx", "markdown", "text", "html"} {
-		if !strings.Contains(strings.ReplaceAll(string(exportOne(t, r, format, bare)), `\`, ""), "x^2") { // Markdown escapes the caret
+		if !strings.Contains(strings.ReplaceAll(string(exportOne(t, r, format, bare)), `\`, ""), "x^2") {
 			t.Errorf("%s: an equation with no alternative is shown as nothing", format)
 		}
 	}
@@ -128,8 +128,8 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 	r := registry()
 	word := string(exportOne(t, r, "docx", notesDoc()))
 	for _, want := range []string{
-		`w:name="_fnref1"`, `w:anchor="_fn1"`, // the mark is a link to the note
-		`w:name="_fn1"`, `w:anchor="_fnref1"`, // the note has a link back
+		`w:name="_fnref1"`, `w:anchor="_fn1"`,
+		`w:name="_fn1"`, `w:anchor="_fnref1"`,
 		`w:name="_fnref2"`, `w:anchor="_fn2"`, `w:name="_fn2"`, `w:anchor="_fnref2"`,
 	} {
 		if !strings.Contains(word, want) {
@@ -158,8 +158,8 @@ func TestFootnotesLinkBothWaysInWordAndMarkdown(t *testing.T) {
 func TestFootnotesLinkBothWaysInRTF(t *testing.T) {
 	rtf := string(exportOne(t, registry(), "rtf", notesDoc()))
 	for _, want := range []string{
-		`{\*\bkmkstart _fnref1}`, `HYPERLINK \\l _fn1`, // the mark is a link to the note
-		`{\*\bkmkstart _fn1}`, `HYPERLINK \\l _fnref1`, // the note has a link back
+		`{\*\bkmkstart _fnref1}`, `HYPERLINK \\l _fn1`,
+		`{\*\bkmkstart _fn1}`, `HYPERLINK \\l _fnref1`,
 		`{\*\bkmkstart _fnref2}`, `HYPERLINK \\l _fn2`, `{\*\bkmkstart _fn2}`, `HYPERLINK \\l _fnref2`,
 	} {
 		if !strings.Contains(rtf, want) {

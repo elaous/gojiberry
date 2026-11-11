@@ -7,24 +7,22 @@ import (
 	"github.com/elaous/gojiberry/transfer"
 )
 
-// Features that only an import can lose: what a file written by another program holds and the editor has no
-// place for. They are not in Features (no exporter writes them).
+// Features only an import can lose.
 const (
 	FeatHeaderFooter Feature = "header-footer"
 	FeatTextBox      Feature = "text-box"
 	FeatDrawing      Feature = "drawing"
 	FeatEndnote      Feature = "endnote"
 	FeatField        Feature = "field"
-	// FeatLayout is everything but the text of a file that holds only drawn text (a PDF): fonts, styles,
-	// pictures, tables and the structure.
+	// FeatLayout is the layout of a file that holds only drawn text.
 	FeatLayout Feature = "layout"
-	// What a web page holds that a document has no place for.
+	// FeatScript is script that a web page holds.
 	FeatScript      Feature = "script"
 	FeatStyleSheet  Feature = "stylesheet"
 	FeatForm        Feature = "form"
 	FeatFrame       Feature = "frame"
 	FeatRemoteImage Feature = "remote-image"
-	// What Markdown holds that a document has no place for.
+	// FeatCellFormat is cell formatting that Markdown holds.
 	FeatCellFormat Feature = "cell-format"
 	FeatRawHTML    Feature = "raw-html"
 )
@@ -32,10 +30,7 @@ const (
 // ImportFormats are the formats ImportFidelity can report on.
 var ImportFormats = []string{"docx", "html", "odt", "pdf", "markdown"}
 
-// ImportFidelity reports what importing a file of this format would leave out of the document, from the file
-// itself: for a Word file the elements Import has no place for (counted by docximport.Inspect), for a PDF
-// everything but the text. The report is Known only for those two formats. It never fails: a file that cannot
-// be inspected gives an unknown report, and the import itself says why it fails.
+// ImportFidelity reports what importing a file would leave out.
 func ImportFidelity(format string, data []byte) Report {
 	r := Report{Format: format, Complete: completeFormats[format]}
 	switch format {
