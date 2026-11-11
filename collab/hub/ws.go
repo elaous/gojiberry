@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// handleWS serves the document's WebSocket endpoint.
 func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	rm, role, ok := h.access(w, r)
 	if !ok {
@@ -26,13 +25,11 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	replica := r.URL.Query().Get("replica")
-	// Access was checked before the upgrade.
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		return // Accept has answered
 	}
 	defer func() { _ = c.CloseNow() }()
-	// A frame over MaxBody is answered with a 413 reject.
 	c.SetReadLimit(min(4*h.cfg.MaxBody, h.cfg.MaxBody+1<<20))
 	s, snapshot, peers, ok := h.join(rm, role, r, replica)
 	if !ok {
@@ -45,7 +42,6 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	out := make(chan event, 64) // Answers to client frames, written by the loop.
 	incoming := make(chan struct{})
-	// send queues an answer, or gives up when the connection closes.
 	send := func(e event) bool {
 		select {
 		case out <- e:
@@ -67,7 +63,6 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			switch f.Event {
 			case "ops", "presence":
-				// Access is checked on every frame, not only on open.
 				if h.role(r, id) != role {
 					_ = c.Close(websocket.StatusPolicyViolation, "access changed")
 					return
@@ -134,7 +129,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case e, open := <-s.ch:
 			if !open {
-				if h.isDead(rm) { // the document expired: say so (4410 is 410 Gone) instead of just hanging up
+				if h.isDead(rm) {
 					_ = c.Close(websocket.StatusCode(4410), goneMsg)
 				}
 				return
@@ -163,7 +158,6 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ackData is the payload of an ack or reject event.
 type ackData struct {
 	ID     uint64 `json:"id"`
 	Error  string `json:"error,omitempty"`
@@ -174,7 +168,6 @@ func ackEvent(name string, id uint64, msg string, status int) event {
 	return jsonEvent(name, ackData{ID: id, Error: msg, Status: status})
 }
 
-// tokenFromQuery lets browsers pass a token in the URL.
 func tokenFromQuery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/ws") && r.Header.Get("Authorization") == "" {
@@ -186,7 +179,6 @@ func tokenFromQuery(next http.Handler) http.Handler {
 	})
 }
 
-// cookieSocketAllowed refuses a WebSocket from another origin.
 func (h *Hub) cookieSocketAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" || r.Header.Get("Cookie") == "" {

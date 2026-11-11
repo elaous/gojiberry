@@ -1,4 +1,3 @@
-// Package hub is the server half of multi-user editing.
 package hub
 
 import (
@@ -40,18 +39,15 @@ type Config struct {
 	// Roles decides each request's role.
 	Roles RoleFunc
 	// User names the caller for presence.
-	User func(r *http.Request) string
-	// SaveDelay is how long after a change the document is saved.
+	User      func(r *http.Request) string
 	SaveDelay time.Duration
 	// KeepAlive is how often an idle event stream is pinged.
 	KeepAlive time.Duration
 	// PresenceInterval is the least time between presence updates.
 	PresenceInterval time.Duration
-	// PresenceTTL is how long a cursor stays after its last update.
-	PresenceTTL time.Duration
+	PresenceTTL      time.Duration
 	// Guard decides who may call the hub.
-	Guard guard.Guard
-	// MaxBody limits a request body in bytes; 0 means the default.
+	Guard   guard.Guard
 	MaxBody int64
 	// CookieOrigins lists the origins allowed to send cookies.
 	CookieOrigins      []string
@@ -60,15 +56,13 @@ type Config struct {
 	MaxRooms int
 	// MaxPeers limits the cursors kept per document.
 	MaxPeers int
-	// Renewer is told that a document was edited, so it is kept alive.
-	Renewer Renewer
+	Renewer  Renewer
 	// RenewInterval is the least time between two renewals.
 	RenewInterval time.Duration
 	// ExpiryTTL is the lifetime the store gives a document.
 	ExpiryTTL time.Duration
 	// AuthFunc returns the Authorization header value for renewals.
-	AuthFunc func(r *http.Request) string
-	// GoneConfirmDelay is how long the hub waits before closing a gone room.
+	AuthFunc         func(r *http.Request) string
 	GoneConfirmDelay time.Duration
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
@@ -93,16 +87,16 @@ type Hub struct {
 	renewing  int        // renewals in flight
 	renewIdle *sync.Cond
 
-	renewFailures atomic.Int64 // renewals that failed for a reason other than "no such document"
+	renewFailures atomic.Int64
 	renewDenied   atomic.Int64 // of those, answered 401 or 403
 	deadRooms     atomic.Int64 // rooms closed because their document expired
-	hubOnlyRooms  atomic.Int64 // rooms whose document is not in the store (counted once per room)
+	hubOnlyRooms  atomic.Int64
 	revivedRooms  atomic.Int64 // closed rooms reopened because the document is live again
 
 	stop     chan struct{} // closed by Stop
 	stopOnce sync.Once
 
-	gone map[string]time.Time // ids whose room was closed as expired -> when that stops being remembered (h.mu)
+	gone map[string]time.Time
 }
 
 // New creates a hub.
@@ -189,12 +183,10 @@ type presenceEntry struct {
 	p    Presence
 	seen time.Time
 
-	// lastSent is when this cursor was last sent.
 	lastSent time.Time
 	timer    *time.Timer
 }
 
-// dropPresence forgets a replica's cursor and pending sends.
 func (rm *room) dropPresence(replica string) {
 	if e, ok := rm.pres[replica]; ok {
 		if e.timer != nil {
@@ -206,16 +198,12 @@ func (rm *room) dropPresence(replica string) {
 
 var errTooManyRooms = errors.New("hub: too many documents")
 
-// errGone signals a document whose room was closed as gone.
 var errGone = errors.New("hub: the document has expired")
 
-// goneMsg is what clients hear about a gone document.
 const goneMsg = "this document has expired and been deleted; copy your content elsewhere"
 
-// room finds or loads a document.
 func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
 	rm, err := h.openRoom(r, id, role)
-	// The store remembers a closed document across restarts.
 	if errors.Is(err, errGone) && role.CanEdit() && h.storeTombstone(r.Context(), id) && h.revived(r, id) {
 		h.clearStoreTombstone(id)
 		return h.openRoom(r, id, role)
@@ -303,7 +291,6 @@ func (h *Hub) role(r *http.Request, id string) Role {
 	return h.cfg.Roles(r, id)
 }
 
-// save writes the document to the store; saves of one document run in order.
 func (h *Hub) save(rm *room) error {
 	if h.cfg.Store == nil {
 		return nil
@@ -330,7 +317,6 @@ func (h *Hub) save(rm *room) error {
 	return err
 }
 
-// markDirty schedules a save (rm.mu held).
 func (h *Hub) markDirty(rm *room) {
 	if h.cfg.Store == nil || rm.dirty || rm.dead {
 		return
@@ -350,7 +336,7 @@ type Health struct {
 	RenewFailures int64 `json:"renewFailures"`
 	RenewDenied   int64 `json:"renewDenied"`  // of those, refused with 401 or 403: see Config.Renewer
 	ExpiredRooms  int64 `json:"expiredRooms"` // rooms closed because their document expired
-	HubOnlyRooms  int64 `json:"hubOnlyRooms"` // rooms whose document is not in the store, counted once each (nothing to renew)
+	HubOnlyRooms  int64 `json:"hubOnlyRooms"`
 	RevivedRooms  int64 `json:"revivedRooms"` // closed rooms reopened because the document is live again
 }
 

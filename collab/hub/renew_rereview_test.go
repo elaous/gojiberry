@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// editOK posts one accepted edit and waits for the ack.
 func editOK(t *testing.T, h *Hub, e edit, id, op string) {
 	t.Helper()
 	if s := e.post(t, id, "editor", "", "r", textOps(t, op, "x")); s != http.StatusNoContent {
@@ -23,7 +22,6 @@ func editOK(t *testing.T, h *Hub, e edit, id, op string) {
 	h.waitRenewals()
 }
 
-// A reverse proxy's 404 is not a gone marker.
 func TestProxy404WithoutMarkerKeepsTheRoomAlive(t *testing.T) {
 	var proxyDown atomic.Bool
 	ds := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +51,6 @@ func TestProxy404WithoutMarkerKeepsTheRoomAlive(t *testing.T) {
 	}
 }
 
-// An older docstore lacks the renew route.
 func TestOlderDocstoreWithoutRenewRouteNeverClosesARoom(t *testing.T) {
 	var calls atomic.Int32
 	ds := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +97,6 @@ func TestGenuineGoneClosesTheRoomOnlyAfterConfirmation(t *testing.T) {
 	}
 }
 
-// One gone followed by success is not a death.
 func TestSingleGoneAnswerDoesNotCloseTheRoom(t *testing.T) {
 	var calls atomic.Int32
 	store := docstore.NewMemoryAdapter()

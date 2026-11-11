@@ -47,14 +47,12 @@ func (c *clock) Now() time.Time {
 }
 func (c *clock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
-// roleByHeader takes the role from X-Role.
 func roleByHeader(r *http.Request, _ string) Role { return Role(r.Header.Get("X-Role")) }
 
 type edit struct {
 	srv *httptest.Server
 }
 
-// post sends ops for document id as role.
 func (e edit) post(t *testing.T, id, role, user, replica, body string) int {
 	t.Helper()
 	req, _ := http.NewRequest("POST", e.srv.URL+"/docs/"+id+"/ops?replica="+replica, strings.NewReader(body))
@@ -126,7 +124,6 @@ func TestRenewOnlyOnAcceptedEdits(t *testing.T) {
 	}
 	check("join/view/cursor traffic", 0)
 
-	// An empty batch is not an edit.
 	if s := e.post(t, "d", "editor", "ana", "r1", "[]"); s != 204 {
 		t.Fatalf("empty batch: %d", s)
 	}
@@ -212,7 +209,6 @@ func TestRenewIsRateLimitedPerDocument(t *testing.T) {
 	typeOnce("a")
 	want(5)
 
-	// A negative interval renews on every access.
 	fr2 := &fakeRenewer{}
 	h2, e2 := newRenewHub(t, Config{Renewer: fr2, RenewInterval: 5 * time.Second, Now: clk.Now})
 	for i := 0; i < 3; i++ {

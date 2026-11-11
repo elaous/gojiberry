@@ -47,7 +47,6 @@ func denied(w http.ResponseWriter, msg string) {
 	writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 }
 
-// access finds the document and the caller's role.
 func (h *Hub) access(w http.ResponseWriter, r *http.Request) (*room, Role, bool) {
 	id := r.PathValue("id")
 	if id == "" || strings.ContainsAny(id, "/\\") {
@@ -95,7 +94,6 @@ func (h *Hub) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ops)
 }
 
-// broadcast sends an event to every subscriber but the sender.
 func (rm *room) broadcast(from string, e event) {
 	for s := range rm.subs {
 		if s.replica == from && from != "" {
@@ -115,7 +113,6 @@ func jsonEvent(name string, v any) event {
 	return event{name: name, data: b}
 }
 
-// bindReplica ties a replica id to the signed-in user.
 func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	if replica == "" || h.cfg.User == nil {
 		return true
@@ -136,7 +133,6 @@ func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	return true
 }
 
-// maxBoundReplicas bounds the replica-to-user table.
 const maxBoundReplicas = 4096
 
 func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +160,6 @@ func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// acceptOps checks and applies operations from replicas.
 func (h *Hub) acceptOps(rm *room, role Role, r *http.Request, replica string, ops []crdt.Op) (int, string) {
 	done := observe.Default().Work("hub_ops")
 	status, msg, renew := h.applyOps(rm, role, r, replica, ops)
@@ -195,7 +190,6 @@ func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops
 		return http.StatusForbidden, err.Error(), false
 	}
 	if !role.CanEdit() && h.cfg.User != nil {
-		// A commenter may only write comments and replies.
 		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
 			return http.StatusForbidden, err.Error(), false
 		}
@@ -206,7 +200,6 @@ func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops
 	return http.StatusNoContent, "", role.CanEdit() && len(ops) > 0 && h.renewDue(rm)
 }
 
-// commentAuthors checks authors of new comments and replies.
 func commentAuthors(ops []crdt.Op, user string) error {
 	if user == "" {
 		return nil
@@ -227,13 +220,10 @@ func commentAuthors(ops []crdt.Op, user string) error {
 }
 
 const (
-	// maxClockJump is how far a clock may run ahead of the document.
-	maxClockJump = 1 << 16
-	// maxCommentSize is the largest comment or reply allowed.
+	maxClockJump   = 1 << 16
 	maxCommentSize = 16 << 10
 )
 
-// authorize decides whether a role may make these changes.
 func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	if role.CanEdit() {
 		return nil
@@ -264,7 +254,6 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			return errors.New(viewOnly)
 		}
 		for _, c := range op.CharOps {
-			// Each character operation advances the clock.
 			if c.ID.Counter > limit {
 				return errors.New(viewOnly)
 			}
@@ -276,7 +265,6 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 	return nil
 }
 
-// prunePresence drops cursors not refreshed recently.
 func (h *Hub) prunePresence(rm *room) {
 	cutoff := h.now().Add(-h.cfg.PresenceTTL)
 	for id, e := range rm.pres {
@@ -287,7 +275,6 @@ func (h *Hub) prunePresence(rm *room) {
 	}
 }
 
-// setPresence records p as its replica's cursor.
 func (h *Hub) setPresence(rm *room, p Presence) {
 	if len(p.Holding) > MaxHolding { // a name of an object, not a message
 		p.Holding = ""
@@ -344,7 +331,6 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// acceptPresence validates and records a cursor update.
 func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (status int, msg string) {
 	done := observe.Default().Work("hub_presence")
 	defer func() {
@@ -378,7 +364,6 @@ func (h *Hub) acceptPresence(rm *room, role Role, r *http.Request, p Presence) (
 	return http.StatusNoContent, ""
 }
 
-// join subscribes a replica to the document.
 func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub, snapshot []crdt.Op, peers []Presence, ok bool) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -398,7 +383,6 @@ func (h *Hub) join(rm *room, role Role, r *http.Request, replica string) (s *sub
 	return s, snapshot, peers, true
 }
 
-// leave ends a subscription.
 func (h *Hub) leave(rm *room, s *sub) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()

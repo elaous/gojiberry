@@ -11,16 +11,12 @@ import (
 	"time"
 )
 
-// goneMemory is how long the hub refuses a closed document's id.
 const goneMemory = time.Hour
 
-// maxGone bounds the table of closed documents.
 const maxGone = 4096
 
-// goneKey is the docstore key of the tombstone mark.
 func goneKey(id string) string { return "collab-gone:" + id }
 
-// storeTombstone says whether the store holds a mark for the document.
 func (h *Hub) storeTombstone(ctx context.Context, id string) bool {
 	if h.cfg.Store == nil {
 		return false
@@ -48,7 +44,6 @@ func (h *Hub) clearStoreTombstone(id string) {
 	}
 }
 
-// renewDue says whether an accepted edit should renew the document.
 func (h *Hub) renewDue(rm *room) bool {
 	if h.cfg.Renewer == nil {
 		return false
@@ -61,7 +56,6 @@ func (h *Hub) renewDue(rm *room) bool {
 	return true
 }
 
-// renew calls the Renewer for a room's document.
 func (h *Hub) renew(rm *room, r *http.Request) {
 	h.renewMu.Lock()
 	h.renewing++
@@ -98,7 +92,6 @@ func (h *Hub) renew(rm *room, r *http.Request) {
 	}()
 }
 
-// renewCtx is the context of one renewal.
 func (h *Hub) renewCtx(r *http.Request) (context.Context, context.CancelFunc) {
 	auth := r.Header.Get("Authorization")
 	if h.cfg.AuthFunc != nil {
@@ -117,7 +110,6 @@ func (h *Hub) hadSuccess(rm *room) bool {
 	return rm.renewedOnce
 }
 
-// confirmWait waits GoneConfirmDelay before a gone is confirmed.
 func (h *Hub) confirmWait() bool {
 	d := h.cfg.GoneConfirmDelay
 	if d == 0 {
@@ -136,7 +128,6 @@ func (h *Hub) confirmWait() bool {
 	}
 }
 
-// revived reports whether a closed room's document came back.
 func (h *Hub) revived(r *http.Request, id string) bool {
 	if h.cfg.Renewer == nil || h.closing.Load() {
 		return false
@@ -158,7 +149,6 @@ func (h *Hub) revived(r *http.Request, id string) bool {
 	return ok
 }
 
-// renewResult acts on the outcome of one renewal.
 func (h *Hub) renewResult(rm *room, err error) {
 	switch {
 	case err == nil:
@@ -206,9 +196,7 @@ func (h *Hub) renewResult(rm *room, err error) {
 	}
 }
 
-// closeDead retires a room whose document expired.
 func (h *Hub) closeDead(rm *room) {
-	// Wait for an in-flight save first.
 	rm.saveMu.Lock()
 	defer rm.saveMu.Unlock()
 	rm.mu.Lock()
@@ -271,7 +259,6 @@ func (h *Hub) isDead(rm *room) bool {
 	return rm.dead
 }
 
-// waitRenewals blocks until renewals in flight finish.
 func (h *Hub) waitRenewals() {
 	h.renewMu.Lock()
 	for h.renewing > 0 {

@@ -18,7 +18,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// readFrame reads frames until one has the event.
 func readFrame(t *testing.T, ctx context.Context, c *websocket.Conn, event string) wire.Frame {
 	t.Helper()
 	for {

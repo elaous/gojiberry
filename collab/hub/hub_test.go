@@ -182,7 +182,6 @@ func TestEndpoints(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized body: %v %v", resp, err)
 	}
-	// A request with no-access role is refused.
 	closed := New(Config{Roles: func(*http.Request, string) Role { return "" }})
 	cs := httptest.NewServer(closed.Handler())
 	defer cs.Close()
@@ -256,7 +255,6 @@ func TestSaveFailureAndBadStore(t *testing.T) {
 	if resp, _ := http.Get(srv.URL + "/docs/a%2Fb/snapshot"); resp.StatusCode == 200 {
 		t.Fatal("slashes in ids are refused")
 	}
-	// Without a store, Flush and Close are harmless.
 	m := New(Config{})
 	if err := m.Flush(); err != nil || m.Close() != nil {
 		t.Fatal("no store")
@@ -296,7 +294,6 @@ func TestPresenceGoneWhenStreamCloses(t *testing.T) {
 	t.Fatalf("no gone event: %v", seen)
 }
 
-// failingStore fails loads other than not-found.
 type failingStore struct {
 	docstore.Adapter
 	mu                 sync.Mutex

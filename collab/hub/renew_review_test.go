@@ -32,7 +32,6 @@ type logBuf struct {
 func (l *logBuf) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock(); return l.b.Write(p) }
 func (l *logBuf) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
-// captureLog sends the standard logger to a buffer.
 func captureLog(t *testing.T) *logBuf {
 	t.Helper()
 	lb := &logBuf{}
@@ -310,7 +309,6 @@ func TestRenewalRefusedIsWarnedOnceAndCounted(t *testing.T) {
 		t.Fatalf("the warning does not explain the cause:\n%s", out)
 	}
 
-	// /healthz reports it.
 	req, _ := http.NewRequest("GET", e.srv.URL+"/healthz", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

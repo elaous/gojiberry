@@ -28,7 +28,6 @@ func newExpiringStore(clk *clock) (*docstore.ExpiringAdapter, docstore.Adapter) 
 	return ea, inner
 }
 
-// A document edited only live through the hub stays alive.
 func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -75,7 +74,6 @@ func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 		}
 	}
 
-	// A dead document is not revived by a later edit.
 	if s := e.post(t, "doc", "editor", "", "r1", textOps(t, "c2", "too late")); s != 204 {
 		t.Fatalf("late edit: %d", s)
 	}
@@ -85,7 +83,6 @@ func TestEndToEndHubEditsKeepADocumentAlive(t *testing.T) {
 	}
 }
 
-// Without hub edits, the document dies after 24h.
 func TestEndToEndViewingAndCommentingDoNotKeepADocumentAlive(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()
@@ -107,7 +104,6 @@ func TestEndToEndViewingAndCommentingDoNotKeepADocumentAlive(t *testing.T) {
 	}
 }
 
-// Over a WebSocket an acknowledged edit renews the document.
 func TestEndToEndWebSocketEditRenews(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -136,7 +132,6 @@ func TestEndToEndWebSocketEditRenews(t *testing.T) {
 	}
 }
 
-// A hub in another process renews through the store.
 func TestEndToEndHubRenewsThroughTheDocstoreServer(t *testing.T) {
 	ctx := context.Background()
 	clk := newClock()

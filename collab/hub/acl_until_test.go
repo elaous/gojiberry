@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// A grant whose end has passed opens nothing.
 func TestACLRolesHonourTheEndOfAGrant(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
 	now := time.Now()
