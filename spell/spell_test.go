@@ -125,7 +125,6 @@ func TestCompleteMany(t *testing.T) {
 	if len(got) != 4 || got[0] != "planetarium" {
 		t.Fatalf("own words first: %v", got)
 	}
-	// then the dictionary's, shortest first: plan, then plank and plant
 	if got[1] != "plan" || got[2] != "plank" || got[3] != "plant" {
 		t.Fatalf("dictionary order: %v", got)
 	}

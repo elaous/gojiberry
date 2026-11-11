@@ -15,12 +15,6 @@ import (
 	"sync"
 )
 
-// Dictionaries on demand. The editor carries English only; a document in another language gets its dictionary from
-// a server that hosts Hunspell files (spell/dictserver, or any static host laid out the same way): Remote lists
-// what is there, resolves a language tag to a dictionary ("de-AT" to "de_AT", else "de_DE") and loads it once.
-// Loading is the expensive step (a big dictionary is a few megabytes and its affixes are expanded), so the result is
-// kept; a failed load is not.
-
 // Language is a dictionary a server offers.
 type Language struct {
 	Lang  string `json:"lang"`           // the dictionary's name, "de_DE"
@@ -28,13 +22,11 @@ type Language struct {
 	Bytes int64  `json:"bytes"`
 }
 
-// Remote loads dictionaries from a server. Make one and keep it: it caches what it loaded.
+// Remote loads dictionaries from a server.
 type Remote struct {
-	// BaseURL is the address the dictionaries are under ("https://host/dict"), without a trailing slash.
 	BaseURL string
 	// HTTP is the client to use (http.DefaultClient when nil).
-	HTTP *http.Client
-	// MaxBytes refuses a file bigger than this once decompressed (64 MiB if 0).
+	HTTP     *http.Client
 	MaxBytes int64
 	// Options say how much of the Hunspell format is used.
 	Options HunspellOptions
@@ -51,7 +43,6 @@ type loadCall struct {
 	err  error
 }
 
-// ErrNoDictionary is returned when the server has no dictionary for a language.
 var ErrNoDictionary = errors.New("spell: no dictionary for this language")
 
 func (r *Remote) max() int64 {
@@ -81,8 +72,6 @@ func (r *Remote) get(ctx context.Context, name string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("spell: the dictionary server answered %s", resp.Status)
 	}
-	// The transport undoes Content-Encoding it asked for itself; a gzip body that arrives still compressed (a static
-	// host that stores .gz and says nothing) is recognised by its first bytes.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, r.max()+1))
 	if err != nil {
 		return nil, err
@@ -127,9 +116,6 @@ func (r *Remote) Languages(ctx context.Context) ([]Language, error) {
 	return langs, nil
 }
 
-// Resolve picks the dictionary for a language tag out of those on offer: the exact one ("de-AT" and "de_AT" are the
-// same), else the one for the same language with the same script or region first, else the first of that language
-// ("de" gives "de_DE", the alphabetically first).
 func Resolve(tag string, offered []Language) (string, bool) {
 	tag = strings.ReplaceAll(strings.TrimSpace(tag), "-", "_")
 	if tag == "" {
@@ -150,8 +136,6 @@ func Resolve(tag string, offered []Language) (string, bool) {
 	return best, best != ""
 }
 
-// Load returns the dictionary of lang (a name from Languages, "de_DE"), fetching and reading it the first time.
-// Several callers asking for the same one wait for one load. A load that fails is not remembered.
 func (r *Remote) Load(ctx context.Context, lang string) (*Dictionary, error) {
 	if !validLang(lang) {
 		return nil, ErrNoDictionary
@@ -177,7 +161,6 @@ func (r *Remote) Load(ctx context.Context, lang string) (*Dictionary, error) {
 	r.flight[lang] = call
 	r.mu.Unlock()
 
-	// The load goes on if the caller that started it gives up: another may be waiting for it.
 	go func() {
 		d, err := r.fetch(context.WithoutCancel(ctx), lang)
 		r.mu.Lock()
