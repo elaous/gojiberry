@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The demo is under the accessibility gate: axe finds nothing wrong with it, with the font selector closed and
-// open.
 func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "", e2etest.Options{Width: 900, Height: 900})
 	for _, v := range d.Axe("") {

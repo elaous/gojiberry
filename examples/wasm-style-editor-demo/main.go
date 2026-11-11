@@ -1,11 +1,5 @@
 //go:build js && wasm
 
-// Command wasm-style-editor-demo shows the non-canvas editing components:
-// a StyleEditor (with its FontSelector) over a canvas.Format, fed by the
-// fonts package's repositories -- the web-safe set, a small "Project
-// fonts" list, and, on request, the fonts installed on this device
-// (Local Font Access API). #state mirrors the format as JSON (the e2e
-// test reads it).
 package main
 
 import (
@@ -89,7 +83,6 @@ func main() {
 	select {}
 }
 
-// loadDeviceFonts adds the fonts installed on this machine to the catalog.
 func loadDeviceFonts(st *state, repo fonts.Repository, render func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -10,10 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestEndToEnd drives the demo in headless Chromium: choose a font in the
-// FontSelector (search, source chips, recent), toggle decorations, edit the size,
-// and check both the demo's mirrored canvas.Format and the live preview's
-// computed style.
 func TestEndToEnd(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "", e2etest.Options{Width: 900, Height: 900})
 	preview := func(prop string) string {
@@ -27,7 +23,6 @@ func TestEndToEnd(t *testing.T) {
 	ok(regexp.MustCompile("Georgia").MatchString(preview("fontFamily")), "the preview uses the family")
 	ok(preview("fontSize") == "18px", "unset size shows the base size")
 
-	// Open the selector, search, filter by source, pick.
 	d.Click(".gj-fontselector-control")
 	ok(d.State().Bool("open") && d.Visible(".gj-fontselector-panel"), "clicking the control opens the panel")
 	all := options()
@@ -44,13 +39,11 @@ func TestEndToEnd(t *testing.T) {
 	ok(d.Is("s.recent[0] === 'Playfair Display'"), "it is remembered as recent")
 	ok(d.Text(".gj-fontselector-label") == "Playfair Display", "the control shows the choice")
 
-	// Reopening lists the recent font first.
 	d.Click(".gj-fontselector-control")
 	ok(d.Text(".gj-fontselector-group") == "Recent", "a Recent group appears")
 	ok(d.Attr(".gj-fontselector-option", "data-family") == "Playfair Display", "recent fonts come first")
 	d.Click(".gj-fontselector-control")
 
-	// Toggles and fields.
 	d.Click(`[data-action="bold"]`)
 	d.Click(`[data-action="italic"]`)
 	d.Click(`[data-action="underline"]`)
@@ -74,8 +67,6 @@ func TestEndToEnd(t *testing.T) {
 	d.Fill(`[data-field="background"]`, "#00ff00")
 	ok(d.State().Str("format.Background") == "#00ff00", "highlight")
 
-	// Device fonts: headless Chromium may or may not offer the API; either way
-	// the demo reports an outcome and keeps working.
 	d.Click("#load-device-fonts")
 	d.WaitForTimeout("a device-fonts outcome", `JSON.parse(document.getElementById('state').textContent).status !== ''`, 20e9)
 	status := d.State().Str("status")
