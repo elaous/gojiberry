@@ -36,7 +36,6 @@ func TestRateLimiterBurstRefillAndForgetting(t *testing.T) {
 	if ok, _ := l.Allow(ctx, "a"); ok {
 		t.Error("only one token came back")
 	}
-	// (Forgetting idle keys is tested with the limiter itself, in docstore.)
 	if ok, wait := (&RateLimiter{}).Allow(ctx, "z"); ok || wait <= 0 {
 		t.Error("a zero budget refuses")
 	}
@@ -104,7 +103,6 @@ func TestAnInjectedLimiterAndClientIPDecideTheRoutes(t *testing.T) {
 	if cl.keys[len(cl.keys)-1] != "register|tenant-7" {
 		t.Errorf("%v", cl.keys)
 	}
-	// Unlimited turns it off.
 	r.svc.limiter = Unlimited{}
 	for range 50 {
 		if code, _ := r.do("POST", "/auth/passkey/login/begin", "", nil); code != 200 {
@@ -169,7 +167,6 @@ func TestAnInjectedChallengeStoreHoldsTheCeremonies(t *testing.T) {
 	}
 }
 
-// A store that is only a Store (no Updater, no Creator) still works: the Service serializes.
 type plainStore struct{ Store }
 
 func TestUpdaterAndCreatorOverAConditionalAdapterAreCompareAndSet(t *testing.T) {
@@ -185,7 +182,6 @@ func TestUpdaterAndCreatorOverAConditionalAdapterAreCompareAndSet(t *testing.T) 
 	if err := st.Update(ctx, "passkey:none", func(*Account) error { return nil }); err != ErrNotFound {
 		t.Errorf("%v", err)
 	}
-	// Many writers each add a label: nobody's change is lost.
 	var wg sync.WaitGroup
 	for i := range 20 {
 		wg.Add(1)
@@ -205,7 +201,6 @@ func TestUpdaterAndCreatorOverAConditionalAdapterAreCompareAndSet(t *testing.T) 
 	if len(got.Credentials) != 20 {
 		t.Errorf("lost updates: %d of 20", len(got.Credentials))
 	}
-	// fn failing writes nothing.
 	boom := context.Canceled
 	if err := st.Update(ctx, "passkey:1", func(a *Account) error { a.Name = "changed"; return boom }); err != boom {
 		t.Error(err)
@@ -213,7 +208,6 @@ func TestUpdaterAndCreatorOverAConditionalAdapterAreCompareAndSet(t *testing.T) 
 	if got, _ := st.Get(ctx, "passkey:1"); got.Name != "n" {
 		t.Error("an error from fn aborts the write")
 	}
-	// The handle record names the account.
 	if by, err := st.ByHandle(ctx, []byte("h1")); err != nil || by.ID != "passkey:1" {
 		t.Errorf("%v", err)
 	}
@@ -236,7 +230,6 @@ func TestServiceFallsBackToItsOwnLockForAPlainStore(t *testing.T) {
 	}
 }
 
-// A shared (store) limiter is a passkey Limiter: two services over one store share the budget.
 func TestStoreLimiterCanBeInjectedAsTheServiceLimiter(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
 	var a, b Limiter = docstore.NewStoreLimiter(store, "passkey", DefaultPerMinute, 2), docstore.NewStoreLimiter(store, "passkey", DefaultPerMinute, 2)
@@ -274,7 +267,6 @@ func TestAnAccountHasItsOwnSignInBudgetWhateverTheAddress(t *testing.T) {
 	if len(al.keys) != 1 || al.keys[0] != "account|"+id {
 		t.Fatalf("the key is account|ID: %v", al.keys)
 	}
-	// Another address, the same account: the account's budget refuses.
 	r.svc.clientIP = func(*http.Request) string { return "addr-2" }
 	al.deny = true
 	_, begin := r.do("POST", "/auth/passkey/login/begin", "", nil)
@@ -288,7 +280,6 @@ func TestAnAccountHasItsOwnSignInBudgetWhateverTheAddress(t *testing.T) {
 	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") != "8" {
 		t.Errorf("%d %q", resp.StatusCode, resp.Header.Get("Retry-After"))
 	}
-	// The counter was not raised by the refused attempt.
 	cs, _ := r.svc.Credentials(context.Background(), id)
 	if cs[0].Cred.Authenticator.SignCount != 1 {
 		t.Errorf("a refused sign-in changes nothing: %+v", cs[0].Cred.Authenticator)

@@ -11,7 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// deleteFails is a conditional store whose Delete never works; listFails is one whose List does not.
 type deleteFails struct {
 	*docstore.MemoryAdapter
 	deletes atomic.Int32
@@ -37,8 +36,6 @@ func (l *listFails) List(context.Context) ([]docstore.Meta, error) {
 	return nil, errors.New("cannot list")
 }
 
-// A record that can never be deleted does not delay the start with retries: the listing worked, so the
-// count is right. A listing that fails is retried, a bounded number of times.
 func TestStartChallengeSweepRetriesOnlyAFailedListing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -52,7 +49,6 @@ func TestStartChallengeSweepRetriesOnlyAFailedListing(t *testing.T) {
 		t.Fatal(err)
 	}
 	sc.Now = clk
-	// an expired record the sweep wants to delete
 	old := ChallengePrefix + "1/" + strings.Repeat("a", 64)
 	if err := mem.Save(ctx, old, []byte(`{}`)); err != nil {
 		t.Fatal(err)

@@ -1,12 +1,3 @@
-// Package passkey signs people in with WebAuthn passkeys (https://www.w3.org/TR/webauthn-3/),
-// with no password: the server keeps each credential's public key and a signature counter and
-// checks a signed one-time challenge. Verification is done by github.com/go-webauthn/webauthn,
-// not by code here. A successful login gives the same bearer session as an OpenID Connect one
-// (auth.Manager.StartSession), so every handler that knows a signed-in person works unchanged.
-//
-// A passkey is two factors in itself, something you have (the authenticator) and something you
-// are or know (the biometric or PIN that unlocks it): Config.UserVerification defaults to
-// "required", which is what lets a passkey sign-in stand without a second step.
 package passkey
 
 import (
@@ -24,11 +15,8 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// ErrNotFound is returned by a Store for an account or credential it does not have.
 var ErrNotFound = errors.New("passkey: not found")
 
-// Credential is one passkey of an account: what the server verifies with, and what the person
-// sees in their list.
 type Credential struct {
 	Cred     webauthn.Credential `json:"cred"`
 	Label    string              `json:"label,omitempty"`
@@ -36,19 +24,12 @@ type Credential struct {
 	LastUsed time.Time           `json:"lastUsed,omitempty"`
 }
 
-// ID is the credential's ID as text (base64url), what a list and a removal use.
 func (c Credential) ID() string { return base64.RawURLEncoding.EncodeToString(c.Cred.ID) }
 
-// Account is a person who can sign in with passkeys. ID is the person's user ID in the rest of
-// the library ("passkey:<random>" for an account made by a passkey, or the ID of an OpenID
-// Connect user the passkey was linked to while signed in as them). Handle is the opaque user
-// handle the authenticator stores (random, never the ID or the e-mail).
+// Account is a person who can sign in with passkeys.
 type Account struct {
-	ID     string `json:"id"`
-	Handle []byte `json:"handle"`
-	// Email is a label: what the person typed when making the account, shown to them and used
-	// to name the passkey in the browser. Nothing verifies it, so it is never the session's
-	// identity (see Service.Session).
+	ID          string       `json:"id"`
+	Handle      []byte       `json:"handle"`
 	Email       string       `json:"email,omitempty"`
 	Name        string       `json:"name,omitempty"`
 	Credentials []Credential `json:"credentials"`
@@ -83,32 +64,20 @@ func (a *Account) WebAuthnCredentials() []webauthn.Credential {
 	return out
 }
 
-// Store keeps accounts and their credentials. Implementations must be safe for concurrent use.
+// Store keeps accounts and their credentials.
 type Store interface {
 	// Get finds an account by its ID, or ErrNotFound.
 	Get(ctx context.Context, id string) (*Account, error)
-	// ByHandle finds an account by the user handle an authenticator returned.
 	ByHandle(ctx context.Context, handle []byte) (*Account, error)
-	// Put saves an account (creating it, or replacing the credentials and details it had).
 	Put(ctx context.Context, a *Account) error
 	// Delete removes an account and everything of it.
 	Delete(ctx context.Context, id string) error
 }
 
-// Updater is an optional capability of a Store: change one account atomically. fn is given the
-// account as it is stored and changes it in place; if fn returns an error nothing is written and
-// the error is returned. A store shared by several processes implements this with a conditional
-// write (read, change, write only if nobody else wrote in between, else read again and call fn
-// again), so fn must be safe to run more than once. Without it the Service serializes changes
-// within its own process only. MemoryStore and AdapterStore (over a docstore.ConditionalAdapter)
-// implement it.
 type Updater interface {
 	Update(ctx context.Context, id string, fn func(*Account) error) error
 }
 
-// Creator is an optional capability of a Store: make an account only if none exists with that
-// ID (ErrExists otherwise), atomically. Without it the Service checks and writes within its own
-// process only.
 type Creator interface {
 	Create(ctx context.Context, a *Account) error
 }
@@ -129,7 +98,6 @@ func clone(a *Account) *Account {
 	return &b
 }
 
-// MemoryStore is a Store in memory, for tests and one-process servers.
 type MemoryStore struct {
 	mu       sync.Mutex
 	accounts map[string]*Account
@@ -206,11 +174,6 @@ func (m *MemoryStore) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-// AdapterStore keeps accounts in a docstore.Adapter: a record per account
-// ("passkey/account/<ID>") and one per user handle ("passkey/handle/<handle>") that names its
-// account. The records hold public keys and e-mail addresses, not secrets, but they are
-// personal data: use an adapter that is not served to people by a docstore server (or one whose
-// ACL hides these keys), and the server's own store only through this type.
 type AdapterStore struct {
 	Adapter docstore.Adapter
 	mu      sync.Mutex // one change at a time within this process
@@ -261,20 +224,15 @@ func (s *AdapterStore) putLocked(ctx context.Context, a *Account) error {
 	if err != nil {
 		return err
 	}
-	// The account first, then the handle record that makes it findable: a failure between the
-	// two leaves an account no sign-in can reach, never a handle that names nothing.
 	if err := s.Adapter.Save(ctx, accountKey(a.ID), data); err != nil {
 		return err
 	}
 	return s.Adapter.Save(ctx, handleKey(a.Handle), []byte(a.ID))
 }
 
-// maxUpdateTries bounds the read-change-write loop of Update when others keep writing.
 const maxUpdateTries = 32
 
-// Update implements Updater. Over a docstore.ConditionalAdapter it is a compare-and-set loop, so
-// several processes may share the adapter; over any other adapter it is serialized within this
-// process only (see the Updater doc).
+// Update implements Updater.
 func (s *AdapterStore) Update(ctx context.Context, id string, fn func(*Account) error) error {
 	ca, ok := s.Adapter.(docstore.ConditionalAdapter)
 	if !ok {
@@ -310,7 +268,6 @@ func (s *AdapterStore) Update(ctx context.Context, id string, fn func(*Account) 
 		}
 		if err := ca.SaveIf(ctx, accountKey(id), data, docstore.Digest(d.Data)); err != nil {
 			if errors.Is(err, docstore.ErrConflict) {
-				// Someone else wrote: wait a little (more each time, randomly) and redo the change.
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
