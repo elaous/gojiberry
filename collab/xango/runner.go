@@ -44,6 +44,7 @@ func (r *runner) do(f func()) {
 
 func (r *runner) loop() {
 	defer func() { r.sess.Close() }()
+	// the loop owns the session, which Repair may replace
 	interval := 40 * time.Millisecond
 	if iv := r.props.Load().Interval; iv > 0 {
 		interval = iv
@@ -65,8 +66,10 @@ func (r *runner) loop() {
 			default:
 			}
 			s := r.sess
+			// Poll may repair the session and replace what is inside it
 			changed := s.Poll()
 			if s.Role.CanEdit() {
+				// a viewer's or commenter's surface records would be refused
 				s.Bridge.SyncSurfaces()
 			}
 			redraw := changed
@@ -75,12 +78,14 @@ func (r *runner) loop() {
 				redraw = true
 			}
 			s.RefreshPeers()
+			// announce on cursor move, ready or reconnect
 			if f := r.props.Load().TypedFor; f != nil {
 				s.TypedFor = f()
 			}
 			if h := r.props.Load().Holding; h != nil {
 				s.Holding = h()
 			}
+			// renewed every few seconds, before the hub forgets the presence
 			renew := s.Holding != "" && time.Since(lastPublish) > holdRenew
 			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs, s.Holding); (c != lastCursor || renew) && s.Bridge.Ready() {
 				lastCursor, lastPublish = c, time.Now()

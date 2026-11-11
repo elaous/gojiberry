@@ -180,6 +180,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 	s.checked[target] = true
 	s.mu.Unlock()
 	if first {
+		// once per session and target: repair leftovers before the lists are read
 		_, _ = s.Saver.Repair(ctx, target)
 	}
 	usage, usageErr := s.Saver.Usage(ctx, target)
@@ -382,6 +383,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	// a copy saved elsewhere since opening is kept as a version first
 	elsewhere, keptKey := s.keepElsewhere(ctx, target, c, doc)
 	e, err := s.Saver.Save(ctx, target, c, doc)
 	if err != nil {
@@ -390,11 +392,13 @@ func (s *Session) save(ctx context.Context) (err error) {
 	stored = true
 	s.set(func() {
 		if s.target == target {
+			// not if the user has moved on to another target meanwhile
 			s.id, s.base = e.ID, e.Updated
 		}
 	})
 	name := e.Name
 	if e.Protection == ProtectionE2EE {
+		// the catalog lists the placeholder; the list shows the real name from now on
 		name = doc.Name()
 		_, tags, _ := s.Saver.Reveal(ctx, target, e.ID)
 		s.remember(e.ID, name, tags)

@@ -100,6 +100,7 @@ func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name 
 		}
 		f := folderEntry{Name: name, Parent: parent}
 		if e2ee {
+			// real name first, in its encrypted record; the plain one holds the placeholder
 			if err := s.writeFolderSecret(ctx, t, cat, id, name); err != nil {
 				return err
 			}
@@ -204,6 +205,7 @@ func (s *Saver) MoveFolder(ctx context.Context, target, id, parent string) error
 		if _, ok := cat.Folders[parent]; parent != "" && !ok || cat.inside(parent, id) {
 			return ErrFolder
 		}
+		// the deepest folder under id decides whether it still fits
 		deepest := 0
 		for other := range cat.Folders {
 			if cat.inside(other, id) {

@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// a stale tab reconnecting must not start a new room
 const goneMemory = time.Hour
 
 const maxGone = 4096
@@ -80,6 +81,7 @@ func (h *Hub) renew(rm *room, r *http.Request) {
 		defer cancel()
 		err := h.cfg.Renewer.Renew(ctx, rm.id)
 		if errors.Is(err, docstore.ErrNotFound) && h.hadSuccess(rm) {
+			// one "gone" does not kill a live room: confirm after a delay
 			if !h.confirmWait() {
 				return
 			}
@@ -198,6 +200,7 @@ func (h *Hub) renewResult(rm *room, err error) {
 }
 
 func (h *Hub) closeDead(rm *room) {
+	// wait for a save in flight: the delete below is the last write
 	rm.saveMu.Lock()
 	defer rm.saveMu.Unlock()
 	rm.mu.Lock()

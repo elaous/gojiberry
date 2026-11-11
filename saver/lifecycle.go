@@ -403,6 +403,7 @@ func (s *Saver) Rename(ctx context.Context, target, id, name string) error {
 			return err
 		}
 		if !e.confidential() {
+			// the catalog lists the placeholder: the name is in the document
 			e.Name = name
 		}
 		cat.Docs[id] = e

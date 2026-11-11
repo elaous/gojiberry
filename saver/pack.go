@@ -277,6 +277,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	for _, f := range idx.Folders {
 		byID[f.ID] = f
 	}
+	// sealed folder names open first: one that fails is made under the placeholder
 	realName := map[string]string{}
 	sealed := map[string]bool{} // folders whose name was sealed but could not be read
 	for _, e := range idx.Entries {
@@ -429,6 +430,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		doc.SetFolder(folder)
 		tags := doc.Tags()
 		doc.SetTrashed(0)
+		// catalog and file agree: Trash below sets it in both
 		if have[doc.ID()] {
 			doc.SetID(docfile.NewID()) // a folder's ID: never share it (see above)
 		}

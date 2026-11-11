@@ -135,6 +135,7 @@ func (h *Hub) bindReplica(rm *room, replica string, r *http.Request) bool {
 	return true
 }
 
+// bounds the replica-to-user table of one document
 const maxBoundReplicas = 4096
 
 func (h *Hub) handleOps(w http.ResponseWriter, r *http.Request) {
@@ -192,6 +193,7 @@ func (h *Hub) applyOps(rm *room, role Role, r *http.Request, replica string, ops
 		return http.StatusForbidden, err.Error(), false
 	}
 	if !role.CanEdit() && h.cfg.User != nil {
+		// a commenter may only write comments and replies under their own name
 		if err := commentAuthors(ops, h.cfg.User(r)); err != nil {
 			return http.StatusForbidden, err.Error(), false
 		}
@@ -253,10 +255,12 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			}
 			continue
 		}
+		// text change: only comment marks, the block is left as it is
 		if !exists || len(op.CharOps) == 0 || blk.Kind != existing.Kind || blk.Order != existing.Order || blk.Deleted != existing.Deleted {
 			return errors.New(viewOnly)
 		}
 		for _, c := range op.CharOps {
+			// every character operation advances the document clock to its id
 			if c.ID.Counter > limit {
 				return errors.New(viewOnly)
 			}
@@ -449,6 +453,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
+			// access can change while a stream is open: end it, the client reconnects
 			if h.role(r, id) != role {
 				return
 			}

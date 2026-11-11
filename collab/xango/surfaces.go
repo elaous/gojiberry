@@ -32,6 +32,7 @@ func pageRecord(id, kind string) (int, bool) {
 	return n, err == nil && n >= 0
 }
 
+// "null" where a page sets none, so removing a header reaches others
 type furniture struct {
 	in     finder
 	footer bool
@@ -124,6 +125,7 @@ type tableRec struct {
 	Anchor *canvas.Anchor
 }
 
+// a map with struct keys does not go through JSON
 type styledCell struct {
 	Row, Col int
 	Style    canvas.CellStyle
@@ -178,6 +180,7 @@ func (o objects) Read() map[string]string {
 			rec.Styles = append(rec.Styles, styledCell{pos.Row, pos.Col, st})
 		}
 		slices.SortFunc(rec.Styles, func(a, b styledCell) int {
+			// the same record every time for the same table
 			if a.Row != b.Row {
 				return a.Row - b.Row
 			}

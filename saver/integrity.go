@@ -106,6 +106,7 @@ func (s *Saver) readEntry(ctx context.Context, t Target, e catalogEntry) (doc do
 		}
 		prevGone = errors.Is(perr, docstore.ErrNotFound)
 	}
+	// gone for good only when every copy is missing; damaged ones are kept
 	if errors.Is(err, docstore.ErrNotFound) && prevGone {
 		return docfile.Document{}, nil, false, fmt.Errorf("%w: %w: %w", ErrUnreadable, ErrDamaged, err)
 	}
@@ -246,6 +247,7 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].id < items[j].id })
 	if s.PendingCheck != nil {
+		// one bad record is a finding, not a reason to report nothing
 		rep.Pending, rep.PendingStuck, err = s.PendingCheck(ctx, target)
 		if err != nil {
 			if cerr := ctx.Err(); cerr != nil {
@@ -296,6 +298,7 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 				rep.Sealed++
 			}
 			if it.e.Prev != "" {
+				// the backup is only found bad when needed, unless looked at
 				_, _, perr := s.tryRead(ctx, t, it.e.Prev, it.e.PrevSum)
 				switch {
 				case perr == nil:

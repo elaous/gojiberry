@@ -18,7 +18,8 @@ type Target struct {
 	Name, Label string
 	Adapter     docstore.Adapter
 	Capacity    int64
-	CatalogKey  string
+	// must start with "catalog:" and end with "index"
+	CatalogKey string
 }
 
 // Saver writes documents to its targets.
@@ -174,10 +175,12 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	}); err != nil {
 		return Entry{}, err
 	}
+	// history lives in versions, not in the document file
 	history := doc.History
 	doc.History = nil
 	var out Entry
 	forced := false
+	// the in-lock read found a level the first read did not
 	for attempt := 0; ; attempt++ {
 		prechecked, rekeyed := false, false
 		if s.Rekey != nil {
@@ -214,6 +217,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 		err := s.saveLocked(ctx, target, c, doc, history, id, e2ee, prechecked, rekeyed, &out)
 		if errors.Is(err, errNeedRekey) && attempt < 2 {
 			forced = true
+			// the level changed since it was read: start over, re-keyed
 			continue
 		}
 		if errors.Is(err, errNeedRekey) {
@@ -230,7 +234,9 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 		prev, existed := cat.Docs[id]
 		protection := prev.Protection
 		if existed {
+			// the catalog is where tags are edited: saving does not bring them back
 			if e2ee && !prev.confidential() {
+				// becoming confidential by this save: the same gate as SetProtection's
 				if s.ConfidentialCheck != nil && !prechecked {
 					if err := s.ConfidentialCheck(ctx, target, id); err != nil {
 						return fmt.Errorf("saver: not saved as confidential: %w", err)
@@ -257,6 +263,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			if _, ok := cat.Folders[doc.Folder()]; !ok {
 				doc.SetFolder("")
 			}
+			// a copy or import of a confidential document stays so, if the check allows
 			if protection = doc.Protection(); e2ee {
 				protection = ProtectionE2EE
 			}

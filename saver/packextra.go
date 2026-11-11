@@ -23,6 +23,7 @@ func blurTime(ns int64) int64 {
 	return ns - ns%day
 }
 
+// a field no reader knows: padding of a blurred record
 const padField = 1000
 
 func blurPlain(plain []byte) []byte {
@@ -30,6 +31,7 @@ func blurPlain(plain []byte) []byte {
 	for bucket < len(plain)+3 {
 		bucket <<= 1
 	}
+	// the field costs its tag (2 bytes), length (1 to 4 bytes) and the zeros
 	for lenBytes := 1; lenBytes <= 4; lenBytes++ {
 		n := bucket - len(plain) - 2 - lenBytes
 		if n >= 0 && varintLen(uint64(n)) == lenBytes {

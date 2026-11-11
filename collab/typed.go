@@ -10,6 +10,7 @@ import (
 // DefaultTypedFor is how long others' typed text stays marked.
 const DefaultTypedFor = 4 * time.Second
 
+// a larger paste is not worth a colour
 const maxTyped = 2000
 
 type typedChar struct {
@@ -30,6 +31,7 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 		s.maxSeen = map[string]uint64{}
 	}
 	now := s.clock()
+	// the first characters to arrive are the document loading, not typing
 	if !s.loaded {
 		for _, op := range ops {
 			for _, c := range op.CharOps {
@@ -41,6 +43,7 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 	for _, op := range ops {
 		for _, c := range op.CharOps {
+			// an object change is a new value for its control mark
 			var stamp crdt.Timestamp
 			var at crdt.Timestamp // the character to show
 			switch {
@@ -109,6 +112,7 @@ func (s *Session) typedRanges() []canvas.TypedRange {
 	}
 	var out []canvas.TypedRange
 	done := map[crdt.Timestamp]bool{}
+	// an object put in and then filled in is shown once
 	for _, t := range live {
 		if done[t.id] {
 			continue

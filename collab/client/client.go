@@ -303,6 +303,7 @@ func (c *Conn) presenceSender() {
 		if resp, err := c.client.Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
+		// SetPresence calls meanwhile wait for the interval: one update goes out
 		if c.opts.PresenceInterval > 0 {
 			select {
 			case <-time.After(c.opts.PresenceInterval):

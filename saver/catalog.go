@@ -14,6 +14,7 @@ import (
 
 const CatalogKey = "catalog:index"
 
+// a rebuild finds folders that hold no document
 const FolderRecordPrefix = "catalog:folder/"
 
 func (t Target) catalogKey() string {
@@ -55,6 +56,7 @@ type catalog struct {
 	Folders map[string]folderEntry  `json:"folders,omitempty"`
 	Skipped []string                `json:"skipped,omitempty"`
 
+	// files written under new keys: removed if the catalog write fails
 	fresh []string
 }
 
@@ -262,6 +264,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 	modified := map[string]int64{} // each file's modification time, to break a tie
 	actual := map[string]string{}  // each file's checksum as it is now
 	changed := func(key string) bool { ks := knownSum[key]; return ks != "" && actual[key] != ks }
+	// a file the old catalog knows nothing about is not vouched for
 	vouched := func(key string) bool {
 		ks := knownSum[key]
 		if ks == "" {
@@ -350,6 +353,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		id := doc.ID()
 		if !docfile.ValidID(id) {
+			// a document from before IDs gets an ID and a matching file key
 			id = stem
 			if !docfile.ValidID(id) {
 				id = docfile.NewID()
@@ -376,6 +380,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			saved = m.UpdatedAt.UnixNano()
 		}
 		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: saved, Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
+		// confidential: real name and tags stay in it; the catalog lists the placeholder
 		if k, ok := knownEntry[m.ID]; doc.Protection() == ProtectionE2EE || ok && k.confidential() {
 			entry.conceal()
 		}
@@ -410,6 +415,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		out.Docs[id] = entry
 	}
+	// a folder with a gone parent, or in a cycle, goes to the top level
 	for id, f := range out.Folders {
 		if _, ok := out.Folders[f.Parent]; f.Parent != "" && !ok || out.depth(id) > MaxFolderDepth+1 {
 			f.Parent = ""
@@ -447,6 +453,7 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id str
 		return nil, err // wraps ErrUnreadable when no copy is good
 	}
 	if fromPrev {
+		// the current file is bad: the previous copy stands in and replaces it
 		bad := e.Key
 		e.Key, e.Sum = e.Prev, e.PrevSum
 		e.Prev, e.PrevSum = "", ""
@@ -459,6 +466,7 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id str
 		return nil, err
 	}
 	key := genKey(id, c)
+	// metadata only: the previous copy stays the previous save
 	s.rotateTouch(ctx, t, e, key, data, later)
 	return func() error {
 		cat.fresh = append(cat.fresh, key)
@@ -512,6 +520,7 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 			if !errors.Is(err, docstore.ErrNotFound) && err.Error() != "unreadable catalog" {
 				return false, err
 			}
+			// readCatalogRev builds one, stored only if nobody else did first
 			if _, _, err := s.readCatalogRev(ctx, t); err != nil {
 				return false, err
 			}
@@ -521,6 +530,7 @@ func (s *Saver) Repair(ctx context.Context, target string) (repaired bool, err e
 		if err != nil || !bad {
 			return false, err
 		}
+		// another process may be half way through an operation: look again
 		if grace > 0 {
 			select {
 			case <-ctx.Done():

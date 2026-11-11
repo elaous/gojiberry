@@ -49,6 +49,7 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	if _, err := atomsFromItems(f.ContentItems()); err != nil {
 		return nil, err
 	}
+	// comment and note IDs no other replica can mint
 	if f.Comments == nil {
 		f.Comments = canvas.NewCommentSet()
 	}
@@ -171,6 +172,7 @@ type edit struct {
 	ins     []rune
 }
 
+// beyond it the middle is replaced whole
 const maxLCS = 4_000_000
 
 func diffRunes(old, cur []rune) []edit {
