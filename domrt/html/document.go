@@ -6,9 +6,7 @@ import (
 	"syscall/js"
 )
 
-// Document wraps the browser's global document object. Get/Call cover
-// anything without a typed method below, the same escape hatch as the
-// rest of this package.
+// Document wraps the browser's global document object.
 type Document struct {
 	Document js.Value
 }
@@ -38,17 +36,12 @@ func (d *Document) GetElementsByName(name string) []Element {
 	return wrapAll(d.Document.Call("getElementsByName", name))
 }
 
-// GetElementsByTagNameNS looks up elements by namespace and tag (e.g.
-// SVG's "http://www.w3.org/2000/svg"). Unlike GetElementsBy{Tag,Class}Name,
-// there is no non-namespaced getElementsByClassNameNS/getElementsByNameNS
-// in the DOM -- those aren't real browser APIs, so this package doesn't
-// pretend to wrap them.
+// GetElementsByTagNameNS looks up elements by namespace and tag name.
 func (d *Document) GetElementsByTagNameNS(namespace, tag string) []Element {
 	return wrapAll(d.Document.Call("getElementsByTagNameNS", namespace, tag))
 }
 
-// GetElementByID returns the element with the given id, or nil when there is
-// none (as QuerySelector does).
+// GetElementByID returns the element with the given id, or nil.
 func (d *Document) GetElementByID(id string) *Element {
 	v := d.Document.Call("getElementById", id)
 	if v.IsNull() || v.IsUndefined() {
@@ -57,9 +50,7 @@ func (d *Document) GetElementByID(id string) *Element {
 	return &Element{Element: v}
 }
 
-// QuerySelector returns the first element in the document matching the
-// CSS selector, in document order, or nil when nothing matches. See
-// Element.QuerySelector for the subtree-scoped variant.
+// QuerySelector returns the first element matching a CSS selector.
 func (d *Document) QuerySelector(selector string) *Element {
 	v := d.Document.Call("querySelector", selector)
 	if v.IsNull() || v.IsUndefined() {
@@ -68,8 +59,7 @@ func (d *Document) QuerySelector(selector string) *Element {
 	return &Element{Element: v}
 }
 
-// QuerySelectorAll returns every element in the document matching the
-// CSS selector, in document order -- empty when nothing matches.
+// QuerySelectorAll returns every element matching a CSS selector.
 func (d *Document) QuerySelectorAll(selector string) []Element {
 	return wrapAll(d.Document.Call("querySelectorAll", selector))
 }
@@ -79,10 +69,7 @@ func (d *Document) CreateElement(tag string) *Element {
 	return &Element{Element: d.Document.Call("createElement", tag)}
 }
 
-// CreateElementNS creates a new, unattached element in the given
-// namespace (e.g. svg.Namespace) with the given tag name -- required
-// for SVG/MathML elements, which createElement alone cannot make. See
-// domrt/svg's CreateElement for a convenience wrapper.
+// CreateElementNS creates an element in the given namespace, such as SVG.
 func (d *Document) CreateElementNS(namespace, tag string) *Element {
 	return &Element{Element: d.Document.Call("createElementNS", namespace, tag)}
 }
@@ -102,8 +89,7 @@ func (d *Document) CreateTextNode(text string) *Element {
 	return &Element{Element: d.Document.Call("createTextNode", text)}
 }
 
-// Get returns a named property of document not covered by a typed
-// getter above (e.g. Get("title"), Get("readyState")).
+// Get returns a named document property not covered by a getter.
 func (d *Document) Get(name string) js.Value {
 	return d.Document.Get(name)
 }
