@@ -8,9 +8,6 @@ import (
 	"slices"
 )
 
-// ring is the Keyring of the store: a ConfidentialKeyring over the owners' keys, rebuilt from the
-// current state for each call, and closed (ErrLocked) while no private key is held. For a store
-// with no owner keys it is closed too: it is never used then.
 type ring struct{ s *Store }
 
 func (r ring) keyring() (anchored, error) {
@@ -29,8 +26,6 @@ func (r ring) keyring() (anchored, error) {
 	}
 	return anchored{ConfidentialKeyring: encrypt.ConfidentialKeyring{
 		People: encrypt.StoreKeyring{Store: s.Raw, Owners: to, Keys: slices.Clone(s.ids), OwnerSigners: slices.Clone(s.signers), SeqFloor: s.floor},
-		// There is no server here: what is not confidential is still encrypted at rest, to the
-		// owner's keys, so a stolen copy of the browser's storage holds no text.
 		AtRest: encrypt.Static{To: to, Keys: slices.Clone(s.ids)},
 	}, anchor: ownersHash(s.cfg.Owners)}, nil
 }
@@ -44,9 +39,6 @@ func (r ring) Recipients(ctx context.Context, id string) ([]age.Recipient, error
 	return k.Recipients(ctx, id)
 }
 
-// Bind implements encrypt.Binder: the adapter then writes each file's frame bound to the signed
-// record of its document (level, seq, recipients) and to the owner list (anchor.go), signed by
-// Adapter.Signer, and cross-checks what it reads or replaces against the record.
 func (r ring) Bind(ctx context.Context, id string) ([]age.Recipient, encrypt.Binding, error) {
 	k, err := r.keyring()
 	if err != nil {
@@ -64,14 +56,13 @@ func (r ring) Binding(ctx context.Context, id string) (encrypt.Binding, error) {
 	return k.Binding(ctx, id)
 }
 
-// Identities implements encrypt.Keyring. A locked store has none: opening says ErrNoKey.
+// Identities implements encrypt.Keyring.
 func (r ring) Identities(ctx context.Context, id string) ([]age.Identity, error) {
 	r.s.mu.RLock()
 	defer r.s.mu.RUnlock()
 	return slices.Clone(r.s.ids), nil
 }
 
-// front is the Adapter the saver sees: the store's adapter behind the gate a change holds.
 type front struct{ s *Store }
 
 func (f front) writable() error {
