@@ -2,7 +2,6 @@ package buffer
 
 import "testing"
 
-// naiveInsert is the plain []rune insert baseline.
 func naiveInsert(buf []rune, pos int, r rune) []rune {
 	out := make([]rune, 0, len(buf)+1)
 	out = append(out, buf[:pos]...)
@@ -11,7 +10,6 @@ func naiveInsert(buf []rune, pos int, r rune) []rune {
 	return out
 }
 
-// Both benchmarks use a large 100,000-character document.
 const (
 	benchDocSize  = 100_000
 	benchTypeSize = 1_000

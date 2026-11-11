@@ -1,14 +1,11 @@
-// Package buffer provides GapBuffer, a mutable sequence for text editing.
 package buffer
 
-// GapBuffer is a mutable sequence; its zero value is ready to use.
 type GapBuffer[T any] struct {
 	buf   []T
 	start int // buf[:start] is the live span before the gap
 	end   int // buf[end:] is the live span after the gap.
 }
 
-// FromSlice returns a GapBuffer containing a copy of items, in order.
 func FromSlice[T any](items []T) *GapBuffer[T] {
 	g := &GapBuffer[T]{buf: append([]T(nil), items...)}
 	g.start = len(g.buf)
@@ -29,7 +26,6 @@ func (g *GapBuffer[T]) At(i int) T {
 	return g.buf[i+(g.end-g.start)]
 }
 
-// Set overwrites the live element at index i (0 <= i < Len()).
 func (g *GapBuffer[T]) Set(i int, v T) {
 	if i < g.start {
 		g.buf[i] = v
@@ -38,7 +34,6 @@ func (g *GapBuffer[T]) Set(i int, v T) {
 	}
 }
 
-// InsertAt inserts items at pos; amortized O(1) when appending at the end.
 func (g *GapBuffer[T]) InsertAt(pos int, items ...T) {
 	if len(items) == 0 {
 		return
@@ -49,7 +44,6 @@ func (g *GapBuffer[T]) InsertAt(pos int, items ...T) {
 	g.start += len(items)
 }
 
-// DeleteAt removes n elements at pos, with the same amortized cost as InsertAt.
 func (g *GapBuffer[T]) DeleteAt(pos, n int) {
 	if n == 0 {
 		return
@@ -58,7 +52,6 @@ func (g *GapBuffer[T]) DeleteAt(pos, n int) {
 	g.end += n
 }
 
-// Slice returns a fresh []T copy of elements in [lo, hi).
 func (g *GapBuffer[T]) Slice(lo, hi int) []T {
 	out := make([]T, 0, hi-lo)
 	if lo < g.start {
@@ -83,7 +76,6 @@ func (g *GapBuffer[T]) ToSlice() []T {
 	return g.Slice(0, g.Len())
 }
 
-// moveGapTo moves the gap to index pos; no-op if already there.
 func (g *GapBuffer[T]) moveGapTo(pos int) {
 	switch {
 	case pos < g.start:
@@ -97,7 +89,6 @@ func (g *GapBuffer[T]) moveGapTo(pos int) {
 	}
 }
 
-// growGap ensures n free slots, doubling capacity when needed.
 func (g *GapBuffer[T]) growGap(n int) {
 	if g.end-g.start >= n {
 		return
