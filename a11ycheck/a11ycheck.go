@@ -1,4 +1,3 @@
-// Package a11ycheck finds places where a document leaves readers out.
 package a11ycheck
 
 import (
@@ -36,35 +35,27 @@ const (
 	RuleTableHeaderMissing = "table-header-missing"
 	// RuleTableHeaderEmpty: some header cell has no text while others do.
 	RuleTableHeaderEmpty = "table-header-empty"
-	// RuleFakeList: paragraphs that start with a typed bullet or number instead of being a list.
-	RuleFakeList = "list-fake"
-	// RuleMediaCaptions: a video with no caption track, so a deaf reader gets none of what is said.
-	RuleMediaCaptions = "media-captions"
+	RuleFakeList         = "list-fake"
+	RuleMediaCaptions    = "media-captions"
 	// RuleMediaTranscript: no transcript. Error for audio, warning for video.
 	RuleMediaTranscript = "media-transcript"
-	// RuleMediaTitle: a clip with no title, so a reader hears only "video" or an address as its name.
-	RuleMediaTitle = "media-title"
-	// RuleEquationAlt: no text alternative (error), or only the formula retyped (warning).
-	RuleEquationAlt = "equation-alt"
-	// RuleFormLabel: a form field with no label, so a screen reader says "edit text" and nothing about what to write.
-	RuleFormLabel = "form-label"
+	RuleMediaTitle      = "media-title"
+	RuleEquationAlt     = "equation-alt"
+	RuleFormLabel       = "form-label"
 )
 
 // Finding is one problem.
 type Finding struct {
 	Rule     string
 	Severity Severity
-	// Message says what is wrong; Fix says what to do about it.
-	Message string
-	Fix     string
-	// Offset counts text-stream runes; objects count as one. Item indexes Document.Content.
+	Message  string
+	Fix      string
+	// Offset counts text-stream runes; objects count as one.
 	Offset, Item int
 	Text         string
-	// Action names the one-click fix a host can offer, or "" when none is safe.
-	Action      string
-	Arg, Length int
-	// Spans are typed markers to remove: offset and length in runes, in order.
-	Spans [][2]int
+	Action       string
+	Arg, Length  int
+	Spans        [][2]int
 }
 
 // The one-click actions of a Finding.
@@ -72,12 +63,10 @@ const (
 	ActionHeadingLevel  = "heading-level"
 	ActionDefaultColour = "default-colour"
 	ActionDescribe      = "describe"
-	// ActionToParagraph: turn the empty heading at Offset into a plain paragraph.
-	ActionToParagraph = "to-paragraph"
+	ActionToParagraph   = "to-paragraph"
 	// ActionWriteMediaText: the person writes the captions or transcript.
 	ActionWriteMediaText = "write-media-text"
-	// ActionToList: make paragraphs at Offset a list and remove the Spans markers.
-	ActionToList = "to-list"
+	ActionToList         = "to-list"
 )
 
 // GateMode says what an export does about errors.
@@ -89,7 +78,6 @@ const (
 	GateBlock GateMode = "block" // refuse, unless the person allowed this one export
 )
 
-// Decide reports whether an export may go on and how many errors it has.
 func (m GateMode) Decide(findings []Finding, override bool) (allow bool, errors int) {
 	for _, f := range findings {
 		if f.Severity == Error {
@@ -99,7 +87,6 @@ func (m GateMode) Decide(findings []Finding, override bool) (allow bool, errors 
 	return m != GateBlock || errors == 0 || override, errors
 }
 
-// ParseGateMode reads "", "allow", "warn" or "block"; ok is false for other words.
 func ParseGateMode(s string) (m GateMode, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "allow", "none":
@@ -130,12 +117,10 @@ func (m GateMode) AtLeast(operator GateMode) GateMode {
 	return m
 }
 
-// OverrideAllowed reports whether a person may export past a blocking gate.
 func OverrideAllowed(operator GateMode) bool { return operator != GateBlock }
 
 // Options tune the checks.
 type Options struct {
-	// Page is the background colour assumed when none is set ("#ffffff" if empty).
 	Page string
 }
 
@@ -148,7 +133,6 @@ func Check(doc docfile.Document, opt Options) []Finding {
 	return out
 }
 
-// checkStructure checks images and headings paragraph by paragraph.
 func checkStructure(doc docfile.Document) []Finding {
 	var out []Finding
 	offset := 0
@@ -255,7 +239,6 @@ func excerpt(s string) string {
 	return s
 }
 
-// itemOffsets returns the rune offset at which each content item starts.
 func itemOffsets(doc docfile.Document) []int {
 	out := make([]int, len(doc.Content))
 	n := 0
@@ -271,7 +254,6 @@ func itemOffsets(doc docfile.Document) []int {
 	return out
 }
 
-// Object is a floating picture or table, outside the text flow.
 type Object struct {
 	Kind, Where string
 	Alt         string
@@ -279,7 +261,6 @@ type Object struct {
 	Rows        [][]string
 }
 
-// CheckObjects checks floating objects; their findings have Offset and Item -1.
 func CheckObjects(objs []Object) []Finding {
 	var out []Finding
 	for _, o := range objs {

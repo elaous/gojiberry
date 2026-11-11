@@ -50,7 +50,6 @@ func TestCheckFindsAnEquationWithoutAnAlternativeWhereItIs(t *testing.T) {
 	if len(eq) != 1 {
 		t.Fatalf("equation findings: %+v", eq)
 	}
-	// Offsets count runes; each equation and picture counts as one.
 	if eq[0].Offset != 6 || eq[0].Item != 1 || eq[0].Severity != Error {
 		t.Errorf("finding = %+v", eq[0])
 	}

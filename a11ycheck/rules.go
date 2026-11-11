@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// checkTable flags a table whose header row has no text.
 func checkTable(t *docfile.TableItem, offset, item int) []Finding {
 	if len(t.Rows) < 2 {
 		return nil
@@ -55,17 +54,15 @@ func joinInts(v []int) string {
 	return strings.Join(s, ", ")
 }
 
-// fakeListRun gathers typed-marker paragraphs; blank paragraphs do not end it.
 type fakeListRun struct {
 	family      string // "bullet" or "number" of the run in progress
 	n           int
 	start, item int
 	text        string
 	end         int
-	spans       [][2]int // the typed marker of each paragraph: its offset and length in runes
+	spans       [][2]int
 }
 
-// add takes a non-heading paragraph and returns findings so far.
 func (r *fakeListRun) add(out []Finding, text string, listKind, start, item int) []Finding {
 	if strings.TrimSpace(text) == "" {
 		return out
@@ -108,7 +105,6 @@ func (r *fakeListRun) flush(out []Finding) []Finding {
 		Action:  ActionToList, Arg: arg, Length: r.end - r.start, Spans: r.spans})
 }
 
-// markerFamily names the typed list marker text starts with, or "" for none.
 func markerFamily(text string) string {
 	rs := []rune(strings.TrimLeftFunc(text, unicode.IsSpace))
 	if len(rs) < 2 {
@@ -131,7 +127,6 @@ func markerFamily(text string) string {
 	return ""
 }
 
-// markerLength returns the runes of the typed marker, with spaces, or 0.
 func markerLength(text string) int {
 	if markerFamily(text) == "" {
 		return 0

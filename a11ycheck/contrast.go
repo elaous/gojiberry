@@ -10,11 +10,10 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// WCAG 2 SC 1.4.3: contrast 4.5 for text, 3 for large text.
 const (
 	minRatio      = 4.5
 	minRatioLarge = 3.0
-	baseFontSize  = 16.0 // what a run with no size of its own is drawn at
+	baseFontSize  = 16.0
 )
 
 func checkContrast(doc docfile.Document, opt Options) []Finding {
@@ -62,7 +61,6 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 
 type rgb struct{ r, g, b uint8 }
 
-// luminance is the relative luminance of a colour (WCAG 2).
 func (c rgb) luminance() float64 {
 	lin := func(v uint8) float64 {
 		s := float64(v) / 255
@@ -74,7 +72,6 @@ func (c rgb) luminance() float64 {
 	return 0.2126*lin(c.r) + 0.7152*lin(c.g) + 0.0722*lin(c.b)
 }
 
-// contrast is the contrast ratio of two colours, 1 to 21.
 func contrast(a, b rgb) float64 {
 	la, lb := a.luminance(), b.luminance()
 	if la < lb {
@@ -83,7 +80,6 @@ func contrast(a, b rgb) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// parseColor reads a hex, rgb() or basic colour name; false if not understood.
 func parseColor(s string) (rgb, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if c, ok := colornames.Map[s]; ok {
@@ -121,7 +117,6 @@ func parseColor(s string) (rgb, bool) {
 	return rgb{}, false
 }
 
-// Contrast returns the WCAG 2 contrast ratio of two CSS colours, 1 to 21.
 func Contrast(fg, bg string) (ratio float64, ok bool) {
 	a, ok1 := parseColor(fg)
 	b, ok2 := parseColor(bg)

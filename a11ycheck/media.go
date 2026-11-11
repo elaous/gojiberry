@@ -6,7 +6,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// MediaFindings checks one embedded clip for text that stands for it.
 func MediaFindings(m docfile.MediaItem, offset, item int) []Finding {
 	var out []Finding
 	name := strings.TrimSpace(m.Title)
