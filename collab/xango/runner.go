@@ -12,8 +12,7 @@ import (
 	"github.com/elaous/gojiberry/collab/wire"
 )
 
-// runner polls a session on a timer and applies what it learns: the others'
-// edits (Session.Poll puts them in the flow), their cursors, the role.
+// runner polls a session on a timer and applies what arrives.
 type runner struct {
 	sess  *collab.Session
 	flow  *canvas.TextFlow
@@ -30,12 +29,10 @@ func newRunner(ctx *cxango.Context, sess *collab.Session, flow *canvas.TextFlow,
 	return r
 }
 
-// stop ends the runner without waiting for it: it is called from the goroutine
-// that owns the canvas, which the loop may be waiting for (Sync). The loop
-// closes the session itself when it sees quit, and does nothing once it has.
+// stop ends the runner without waiting for it.
 func (r *runner) stop() {
 	close(r.quit)
-	r.sess.Bridge.Detach() // the flow stops sharing and gets its own undo back
+	r.sess.Bridge.Detach()
 }
 
 func (r *runner) do(f func()) {
@@ -47,7 +44,7 @@ func (r *runner) do(f func()) {
 }
 
 func (r *runner) loop() {
-	defer func() { r.sess.Close() }() // the loop owns the session, which Repair may replace
+	defer func() { r.sess.Close() }()
 	interval := 40 * time.Millisecond
 	if iv := r.props.Load().Interval; iv > 0 {
 		interval = iv
@@ -68,9 +65,9 @@ func (r *runner) loop() {
 				return // stopped while waiting for the canvas
 			default:
 			}
-			s := r.sess // Poll may repair the session and replace what is inside it
+			s := r.sess
 			changed := s.Poll()
-			if s.Role.CanEdit() { // a viewer's or commenter's surface records would be refused
+			if s.Role.CanEdit() {
 				s.Bridge.SyncSurfaces()
 			}
 			redraw := changed
@@ -79,16 +76,13 @@ func (r *runner) loop() {
 				redraw = true
 			}
 			s.RefreshPeers()
-			// Tell the others where we are when the cursor moves, and also when
-			// the session becomes ready or reconnects (they know nothing of us
-			// until then, and the cursor may not move for a while).
+			// Send this replica's cursor to the others.
 			if f := r.props.Load().TypedFor; f != nil {
 				s.TypedFor = f()
 			}
 			if h := r.props.Load().Holding; h != nil {
 				s.Holding = h()
 			}
-			// A held object is renewed every few seconds, before the hub forgets the presence it came with.
 			renew := s.Holding != "" && time.Since(lastPublish) > holdRenew
 			if c := fmt.Sprint(r.flow.Cursors()[0], s.Bridge.Ready(), s.Status, s.Repairs, s.Holding); (c != lastCursor || renew) && s.Bridge.Ready() {
 				lastCursor, lastPublish = c, time.Now()
@@ -143,5 +137,5 @@ func (r *runner) state() State {
 	return st
 }
 
-// holdRenew is how often a held object is announced again.
+// holdRenew is how often a held object is announced.
 const holdRenew = 3 * time.Second

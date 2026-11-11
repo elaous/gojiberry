@@ -12,10 +12,7 @@ import (
 	"github.com/elaous/gojiberry/collab"
 )
 
-// The surfaces: parts of the wrapped canvas other than the main text, shared
-// as one record per element (see collab.Surface). They look their elements up
-// in the wrapper's children each time, so they keep working when a re-render
-// replaces an element.
+// The surfaces are the parts of the canvas shared besides the text.
 
 // finder is what a surface needs of the wrapper.
 type finder interface {
@@ -39,9 +36,7 @@ func pageRecord(id, kind string) (int, bool) {
 	return n, err == nil && n >= 0
 }
 
-// furniture shares the pages' headers (or footers and page numbers). Each
-// page has a record, "null" where it sets none, so that removing a header
-// reaches the others too.
+// furniture shares the pages' headers and footers.
 type furniture struct {
 	in     finder
 	footer bool
@@ -115,12 +110,7 @@ func (f furniture) Write(recs map[string]string) {
 	}
 }
 
-// objects shares floating text, tables and images. An element with a Key is
-// shared under it ("float:intro"), so adding or removing others never shifts
-// it; one without a Key goes by its place among the unkeyed ones of its kind
-// ("float:#0"), which is only stable while the others do not change. Floating
-// text is shared as plain text plus position, size and anchor, a table by its
-// cells, an image by where it is and how big (its picture is not sent).
+// objects shares floating text, tables and images.
 type objects struct{ in finder }
 
 type floatRec struct {
@@ -139,8 +129,7 @@ type tableRec struct {
 	Anchor *canvas.Anchor
 }
 
-// styledCell is a cell's style with its place (a map with struct keys does not
-// go through JSON).
+// styledCell is a cell's style with its place.
 type styledCell struct {
 	Row, Col int
 	Style    canvas.CellStyle
@@ -156,7 +145,7 @@ var objectKinds = []struct{ kind, tag string }{
 	{"float", cxango.TagFloatingText}, {"table", cxango.TagTable}, {"image", cxango.TagImage},
 }
 
-// ref names an element: its key, or "#n" by place among the unkeyed.
+// ref names an element by key, or #n by place.
 func ref(key string, n int) string {
 	if key != "" {
 		return key
@@ -173,7 +162,7 @@ func (objects) Owns(id string) bool {
 	return false
 }
 
-// find returns the element of the kind that the reference names, or nil.
+// find returns the element of the kind the record names.
 func (o objects) find(tag, want string) any {
 	var found any
 	o.in.Each(tag, func(key string, n int, v any) {
@@ -196,7 +185,7 @@ func (o objects) Read() map[string]string {
 		for pos, st := range tv.Table.Styles {
 			rec.Styles = append(rec.Styles, styledCell{pos.Row, pos.Col, st})
 		}
-		slices.SortFunc(rec.Styles, func(a, b styledCell) int { // the same record every time for the same table
+		slices.SortFunc(rec.Styles, func(a, b styledCell) int {
 			if a.Row != b.Row {
 				return a.Row - b.Row
 			}
@@ -256,8 +245,7 @@ func (o objects) Write(recs map[string]string) {
 	}
 }
 
-// sharing is what a Flow shares: the text flow by default, the pages'
-// headers, footers or objects on their own, or everything.
+// sharing lists what a Flow shares.
 func (f Flow) sharing(in finder) (collab.Sharing, bool) {
 	switch f {
 	case "", FlowText:
@@ -281,7 +269,6 @@ func nonNil(m map[canvas.CellPos]canvas.CellStyle) map[canvas.CellPos]canvas.Cel
 	return m
 }
 
-// fitting keeps the merges that lie inside a rows x cols grid.
 func fitting(ms []canvas.Merge, rows, cols int) []canvas.Merge {
 	var out []canvas.Merge
 	for _, m := range ms {

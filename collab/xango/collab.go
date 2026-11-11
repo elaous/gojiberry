@@ -1,36 +1,4 @@
-// Package xango is the shared-editing wrapper for canvas xango trees (import path
-// collab/xango): put canvas elements inside <collab.Collab> and they become
-// multi-user.
-//
-//	import (
-//		canvas "github.com/elaous/gojiberry/canvas/xango"
-//		collab "github.com/elaous/gojiberry/collab/xango"
-//	)
-//
-//	<canvas.Canvas width={800} height={600} mode={canvas.ModeEdit}>
-//		<collab.Collab
-//			transport={collab.WebSockets()}
-//			client={client.Options{BaseURL: "https://host", Doc: "report"}}
-//			name="Ana" color="#e11d48">
-//			<canvas.TextFlow items={seed} pageCount={3} />
-//		</collab.Collab>
-//	</canvas.Canvas>
-//
-// The wrapper connects when it appears, shares the flow it wraps with
-// everyone on the document, applies what they do, draws their cursors,
-// follows the role the server gives (a viewer's canvas is held in view
-// mode), repairs itself when the server refuses something, and disconnects
-// when it leaves the tree. How it talks to the hub is the Transport: HTTP
-// endpoints (Server-Sent Events and POSTs, the default) or one WebSocket.
-//
-// While wrapped, the flow's content belongs to the session: the content props
-// (Items, Source, Text) only seed an empty document, and changing them later
-// does not push anything.
-//
-// The wrapper runs a goroutine that polls the session and touches the flow
-// and the stage, as the canvas's own event handlers do: that is safe in the
-// single-threaded wasm runtime. Elsewhere give Sync, which runs a function on
-// the goroutine that owns them.
+// Package xango shares xango elements between people in real time.
 package xango
 
 import (
@@ -57,30 +25,24 @@ const TagCollab = "collab.Collab"
 type Flow string
 
 const (
-	// FlowText is the main text flow (a canvas.TextFlow element): the first
-	// one inside the wrapper, with its comments, notes and styles. This is
-	// the default.
+	// FlowText is the main text flow.
 	FlowText Flow = "textflow"
-	// FlowHeader and FlowFooter are the pages' headers, and footers with
-	// their page numbers.
+	// FlowHeader and FlowFooter are the pages' headers and footers.
 	FlowHeader Flow = "header"
 	FlowFooter Flow = "footer"
-	// FlowObjects is the elements placed on the pages: floating text,
-	// tables and images (their position and size, and the text or cells).
+	// FlowObjects is the elements placed on the pages.
 	FlowObjects Flow = "objects"
 	// FlowAll is all of the above.
 	FlowAll Flow = "*"
 )
 
-// ErrFlowNotSupported is reported (State.Err) for a Flow that is not one of
-// the constants above.
+// ErrFlowNotSupported is reported for a Flow the element cannot share.
 var ErrFlowNotSupported = errors.New("collab: unknown flow (want textflow, header, footer, objects or *)")
 
-// ErrNoFlow is reported when the wrapper has no canvas.TextFlow inside.
+// ErrNoFlow is reported when the wrapper has no canvas.
 var ErrNoFlow = errors.New("collab: no canvas.TextFlow inside the Collab element")
 
-// State is what the wrapper tells OnState: the connection, who else is on the
-// document and what is waiting to be sent.
+// State is what the wrapper tells OnState.
 type State struct {
 	Replica string // this session's own id: the others' Peers are the ones that are not it
 	Status  client.Status
@@ -88,16 +50,12 @@ type State struct {
 	Peers   []wire.Presence // the other people, by name
 	Pending int             // operations the server has not accepted yet
 	Repairs int             // times the session had to be rebuilt
-	// Merged counts the changes made while offline that have met the shared document since the session
-	// began; Rejected the changes the server refused (see collab.Session). Both only grow.
+	// Merged counts changes made while offline and merged later.
 	Merged, Rejected int
-	// Conflicts counts the times others changed a paragraph being edited here, ConflictWith names them for the
-	// latest (see collab.Session). Only grows.
+	// Conflicts counts times others changed a paragraph edited here.
 	Conflicts    int
 	ConflictWith []string
-	// Err is why sharing is not working: the flow is not supported, or has
-	// content that cannot be shared, or the server refused something and
-	// the session has not yet repaired itself.
+	// Err is why sharing is not working.
 	Err error
 }
 
@@ -105,34 +63,27 @@ type State struct {
 type CollabProps struct {
 	Key string
 
-	// Transport is how the session talks to the hub: collab.HTTPEndpoints()
-	// (the default) or ws.WebSockets() from collab/ws, or your own.
+	// Transport is how the session talks to the hub.
 	Transport collab.Transport
-	// Client says where the hub is (BaseURL, Doc), as whom (Header, for
-	// the sign-in token) and how to retry.
+	// Client says where the hub is.
 	Client client.Options
-	// Replica identifies this copy of the document; it must be unique per
-	// tab or device. The default is random.
+	// Replica identifies this copy of the document.
 	Replica string
 	// Name and Color are shown to others with the cursor.
 	Name, Color string
 
-	// Flow chooses what is shared (default FlowText).
+	// Flow chooses what is shared; the default is FlowText.
 	Flow Flow
 
-	// Interval is how often the session is polled (default 40ms).
+	// Interval is how often the session is polled.
 	Interval time.Duration
-	// OnState is called when the connection, the people, the role or the
-	// waiting operations change; from the polling goroutine (or from Sync).
+	// OnState is called when the connection or state changes.
 	OnState func(State)
-	// Holding, when set, is asked every tick for the object this person is changing ("" for none), which goes to the
-	// others with the cursor and is renewed while it is held.
+	// Holding, when set, is asked every tick for the held object.
 	Holding func() string
-	// TypedFor, when set, is asked every tick for how long the text others typed stays in their colour (zero is the
-	// default, collab.DefaultTypedFor; negative turns the colours off).
+	// TypedFor, when set, gives how long typed text stays marked.
 	TypedFor func() time.Duration
-	// Sync, if set, runs f on the goroutine that owns the flow and the
-	// stage; the polling loop does all its work through it.
+	// Sync, if set, runs f on the session goroutine.
 	Sync func(f func())
 
 	Children []xango.Node
@@ -158,13 +109,13 @@ type element struct {
 	err  error
 }
 
-// Drawers implements cxango.Element: the wrapper draws what its children draw.
+// Drawers implements cxango.Element.
 func (e *element) Drawers() []canvas.Drawer { return e.kids.Drawers() }
 
 // Elements implements cxango.Holder.
 func (e *element) Elements() []cxango.Element { return e.kids.Elements() }
 
-// Close implements cxango.Closer: disconnect and close the children.
+// Close implements cxango.Closer: disconnects and closes.
 func (e *element) Close() {
 	e.stop()
 	e.kids.Close()
@@ -205,7 +156,7 @@ func (e *element) Update(c *cxango.Context, props any, children []xango.Node) (b
 		e.flow = flow
 		e.start(p, flow, want)
 	} else if e.run != nil {
-		e.run.props.Store(&p) // callbacks and the interval may change without a reconnect
+		e.run.props.Store(&p)
 	}
 	return changed, nil
 }
@@ -214,7 +165,7 @@ func (e *element) Update(c *cxango.Context, props any, children []xango.Node) (b
 func (e *element) start(p CollabProps, flow *canvas.TextFlow, id string) {
 	report := func(err error) {
 		if err == e.err {
-			return // said already; a re-render must not repeat it
+			return
 		}
 		e.err = err
 		if p.OnState != nil {
@@ -241,8 +192,7 @@ func (e *element) start(p CollabProps, flow *canvas.TextFlow, id string) {
 	e.run = newRunner(e.ctx, sess, flow, &p)
 }
 
-// identity is what a running session was made from: when it changes the
-// wrapper reconnects.
+// identity is what a running session was made from.
 func identity(p CollabProps, flow *canvas.TextFlow) string {
 	hdr := make([]string, 0, len(p.Client.Header))
 	for k, v := range p.Client.Header {
@@ -252,8 +202,7 @@ func identity(p CollabProps, flow *canvas.TextFlow) string {
 	return fmt.Sprint(p.Key, "|", p.Client.BaseURL, "|", p.Client.Doc, "|", p.Replica, "|", p.Flow, "|", hdr, "|", transportID(p.Transport), "|", flow != nil)
 }
 
-// transportID tells two transports apart without comparing values that may
-// not be comparable (a TransportFunc).
+// transportID tells two transports apart.
 func transportID(t collab.Transport) string {
 	if t == nil {
 		return "http"
