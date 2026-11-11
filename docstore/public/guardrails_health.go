@@ -10,24 +10,16 @@ import (
 	"time"
 )
 
-// ---- health
-
-// Health is what /admin/health reports (and /public/health reduces to its OK): whether the
-// promises the offer rests on are being kept. It holds no secrets and no per-document data, but
-// it says how full the offer is, so it is for the operator.
+// Health is what /admin/health reports.
 type Health struct {
 	OK       bool     `json:"ok"`
 	Problems []string `json:"problems,omitempty"`
-	// LastSweep is when Sweep last finished (the zero time: never).
+	// LastSweep is when Sweep last finished.
 	LastSweep time.Time `json:"lastSweep"`
-	// StorageBytes and StorageMax are the byte counter and its budget.
+	// StorageBytes and StorageMax are the bytes stored and the budget.
 	StorageBytes int64 `json:"storageBytes"`
 	StorageMax   int64 `json:"storageMax"`
-	// PriorityBursts is how many networks sent priority-category reports for more than
-	// Config.PriorityBurstDocs different documents within the last hour: a flood of the path that
-	// outranks other reports, or a real wave of abuse, either way for the operator to look at.
-	// It is not a Problem (it does not turn /public/health to 503: that is for the offer's own
-	// promises).
+	// PriorityBursts is how many networks sent bursts of priority reports.
 	PriorityBursts int `json:"priorityBursts"`
 }
 
@@ -40,12 +32,10 @@ const (
 	ProblemStorageFull    = "storage-full"    // the byte budget is used up: writes are refused
 )
 
-// DefaultSweepInterval is how often Run sweeps when it is given no interval, and the interval
-// Health assumes for a Service whose Run was never started.
+// DefaultSweepInterval is how often Run sweeps.
 const DefaultSweepInterval = 5 * time.Minute
 
-// expiryDisabled asks the store's policy (when it is an ExpiringAdapter, the only one that can be
-// asked) whether a public document would get a deadline.
+// expiryDisabled asks the store's policy whether expiry is off.
 func (s *Service) expiryDisabled() bool {
 	ea, ok := s.store.(*docstore.ExpiringAdapter)
 	if !ok || ea.Policy == nil {
@@ -55,8 +45,7 @@ func (s *Service) expiryDisabled() bool {
 	return !has || ttl <= 0
 }
 
-// Health reports on the offer's own promises: documents get deadlines, the sweeper runs, the
-// storage budget has room.
+// Health reports on the offer's own promises.
 func (s *Service) Health() Health {
 	now := s.now()
 	s.healthMu.Lock()
@@ -90,10 +79,7 @@ func (s *Service) Health() Health {
 	return h
 }
 
-// handleHealth serves GET /public/health, which anyone may call: 200 when everything holds and 503
-// when not, with a body that says no more than that. The storage figures, the names of the problems
-// and the time of the last sweep tell an attacker when the offer is full or its sweeper is down, so
-// they are in the detailed report behind the admin guard (GET /admin/health) only.
+// handleHealth serves GET /public/health.
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -106,7 +92,7 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]bool{"ok": false})
 }
 
-// handleAdminHealth serves GET /admin/health: the detailed Health report, for the operator.
+// handleAdminHealth serves GET /admin/health.
 func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -130,8 +116,7 @@ func (s *Service) alarmNoDeadline() {
 	log.Print("public docstore: ALARM: a public document was stored without a deadline and was removed: the store's expiry policy does not cover " + fmt.Sprintf("%q", docKeyPrefix) + " keys, so the 24 hour promise is not kept; see /public/health")
 }
 
-// priorityBursts is how many networks are over the burst limit now: from the store when the burst watch is
-// shared, else this process's own count (also the answer when the store cannot be read).
+// priorityBursts is how many networks are over the burst limit.
 func (s *Service) priorityBursts(now time.Time) int {
 	if s.burst != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// reportRef is the part of a stored report its document's record keeps.
+// reportRef is the part of a stored report its document keeps.
 type reportRef struct {
 	ID       string    `json:"id"`
 	Reporter string    `json:"by"`  // the reporter's hash (reporterHash)
@@ -26,42 +26,29 @@ type reportRef struct {
 	At       time.Time `json:"at"`
 }
 
-// Report is a stored abuse report, "report/<ID>". It outlives the document (Config.ReportTTL);
-// the content is not kept, so what the operator can act on is the view ID (takedown by ID).
+// Report is a stored abuse report.
 type Report struct {
 	ID     string    `json:"id"`
 	ViewID string    `json:"view"`
 	DocID  string    `json:"doc"`
 	Reason string    `json:"reason"`
 	At     time.Time `json:"at"`
-	// Category is one of ReportCategories ("other" when the reporter named none or an unknown
-	// one); Priority says the report was kept as a priority one: its category is on the priority
-	// list and the reporter's and the document's priority caps had room.
+	// Category is one of ReportCategories.
 	Category string `json:"category,omitempty"`
 	Priority bool   `json:"priority,omitempty"`
-	// Reporter is a keyed hash of the reporting client (never the address; see reporterHash), so
-	// the same client's reports can be told from other clients' without holding an address.
+	// Reporter is a keyed hash of the reporting client.
 	Reporter string `json:"reporter,omitempty"`
 }
-
-// ---- reports
 
 const (
 	maxReportBody   = 8 << 10
 	maxReasonBytes  = 2000
 	maxReportsOfDoc = 20
-	// maxPriorityOfDoc is how many of a document's slots priority reports may hold: half, so a
-	// priority flood cannot pin a document's slots and the ordinary reports of everyone else
-	// still find room.
+	// maxPriorityOfDoc is how many of a document's slots are priority.
 	maxPriorityOfDoc = maxReportsOfDoc / 2
 )
 
-// handleReport serves POST /public/report {"id": "<view id or document id>", "reason": "...",
-// "category": "csam|illegal|spam|other"}. The category is one of the fixed set ReportCategories (an
-// unknown or missing one is "other"); only the category, never the free text of the reason, can
-// make a report a priority one. The reports are kept (report/<id>) for the operator, who takes a
-// document down by ID. A document stops collecting reports after a few, so one link cannot fill the
-// store.
+// handleReport serves POST /public/report.
 func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, "POST")
@@ -113,8 +100,6 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	addr := s.clientIP(r)
 	reporter, err := s.reporterHash(ctx, ClientKey(addr))
 	if err != nil {
-		// Without the salt no reporter can be told from another (and a made-up one would split a
-		// reporter's reports across restarts): the report is refused, not taken half-way.
 		w.Header().Set("Retry-After", "10")
 		http.Error(w, "reports cannot be taken right now; try again shortly", http.StatusServiceUnavailable)
 		return
@@ -127,7 +112,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	s.ensureCounters(ctx) // the report counters are only for eviction: a report is taken even if they are unknown
+	s.ensureCounters(ctx)
 	var rep Report
 	notify := false
 	needEvict, stored, err := func() (bool, string, error) {
@@ -156,9 +141,6 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		reportID = stored
 	}
 	if needEvict {
-		// Over the global bound: the oldest ordinary reports go, the new one stays. It runs after
-		// the document's lock is let go: evicting updates the records of other documents, each
-		// under its own lock.
 		if metas, info, err := s.listReports(context.WithoutCancel(ctx)); err == nil {
 			s.evictReports(context.WithoutCancel(ctx), metas, info)
 		}
@@ -166,23 +148,16 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"reportId": reportID})
 }
 
-// reportKey is the dedupe key of a report: the reporter and the category, so one client reporting a
-// document under the same category counts once, however it words the reason (rewording must not
-// buy more slots). The reason is kept in the report, not in the key.
+// reportKey is the dedupe key of a report.
 func reportKey(reporter, category string) string {
 	h := sha256.Sum256([]byte(reporter + "\x00" + categoryOf(category)))
 	return base64.RawURLEncoding.EncodeToString(h[:9])
 }
 
-// saltRetryMax caps the backoff between attempts to get the reporter salt.
+// saltRetryMax caps the backoff between attempts to save the salt.
 const saltRetryMax = 30 * time.Second
 
-// reporterSalt returns the stored salt of the reporter hashes, creating it if the store has none.
-// The salt is never made up for this process when the store fails: a failure is an error, retried
-// after a backoff (1s, 2s, ... up to 30s; nothing is tried before it ends), and the caller refuses
-// the report until a salt exists. It is created with a create-if-absent write (SaveIf with no
-// previous content), so replicas starting together converge on one value: whoever loses the race
-// reads the winner's. A store that cannot write conditionally falls back to save and read back.
+// reporterSalt returns the stored salt of the reporter hashes.
 func (s *Service) reporterSalt(ctx context.Context) ([]byte, error) {
 	s.saltMu.Lock()
 	defer s.saltMu.Unlock()
@@ -193,8 +168,6 @@ func (s *Service) reporterSalt(ctx context.Context) ([]byte, error) {
 	if now.Before(s.saltRetry) {
 		return nil, errSaltUnavailable
 	}
-	// The store may be slow or the client may leave: neither may decide for everyone, so the
-	// attempt has a context of its own.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	salt, err := s.loadOrCreateSalt(ctx)
@@ -226,7 +199,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 			if salt, ok := valid(d.Data); ok {
 				return salt, nil
 			}
-			prev = docstore.Digest(d.Data) // damaged: replace exactly that
+			prev = docstore.Digest(d.Data)
 		case errors.Is(err, docstore.ErrNotFound):
 		default:
 			return nil, err
@@ -244,7 +217,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 		case err == nil:
 			return fresh, nil
 		case errors.Is(err, docstore.ErrConflict):
-			continue // somebody else created it first: read theirs
+			continue
 		case errors.Is(err, docstore.ErrConditionalUnsupported):
 			return s.saveSaltUnconditionally(ctx, raw)
 		default:
@@ -254,9 +227,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 	return nil, errors.New("the reporter salt kept changing while it was being created")
 }
 
-// saveSaltUnconditionally is the fallback for a store without a conditional write: save, then read
-// back what is stored and use that, so replicas that raced end up with the last writer's value
-// (after a short window in which they may have used their own).
+// saveSaltUnconditionally is the fallback for a failed salt save.
 func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]byte, error) {
 	if err := s.store.Save(ctx, saltKey, raw); err != nil {
 		return nil, err
@@ -274,12 +245,7 @@ func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]by
 	return rec.Salt, nil
 }
 
-// reporterHash names a reporting client without holding its address: HMAC-SHA-256 under the
-// report key (Config.ReportKey, which is never stored) over the stored salt and the client, cut to
-// 96 bits. The salt alone would not do: it is in the store, and with it a dump could be tested
-// against all four billion IPv4 addresses; the key is not. So "the report holds no address"
-// holds as long as the key is kept out of the store. It is the same across restarts and replicas
-// that share the key and the store, and an error (no salt yet) means the report cannot be taken.
+// reporterHash names a reporting client without revealing it.
 func (s *Service) reporterHash(ctx context.Context, client string) (string, error) {
 	salt, err := s.reporterSalt(ctx)
 	if err != nil {
@@ -293,7 +259,7 @@ func (s *Service) reporterHash(ctx context.Context, client string) (string, erro
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:12]), nil
 }
 
-// refLive reports whether the report a reference names is still stored.
+// refLive reports whether the report a reference names is live.
 func (s *Service) refLive(ctx context.Context, ref reportRef) (bool, error) {
 	_, err := s.store.Load(ctx, docstore.ReportPrefix+ref.ID)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -302,9 +268,7 @@ func (s *Service) refLive(ctx context.Context, ref reportRef) (bool, error) {
 	return err == nil, err
 }
 
-// pruneRefs drops the references whose reports are gone (evicted or deleted by a path that did not
-// update the record, a crash between the two) and reports whether it changed meta. The count
-// follows the live references.
+// pruneRefs drops the references whose reports are gone.
 func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 	kept := meta.ReportRefs[:0:0]
 	for _, ref := range meta.ReportRefs {
@@ -324,33 +288,10 @@ func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 	return true, nil
 }
 
-// storeReport decides whether rep is kept for the document whose record is meta (the caller holds
-// the document's lock) and keeps it. The rules, in order:
-//
-//   - the same reporter with the same category and reason again is a duplicate and counts once:
-//     nothing is stored, and the id of the first report is returned (if that report is gone, the
-//     reference is dropped and this is a new report);
-//   - a report counts as a priority one only if its category is on the priority list, its reporter
-//     has made fewer than Config.MaxPriorityReportsPerReporter priority reports in the last day, and
-//     the document holds fewer than maxPriorityOfDoc priority reports; otherwise it is an ordinary
-//     one (kept, or dropped, by the rules below);
-//   - a document has at most maxReportsOfDoc reports; a priority one that finds the document full
-//     evicts the document's oldest ordinary report to make room (or is dropped if every report
-//     there is a priority one, which the half cap makes impossible), any other is dropped;
-//   - the last Config.ReportReservedPerDoc slots of a document are for reporters with no report on
-//     it yet, and, once the stored reports pass the global bound minus Config.ReportReservePercent
-//     of it, reports are taken only from reporters with no stored report at all (priority reports
-//     are exempt from both reserves: they are not the flood the reserves keep out).
-//
-// The slots are counted from the document's live reports: references to reports that no longer
-// exist are dropped before they are counted. A dropped report is answered 202 like a kept one, so a
-// flooder learns nothing. id is the report's id if it was stored or is a duplicate, "" if it was
-// dropped; over says the stored reports now pass the global bound, which the caller (not holding
-// the lock) answers with evictReports.
+// storeReport decides whether rep is kept for the document.
 func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (id string, stored, over bool, err error) {
 	pruned := false
 	defer func() {
-		// A prune is worth keeping even when the report itself is dropped.
 		if pruned && !stored {
 			if e := s.putJSON(ctx, docRecordPrefix+rep.DocID, *meta); e != nil {
 				log.Printf("public docstore: updating a document's report list: %s", redact(e))
@@ -396,12 +337,12 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 		if !priority || !s.evictOrdinaryRef(ctx, meta) {
 			return "", false, false, nil
 		}
-		pruned = true // the eviction changed the record; keep it even if the save below fails
+		pruned = true
 	} else if !priority {
 		if reserved := s.cfg.ReportReservedPerDoc; reserved > 0 && n >= maxReportsOfDoc-reserved {
 			for _, ref := range meta.ReportRefs {
 				if ref.Reporter == rep.Reporter {
-					return "", false, false, nil // the slots left are for new reporters
+					return "", false, false, nil
 				}
 			}
 		}
@@ -416,7 +357,7 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 	if err := s.store.Save(ctx, docstore.ReportPrefix+rep.ID, raw); err != nil {
 		if priority && s.prioQuota != nil {
 			if r, ok := s.prioQuota.(QuotaRefunder); ok {
-				r.Refund(ctx, "prio|"+rep.Reporter, 1) // the report was not kept: the allowance is given back
+				r.Refund(ctx, "prio|"+rep.Reporter, 1)
 			}
 		}
 		return "", false, false, err
@@ -434,8 +375,7 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 	return rep.ID, true, over, nil
 }
 
-// evictOrdinaryRef deletes the oldest non-priority report of the document and reports whether
-// there was one.
+// evictOrdinaryRef deletes the oldest non-priority reference.
 func (s *Service) evictOrdinaryRef(ctx context.Context, meta *docMeta) bool {
 	oldest := -1
 	for i, ref := range meta.ReportRefs {
@@ -457,8 +397,7 @@ func (s *Service) evictOrdinaryRef(ctx context.Context, meta *docMeta) bool {
 	return true
 }
 
-// allowPriority spends one of the reporter's priority reports for the day: from the shared quota when there is
-// one (an error there is a refusal: the report is then kept as an ordinary one), else from the per-process count.
+// allowPriority spends one of the reporter's priority reports.
 func (s *Service) allowPriority(ctx context.Context, reporter string) bool {
 	limit := s.cfg.MaxPriorityReportsPerReporter
 	if limit < 0 {

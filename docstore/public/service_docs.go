@@ -12,14 +12,11 @@ import (
 	"time"
 )
 
-// ---- documents
-
 // docResponse is the body of POST /public/doc.
 type docResponse struct {
-	// ID is the document's ID, for the owner (and collaborators holding the edit link); report
-	// and takedown accept it as they accept the view ID.
+	// ID is the document's ID, for the owner.
 	ID string `json:"id"`
-	// ViewID names the read-only link: GET /public/view/<viewId>.
+	// ViewID names the read-only link.
 	ViewID   string    `json:"viewId"`
 	Expires  time.Time `json:"expires"`
 	Versions int       `json:"versions"`
@@ -28,12 +25,7 @@ type docResponse struct {
 // errTooSlow is what the minimum-rate reader fails with.
 var errTooSlow = errors.New("public: the request body arrives slower than the minimum rate")
 
-// rateReader reads a request body and holds the sender to a minimum average rate: after grace, at
-// least rate bytes per second must have arrived, or the next read fails with errTooSlow. Before
-// every read it sets the connection's read deadline to the moment the rate would be missed if
-// nothing more came (grace + bytes read / rate, never later than limit after the start), so a
-// client that sends nothing is cut off then, not at the request's far deadline: the declared length
-// of a large body is held in flight, and a trickle must not hold it for the whole timeout.
+// rateReader reads a request body and enforces the minimum rate.
 type rateReader struct {
 	r     io.Reader
 	rc    *http.ResponseController
@@ -49,7 +41,7 @@ func (m *rateReader) Read(p []byte) (int, error) {
 	if time.Since(m.start) >= allowed {
 		return 0, errTooSlow
 	}
-	_ = m.rc.SetReadDeadline(m.start.Add(allowed)) // not every writer supports it (tests)
+	_ = m.rc.SetReadDeadline(m.start.Add(allowed))
 	n, err := m.r.Read(p)
 	m.read += int64(n)
 	if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -58,10 +50,7 @@ func (m *rateReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// readBody reads the document body, refusing more than MaxDocBytes (413), an empty one (400) and
-// one that arrives too slowly (408: below the minimum rate, see rateReader, or past the request's
-// read deadline, see headers). A body that fails to arrive, whatever the reason, was paid for by
-// the client: its daily bytes stay charged (tk.keep) and only the in-flight claim ends.
+// readBody reads the document body, refusing more than the limit.
 func (s *Service) readBody(w http.ResponseWriter, r *http.Request, tk *ticket) ([]byte, bool) {
 	if r.ContentLength > s.cfg.MaxDocBytes {
 		http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
@@ -97,10 +86,7 @@ func (s *Service) readBody(w http.ResponseWriter, r *http.Request, tk *ticket) (
 	return data, true
 }
 
-// screen runs the content checks every write goes through. A body refused for its content (422)
-// stays charged to the client's daily bytes: it was sent, and giving the bytes back would let one
-// client send refused content for free; an outage of the checker (503) is the server's and is
-// refunded.
+// screen runs the content checks every write goes through.
 func (s *Service) screen(w http.ResponseWriter, r *http.Request, data []byte, tk *ticket) bool {
 	bad, err := s.blocklist.Blocked(r.Context(), data)
 	if err != nil {
@@ -116,12 +102,7 @@ func (s *Service) screen(w http.ResponseWriter, r *http.Request, data []byte, tk
 	return true
 }
 
-// handleDoc serves the session's own document:
-//
-//	POST   /public/doc   create it (body: the document bytes); 409 if the session already has one
-//	PUT    /public/doc   save an edit (renews the 24 hours)
-//	GET    /public/doc   download it (never renews; always available until it is deleted)
-//	DELETE /public/doc   discard it, freeing the session for another
+// handleDoc serves the session's own document.
 func (s *Service) handleDoc(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -150,8 +131,6 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	if !s.writeAllowed(w, r, sess) {
 		return
 	}
-	// One document per session. A document that is gone (expired) frees the session; one that
-	// was taken down does not: that session is done. Checked before the body is read.
 	old := sess.DocID
 	if old != "" {
 		if gone, err := s.removed(ctx, old); err != nil {
@@ -169,7 +148,6 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Size, storage and the daily bytes are settled before the body is read.
 	tk, ok := s.admit(w, r)
 	if !ok {
 		return
@@ -211,8 +189,6 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	defer unlock()
 	view := viewIDOf(docID)
 	meta := docMeta{Owner: sess.User().ID, ViewID: view, Created: s.now().UTC(), Versions: 1, Bytes: len(data)}
-	// Records first, the document last: a failure leaves records without a document, which the
-	// sweep removes, never a document nobody can find or expire.
 	rollback := func() {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
@@ -242,22 +218,16 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !has {
-		// The store did not give the document a deadline (a policy that skips it): never keep a
-		// public document that would live for ever.
 		rollback()
 		s.alarmNoDeadline()
 		s.fail(w, errNoDeadline)
 		return
 	}
-	// A takedown that arrived while this create was in flight (it tombstones an ID it cannot
-	// resolve yet, see handleTakedown) wins: look again now that the document is stored, so
-	// either this sees the tombstone or the takedown sees the records and deletes them.
 	if gone, err := s.removed(ctx, docID); err != nil {
 		rollback()
 		s.fail(w, err)
 		return
 	} else if gone {
-		// Removed, and the session keeps the claim on the dead document ID: it stays banned.
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
 		_ = s.dropRecords(bg, docID)
@@ -272,8 +242,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, docResponse{ID: docID, ViewID: view, Expires: exp, Versions: 1})
 }
 
-// ownDoc finds the session's document and its record, answering 404 (none, or expired) or 410
-// (taken down).
+// ownDoc finds the session's document and its record.
 func (s *Service) ownDoc(w http.ResponseWriter, r *http.Request, sess Session) (docID string, ok bool) {
 	ctx := r.Context()
 	if sess.DocID == "" {
@@ -303,8 +272,7 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 	if !s.writeAllowed(w, r, sess) {
 		return
 	}
-	// The save limit is checked on the record as it is now, before the body is read, and again
-	// under the lock below.
+	// The save limit is checked on the record as it is stored.
 	var early docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &early); err != nil {
 		s.fail(w, err)
@@ -340,7 +308,6 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	} else if !live {
-		// Expired: an edit must not bring it back (the view link and the document are gone).
 		http.Error(w, "this document expired; create a new one", http.StatusNotFound)
 		return
 	}
@@ -355,8 +322,6 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer res.cancel() // a no-op once committed
-	// The count goes up before the save and comes back down if the save fails: a crash between
-	// the two can only leave the count one too high (the safe side), never an uncounted edit.
 	next := meta
 	next.Versions++
 	next.Bytes = len(data)
@@ -369,8 +334,6 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	// The save renewed the deadline; make sure there is one. Without it the document would
-	// live for ever: remove it (the edit cannot be taken back) and raise the alarm.
 	exp, has, err := s.expiresOf(ctx, docID)
 	if err != nil {
 		s.fail(w, err)
@@ -380,7 +343,7 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 		bg := context.WithoutCancel(ctx)
 		_ = s.deleteKey(bg, docKey(docID))
 		_ = s.dropRecords(bg, docID)
-		s.bytes.release(docID) // the document is gone: its bytes are not counted until the next sweep
+		s.bytes.release(docID)
 		s.alarmNoDeadline()
 		s.fail(w, errNoDeadline)
 		return
@@ -414,8 +377,7 @@ func (s *Service) downloadDoc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="document"`)
 	s.setExpires(ctx, w, docID)
-	// Whoever holds the edit link may be a different browser from the one that made the document: the view
-	// link is theirs to give too.
+	// Whoever holds the edit link may be a different browser.
 	var meta docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err == nil && found && meta.ViewID != "" {
 		w.Header().Set("X-Gojiberry-View-Id", meta.ViewID)
@@ -451,11 +413,7 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- view links
-
-// handleView serves GET /public/view/<viewId>: the document, read-only. It never renews the
-// expiry, and shows nothing but the content and the deadline: not the edit token, the owner
-// session or the document ID. A taken-down view ID answers 410.
+// handleView serves GET /public/view/<viewId>.
 func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -488,7 +446,7 @@ func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, err := s.store.Load(ctx, docKey(rec.Doc))
 	if errors.Is(err, docstore.ErrNotFound) {
-		_ = s.dropRecords(context.WithoutCancel(ctx), rec.Doc) // expired: its records go with it
+		_ = s.dropRecords(context.WithoutCancel(ctx), rec.Doc)
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -501,8 +459,7 @@ func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(doc.Data)
 }
 
-// resolve finds the document an ID names: a view ID or a document ID. ok is false for an
-// unknown one.
+// resolve finds the document an ID names.
 func (s *Service) resolve(ctx context.Context, id string) (docID, view string, ok bool, err error) {
 	if !validID(id) {
 		return "", "", false, nil

@@ -7,19 +7,16 @@ import (
 	"time"
 )
 
-// prioWindow is how long a priority report counts against its reporter's allowance.
+// prioWindow is how long a priority report counts against a reporter.
 const prioWindow = 24 * time.Hour
 
-// burstWindow is the hour over which priority reports from one network are counted by document.
+// burstWindow is the hour over which priority reports count as a burst.
 const burstWindow = time.Hour
 
 // maxBurstNets bounds the networks the burst watch remembers.
 const maxBurstNets = 10000
 
-// prioTracker keeps the two counts that stop the priority path of the abuse reports from being
-// flooded: how many priority reports each reporter has made in the last day (the allowance), and,
-// per network, which different documents priority-category reports named in the last hour (the
-// burst flag for the operator). It is per process, like the other counters.
+// prioTracker keeps the two counts that limit priority reports.
 type prioTracker struct {
 	mu      sync.Mutex
 	byRep   map[string][]time.Time
@@ -27,8 +24,7 @@ type prioTracker struct {
 	flagged map[string]time.Time            // net -> when the burst was last logged
 }
 
-// allow reports whether reporter may make another priority report: fewer than limit in the last
-// day (a negative limit: always).
+// allow reports whether reporter may make another priority report.
 func (p *prioTracker) allow(reporter string, now time.Time, limit int) bool {
 	if limit < 0 {
 		return true
@@ -64,9 +60,7 @@ func (p *prioTracker) record(reporter string, at time.Time) {
 	p.byRep[reporter] = append(p.byRep[reporter], at)
 }
 
-// rebuild replaces the allowance counts with what the stored reports say (the priority ones made in
-// the last day), keeping what was recorded in memory since the listing started (a report stored
-// while it ran may be missing from it).
+// rebuild replaces the allowance counts with the stored reports.
 func (p *prioTracker) rebuild(info map[string]reportInfo, now, listStart time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -86,10 +80,7 @@ func (p *prioTracker) rebuild(info map[string]reportInfo, now, listStart time.Ti
 	p.byRep = fresh
 }
 
-// note records that a priority-category report from network net named document doc, and reports
-// whether that network has now named more than limit different documents within the hour (a
-// non-positive limit: never) and whether this is the first time in the hour it is flagged, which is
-// when the caller logs it.
+// note records a priority report from a network.
 func (p *prioTracker) note(net, doc string, now time.Time, limit int) (over, first bool) {
 	if limit <= 0 {
 		return false, false
@@ -104,7 +95,7 @@ func (p *prioTracker) note(net, doc string, now time.Time, limit int) (over, fir
 		if len(p.byNet) >= maxBurstNets {
 			p.pruneLocked(now)
 			if len(p.byNet) >= maxBurstNets {
-				return false, false // the watch is full of busy networks: this one goes unwatched
+				return false, false
 			}
 		}
 		docs = map[string]time.Time{}
@@ -126,7 +117,7 @@ func (p *prioTracker) note(net, doc string, now time.Time, limit int) (over, fir
 	return true, false
 }
 
-// bursts is how many networks are over limit documents within the hour right now.
+// bursts is how many networks are over the limit.
 func (p *prioTracker) bursts(now time.Time, limit int) int {
 	if limit <= 0 {
 		return 0
@@ -169,15 +160,14 @@ func (p *prioTracker) pruneLocked(now time.Time) {
 	}
 }
 
-// prune forgets what has aged out (Sweep calls it).
+// prune forgets what has aged out; Sweep calls it.
 func (p *prioTracker) prune(now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.pruneLocked(now)
 }
 
-// noteBurst feeds the burst watch for a priority-category report and logs the first time a network
-// goes over the limit in an hour.
+// noteBurst feeds the burst watch for a priority report.
 func (s *Service) noteBurst(ctx context.Context, net, doc string) {
 	var over, first bool
 	if s.burst != nil {
@@ -190,7 +180,6 @@ func (s *Service) noteBurst(ctx context.Context, net, doc string) {
 				return
 			}
 		}
-		// The shared watch could not be reached: this process keeps count meanwhile.
 	}
 	over, first = s.prio.note(net, doc, s.now(), s.cfg.PriorityBurstDocs)
 	if over && first {
