@@ -1,4 +1,3 @@
-// Package docsearch is a search over managed documents.
 package docsearch
 
 import (
@@ -39,7 +38,6 @@ type Hit struct {
 	Snippet string
 }
 
-// Add puts a document in the index, replacing any old version.
 func (ix *Index) Add(id, title, text string) {
 	if ix.docs == nil {
 		ix.docs = map[string]*doc{}
@@ -57,7 +55,6 @@ func (ix *Index) Remove(id string) { delete(ix.docs, id) }
 // Len is how many documents are indexed.
 func (ix *Index) Len() int { return len(ix.docs) }
 
-// words splits text into lower-case words.
 func words(s string) []string {
 	var out []string
 	var cur []rune
@@ -123,7 +120,6 @@ func count(ws []string, t string, prefix bool) int {
 	return n
 }
 
-// snippet is about 60 characters of text around a match.
 func snippet(text string, terms []string) string {
 	lower := []rune(strings.ToLower(text))
 	rs := []rune(text)

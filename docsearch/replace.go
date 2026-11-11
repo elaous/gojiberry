@@ -11,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Replace across documents is planned, then applied.
-
 // Change is what a plan would do to one document.
 type Change struct {
 	ID, Title string
@@ -161,7 +159,6 @@ func (a *Applied) Undo(ctx context.Context) (restored, kept []string, err error)
 
 var errChanged = errors.New("docsearch: the document changed")
 
-// swap replaces from by to if the store still holds it.
 func swap(ctx context.Context, store docstore.Adapter, id string, from, to []byte) error {
 	if c, ok := store.(docstore.ConditionalAdapter); ok {
 		if err := c.SaveIf(ctx, id, to, docstore.Digest(from)); !errors.Is(err, docstore.ErrConditionalUnsupported) {
@@ -187,7 +184,6 @@ func contains(ids []string, id string) bool {
 	return false
 }
 
-// decode reads a stored document in whichever format it has.
 func decode(data []byte) (docfile.Document, docfile.Codec, error) {
 	var last error
 	for _, c := range docfile.Formats() {
@@ -205,7 +201,6 @@ func decode(data []byte) (docfile.Document, docfile.Codec, error) {
 	return docfile.Document{}, nil, last
 }
 
-// window is about 60 characters of text around a match.
 func window(text string, from, to int) string {
 	rs := []rune(text)
 	lo, hi := max(0, from-25), min(len(rs), to+25)

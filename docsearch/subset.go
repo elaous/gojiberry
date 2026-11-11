@@ -7,7 +7,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Subset is a view of a store that holds only some documents.
 func Subset(store docstore.Adapter, keys []string) docstore.Adapter {
 	return subset{store: store, keys: slices.Clone(keys)}
 }

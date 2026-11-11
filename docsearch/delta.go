@@ -8,8 +8,6 @@ import (
 	"slices"
 )
 
-// An index kept between visits is updated by deltas.
-
 var deltaMagic = []byte("GJSD1")
 
 // Delta is the change one refresh made to an index.
@@ -33,7 +31,6 @@ func (ix *Index) DeltaFor(res Result) Delta {
 	return d
 }
 
-// baseID ties a delta to its base index.
 func baseID(base []byte) ([]byte, error) {
 	n := len(magic) + 12
 	if len(base) < n {
