@@ -13,7 +13,6 @@ import (
 	"sync"
 )
 
-// Files is where import reads files and export, pack and unpack write them.
 type Files interface {
 	// Glob lists the files a pattern names.
 	Glob(pattern string) ([]string, error)
@@ -83,7 +82,6 @@ func (OSFiles) Write(name string, force bool, write func(io.Writer) error) (err 
 	return os.Rename(f.Name(), name)
 }
 
-// PageFiles is Files for a page; Inbox holds files delivered to it.
 type PageFiles struct {
 	// Deliver hands over a finished file.
 	Deliver func(name string, data []byte)
@@ -158,7 +156,6 @@ func (p *PageFiles) Exists(name string) bool {
 // MkdirAll implements Files; the inbox has no folders.
 func (*PageFiles) MkdirAll(string) error { return nil }
 
-// Write implements Files: the file is built in memory and delivered when it is whole.
 func (p *PageFiles) Write(name string, force bool, write func(io.Writer) error) error {
 	if p.Deliver == nil {
 		return errors.New("console: nowhere to deliver the file")

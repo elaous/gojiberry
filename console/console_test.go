@@ -197,7 +197,6 @@ func TestRemoveRestoreAndPurgeAsks(t *testing.T) {
 		t.Fatalf("%q", out)
 	}
 	r.must("restore 'old 1'")
-	// purge asks; the first answer is no.
 	out := r.must("purge 'old *'")
 	if !strings.Contains(out, "[y/N]") || !strings.Contains(out, "left alone") {
 		t.Fatalf("%q", out)
@@ -205,13 +204,11 @@ func TestRemoveRestoreAndPurgeAsks(t *testing.T) {
 	if tr, _ := r.s.Trashed(context.Background(), "m"); len(tr) != 1 {
 		t.Fatalf("a no leaves it: %d", len(tr))
 	}
-	// A dry run asks nothing and changes nothing.
 	r.sh.DryRun = true
 	if out := r.must("purge 'old *'"); !strings.Contains(out, "would delete for good") || strings.Contains(out, "[y/N]") {
 		t.Fatalf("%q", out)
 	}
 	r.sh.DryRun = false
-	// The second answer is yes.
 	out = r.must("purge 'old *'")
 	if !strings.Contains(out, "delete for good old 2") {
 		t.Fatalf("%q", out)
@@ -284,7 +281,6 @@ func TestImportExportAndPack(t *testing.T) {
 	if out := other.must("ls"); out != "notes\n" {
 		t.Fatalf("%q", out)
 	}
-	// A dry run packs nothing.
 	r.sh.DryRun = true
 	nope := filepath.Join(dir, "nope.opendoc")
 	r.must("pack " + nope)

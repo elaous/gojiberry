@@ -133,7 +133,6 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 	return nil
 }
 
-// uniqueFile returns name, made unique with a short suffix.
 func uniqueFile(name, id string, used map[string]bool) string {
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)

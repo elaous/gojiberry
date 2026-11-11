@@ -68,7 +68,6 @@ func (sh *Shell) rmdir(ctx context.Context, args []string) error {
 	return nil
 }
 
-// folderEmpty reports whether rmdir would succeed.
 func (sh *Shell) folderEmpty(ctx context.Context, t *tree, id, label string) error {
 	for _, f := range t.folders {
 		if f.Parent == id {

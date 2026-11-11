@@ -8,36 +8,23 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// MaxLines bounds the log a Session keeps: the oldest lines go first.
 const MaxLines = 500
 
-// Session is the console inside the editor: the state behind components.ConsolePanel. It runs one command at a time on
-// a Shell in the background (Pending), keeps what was typed and what came back as a log, remembers the commands for
-// the Up and Down keys, and turns a command's question (purge, rebuild) into a Yes and No in the panel.
-//
-// The Shell's Out, Err, Confirm and Files are taken over by the Session. Files is a PageFiles: the person adds
-// files with the panel (PickFiles), import and unpack read them, and export and pack deliver what they make
-// through Deliver (a download).
 type Session struct {
-	Shell *Shell
-	Files *PageFiles
-	// PickFiles opens the chooser; the host calls add for each file picked (transfer.PickFiles in a browser).
+	Shell     *Shell
+	Files     *PageFiles
 	PickFiles func(add func(name string, data []byte))
-	// Before is called when a command is about to run, in its goroutine: a host whose target can change
-	// (the Save tab's) points the Shell at the right one there.
-	Before func()
-	// OnDone is called after each command, with its error (nil if it succeeded): refresh the document list there.
-	OnDone func(err error)
-	// OnChange is called after any state change, possibly from another goroutine.
-	OnChange func()
-	Pending  *components.Pending
+	Before    func()
+	OnDone    func(err error)
+	OnChange  func()
+	Pending   *components.Pending
 
 	mu       sync.Mutex
 	lines    []components.ConsoleLine
 	partial  map[string]string // kind -> text of a line not finished yet
 	input    string
 	history  []string
-	hpos     int // where the Up and Down keys are in history; len(history) is "a new line"
+	hpos     int
 	question string
 	answer   chan bool
 	runCtx   context.Context
@@ -62,7 +49,6 @@ func (s *Session) changed() {
 	}
 }
 
-// lineWriter splits output into the log's lines.
 type lineWriter struct {
 	s    *Session
 	kind string
@@ -92,7 +78,6 @@ func (s *Session) addLocked(kind, text string) {
 	}
 }
 
-// flushLocked finishes a command's partial output line.
 func (s *Session) flushLocked() {
 	for _, kind := range []string{"out", "err"} {
 		if t := s.partial[kind]; t != "" {
@@ -102,7 +87,6 @@ func (s *Session) flushLocked() {
 	}
 }
 
-// confirm asks a question through the Shell.
 func (s *Session) confirm(question string) bool {
 	s.mu.Lock()
 	ch := make(chan bool, 1)

@@ -62,7 +62,6 @@ func TestSessionRunsCommandsAndKeepsALogAndAPrompt(t *testing.T) {
 	if p = s.Props(); !strings.HasSuffix(texts(p, "out"), "Report Q2") {
 		t.Errorf("%s", texts(p, ""))
 	}
-	// An error is a line of its own.
 	s.type_("nosuchcommand")
 	p = s.Props()
 	if !strings.Contains(texts(p, "err"), "unknown command") {
@@ -72,7 +71,6 @@ func TestSessionRunsCommandsAndKeepsALogAndAPrompt(t *testing.T) {
 	if p = s.Props(); !strings.HasSuffix(texts(p, "out"), "/Archive") {
 		t.Errorf("%s", texts(p, ""))
 	}
-	// clear empties the log.
 	s.type_("clear")
 	if p = s.Props(); len(p.Lines) != 0 {
 		t.Errorf("%d lines after clear", len(p.Lines))

@@ -1,4 +1,3 @@
-// Package console is a command line for document stores.
 package console
 
 import (
@@ -15,7 +14,6 @@ import (
 	"unicode"
 )
 
-// registerExport adds the writers of the other file formats.
 var registerExport func(*transfer.Registry)
 
 // Shell runs console commands on one target of a Saver.
@@ -31,10 +29,8 @@ type Shell struct {
 	Script bool
 	// Registry reads and writes import and export files.
 	Registry *transfer.Registry
-	// Files is where import, export, pack and unpack read and write.
-	Files Files
-	// Confirm, when set, answers the questions of purge and similar commands.
-	Confirm func(question string) bool
+	Files    Files
+	Confirm  func(question string) bool
 	// Format is how imported documents are stored.
 	Format docfile.Codec
 
@@ -226,13 +222,11 @@ func (sh *Shell) reader() *bufio.Reader {
 	return sh.in
 }
 
-// ask puts a question; a destructive command goes ahead only on yes.
 func (sh *Shell) ask(question string) bool {
 	if sh.Yes {
 		return true
 	}
 	if sh.Script {
-		// The next script line is a command, not an answer: never read it.
 		sh.printf("%s\nnot confirmed: a script needs -y to answer yes\n", question)
 		return false
 	}
@@ -245,7 +239,6 @@ func (sh *Shell) ask(question string) bool {
 	return line == "y" || line == "yes"
 }
 
-// declined is what a command returns when its question is refused.
 func (sh *Shell) declined() error {
 	if sh.Script {
 		return errors.New("not confirmed: nothing was changed (a script needs -y to answer yes)")
@@ -254,7 +247,6 @@ func (sh *Shell) declined() error {
 	return nil
 }
 
-// act does a change; with DryRun it only says what it would do.
 func (sh *Shell) act(desc string, do func() error) error {
 	if sh.DryRun {
 		sh.printf("would %s\n", desc)
@@ -285,7 +277,6 @@ func (sh *Shell) tree(ctx context.Context) (*tree, error) {
 }
 
 func (sh *Shell) pathOf(id string) string {
-	// Names come from the last tree read.
 	if id == "" {
 		return "/"
 	}
@@ -325,7 +316,6 @@ func (t *tree) child(parent, name string) (saver.Folder, error) {
 	return saver.Folder{}, fmt.Errorf("console: %d folders are called %q here", len(found), name)
 }
 
-// folder resolves a folder path such as /Work/Reports.
 func (sh *Shell) folder(t *tree, p string) (string, error) {
 	cur := sh.cwd
 	if strings.HasPrefix(p, "/") {
@@ -347,7 +337,6 @@ func (sh *Shell) folder(t *tree, p string) (string, error) {
 	return cur, nil
 }
 
-// splitPath splits Work/Reports/Q* into folder path and pattern.
 func splitPath(p string) (dir, last string) {
 	i := strings.LastIndex(p, "/")
 	if i < 0 {
@@ -356,7 +345,6 @@ func splitPath(p string) (dir, last string) {
 	return p[:i+1], p[i+1:]
 }
 
-// globMatch matches name against pattern, ignoring case.
 func globMatch(pattern, name string) bool {
 	return glob([]rune(strings.ToLower(pattern)), []rune(strings.ToLower(name)))
 }
@@ -397,7 +385,6 @@ type thing struct {
 	name   string
 }
 
-// match finds the documents and folders a pattern names.
 func (sh *Shell) match(ctx context.Context, t *tree, pattern string, trashed bool) (in string, out []thing, err error) {
 	dir, last := splitPath(pattern)
 	in, err = sh.folder(t, dir)
