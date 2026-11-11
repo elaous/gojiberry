@@ -78,7 +78,7 @@ func TestEndToEnd(t *testing.T) {
 	d.OK(!d.State().Bool("menuOpen"), "choosing a style closes the menu")
 	head := d.Pixel(60, 44)
 	d.OK(head[0] == 0x25 && head[1] == 0x63 && head[2] == 0xeb, fmt.Sprintf("the header row is blue after the style: %#x", head))
-	if dir := os.Getenv("GOJIBERRY_FEATURE_SHOTS"); dir != "" { // the picture of docs/features.md (make feature-shots)
+	if dir := os.Getenv("GOJIBERRY_FEATURE_SHOTS"); dir != "" { // the picture of docs/features.md
 		d.CanvasClick(24, 24)
 		d.ScreenshotOf("#stage", filepath.Join(dir, "table-styles.webp"))
 		d.Press("Escape")

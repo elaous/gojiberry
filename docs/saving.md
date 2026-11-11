@@ -1,7 +1,7 @@
 # Saving, importing and fonts
 
 Everything here is non-canvas: Go packages plus DOM components that sit
-around the canvas editor. `examples/canvas-editor-showcase` wires all of it
+around the canvas editor. The showcase in the [OpenDocs repository](https://github.com/elaous/opendocs) wires all of it
 (File menu, the Save and Import/Export tabs, a font that downloads lazily).
 
 ## The document model (`docfile`)

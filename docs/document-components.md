@@ -342,7 +342,7 @@ buttons have accessible names that say which row they are for ("Make Budget conf
 alike, as two hidden documents do, a short ID is added), so a screen reader can tell them apart. `Session.Clear`
 drops the open document from the session (ID, name, tag filter, selection, revealed names, status) when the keys are
 forgotten and the host empties the editor.
-The showcase's "Encrypt this store" (`examples/canvas-editor-showcase`, `encstore`) is a host of all this.
+The showcase's "Encrypt this store" (in the OpenDocs repository, `encstore`) is a host of all this.
 
 **Errors in words.** (The encrypt errors are taught by `components/encerr`: a host calls `encerr.Install()` once.) A component's error line (`Pending.Err`) is drawn by `ErrorView`, which asks
 `ExplainError` for a group and a translated message (`err.*` ids): unsigned file after a key change, a file no owner

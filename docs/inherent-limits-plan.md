@@ -74,7 +74,7 @@ on real people, and all of it is fixable; the roadmap entry has the five steps. 
 
 Done when: a person who enrolled one key is told, can test the recovery key without risk, can print it, is
 reminded, and can revoke a device and re-key with a visible progress bar; each step has a browser test and
-passes `make a11y-test`.
+passes the accessibility gate (`make a11y-test`, now in the OpenDocs repository).
 
 ## 45. Unenrolled-address entry numbering by a holder of the directory key
 

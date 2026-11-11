@@ -60,41 +60,9 @@ fmt:
 vet:
 	go vet ./...
 
-# The showcase's browser tests alone take about 450s on a quiet machine, so the default 10 minute
-# per-package limit is too close (a full run that shared the machine with other work hit it).
 .PHONY: test
 test:
-	go test -timeout 75m ./...  # the showcase browser tests alone take about 35 minutes
-
-# a11y-test is the accessibility gate: axe-core over the page in every state a person meets it (the
-# document, each tab, each menu, the find bar, the key directory), and the keyboard and reading-copy
-# tests. It needs a Chromium and fails without one rather than skipping (GOJIBERRY_REQUIRE_BROWSER).
-# A new axe violation fails it; the reviewed exceptions are listed, each with a roadmap entry, in
-# examples/canvas-editor-showcase/e2e_axe_test.go (axeDisabled). Run it before a release, with the
-# manual screen-reader script: docs/accessibility-testing.md.
-.PHONY: a11y-test
-a11y-test:
-	GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run 'Axe|Accessib|ScreenReader|ReadingCopy|Keyboard|ArrowKeys|DialogFocus|DisplayPreferences' ./examples/canvas-editor-showcase/
-
-# e2e-test is the whole browser suite of the showcase (every end-to-end test, about 25 minutes). It needs Chrome or
-# Chromium and fails, rather than skips, without one. Run it at the full run every ten merges, or from the hosted
-# workflow ("e2e"). It is not part of `make test`'s default time budget on purpose. With GOJIBERRY_E2E_JSON=file the
-# output is `go test -json` written to that file (the nightly run reads it: .github/scripts/e2e-report.py).
-.PHONY: e2e-test
-e2e-test:
-	@if [ -n "$$GOJIBERRY_E2E_JSON" ]; then \
-		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m -json ./examples/canvas-editor-showcase/ > "$$GOJIBERRY_E2E_JSON"; status=$$?; \
-		GOJIBERRY_REQUIRE_BROWSER=1 GOFLAGS=-tags=experimental go test -count=1 -timeout 30m -json -run '$(E2E_EXPERIMENTAL_RUN)' ./examples/canvas-editor-showcase/ >> "$$GOJIBERRY_E2E_JSON" || status=$$?; \
-		exit $$status; \
-	else \
-		GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -timeout 75m ./examples/canvas-editor-showcase/ && $(MAKE) e2e-test-experimental; \
-	fi
-
-# The experimental features (build tags, docs/phase-2.md) are off in the run above; their tests run with -tags experimental.
-E2E_EXPERIMENTAL_RUN ?= TestFormFields|TestAFormFieldInATableCell|TestInsertAMap|TestATextFileOpensForReading
-.PHONY: e2e-test-experimental
-e2e-test-experimental:
-	GOJIBERRY_REQUIRE_BROWSER=1 GOFLAGS=-tags=experimental go test -count=1 -timeout 30m -run '$(E2E_EXPERIMENTAL_RUN)' ./examples/canvas-editor-showcase/
+	go test -timeout 75m ./...
 
 # pdfa11y-test checks the tagged PDF the exporter writes with pdfa11y (github.com/speedata/pdfa11y, a Go
 # checker for the machine-checkable part of PDF/UA). It installs the tool into .pdfa11y/ (ignored by git) and
@@ -105,7 +73,7 @@ pdfa11y-test:
 	PATH="$(CURDIR)/.pdfa11y:$$PATH" GOJIBERRY_REQUIRE_PDFA11Y=1 go test -count=1 -run Pdfa11y ./export
 
 # ci-local runs the CI job's make steps on this machine (no hosted runner needed); see
-# .github/scripts/local-ci.sh. `make ci-local STEPS=a11y-test` runs only that step.
+# .github/scripts/local-ci.sh. `make ci-local STEPS=lint` runs only that step.
 .PHONY: ci-local
 ci-local:
 	.github/scripts/local-ci.sh $(STEPS)
@@ -161,7 +129,7 @@ lint:
 .PHONY: wasm-lint
 wasm-lint:
 	@bin="$$(mktemp -d)/golangci-lint"; trap 'rm -rf "$$(dirname "$$bin")"' EXIT; \
-	(cd tools && go build -o "$$bin" $(LINT_PKG)) && GOOS=js GOARCH=wasm "$$bin" run ./... && GOOS=js GOARCH=wasm "$$bin" run --build-tags experimental ./examples/canvas-editor-showcase/...
+	(cd tools && go build -o "$$bin" $(LINT_PKG)) && GOOS=js GOARCH=wasm "$$bin" run ./...
 
 # lint-modules runs the same pinned golangci-lint (built once from tools/go.mod,
 # as lint and wasm-lint do) inside each nested module, since golangci-lint does not cross
@@ -220,38 +188,6 @@ coverage-html: coverage
 .PHONY: coverage-badge
 coverage-badge: coverage
 	.github/scripts/gen-coverage-badge.sh coverage.out README.md
-
-# wasm-size builds the showcase wasm and fails when its raw or gzip size is over the budget in
-# docs/wasm-budget.txt (roadmap 82). It is not part of `make check` (a build of the showcase on
-# its own, a few seconds); CI runs it as its own step.
-.PHONY: wasm-size
-wasm-size:
-	.github/scripts/wasm-size.sh examples/canvas-editor-showcase docs/wasm-budget.txt
-
-# showcase-dist builds the showcase for deployment into dist/showcase (override with SHOWCASE_DIST=...):
-# main.wasm, files.wasm (the file formats, loaded when first used), files-worker.js, index.html and wasm_exec.js, plus a precompressed .gz of each (and a .br when the brotli
-# tool is installed) written by cmd/wasmdist (roadmap 82). Upload that directory; docs/deploy.md has the
-# server settings (types, gzip_static or precompressed, cache headers). It needs no credentials.
-SHOWCASE_DIST ?= dist/showcase
-.PHONY: showcase-dist
-showcase-dist:
-	rm -rf $(SHOWCASE_DIST)
-	mkdir -p $(SHOWCASE_DIST)
-	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/main.wasm .
-	cd examples/canvas-editor-showcase && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o $(abspath $(SHOWCASE_DIST))/files.wasm ./files
-	cp examples/canvas-editor-showcase/index.html examples/canvas-editor-showcase/files-worker.js $(SHOWCASE_DIST)/
-	cp examples/canvas-editor-showcase/static/* $(SHOWCASE_DIST)/
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $(SHOWCASE_DIST)/wasm_exec.js
-	go run ./cmd/wasmdist $(SHOWCASE_DIST)
-
-# feature-shots makes the pictures of docs/features.md (one screenshot of the showcase per feature, WebP, about
-# 700 KB in all) in docs/features/img, by driving the showcase in headless Chromium. Run it when the editor looks
-# different and commit the pictures that changed; it is not part of `make check`.
-.PHONY: feature-shots
-feature-shots:
-	rm -rf docs/features/img
-	GOJIBERRY_FEATURE_SHOTS=$(abspath docs/features/img) GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run TestFeatureShots ./examples/canvas-editor-showcase
-	GOJIBERRY_FEATURE_SHOTS=$(abspath docs/features/img) GOJIBERRY_REQUIRE_BROWSER=1 go test -count=1 -run TestEndToEnd ./examples/canvas-table-demo
 
 # bench runs every Go benchmark in the module: buffer's own
 # GapBuffer-vs-naive-slice benchmarks (fast, native, no extra setup)

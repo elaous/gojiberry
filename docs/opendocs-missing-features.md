@@ -1,7 +1,8 @@
 # opendocs features the showcase does not have
 
 From opendocs' `docs/ROADMAP.md` and `docs/architecture/` (what it says it
-shipped; not re-tested here) against what `examples/canvas-editor-showcase`
+shipped; not re-tested here) against what the OpenDocs showcase editor (moved out of this
+repository)
 and the library do today. **Missing** = nothing equivalent; **Partial** =
 something smaller exists. See [opendocs-scan.md](opendocs-scan.md) for how the
 two engines differ and what moves cleanly.

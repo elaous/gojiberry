@@ -13,14 +13,11 @@
 # the check that failed, not buried in a longer combined run.
 name: CI
 
-# Manual, plus the nightly browser run: run it from the Actions tab ("Run workflow", pick a branch). The checks run
+# Manual: run it from the Actions tab ("Run workflow", pick a branch). The checks run
 # locally before code is pushed (targeted tests for the change) and the full suite runs once
 # every ten merged PRs; see docs/testing-workflow.md. To turn the automatic runs back on,
 # restore `push:` and `pull_request:` under `on:`.
 on:
-  # nightly: the whole browser suite of the showcase (the e2e job), on the default branch; see docs/testing-workflow.md for the cost
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       run:
@@ -30,8 +27,6 @@ on:
         options:
           - all
           - fast-checks
-          - a11y
-          - e2e
           - mailpit
           - grammar
           - postgres
@@ -93,10 +88,6 @@ jobs:
       - name: make modules
         run: make modules
 
-      # The size gate: the showcase wasm against the budget in docs/wasm-budget.txt (roadmap 82).
-      - name: make wasm-size
-        run: make wasm-size
-
       # Computes the coverage profile and rewrites README.md's coverage badge line in this checkout
       # (a static img.shields.io URL, see gen-coverage-badge.sh). The run is manual, so nothing is
       # committed from here: the badge in README.md is updated by hand at each full run
@@ -104,108 +95,6 @@ jobs:
       # proves that the generator works.
       - name: make coverage-badge
         run: make coverage-badge
-
-  # The accessibility gate: axe-core over the page in every state, and the keyboard and reading-copy
-  # tests, in the runner's Chrome (ubuntu-latest has google-chrome). It fails, rather than skips, if no
-  # browser is found. Also runnable on this machine: `make a11y-test`, `make ci-local STEPS=a11y-test`.
-  a11y:
-    if: ${{ inputs.run == 'all' || inputs.run == 'a11y' }}
-    name: Accessibility gate (axe-core and keyboard tests in Chrome)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Which browser
-        run: |
-          for b in chromium chromium-browser google-chrome google-chrome-stable; do
-            if command -v "$b" >/dev/null; then echo "using $b"; "$b" --version; exit 0; fi
-          done
-          echo "no Chrome or Chromium on this runner"
-          exit 1
-
-      - name: make a11y-test
-        run: make a11y-test
-
-  e2e:
-    if: ${{ github.event_name == 'schedule' || inputs.run == 'all' || inputs.run == 'e2e' }}
-    name: The whole browser suite of the showcase (Chrome)
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Which browser
-        run: |
-          for b in chromium chromium-browser google-chrome google-chrome-stable; do
-            if command -v "$b" >/dev/null; then echo "using $b"; "$b" --version; exit 0; fi
-          done
-          echo "no Chrome or Chromium on this runner"
-          exit 1
-
-      # The suite runs to the end whatever fails (every test is its own; a panic or a timeout is reported as
-      # the tests that did not finish), the output goes to e2e.json, and the next steps turn it into an issue.
-      - name: make e2e-test
-        id: e2e
-        continue-on-error: true
-        env:
-          GOJIBERRY_E2E_JSON: e2e.json
-        run: make e2e-test
-
-      - name: Report
-        if: ${{ always() }}
-        id: report
-        run: |
-          status=0
-          python3 .github/scripts/e2e-report.py e2e.json "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > e2e-report.md || status=$?
-          cat e2e-report.md >> "$GITHUB_STEP_SUMMARY"
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-
-      # A failed run opens an issue (or adds to the one that is open) with every failed test; a run that passes
-      # closes it. Only the labelled issue is touched.
-      - name: Issue
-        if: ${{ always() }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const failed = '${{ steps.report.outputs.status }}' !== '0' || '${{ steps.e2e.outcome }}' === 'failure';
-            const label = 'nightly-e2e';
-            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            let report = fs.existsSync('e2e-report.md') ? fs.readFileSync('e2e-report.md', 'utf8') : '';
-            if (report.length > 60000) report = report.slice(0, 60000) + '\n\n(cut: the rest is in the run)';
-            try { await github.rest.issues.createLabel({ ...context.repo, name: label, color: 'b60205' }); } catch (e) { /* it exists */ }
-            const open = await github.rest.issues.listForRepo({ ...context.repo, labels: label, state: 'open' });
-            const current = open.data.find(i => !i.pull_request);
-            if (failed) {
-              const body = report || `The browser suite failed. [The run](${run})`;
-              if (current) {
-                await github.rest.issues.createComment({ ...context.repo, issue_number: current.number, body });
-              } else {
-                await github.rest.issues.create({ ...context.repo, title: 'Nightly browser run failed', labels: [label], body });
-              }
-            } else if (current) {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: current.number, body: `The browser suite passed in [this run](${run}); closing.` });
-              await github.rest.issues.update({ ...context.repo, issue_number: current.number, state: 'closed', state_reason: 'completed' });
-            }
-
-      - name: The run fails if the suite did
-        if: ${{ steps.report.outputs.status != '0' || steps.e2e.outcome == 'failure' }}
-        run: exit 1
 
   grammar-test:
     name: vscode-xango grammar suite

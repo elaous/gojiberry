@@ -95,7 +95,7 @@ in the selector is downloaded into the store the first time the text uses it
 `PageNumber`, `Watermark`, `Background`, `Image`, `FloatingText`, `Table`,
 `ScrollView`); CSS imports (`import _ "<module path>/x.css"`).
 
-`examples/canvas-editor-showcase` puts all of it in one window.
+[OpenDocs](https://github.com/elaous/opendocs) puts all of it in one window.
 
 ## Done since this list was written
 

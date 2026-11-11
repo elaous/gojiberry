@@ -1,6 +1,6 @@
 # Testing guide: each feature, by hand and by test
 
-For every feature: the steps to try it, what you should see, and the automated test that covers it (all in `examples/canvas-editor-showcase` unless a path is given; run one with `GOJIBERRY_REQUIRE_BROWSER=1 go test ./examples/canvas-editor-showcase -run <TestName>`). Build the showcase with `make showcase-dist` and serve `dist/showcase` with any static file server (for example `python3 -m http.server -d dist/showcase`), then open it in a browser (see [testing-workflow.md](testing-workflow.md) for the whole workflow and [accessibility-testing.md](accessibility-testing.md) for the screen-reader script). A picture of each feature is in [features.md](features.md).
+For every feature: the steps to try it, what you should see, and the automated test that covers it (all in the OpenDocs repository (opendocs) unless a path is given; run one there with `GOJIBERRY_REQUIRE_BROWSER=1 go test . -run <TestName>`). Build the showcase in the OpenDocs repository (see its README) and serve the output with any static file server, then open it in a browser (see [testing-workflow.md](testing-workflow.md) for the whole workflow and [accessibility-testing.md](accessibility-testing.md) for the screen-reader script). A picture of each feature is in [features.md](features.md).
 
 Every feature also has these checks: it works with the keyboard alone, nothing is announced twice, the page shows no error in the console, and the Check tab and axe find nothing new.
 
@@ -102,7 +102,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Also try.** Insert an `.svg` and an `.avif` file; export to Word and check both are there as pictures.
 
-**Automated.** `TestAPictureWithALegendAndAWebPPicture`, `TestSVGAndAVIFPicturesAreStoredAsPNG` (examples/canvas-editor-showcase), `export/images_test.go`, `canvas/image_test.go`
+**Automated.** `TestAPictureWithALegendAndAWebPPicture`, `TestSVGAndAVIFPicturesAreStoredAsPNG` (opendocs), `export/images_test.go`, `canvas/image_test.go`
 
 ## Find a picture online
 
@@ -112,7 +112,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **Also try.** Search, then press **More results**; put an `image-repos.json` next to the page and check the repository is listed, off.
 
-**Automated.** `TestImageCreditTravelsInWordAndODTProperties` (export), `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (examples/canvas-editor-showcase), package `imagerepo` tests
+**Automated.** `TestImageCreditTravelsInWordAndODTProperties` (export), `TestOperatorListOfRepositoriesAndMoreResults`, `TestFindAPictureInARepositoryAndInsertItWithItsCredit` (opendocs), package `imagerepo` tests
 
 ## Mentions
 
@@ -120,7 +120,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** "Mentions of you" with Ana's comment, announced once; Ana sees none; "Mark as read" removes it, and it stays gone after the page is reloaded.
 
-**Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (examples/canvas-editor-showcase), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas), package `mentionmail` (mail once, retry a failure, cap a mail)
+**Automated.** `TestAMentionedPersonIsToldAndCanMarkItRead` (opendocs), `TestMentionsOfListsWhatOthersWroteAboutThePerson` (canvas), package `mentionmail` (mail once, retry a failure, cap a mail)
 
 **Push when the page is closed.** *Try it:* serve a push server (docs/web-push.md) and `push.json`, open the Comments tab, tick "Notify me of mentions when this page is closed", allow notifications, close the page, and have someone mention you. *You should see:* a notification naming who and the document; clicking it opens the page; unticking stops it (this last part with a real push service is not covered by an automated test). *Automated:* `TestMentionNotificationsWhenThePageIsClosed` (stand-ins for the push API), package `webpush` (encryption checked by an independent decryptor, VAPID, SSRF refusals, handler), package `mentionpush`, `wasmserve/sw-push.test.js` (`make sw-test`).
 
@@ -130,7 +130,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 **You should see.** A map picture at the caret with a red marker at the centre, *Map data © OpenStreetMap contributors (ODbL)* under it, and the alt text *Map of ...* in the picture's list. A latitude over 90 is refused in words.
 
-**Automated.** `TestInsertAMapFromAPlusCodeAndFromAnAddress`, `TestMapsAreNotInADefaultBuild` (examples/canvas-editor-showcase), package `osmmap` tests (Plus Code vectors of the specification, round trip, coordinates, Nominatim and tile stand-ins, rendering)
+**Automated.** `TestInsertAMapFromAPlusCodeAndFromAnAddress`, `TestMapsAreNotInADefaultBuild` (opendocs), package `osmmap` tests (Plus Code vectors of the specification, round trip, coordinates, Nominatim and tile stand-ins, rendering)
 
 ## Text formats as they are
 
@@ -148,7 +148,7 @@ Every feature also has these checks: it works with the keyboard alone, nothing i
 
 Then press the letter of a column, or the number of a row: it is highlighted and the Styles tab shows its actions; insert a column after, duplicate a row. Export as Word, OpenDocument or HTML and open it: the column and row keep the sizes you dragged. Press the same edge twice quickly: the size goes back to the table's own.
 
-**Automated.** `TestDraggingATableGripResizesAColumnAndARow`, `TestTableGripsSelectAndTheStylesTabActsOnThem` (examples/canvas-editor-showcase), canvas `table_sizes_test.go`, `TestTableSizesRoundTrip` (docfile), `tablesizes_test.go` (export)
+**Automated.** `TestDraggingATableGripResizesAColumnAndARow`, `TestTableGripsSelectAndTheStylesTabActsOnThem` (opendocs), canvas `table_sizes_test.go`, `TestTableSizesRoundTrip` (docfile), `tablesizes_test.go` (export)
 
 ## Table formulas
 
@@ -166,7 +166,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** What the picture in [features.md](features.md#equations) shows; the Word, HTML and text exports have the words of the alternative in the sentence.
 
-**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetLimitsOfASumGoAboveAndBelowInABlock`, `TestTypesetBracketsGrowWithAFraction`, `TestTypesetMatrixAndAlignedEquations`, `TestTypingDollarsMakesAnInlineFormula` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols`, `TestMatrixAndAlignedEquationsInMathMLAndOfficeMath`, `TestInlineFormulaIsInlineMathMLInHTML`, `TestInlineFormulaIsOfficeMathInTheLineInWord`, `TestOfficeMathMatricesAndAlignedEquationsReadBack` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (examples/canvas-editor-showcase)
+**Automated.** `TestTypesetFractionHasARuleAndPutsTheNumeratorAbove`, `TestTypesetScriptsAndRoots`, `TestInlineEquationSitsOnTheBaselineOfItsLine`, `TestBlockEquationIsTypesetNotTyped` (canvas), `TestTypesetLimitsOfASumGoAboveAndBelowInABlock`, `TestTypesetBracketsGrowWithAFraction`, `TestTypesetMatrixAndAlignedEquations`, `TestTypingDollarsMakesAnInlineFormula` (canvas), `TestTypesetterAndMathMLReadTheSameSymbols`, `TestMatrixAndAlignedEquationsInMathMLAndOfficeMath`, `TestInlineFormulaIsInlineMathMLInHTML`, `TestInlineFormulaIsOfficeMathInTheLineInWord`, `TestOfficeMathMatricesAndAlignedEquationsReadBack` (export), `TestAnInlineEquationStaysInItsLineAsText` (docfile), `TestAnInlineEquationStandsInItsSentence` (opendocs)
 
 ## Markdown tables
 
@@ -176,7 +176,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Also try.** Import a `.md` file with `A claim[^1]` and `[^1]: The note.` (it comes in as a footnote) and a picture at an `https://` address (the Files tab says it was left out). In a table, put the caret in a cell and paste a Markdown table or cells copied from a spreadsheet.
 
-**Automated.** `TestMarkdownFootnotesBecomeFootnotes` (transfer), `TestMarkdownImportFidelityNamesWhatIsLeftOut` (export), `TestPasteIntoATableFillsCellsFromTheActiveOne` (canvas), `TestMarkdownImportSaysWhatItLeftOutAndKeepsItsFootnotes` (showcase), `TestEnterAfterThreeMarkdownTableLinesMakesATable`, `TestFormulaSwitchInTheTopRightCorner` (canvas), `TestMarkdownImportTitleImagesAndFormulas` (transfer), `TestTypingAMarkdownTableMakesATable` (examples/canvas-editor-showcase)
+**Automated.** `TestMarkdownFootnotesBecomeFootnotes` (transfer), `TestMarkdownImportFidelityNamesWhatIsLeftOut` (export), `TestPasteIntoATableFillsCellsFromTheActiveOne` (canvas), `TestMarkdownImportSaysWhatItLeftOutAndKeepsItsFootnotes` (showcase), `TestEnterAfterThreeMarkdownTableLinesMakesATable`, `TestFormulaSwitchInTheTopRightCorner` (canvas), `TestMarkdownImportTitleImagesAndFormulas` (transfer), `TestTypingAMarkdownTableMakesATable` (opendocs)
 
 ## References
 
@@ -184,7 +184,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** `(Silva & Costa, 2020)` in the text, the entry rewritten in MLA, and the list at the caret with the title in italics.
 
-**Automated.** `TestCiteASourceAndInsertTheListOfReferences` (examples/canvas-editor-showcase), package `reference` tests, `TestSourcesAreKeptWithTheDocument` (docfile)
+**Automated.** `TestCiteASourceAndInsertTheListOfReferences` (opendocs), package `reference` tests, `TestSourcesAreKeptWithTheDocument` (docfile)
 
 ## Two-page spread
 
@@ -248,7 +248,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** Terms beside each hub voice; a download whose file differs from the pinned checksum is refused and nothing is kept; a repository's voices disabled until you say you read them; your own voice listed under its language as `…-own`.
 
-**Automated.** `TestVoiceSourcesHubRepositoryAndOwnFiles` (examples/canvas-editor-showcase), packages `voice/read/hub` and `voice/read/piper` (`sources_test.go`)
+**Automated.** `TestVoiceSourcesHubRepositoryAndOwnFiles` (opendocs), packages `voice/read/hub` and `voice/read/piper` (`sources_test.go`)
 
 ## Several people at one object
 
@@ -256,7 +256,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** On Bo's page the equation has a red outline with a *busy* badge in Ana's colour, and the announcer says "Busy: Ana is changing this equation."; Bo's text is put back. After about eight seconds without a change from Ana, Bo can change it.
 
-**Automated.** `TestAnObjectOnePersonIsChangingIsBusyForTheOther`, `TestATableOnePersonIsChangingIsBusyForTheOther` (examples/canvas-editor-showcase), `TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName` (collab/hub), `TestABusyObjectHasAnOutlineAndABadge` (canvas)
+**Automated.** `TestAnObjectOnePersonIsChangingIsBusyForTheOther`, `TestATableOnePersonIsChangingIsBusyForTheOther` (opendocs), `TestPresenceCarriesTheObjectBeingHeldAndDropsAnOverlongName` (collab/hub), `TestABusyObjectHasAnOutlineAndABadge` (canvas)
 
 ## Share
 
@@ -344,7 +344,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** The fields drawn in the text with their label and value; a red outline while the value is wrong; the values in the Markdown export as `Order number: AB123`.
 
-**Build tags.** Form fields are experimental: build with `-tags experimental` (or `exp_forms`; add `exp_forms_submit` for the web form with an address) to try them; a default build has no Forms tab. **Automated.** `TestFormsAreNotInADefaultBuild`, `TestAFormFieldInATableCell` (table cells; canvas `table_fields_test.go`), `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; examples/canvas-editor-showcase), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), `TestHTMLFormFieldsReadBackFromTheirPage` (export and htmlimport), package `formdata`, package `formseal`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
+**Build tags.** Form fields are experimental: build with `-tags experimental` (or `exp_forms`; add `exp_forms_submit` for the web form with an address) to try them; a default build has no Forms tab. **Automated.** `TestFormsAreNotInADefaultBuild`, `TestAFormFieldInATableCell` (table cells; canvas `table_fields_test.go`), `TestFormFieldsAddFillLockAndClear` (it also downloads the answers; opendocs), `TestFormFieldsAreHTMLControlsAndWordsElsewhere` and `TestHTMLSubmitToWrapsFormFieldsInAForm` (export; the web form also downloaded in the e2e), `TestHTMLFormFieldsReadBackFromTheirPage` (export and htmlimport), package `formdata`, package `formseal`, `TestFormFieldProblems`, `TestFormFieldEyePenAndCheckboxPresses`, `TestClearFormFieldsAndWords` (canvas), `TestFormFieldRoundTripsThroughTheFlow` (docfile), the form-field pair of `TestFidelityMatrixMatchesTheExporters` (export)
 
 ## Add-ons
 
@@ -352,7 +352,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** The model with its size and a link to its terms; progress while it downloads; the text in the document, with nothing sent to any address.
 
-**Automated.** `TestAddonsTabAndDictationOnTheDevice`, `TestDraftDescriptionFromTheDescribeAddon`, `TestReadTheTextInAPictureWithTheOcrAddon`, `TestTranslateTheSelectionWithTheTranslateAddon`, `TestLanguageTabWithTheLlmAddon`, `TestSpellingWithTheSpellAddonsDictionary`, `TestDrawADiagramWithTheDiagramAddon` (examples/canvas-editor-showcase, with stand-in add-ons), packages `addons` (`ParseModels`) and `helper` (prompts, cleaning an answer).
+**Automated.** `TestAddonsTabAndDictationOnTheDevice`, `TestDraftDescriptionFromTheDescribeAddon`, `TestReadTheTextInAPictureWithTheOcrAddon`, `TestTranslateTheSelectionWithTheTranslateAddon`, `TestLanguageTabWithTheLlmAddon`, `TestSpellingWithTheSpellAddonsDictionary`, `TestDrawADiagramWithTheDiagramAddon` (opendocs, with stand-in add-ons), packages `addons` (`ParseModels`) and `helper` (prompts, cleaning an answer).
 
 ## Preferences
 
@@ -376,7 +376,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** The progress while it downloads; the bar saying "Downloaded voice, running in this page"; the sentence and the word marked while it reads.
 
-**Automated.** `TestDownloadAReaderVoiceAndReadWithIt` (examples/canvas-editor-showcase, with a stand-in network, runtime and Web Audio), packages `voice/read` (`Player`) and `voice/read/piper` (catalogue, config, install with checksum, speaking, cancel). A real runtime has not been run against it.
+**Automated.** `TestDownloadAReaderVoiceAndReadWithIt` (opendocs, with a stand-in network, runtime and Web Audio), packages `voice/read` (`Player`) and `voice/read/piper` (catalogue, config, install with checksum, speaking, cancel). A real runtime has not been run against it.
 
 ## Typewriter scrolling
 
@@ -386,7 +386,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **Also try.** Tick **Typewriter carriage** too, type a long line (the page slides left under the caret), then press Enter (the page slides back right, past its left edge, and up a line).
 
-**Automated.** `TestTypewriterScrolling`, `TestTypewriterCarriageSlidesThePageSideways` (examples/canvas-editor-showcase), `TestTypewriterKeepsTheLineAtOneHeight`, `TestTypewriterCarriageKeepsTheLetterInOnePlace` (canvas)
+**Automated.** `TestTypewriterScrolling`, `TestTypewriterCarriageSlidesThePageSideways` (opendocs), `TestTypewriterKeepsTheLineAtOneHeight`, `TestTypewriterCarriageKeepsTheLetterInOnePlace` (canvas)
 
 ## Scripts
 
@@ -396,7 +396,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 **You should see.** Each result in the log under the script; reading refused until allowed; no network in the sandbox; Stop ends a script that never finishes.
 
-**Automated.** `TestScriptsRunInASandboxAndAskForWhatTheyMayHave` (examples/canvas-editor-showcase), package `script`.
+**Automated.** `TestScriptsRunInASandboxAndAskForWhatTheyMayHave` (opendocs), package `script`.
 
 ## Typed text in colour
 
@@ -404,7 +404,7 @@ Then press the letter of a column, or the number of a row: it is highlighted and
 
 ## About and licence
 
-**Try it.** Open Help > About Gojiberry. *You should see:* the licence and credit text, and four links (source, licence, notice, commercial licence) that open the repository in a new tab. **Automated.** `TestAboutTabShowsTheCreditAndTheSourceLink` (examples/canvas-editor-showcase).
+**Try it.** Open Help > About Gojiberry. *You should see:* the licence and credit text, and four links (source, licence, notice, commercial licence) that open the repository in a new tab. **Automated.** `TestAboutTabShowsTheCreditAndTheSourceLink` (opendocs).
 
 ## Packs
 
