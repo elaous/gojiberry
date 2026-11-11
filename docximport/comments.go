@@ -7,12 +7,8 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Comments: Word and Google Docs comments become canvas comments.
-
-// commentPrefix keeps imported comment IDs apart from others.
 const commentPrefix = "w"
 
-// loadComments reads the comments and who answers whom.
 func (r *reader) loadComments() {
 	cs := r.xml("word/comments.xml")
 	if cs == nil {
@@ -68,7 +64,6 @@ func (r *reader) loadComments() {
 			}
 		}
 	}
-	// Replies join their parent, in file order.
 	idx := map[*entry]int{} // the position of each top-level comment in r.doc.Comments
 	for _, e := range entries {
 		if !e.reply {
@@ -95,7 +90,6 @@ func (r *reader) loadComments() {
 	}
 }
 
-// openComment starts a range; closeComment ends it.
 func (r *reader) openComment(id string) {
 	if id != "" && r.comments[commentPrefix+id] {
 		r.openComments = append(r.openComments, commentPrefix+id)
@@ -112,7 +106,6 @@ func (r *reader) closeComment(id string) {
 	}
 }
 
-// currentComment is the comment the run being read belongs to.
 func (r *reader) currentComment() string {
 	if n := len(r.openComments); n > 0 {
 		return r.openComments[n-1]

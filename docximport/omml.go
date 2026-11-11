@@ -2,14 +2,11 @@ package docximport
 
 import "strings"
 
-// Office Math is read back into the editor's linear notation.
-
 var ommlSymbols = map[rune]string{
 	'π': "pi", 'α': "alpha", 'β': "beta", 'γ': "gamma", 'δ': "delta", 'θ': "theta", 'λ': "lambda", 'μ': "mu",
 	'σ': "sigma", 'ω': "omega", '∞': "infty", '∑': "sum", '∫': "int",
 }
 
-// linearFormula is the formula of an oMath or oMathPara node.
 func linearFormula(n *node) string {
 	var f strings.Builder
 	var walk func(n *node, out *strings.Builder)
@@ -18,7 +15,7 @@ func linearFormula(n *node) string {
 		walk(n, &sb)
 		s := strings.TrimSpace(sb.String())
 		if len([]rune(s)) <= 1 || isSymbolName(s) {
-			return " " + s + " " // one thing: a letter, a digit or a name like pi or sum
+			return " " + s + " "
 		}
 		return "{" + s + "}"
 	}
@@ -80,7 +77,6 @@ func linearFormula(n *node) string {
 			out.WriteString("matrix{" + rows(n.children("mr"), func(mr *node) []*node { return mr.children("e") }, " & ") + "}")
 			return
 		case "eqArr":
-			// Aligned equations: one line each, with & marking alignment.
 			var lines []string
 			for _, e := range n.children("e") {
 				var sb strings.Builder
@@ -91,7 +87,7 @@ func linearFormula(n *node) string {
 			return
 		case "d":
 			if es := n.children("e"); len(es) == 1 && es[0].child("m") != nil && len(es[0].kids) == 1 {
-				walk(es[0], out) // a matrix between its brackets: the notation's matrix has its own
+				walk(es[0], out)
 				return
 			}
 			out.WriteString("(")
@@ -133,7 +129,6 @@ func linearFormula(n *node) string {
 	return strings.Join(strings.Fields(f.String()), " ")
 }
 
-// isSymbolName says s is one of the notation's symbol names.
 func isSymbolName(s string) bool {
 	for _, v := range ommlSymbols {
 		if v == s {
@@ -143,7 +138,6 @@ func isSymbolName(s string) bool {
 	return false
 }
 
-// notationWord says whether s would be read as a notation word.
 func notationWord(s string) bool {
 	return s == "frac" || s == "sqrt" || isSymbolName(s)
 }

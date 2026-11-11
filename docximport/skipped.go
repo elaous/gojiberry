@@ -12,8 +12,8 @@ type Skipped struct {
 	TextBoxes   int // text boxes: their text is not read
 	Drawings    int // shapes, charts and diagrams that are not pictures
 	Endnotes    int // endnote references (only footnotes are read)
-	Fields      int // fields (page number, cross reference, contents): their last shown text stays, the field is gone
-	Bookmarks   int // bookmarks (links to one are kept as "#name", the place they point at is not)
+	Fields      int
+	Bookmarks   int
 	Columns     int // sections laid out in columns
 	Layout      int // paragraphs with an indent or spacing of their own
 }
@@ -23,7 +23,6 @@ func (s Skipped) Total() int {
 	return s.HeaderFoots + s.TextBoxes + s.Drawings + s.Endnotes + s.Fields + s.Bookmarks + s.Columns + s.Layout
 }
 
-// Inspect counts what Import would leave out of a .docx file.
 func Inspect(data []byte) (Skipped, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -50,7 +49,6 @@ func Inspect(data []byte) (Skipped, error) {
 	return s, nil
 }
 
-// scan counts the elements of one part.
 func (s *Skipped) scan(n *node) {
 	for _, k := range n.kids {
 		switch k.name {

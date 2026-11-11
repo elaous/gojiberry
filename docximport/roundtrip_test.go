@@ -111,7 +111,6 @@ func TestDocxRoundTripKeepsMergedCells(t *testing.T) {
 	}
 }
 
-// Cell background, alignment and bold survive a round trip.
 func TestDocxRoundTripKeepsCellStyles(t *testing.T) {
 	in := docfile.Document{Content: []docfile.Item{{Table: &docfile.TableItem{
 		Rows: []docfile.TableRow{{Cells: []string{"a", "b"}}, {Cells: []string{"c", "d"}}},
@@ -188,7 +187,6 @@ func TestTrackedChangesRoundTrip(t *testing.T) {
 	}
 }
 
-// A vertical section comes back as vertical text.
 func TestDocxVerticalTextRoundTrip(t *testing.T) {
 	snap := export.Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, MarginLeft: 96, MarginTop: 96, MarginRight: 96, MarginBottom: 96,
 		Blocks: []export.Block{{Kind: export.Paragraph, Segments: []export.Segment{{Text: "日本語"}}}}}
