@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A canvas/xango tree drawn inside an ordinary page: the canvas and the text copy are made, the table is painted, and
-// the cell render prop drew a bar where the number would be.
 func TestCanvasViewInAPage(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.WaitFor("the view", `document.getElementById('state').textContent === 'ready'`)
