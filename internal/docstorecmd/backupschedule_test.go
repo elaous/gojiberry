@@ -24,7 +24,6 @@ func TestRotationKeepsTheNewestBackupsAndNothingElse(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// files that are not ours, and a directory with a backup's name: never touched
 	for _, other := range []string{"notes.txt", "gojiberry-backup-latest.tar", "gojiberry-backup-20260101T000000Z.tar.bak"} {
 		if err := os.WriteFile(filepath.Join(dir, other), []byte("keep me"), 0o600); err != nil {
 			t.Fatal(err)
@@ -58,7 +57,6 @@ func TestBackupIntoADirectoryRunsOnceAndRotates(t *testing.T) {
 	src := docstore.NewMemoryAdapter()
 	_ = src.Save(ctx, "doc", []byte("ciphertext"))
 	dir := filepath.Join(t.TempDir(), "backups") // does not exist yet
-	// older backups already there
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +74,6 @@ func TestBackupIntoADirectoryRunsOnceAndRotates(t *testing.T) {
 	if len(files) != 2 {
 		t.Fatalf("files: %v", files)
 	}
-	// the newest is a real backup and restores
 	dst := docstore.NewMemoryAdapter()
 	newest := files[len(files)-1]
 	if _, code, _, errOut = run(t, dst, "restore", newest); code != 0 {
@@ -120,7 +117,6 @@ func TestScheduledBackupsRepeatUntilStoppedAndSurviveAFailedRound(t *testing.T) 
 	if len(files) == 0 || len(files) > 3 {
 		t.Fatalf("%d backups kept, want 1 to 3", len(files))
 	}
-	// A directory that cannot be made is a failed run, reported, exit 1.
 	bad := files[0] // a file where the directory should be
 	if code := runScheduledBackups(context.Background(), src, filepath.Join(bad, "sub"), 3, 0, &out, &errOut, audit.NewLogger(&errOut)); code != 1 {
 		t.Errorf("unwritable directory: %d", code)

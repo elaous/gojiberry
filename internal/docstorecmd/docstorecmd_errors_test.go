@@ -18,7 +18,6 @@ import (
 	"github.com/elaous/gojiberry/docstore/public"
 )
 
-// failingList is a store without optional capabilities whose List fails once broken is set.
 type failingList struct {
 	docstore.Adapter
 	broken bool
@@ -51,7 +50,6 @@ func TestBackupAndRestoreReportAnAdapterThatCannotList(t *testing.T) {
 		t.Errorf("temp file left after a failed backup: %v", left)
 	}
 
-	// A restore without -force looks at the store first; when it cannot, it stops before writing.
 	good := docstore.NewMemoryAdapter()
 	_ = good.Save(ctx, "one", []byte("data"))
 	if _, err := backupToFile(ctx, good, file); err != nil {
@@ -225,7 +223,6 @@ func TestWithPublicRejectsBadModes(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), env) || svc != nil {
 				t.Fatalf("withPublic = %v, %v", svc, err)
 			}
-			// Nothing was mounted by the failed start.
 			if c := status(srv.Handler(), "POST", "/public/session"); c != http.StatusNotFound {
 				t.Errorf("/public/session = %d after a refused start", c)
 			}
@@ -249,7 +246,6 @@ func TestPublicSharedModesFallBackOrRefuseWithoutConditionalWrites(t *testing.T)
 	for _, c := range calls {
 		t.Run(c.name, func(t *testing.T) {
 			logs := captureLog(t)
-			// "store" keeps the server running on per-process state and says so loudly.
 			got, err := c.call(" Store ")
 			if err != nil || !isNil(got) {
 				t.Fatalf("store fell back to %v, %v", got, err)
@@ -257,11 +253,9 @@ func TestPublicSharedModesFallBackOrRefuseWithoutConditionalWrites(t *testing.T)
 			if !strings.Contains(logs.String(), "NOT SHARED BY REPLICAS") || !strings.Contains(logs.String(), c.env+"=store-required") {
 				t.Errorf("warning: %q", logs)
 			}
-			// "store-required" refuses.
 			if _, err := c.call("store-required"); err == nil || !strings.Contains(err.Error(), c.env) {
 				t.Errorf("store-required = %v", err)
 			}
-			// The in-process default is silent with one replica and warns with several.
 			logs.Reset()
 			if got, err := c.call("memory"); err != nil || !isNil(got) || strings.Contains(logs.String(), "WARNING") {
 				t.Errorf("memory: %v %v %q", got, err, logs)
@@ -275,7 +269,6 @@ func TestPublicSharedModesFallBackOrRefuseWithoutConditionalWrites(t *testing.T)
 	}
 }
 
-// isNil reports whether v is a nil interface or an interface holding a nil pointer.
 func isNil(v any) bool {
 	if v == nil {
 		return true
@@ -307,7 +300,6 @@ func TestPasskeysRejectsBadSettings(t *testing.T) {
 	}
 
 	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_CHALLENGES", "")
-	// Trusted proxies are accepted, and the routes are mounted.
 	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_ORIGINS", "https://opendocs.io")
 	t.Setenv("GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES", "10.0.0.0/8, 192.168.0.0/16")
 	srv := docstore.NewServer(a, "memory")
@@ -362,7 +354,6 @@ func TestWithSessionsMissLimitIsOptIn(t *testing.T) {
 		_, ok := m.CurrentUser(req)
 		return ok
 	}
-	// A client sends many tokens that are not sessions, then its own valid one.
 	flood := func(t *testing.T, on bool) (valid, other bool) {
 		t.Helper()
 		if on {

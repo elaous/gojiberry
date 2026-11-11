@@ -67,7 +67,6 @@ func TestWithDirectoryIsOffWithoutAKeyAndMountsEveryRouteWithOne(t *testing.T) {
 			t.Errorf("%s %s = %d, want 401 (mounted, needs sign-in)", r[0], r[1], c)
 		}
 	}
-	// The domain policy and the shared limiters are in effect: a user of x.io may not look up y.org.
 	tok, _ := mgr.StartSession(auth.User{ID: "google:1", Email: "ana@x.io", VerifiedEmail: true})
 	if c := statusTok(h, "GET", "/directory/lookup?email=bo@y.org", tok); c != 403 {
 		t.Errorf("another domain = %d", c)
@@ -84,7 +83,6 @@ func expiring() docstore.Adapter {
 	return docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.FixedTTL(24*time.Hour))
 }
 
-// Everything off keeps the current behaviour: no public routes, nothing mounted.
 func TestPublicOffByDefault(t *testing.T) {
 	a := expiring()
 	srv := docstore.NewServer(a, "memory")
@@ -99,14 +97,12 @@ func TestPublicOffByDefault(t *testing.T) {
 	}
 }
 
-// The 24 hour promise: the public routes do not start without expiry.
 func TestPublicRefusesToStartWithoutExpiry(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	a := docstore.NewMemoryAdapter()
 	if _, err := withPublic(docstore.NewServer(a, "memory"), a, 0, docstore.MemoryLimiters()); err == nil || !strings.Contains(err.Error(), "EXPIRY_TTL") {
 		t.Fatalf("err = %v", err)
 	}
-	// a TTL was given but the adapter does not expire (miswired): refused too
 	if _, err := withPublic(docstore.NewServer(a, "memory"), a, time.Hour, docstore.MemoryLimiters()); err == nil {
 		t.Fatal("a store without expiry was accepted")
 	}
@@ -128,13 +124,11 @@ func TestPublicEnabled(t *testing.T) {
 	if rec.Code != http.StatusCreated || !strings.Contains(strings.Join(rec.Header().Values("Link"), ","), `rel="terms"`) {
 		t.Fatalf("session = %d %v", rec.Code, rec.Header())
 	}
-	// no admin token configured: no takedown route
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("DELETE", "/admin/takedown/AAAAAAAAAAAAAAAAAAAAAA", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("takedown without a token = %d", rec.Code)
 	}
-	// a bad value is an error, not a default
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_MAX_DOC_BYTES", "ten")
 	if _, err := withPublic(srv, a, time.Hour, docstore.MemoryLimiters()); err == nil {
 		t.Fatal("a bad value was accepted")
@@ -155,8 +149,6 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// Public mode closes the generic /docs API by default: anonymous visitors must not be able to read
-// or write the documents of the store beside the public offer.
 func TestPublicClosesDocsByDefault(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	a := expiring()
@@ -182,7 +174,6 @@ func TestPublicClosesDocsByDefault(t *testing.T) {
 	}
 }
 
-// With sign-in and required ACLs /docs is protected, so it is left to them.
 func TestPublicLeavesDocsToRequiredACLs(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	m, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://app.example.com"})
@@ -198,11 +189,9 @@ func TestPublicLeavesDocsToRequiredACLs(t *testing.T) {
 	if code := status(h, "GET", "/docs"); code != http.StatusOK {
 		t.Fatalf("/docs = %d: the ACL-protected API must stay reachable for signed-in people", code)
 	}
-	// an anonymous write is refused by the ACL rule, not stored
 	if code := status(h, "PUT", "/docs/x"); code != http.StatusUnauthorized && code != http.StatusForbidden {
 		t.Fatalf("anonymous PUT /docs/x = %d", code)
 	}
-	// RequireACL without a manager is not protection: closed by default again
 	srv2 := docstore.NewServer(a, "memory").WithRequireACL(true)
 	if _, err := withPublic(srv2, a, 24*time.Hour, docstore.MemoryLimiters()); err != nil {
 		t.Fatal(err)
@@ -227,7 +216,6 @@ func TestPublicAllowOpenDocsIsAnExplicitOptInAndLoud(t *testing.T) {
 	if out := logs.String(); !strings.Contains(out, "WARNING") || !strings.Contains(out, "OPEN") {
 		t.Fatalf("no loud warning: %q", out)
 	}
-	// anything but a boolean refuses to start
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ALLOW_OPEN_DOCS", "yes please")
 	if _, err := withPublic(docstore.NewServer(a, "memory"), a, 24*time.Hour, docstore.MemoryLimiters()); err == nil || !strings.Contains(err.Error(), "ALLOW_OPEN_DOCS") {
 		t.Fatalf("err = %v", err)
@@ -257,9 +245,6 @@ func TestPublicWarnsWhenTrustedProxiesIsEmpty(t *testing.T) {
 	}
 }
 
-// The admin route counts failed authentications per client address, so behind an unnamed proxy one
-// caller's wrong guesses would lock the operator out: with an admin token the server does not start
-// unless the proxies are named or "none" says there are none.
 func TestPublicRefusesAdminBehindUnsetTrustedProxies(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN", "a-long-random-admin-token")
@@ -281,7 +266,6 @@ func TestPublicRefusesAdminBehindUnsetTrustedProxies(t *testing.T) {
 			t.Fatalf("/admin/health without the token = %d, want 403", rec.Code)
 		}
 	}
-	// no admin token, no admin route, no demand
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_ADMIN_TOKEN", "")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "")
 	a = expiring()
@@ -290,7 +274,6 @@ func TestPublicRefusesAdminBehindUnsetTrustedProxies(t *testing.T) {
 	}
 }
 
-// A tombstone shorter than the session lets a ban lapse: the server does not start.
 func TestPublicRefusesAShortTombstoneTTL(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TOMBSTONE_TTL", "24h")
@@ -300,7 +283,6 @@ func TestPublicRefusesAShortTombstoneTTL(t *testing.T) {
 	}
 }
 
-// A client that is slow to send its request is cut off by the server's own timeouts.
 func TestHTTPServerHasReadTimeouts(t *testing.T) {
 	s := newHTTPServer(":0", http.NotFoundHandler())
 	if s.ReadTimeout <= 0 || s.ReadHeaderTimeout <= 0 || s.IdleTimeout <= 0 {
@@ -308,7 +290,6 @@ func TestHTTPServerHasReadTimeouts(t *testing.T) {
 	}
 }
 
-// plainAdapter hides every optional capability (conditional writes among them) of the store it wraps.
 type plainAdapter struct{ docstore.Adapter }
 
 func TestWithDirectoryOnAStoreWithoutConditionalWrites(t *testing.T) {
@@ -321,7 +302,6 @@ func TestWithDirectoryOnAStoreWithoutConditionalWrites(t *testing.T) {
 	plain := plainAdapter{docstore.NewMemoryAdapter()}
 	build := func() *docstore.Server { return docstore.NewServer(plain, "plain").WithAuth(mgr) }
 
-	// More than one process on such a store: the directory refuses to start, and is not mounted.
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "2")
 	srv := build()
 	if err := withDirectory(ctx, srv, plain, docstore.MemoryLimiters()); err == nil || !strings.Contains(err.Error(), "conditional") {
@@ -330,7 +310,6 @@ func TestWithDirectoryOnAStoreWithoutConditionalWrites(t *testing.T) {
 	if c := statusTok(srv.Handler(), "GET", "/directory/log", ""); c != 404 {
 		t.Errorf("not mounted: %d", c)
 	}
-	// One process: a warning, and it runs.
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "1")
 	logs := captureLog(t)
 	if err := withDirectory(ctx, build(), plain, docstore.MemoryLimiters()); err != nil {
@@ -339,7 +318,6 @@ func TestWithDirectoryOnAStoreWithoutConditionalWrites(t *testing.T) {
 	if !strings.Contains(logs.String(), "WARNING") || !strings.Contains(logs.String(), "conditional") {
 		t.Errorf("no warning: %q", logs)
 	}
-	// A conditional store takes any number.
 	t.Setenv("GOJIBERRY_DOCSTORE_REPLICAS", "4")
 	a := docstore.NewMemoryAdapter()
 	if err := withDirectory(ctx, docstore.NewServer(a, "memory").WithAuth(mgr), a, docstore.MemoryLimiters()); err != nil {
@@ -362,7 +340,6 @@ func TestWithDirectoryOnAStoreWithoutConditionalWrites(t *testing.T) {
 	}
 }
 
-// The start-up check runs before the server serves, logs what it found, and shows it in /health.
 func TestWithDirectoryStartupCensusIsLoggedAndInHealth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -371,7 +348,6 @@ func TestWithDirectoryStartupCensusIsLoggedAndInHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := docstore.NewMemoryAdapter()
-	// Records published under one key ...
 	t.Setenv("GOJIBERRY_DOCSTORE_DIRECTORY_KEY", strings.Repeat("11", 32))
 	first := docstore.NewServer(a, "memory").WithAuth(mgr)
 	if err := withDirectory(ctx, first, a, docstore.MemoryLimiters()); err != nil {
@@ -387,7 +363,6 @@ func TestWithDirectoryStartupCensusIsLoggedAndInHealth(t *testing.T) {
 			t.Fatalf("publish: %d %s", rec.Code, rec.Body)
 		}
 	}
-	// ... and the operator starts the server with another key and no PREV.
 	t.Setenv("GOJIBERRY_DOCSTORE_DIRECTORY_KEY", strings.Repeat("22", 32))
 	logs := captureLog(t)
 	second := docstore.NewServer(a, "memory").WithAuth(mgr)
@@ -409,7 +384,6 @@ func TestWithDirectoryStartupCensusIsLoggedAndInHealth(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &h); err != nil || h.Status != "ok" || h.Directory.UnknownKeys != 2 || h.Directory.Records != 2 {
 		t.Errorf("/health: %s", rec.Body)
 	}
-	// Listing the old key as retired makes them known again, and re-signs them before serving.
 	t.Setenv("GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV", strings.Repeat("11", 32))
 	logs = captureLog(t)
 	third := docstore.NewServer(a, "memory").WithAuth(mgr)
@@ -430,7 +404,6 @@ func ageKey(t *testing.T, i int) string {
 	return id.Recipient().String()
 }
 
-// The public offer's budgets can live in the store like the directory's, so replicas share them.
 func TestPublicTakesTheStoreLimiters(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	a := expiring()
@@ -447,7 +420,6 @@ func TestPublicTakesTheStoreLimiters(t *testing.T) {
 	if len(metas) != 1 {
 		t.Errorf("the session budget is not a record in the store: %v", metas)
 	}
-	// A second server process on the same store shares the budget.
 	srv2 := docstore.NewServer(a, "memory")
 	if _, err := withPublic(srv2, a, 24*time.Hour, docstore.StoreLimiters(a)); err != nil {
 		t.Fatal(err)
@@ -460,7 +432,6 @@ func TestPublicTakesTheStoreLimiters(t *testing.T) {
 	if metas, _ := docstore.ListPrefix(context.Background(), a, docstore.RateLimitPrefix+"public-session/"); len(metas) != 1 {
 		t.Errorf("two replicas, two budgets: %v", metas)
 	}
-	// And the default is still a budget per process.
 	b := expiring()
 	srv3 := docstore.NewServer(b, "memory")
 	if _, err := withPublic(srv3, b, 24*time.Hour, docstore.MemoryLimiters()); err != nil {
@@ -473,8 +444,6 @@ func TestPublicTakesTheStoreLimiters(t *testing.T) {
 	}
 }
 
-// publicSession opens an anonymous session on h and creates its one document; it returns the
-// bearer token and the key the document is stored under.
 func publicSession(t *testing.T, h http.Handler, a docstore.Adapter) (token, key string) {
 	t.Helper()
 	rec := httptest.NewRecorder()
@@ -512,9 +481,6 @@ func renewWith(h http.Handler, token, id string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// A public (anonymous) session token cannot renew anything through POST /docs/{id}/renew, in
-// each way the generic API can be configured beside the public offer, and never moves the
-// deadline of a public document.
 func TestPublicSessionTokenCannotUseTheRenewRoute(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "none")
@@ -563,15 +529,12 @@ func TestPublicSessionTokenCannotUseTheRenewRoute(t *testing.T) {
 		h := srv.Handler()
 		tok, key := publicSession(t, h, a)
 		before := deadline(a, key)
-		// The public document's own key is hidden from /docs: 400 whoever asks.
 		if rec := renewWith(h, tok, key); rec.Code != http.StatusBadRequest {
 			t.Errorf("renew of the public document = %d, want 400", rec.Code)
 		}
-		// A document with an access list: the token is no sign-in, so it is nobody.
 		if rec := renewWith(h, tok, "shared"); rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
 			t.Errorf("renew of a shared document = %d, want 401/403", rec.Code)
 		}
-		// Required ACLs: a document nobody owns is closed to it too.
 		_ = a.Save(ctx, "unowned", []byte("x"))
 		if rec := renewWith(h, tok, "unowned"); rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
 			t.Errorf("renew of an unowned document = %d, want 401/403", rec.Code)
@@ -603,8 +566,6 @@ func TestPublicSessionTokenCannotUseTheRenewRoute(t *testing.T) {
 	})
 }
 
-// The hub gives a public session token no role on a document with an access list (it is not a
-// sign-in), so it cannot edit, and so cannot make the hub renew anything.
 func TestPublicSessionTokenHasNoRoleInTheHub(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "none")
@@ -661,8 +622,6 @@ func (c countingRenewer) Renew(ctx context.Context, id string) error {
 	return c.Renewer.Renew(ctx, id)
 }
 
-// docstore.ConfigFromEnv turns the orphan sweep on by the same reading of GOJIBERRY_DOCSTORE_PUBLIC
-// that public.FromEnv uses to mount the offer, so the two cannot disagree.
 func TestOrphanSweepDefaultMatchesThePublicSwitch(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_EXPIRY_TTL", "24h")
 	for _, v := range []string{"", "true", "TRUE", "1", "on", "false", "0", "off"} {
@@ -677,7 +636,6 @@ func TestOrphanSweepDefaultMatchesThePublicSwitch(t *testing.T) {
 	}
 }
 
-// A short admin token is refused at start; the explicit override starts the server and warns loudly.
 func TestPublicRefusesAShortAdminTokenUnlessAllowed(t *testing.T) {
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC", "true")
 	t.Setenv("GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES", "none")

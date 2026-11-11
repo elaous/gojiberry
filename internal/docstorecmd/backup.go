@@ -13,11 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// runOperatorCommand handles `docstore backup <file>` and `docstore restore [-force] <file>`, which
-// work on the store the environment configures and then exit. It reports whether args was one of
-// them; code is the exit status when it was. The backup holds exactly what the store holds (the
-// ciphertext of an encrypted store), so no key is needed and none is read. Each command writes one
-// audit event (package audit) to stderr, without any name or id in it.
 func runOperatorCommand(ctx context.Context, adapter docstore.Adapter, args []string, stdout, stderr io.Writer) (handled bool, code int) {
 	if len(args) == 0 || (args[0] != "backup" && args[0] != "restore") {
 		return false, 0
@@ -74,8 +69,6 @@ func runOperatorCommand(ctx context.Context, adapter docstore.Adapter, args []st
 
 var errNotEmpty = errors.New("the store already has documents; use -force to restore into it (same ids are replaced)")
 
-// backupToFile writes the backup next to file and renames it into place, so a failed run never
-// leaves a half file under the final name. The file is readable by its owner only.
 func backupToFile(ctx context.Context, adapter docstore.Adapter, file string) (int, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(file), ".backup-*")
 	if err != nil {
