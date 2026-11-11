@@ -67,9 +67,7 @@ func TestDeleteAtStartMiddleEnd(t *testing.T) {
 
 func TestGapMovesBothDirectionsRepeatedly(t *testing.T) {
 	g := FromSlice([]rune("0123456789"))
-	// Bounce the edit point back and forth across the buffer, the
-	// access pattern most likely to expose an off-by-one in
-	// moveGapTo's two branches.
+	// Bounce the edit point across the buffer to exercise moveGapTo.
 	g.InsertAt(5, 'a') // "01234a56789"
 	g.InsertAt(2, 'b') // "01b234a56789"
 	g.InsertAt(9, 'c') // "01b234a56c789" (index 9 is between '6' and '7')
@@ -135,12 +133,7 @@ func TestGrowsBeyondInitialCapacity(t *testing.T) {
 	}
 }
 
-// TestAgainstNaiveReference drives both a GapBuffer and a plain []rune
-// reference implementation through the same long random sequence of
-// inserts/deletes/reads and asserts they agree after every single
-// operation -- the strongest correctness check available for a data
-// structure whose whole point is an internal representation trick
-// (the gap) that must never be observable from the outside.
+// TestAgainstNaiveReference compares GapBuffer with a []rune reference over random edits.
 func TestAgainstNaiveReference(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	g := &GapBuffer[rune]{}
@@ -183,10 +176,7 @@ func TestAgainstNaiveReference(t *testing.T) {
 }
 
 func TestCharFormatPayload(t *testing.T) {
-	// GapBuffer is generic specifically so a real editor can pair each
-	// rune with its formatting in one buffer (avoiding two parallel
-	// structures that could drift out of sync) -- exercise that with a
-	// representative payload type instead of only ever testing rune.
+	// Generic T lets a rune carry its formatting in one buffer.
 	type char struct {
 		Rune rune
 		Bold bool
