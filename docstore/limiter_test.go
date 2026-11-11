@@ -88,8 +88,6 @@ func TestStoreLimiterSharedBudgetAcrossInstances(t *testing.T) {
 	if ok, _ := newStoreLimiter(store, clk, "lookup", 1, 4).Allow(ctx, "user"); !ok {
 		t.Error("another name, another budget")
 	}
-	// The per-process limiter is what the store limiter exists to replace: two of them
-	// would have allowed 8.
 	m1, m2 := NewRateLimiter(1, 4), NewRateLimiter(1, 4)
 	m1.Now, m2.Now = clk.Now, clk.Now
 	n := 0
@@ -230,7 +228,6 @@ func TestSweepRateLimitsDeletesStaleRecords(t *testing.T) {
 	_ = store.Save(ctx, RateLimitPrefix+"s/junk", []byte("not json")) // unreadable, just written
 	_ = store.Save(ctx, "doc1", []byte("a document"))                 // not ours
 
-	// 30s after "idle": its bucket has been full for ~28s, under the one-minute grace.
 	if n, err := SweepRateLimits(ctx, store, clk.Now()); err != nil || n != 0 {
 		t.Fatalf("early sweep: %d %v", n, err)
 	}
@@ -247,7 +244,6 @@ func TestSweepRateLimitsDeletesStaleRecords(t *testing.T) {
 	if !ids["doc1"] || !ids[RateLimitPrefix+"s/junk"] || len(ids) != 2 {
 		t.Errorf("left: %v", ids)
 	}
-	// An hour later the unreadable record goes too; the documents never do.
 	n, err = SweepRateLimits(ctx, store, time.Now().Add(2*time.Hour)) // the memory adapter stamps real time
 	if err != nil || n != 1 {
 		t.Fatalf("late sweep: %d %v", n, err)
@@ -255,7 +251,6 @@ func TestSweepRateLimitsDeletesStaleRecords(t *testing.T) {
 	if _, err := store.Load(ctx, "doc1"); err != nil {
 		t.Error("the sweep touched a document")
 	}
-	// A swept caller starts with a full bucket again, as before.
 	for range 3 {
 		if ok, _ := l.Allow(ctx, "idle"); !ok {
 			t.Error("a swept caller has the full burst")

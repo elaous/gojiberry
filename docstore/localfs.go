@@ -14,12 +14,9 @@ import (
 	"syscall"
 )
 
-// LocalFSConfig is the localfs backend's own config, decoded from
-// Config.BackendConfig when Config.Backend == "localfs".
+// LocalFSConfig is the localfs backend's configuration.
 type LocalFSConfig struct {
-	// Dir is where documents are stored, created (with any missing
-	// parents) on first use if it doesn't already exist. Defaults to
-	// "./docstore-data" if empty.
+	// Dir is where documents are stored.
 	Dir string `json:"dir"`
 }
 
@@ -35,18 +32,13 @@ func init() {
 	})
 }
 
-// LocalFSAdapter stores each document as one file (base64url-encoded
-// ID as the filename, to keep arbitrary document IDs safe on disk) in
-// a single flat directory. It has no external dependencies, so it is
-// the adapter of choice for a self-hosted single-machine deployment
-// that wants real persistence without running a database.
+// LocalFSAdapter stores each document as one file.
 type LocalFSAdapter struct {
 	dir string
 	mu  sync.Mutex
 }
 
-// NewLocalFSAdapter stores documents under dir, creating it (and any
-// missing parents) if it does not already exist.
+// NewLocalFSAdapter stores documents under dir.
 func NewLocalFSAdapter(dir string) (*LocalFSAdapter, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -61,7 +53,7 @@ func (a *LocalFSAdapter) path(id string) string {
 func (a *LocalFSAdapter) Save(_ context.Context, id string, data []byte) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	unlock, err := a.lockDir() // so a conditional save in another process is not overtaken
+	unlock, err := a.lockDir()
 	if err != nil {
 		return err
 	}
@@ -69,12 +61,7 @@ func (a *LocalFSAdapter) Save(_ context.Context, id string, data []byte) error {
 	return a.writeFile(id, data)
 }
 
-// writeFile writes the document so that, after a crash or a power cut, the file is
-// either the old one or the whole new one: the data is written to a temporary file and
-// flushed to the disk (fsync), the temporary file replaces the old one in one step, and
-// the directory entry is flushed too, since a rename that is not on the disk can be undone
-// by the power going. (os.WriteFile alone leaves the data in the cache: a file can come
-// back empty.)
+// writeFile replaces the file atomically.
 func (a *LocalFSAdapter) writeFile(id string, data []byte) error {
 	err := a.writeFile1(id, data)
 	if errors.Is(err, syscall.ENOSPC) {
@@ -127,7 +114,7 @@ func (a *LocalFSAdapter) Load(_ context.Context, id string) (Document, error) {
 	return Document{ID: id, Data: data, UpdatedAt: info.ModTime()}, nil
 }
 
-// LoadHead implements HeadReader: it opens the file and reads its first n bytes.
+// LoadHead implements HeadReader by reading the file start.
 func (a *LocalFSAdapter) LoadHead(_ context.Context, id string, n int) ([]byte, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -167,9 +154,7 @@ func (a *LocalFSAdapter) List(_ context.Context) ([]Meta, error) {
 	return metas, nil
 }
 
-// ListPrefix implements PrefixLister. File names are encoded IDs, so a prefix cannot be
-// matched without decoding them: it reads the directory's names (no file is opened) and keeps
-// the matching ones.
+// ListPrefix implements PrefixLister.
 func (a *LocalFSAdapter) ListPrefix(ctx context.Context, prefix string) ([]Meta, error) {
 	all, err := a.List(ctx)
 	if err != nil {
