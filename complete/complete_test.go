@@ -23,7 +23,7 @@ func TestTextWordsRankByUseAndRecency(t *testing.T) {
 	if first := words(ix.Suggest("pla", Options{Max: 1})); first != "planet" {
 		t.Fatalf("most used first: %s", first)
 	}
-	// a word used last beats an equally used earlier one
+	// A word used last beats an equally used earlier one.
 	var jx Index
 	jx.AddText("alpha alps alpine")
 	if got := words(jx.Suggest("al", Options{Max: 1})); got != "alpine" {

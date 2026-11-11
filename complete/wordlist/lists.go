@@ -1,7 +1,6 @@
 package wordlist
 
-// The lists, one word per space-separated token. Nouns are written as the language writes them
-// (German nouns with a capital).
+// Word lists, one word per space-separated token.
 
 const de = `aber alle allein alles also alt am Anfang andere ändern anders Antwort Arbeit arbeiten auch auf aus Auto
 bald bauen beginnen bei beide beim besser bestimmt Bild bin bis bitte bleiben brauchen bringen Buch dabei dafür dann

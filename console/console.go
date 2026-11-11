@@ -1,24 +1,4 @@
-// Package console is a command line for the work that is clumsy with a mouse: bulk rename,
-// move and tag by pattern, import and export of folders, packs, repair and rebuild of a
-// catalog. It drives a saver.Saver, so it works on any store the saver does (files, SQLite,
-// a docstore server, the browser's storage through the page).
-//
-//	ls [-l] [pattern...]        list the documents and folders here
-//	cd path | pwd | mkdir path... | rmdir path...
-//	mv source... dest[/]        move into a folder, or rename one thing
-//	cp source dest[/]           copy a document (into a folder if dest ends in /)
-//	tag [+tag|-tag]... pattern...
-//	rm pattern...               to the trash;  purge pattern...  deletes for good (asks)
-//	restore pattern...          out of the trash;  trash  lists it
-//	import [-d dir] file...     bring in files (.docx, .md, .txt, .open, ...)
-//	export [-f format] [-o dir] [--force] pattern...
-//	pack [--force] out.opendoc [folder]   one .opendoc pack;  unpack file.opendoc [dir]
-//	check | repair | rebuild    the integrity tools;  usage  how full the store is
-//
-// A pattern is a name with * (any run of characters) and ? (any one character), in any case,
-// optionally under a folder path ("Work/Reports/Q*"); every other character, [ ] and \
-// included, stands for itself. With DryRun every command that would change something says what it
-// would do and does nothing; a command that destroys (purge, rebuild) asks first unless Yes.
+// Package console is a command line for document stores.
 package console
 
 import (
@@ -35,33 +15,27 @@ import (
 	"unicode"
 )
 
-// registerExport adds the writers of the other file formats to the default Registry; native builds set it.
+// registerExport adds the writers of the other file formats.
 var registerExport func(*transfer.Registry)
 
 // Shell runs console commands on one target of a Saver.
 type Shell struct {
 	Saver  *saver.Saver
 	Target string
-	// In answers questions; Out and Err get the output and the messages.
+	// In answers questions; Out and Err get the output.
 	In       io.Reader
 	Out, Err io.Writer
-	// DryRun says what would change and changes nothing; Yes answers every question yes.
+	// DryRun says what would change and changes nothing.
 	DryRun, Yes bool
-	// Script says the commands come from a file: Interact stops at the first command that
-	// fails and returns its error, and a question is never read from the script (it is
-	// answered no unless Yes is set).
+	// Script says the commands come from a file.
 	Script bool
-	// Registry reads and writes the files import and export handle; nil is the default set
-	// (JSON, protobuf, Markdown, text, .docx, .pdf, HTML, ...).
+	// Registry reads and writes import and export files.
 	Registry *transfer.Registry
-	// Files is where import, export, pack and unpack read and write files; nil is the disk
-	// (OSFiles). A page gives PageFiles.
+	// Files is where import, export, pack and unpack read and write.
 	Files Files
-	// Confirm, when set, answers the questions of purge and rebuild instead of reading In: a
-	// host that has no terminal asks its person and returns the answer. Script and Yes still
-	// decide first.
+	// Confirm, when set, answers the questions of purge and similar commands.
 	Confirm func(question string) bool
-	// Format is how imported documents are stored; nil is JSON.
+	// Format is how imported documents are stored.
 	Format docfile.Codec
 
 	cwd string // the folder ID being worked in, "" for the top
@@ -73,8 +47,7 @@ func New(s *saver.Saver, target string, in io.Reader, out, errw io.Writer) *Shel
 	return &Shell{Saver: s, Target: target, In: in, Out: out, Err: errw}
 }
 
-// Cwd is the ID of the folder commands work in ("" for the top); SetCwd moves there. A host
-// that shows folders itself keeps the two in step with them.
+// Cwd is the ID of the folder commands work in.
 func (sh *Shell) Cwd() string { return sh.cwd }
 
 // SetCwd sets the folder commands work in.
@@ -95,10 +68,7 @@ func (sh *Shell) printf(format string, a ...any) { _, _ = fmt.Fprintf(sh.Out, fo
 
 func (sh *Shell) warnf(format string, a ...any) { _, _ = fmt.Fprintf(sh.Err, format, a...) }
 
-// Split breaks a command line into words: spaces separate them, single and double quotes
-// group. A backslash outside single quotes escapes a space, a quote or another backslash;
-// before any other character it stays as it is (so C:\docs\a.md and a pattern with \ in it
-// pass through). A line cannot end in a lone backslash.
+// Split breaks a command line into words; spaces separate them.
 func Split(line string) ([]string, error) {
 	var words []string
 	var cur strings.Builder
@@ -216,9 +186,7 @@ pack [--force] out.opendoc [folder]   unpack file.opendoc [dir]
 check   repair   rebuild   usage
 `
 
-// Interact reads commands from the Shell's In until it ends or "exit" is typed, printing a
-// prompt and each command's error. An interactive session carries on after an error; with
-// Script set it stops at the first one and returns it (with the line number).
+// Interact reads commands from In until the input ends.
 func (sh *Shell) Interact(ctx context.Context, prompt bool) error {
 	r := sh.reader()
 	for n := 1; ; n++ {
@@ -258,7 +226,7 @@ func (sh *Shell) reader() *bufio.Reader {
 	return sh.in
 }
 
-// ask puts a question; a destructive command goes ahead only on "y".
+// ask puts a question; a destructive command goes ahead only on yes.
 func (sh *Shell) ask(question string) bool {
 	if sh.Yes {
 		return true
@@ -277,9 +245,7 @@ func (sh *Shell) ask(question string) bool {
 	return line == "y" || line == "yes"
 }
 
-// declined is what a command returns when its question was not answered yes: interactively
-// the command is left alone and the session carries on; in a script it is an error, so the
-// script stops and the exit status says the command did not run.
+// declined is what a command returns when its question is refused.
 func (sh *Shell) declined() error {
 	if sh.Script {
 		return errors.New("not confirmed: nothing was changed (a script needs -y to answer yes)")
@@ -288,7 +254,7 @@ func (sh *Shell) declined() error {
 	return nil
 }
 
-// act does a change: with DryRun it only says what it would do.
+// act does a change; with DryRun it only says what it would do.
 func (sh *Shell) act(desc string, do func() error) error {
 	if sh.DryRun {
 		sh.printf("would %s\n", desc)
@@ -300,8 +266,6 @@ func (sh *Shell) act(desc string, do func() error) error {
 	sh.printf("%s\n", desc)
 	return nil
 }
-
-// ---- folders and paths ----
 
 type tree struct {
 	folders []saver.Folder
@@ -321,7 +285,7 @@ func (sh *Shell) tree(ctx context.Context) (*tree, error) {
 }
 
 func (sh *Shell) pathOf(id string) string {
-	// Names come from the last tree read; a path of IDs would not be readable.
+	// Names come from the last tree read.
 	if id == "" {
 		return "/"
 	}
@@ -361,7 +325,7 @@ func (t *tree) child(parent, name string) (saver.Folder, error) {
 	return saver.Folder{}, fmt.Errorf("console: %d folders are called %q here", len(found), name)
 }
 
-// folder resolves a folder path ("/Work/Reports", "../Work", "." or "") to its ID.
+// folder resolves a folder path such as /Work/Reports.
 func (sh *Shell) folder(t *tree, p string) (string, error) {
 	cur := sh.cwd
 	if strings.HasPrefix(p, "/") {
@@ -383,7 +347,7 @@ func (sh *Shell) folder(t *tree, p string) (string, error) {
 	return cur, nil
 }
 
-// splitPath splits "Work/Reports/Q*" into the folder part and the last element.
+// splitPath splits Work/Reports/Q* into folder path and pattern.
 func splitPath(p string) (dir, last string) {
 	i := strings.LastIndex(p, "/")
 	if i < 0 {
@@ -392,8 +356,7 @@ func splitPath(p string) (dir, last string) {
 	return p[:i+1], p[i+1:]
 }
 
-// globMatch matches name against pattern, ignoring case: * is any run of characters, ? any
-// one, and every other character (including [ ] and \) stands for itself.
+// globMatch matches name against pattern, ignoring case.
 func globMatch(pattern, name string) bool {
 	return glob([]rune(strings.ToLower(pattern)), []rune(strings.ToLower(name)))
 }
@@ -434,7 +397,7 @@ type thing struct {
 	name   string
 }
 
-// match finds the documents and folders a pattern names, and the folder they are in.
+// match finds the documents and folders a pattern names.
 func (sh *Shell) match(ctx context.Context, t *tree, pattern string, trashed bool) (in string, out []thing, err error) {
 	dir, last := splitPath(pattern)
 	in, err = sh.folder(t, dir)
@@ -505,8 +468,7 @@ func (th thing) label() string {
 	return th.name
 }
 
-// Matches is the IDs of the documents the patterns name (folders are left out): in the trash
-// when trashed is set, otherwise out of it. A host uses it to guard a command before it runs.
+// Matches is the IDs of the documents the patterns name.
 func (sh *Shell) Matches(ctx context.Context, trashed bool, patterns ...string) ([]string, error) {
 	t, err := sh.tree(ctx)
 	if err != nil {

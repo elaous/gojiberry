@@ -512,7 +512,6 @@ func TestPackAndExportDoNotClobber(t *testing.T) {
 		t.Error("the file is untouched")
 	}
 	r.must("pack --force " + pk)
-	// A failure leaves no partial file and no temporary file.
 	bad := filepath.Join(dir, "nodir", "x.opendoc")
 	if err := r.run("pack " + bad); err == nil {
 		t.Error("an unwritable path")
@@ -562,7 +561,6 @@ func TestUnpackReportsSignatureAndFailures(t *testing.T) {
 	if !strings.Contains(out, "not signed") {
 		t.Errorf("it says whether the pack is signed: %q", out)
 	}
-	// A store that cannot save: every document fails, and that is an error.
 	broken := &saver.Saver{Targets: []saver.Target{{Name: "m", Adapter: failingSave{docstore.NewMemoryAdapter()}}}}
 	b := &rig{t: t, out: &bytes.Buffer{}, err: &bytes.Buffer{}, s: broken}
 	b.sh = New(broken, "m", strings.NewReader(""), b.out, b.err)
@@ -577,7 +575,6 @@ func TestUnpackReportsSignatureAndFailures(t *testing.T) {
 
 type failingSave struct{ docstore.Adapter }
 
-// Save fails for documents; the catalog (its index and folders) still saves.
 func (f failingSave) Save(ctx context.Context, id string, data []byte) error {
 	if strings.HasPrefix(id, "catalog:") {
 		return f.Adapter.Save(ctx, id, data)

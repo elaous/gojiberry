@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// ---- files ----
-
 func (sh *Shell) importFiles(ctx context.Context, args []string) error {
 	dest := ""
 	var files []string
@@ -105,7 +103,7 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	used := map[string]bool{} // file names this command has taken, lower case
+	used := map[string]bool{}
 	for _, th := range things {
 		if th.doc == nil {
 			continue
@@ -135,8 +133,7 @@ func (sh *Shell) exportDocs(ctx context.Context, args []string) error {
 	return nil
 }
 
-// uniqueFile is name, or name with a short piece of the document's ID before the extension
-// when another document of this command already took it.
+// uniqueFile returns name, made unique with a short suffix.
 func uniqueFile(name, id string, used map[string]bool) string {
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
@@ -241,8 +238,6 @@ func (sh *Shell) unpack(ctx context.Context, args []string) error {
 		return nil
 	})
 }
-
-// ---- integrity ----
 
 func (sh *Shell) check(ctx context.Context) error {
 	if sh.DryRun {
