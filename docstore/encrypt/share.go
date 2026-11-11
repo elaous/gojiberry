@@ -14,71 +14,28 @@ import (
 	"time"
 )
 
-// KeysPrefix is the prefix of the records that say who a document is shared with: "keys:<document
-// ID>". They hold public keys only, so they are stored readable (DefaultSkip) and a person
-// with only the store can see who has access, but not open anything.
-//
-// A record is signed by an owner key (Ed25519, see Signer), and it is what decides who
-// the document is encrypted to, so it is never trusted unsigned: StoreKeyring.Recipients
-// verifies it against the owners' signing keys and fails closed. A person who can only
-// write the store cannot add themselves as a recipient, or change the list, without
-// being refused. What the signature does not stop (C.5): a store writer can still delete a
-// record, or put back an older validly signed one (a replay), which no signature check can
-// tell from the current one. Three layers answer that, none needing the client to remember
-// anything except the last:
-//
-//   - the frame inside every encrypted file carries the level and the record's seq (Binding),
-//     so Save, Load and the re-keys cross-check the file with the record and report
-//     ErrDowngrade for a record that is missing or older than the file was sealed under;
-//   - the owner-signed index (IndexKey, Sharing.VerifyIndex) lists the end-to-end documents,
-//     so a deleted or replaced record is found even for a document never opened here;
-//   - the optional SeqFloor (MemorySeqFloor, FileSeqFloor, StorageSeqFloor) refuses a record
-//     older than the highest seen on this client, and the saver re-asserts a confidential
-//     document's level on each save (saver.Saver.Rekey).
+// KeysPrefix is the prefix of the sharing records.
 const KeysPrefix = "keys:"
 
-// Sharing changes who a document is shared with. Adapter is the encrypting adapter over Store,
-// whose keyring is a StoreKeyring over the same Store. Signer is the owner's signing key, which
-// every change to a list needs; OwnerSigners are further owner keys whose lists are accepted
-// (Signer's own key always is).
-//
-// A change to a list is a read, a change and a write of the record. On a Store with
-// docstore.ConditionalAdapter (SaveIf) a change made by someone else in between is noticed
-// and the change is made again; on a Store without it, two changes to one document's list at
-// the same moment can lose one of them, so serialize them (one owner client, or a Store
-// Lock) there. A custom Adapter.Skip must keep the "keys:" prefix (KeysPrefix, which includes
-// IndexKey) readable, as DefaultSkip does: the records are plain signed lists, and encrypting
-// them would make the keyring unable to read them.
-//
-// The Adapter must be the encrypting adapter over Store: a change to a list first checks the
-// record against the document's stored files (ErrDowngrade) so it never signs over a replayed
-// or deleted record, and re-keys through it.
+// Sharing changes who a document is shared with.
 type Sharing struct {
 	Store        docstore.Adapter
 	Adapter      *Adapter
 	Signer       *Signer
 	OwnerSigners []ed25519.PublicKey
-	// SeqFloor, when set, refuses a record older than the highest seen (ErrStaleRecord) and
-	// is raised by every record this Sharing writes. Share the one of the StoreKeyring.
+	// SeqFloor, when set, refuses a record older than the floor.
 	SeqFloor SeqFloor
-	// PendingWarnAfter is how long a pending re-key may last before PendingStatus calls it
-	// stuck; 0 is DefaultPendingWarnAfter.
+	// PendingWarnAfter is how long a re-key may stay pending.
 	PendingWarnAfter time.Duration
 
 	now func() time.Time // tests
-	// afterRead, when set, is called by mutate between reading the record and checking the
-	// files against it (tests).
+	// afterRead, when set, is called by mutate between reads.
 	afterRead func()
-	// beforeFlip, when set, is called by finishFiles after the files were re-keyed and before the
-	// record is changed to say they are signed (tests).
+	// beforeFlip, when set, is called by finishFiles before the flip.
 	beforeFlip func()
 }
 
-// ErrUnsignedAfterFlip is returned by the re-key (Repair, Add, Remove, SetProtection, Recover)
-// when, after it wrote the record (which says Signed, whether it was Signed before and only
-// Pending or is marked so now), a file of the document is still unsigned: a client with no
-// Signer saved it in the few steps between the re-key's last look and the write of the record. The record does say Signed and the file is refused as forged (it
-// wraps ErrForgedFrame); the owner checks it is theirs and runs Repair with AcceptUnsigned.
+// ErrUnsignedAfterFlip is returned when unsigned files remain.
 var ErrUnsignedAfterFlip = errors.New("encrypt: a file was saved unsigned while the re-key was finishing, and the record now says Signed")
 
 // RepairOption changes what Repair and Recover accept.
@@ -86,19 +43,7 @@ type RepairOption func(*repairOpts)
 
 type repairOpts struct{ acceptUnsigned bool }
 
-// AcceptUnsigned is the owner's confirmation that a file of the document whose frame is not
-// signed (v1, v2) is theirs, so that Repair (or Recover) seals it again with a signed frame
-// even though the record says every file is signed (or the Adapter has RequireSigned): the
-// state a client without the owner's signing key, or a build that wrote unsigned frames, leaves
-// behind once the record has been marked signed, where Save, Load and every re-key otherwise
-// refuse the file as forged (ErrForgedFrame). Without the option these refuse, naming the file.
-//
-// It launders nothing that carries a signature: a v3 frame whose signature is not an owner's, or
-// that does not match its content, is a forgery and is refused (ErrForgedFrame) with or without
-// it. It cannot tell an unsigned file the owner's own client wrote from one minted by someone
-// who knows a recipient's public key (an unsigned frame carries no proof): confirm that the
-// file is yours (its content, with Load through an Adapter that has no RequireSigned, if need
-// be) before using it. It needs the Adapter's Signer (ErrNoFrameSigner otherwise).
+// AcceptUnsigned is the owner's confirmation for unsigned files.
 func AcceptUnsigned() RepairOption { return func(o *repairOpts) { o.acceptUnsigned = true } }
 
 func repairOptions(opts []RepairOption) repairOpts {
@@ -117,29 +62,19 @@ func (s *Sharing) verifiers() []ed25519.PublicKey {
 	return out
 }
 
-// mutateAttempts is how many times a change to a list is redone when it was changed meanwhile.
+// mutateAttempts is how many times a list change is retried.
 const mutateAttempts = 5
 
 // mutateOpts changes how mutate reads and numbers a record.
 type mutateOpts struct {
-	// recover is Recover's: the record is read without the floor and without the check against
-	// the files' frames (it may be the replayed or missing one being replaced), and the new seq
-	// is above minSeq.
+	// recover is Recover's: the record is read without checks.
 	recover bool
 	minSeq  uint64
-	// noCheck skips the cross-check with the files' frames (not the floor): for a write that
-	// only records that a file is unsigned, which the check would refuse for that very file.
+	// noCheck skips the cross-check with the files' frames.
 	noCheck bool
 }
 
-// mutate reads and verifies the list, lets fn change it, and writes it back signed, only if it
-// is still what was read (on a store that writes conditionally). It returns the list as it is
-// after fn, whether or not fn changed it.
-//
-// Before anything is written the record is cross-checked with what the document's newest
-// stored file says it was sealed under (Adapter.checkDocument): a record that is missing, or
-// older than that file, is ErrDowngrade, never signed over (signing the replayed record again
-// would make the replay the truth). Sharing.Recover is the way past it.
+// mutate reads, verifies, changes and saves the list.
 func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
 	return s.mutateWith(ctx, docID, mutateOpts{}, fn)
 }
@@ -158,7 +93,7 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 		if err != nil {
 			return rec, err
 		}
-		before := rec.binding(digest != "") // fn changes rec: the check is of the record as read
+		before := rec.binding(digest != "")
 		changed, err := fn(&rec)
 		if err != nil || !changed {
 			return rec, err
@@ -169,9 +104,6 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 		if !o.recover && !o.noCheck && s.Adapter != nil {
 			if err := s.Adapter.checkDocumentByID(ctx, docID, before); err != nil {
 				if !raced && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
-					// A client that completed a switch between the read of the record and the
-					// files leaves files sealed under a newer record: read the record again
-					// once. A record really missing or replaced is the same the second time.
 					raced = true
 					continue
 				}
@@ -216,16 +148,13 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 	return sharedRecord{}, docstore.ErrConflict
 }
 
-// Resign signs the document's list again with Signer, unchanged but for its sequence number: what
-// a store does for every list when the owner key that signed them is taken out of OwnerSigners
-// (it would no longer verify). OwnerSigners must still hold the key that signed it now.
+// Resign signs the document's list again with Signer.
 func (s *Sharing) Resign(ctx context.Context, docID string) error {
 	_, err := s.mutate(ctx, docID, func(*sharedRecord) (bool, error) { return true, nil })
 	return err
 }
 
-// List says who a document is shared with, besides the owner's own keys. A list whose
-// signature does not verify is an error.
+// List says who a document is shared with, besides the owners.
 func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	if err != nil {
@@ -242,13 +171,7 @@ func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 	return out, nil
 }
 
-// Add shares a document with a key. confirmed is the fingerprint the owner says they checked
-// with the person it belongs to; it must be the key's own (ErrFingerprint), computed here from
-// the key's text, so a key pasted for the wrong person is not added by a click alone. The
-// list is saved (signed), then every file of the document (its current and previous copies
-// and its versions) is encrypted again to it, so the new person can open all of it. Adding a
-// key that is already listed still encrypts the files again (it finishes an earlier add that
-// was cut short); it changes nothing else.
+// Add shares a document with a key.
 func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed string) error {
 	if !docfile.ValidID(docID) {
 		return errors.New("encrypt: not a document ID")
@@ -283,13 +206,7 @@ func (s *Sharing) Add(ctx context.Context, docID string, r Recipient, confirmed 
 	return err
 }
 
-// Remove takes a key out and encrypts the document again, with a new data key, to who is left.
-// That stops them reading what is saved from now on; nothing takes back what they already
-// opened or copied, and a caller should say so. It returns how many files were encrypted again.
-//
-// It can be run again after a failure: the list is saved first, marked pending, and the
-// mark is cleared only when every file is re-keyed. Remove of a key that is no longer listed
-// finishes a pending re-key, and is docstore.ErrNotFound only when nothing is pending.
+// Remove takes a key out and encrypts the document again.
 func (s *Sharing) Remove(ctx context.Context, docID, fingerprint string) (int, error) {
 	found := false
 	rec, err := s.mutate(ctx, docID, func(rec *sharedRecord) (bool, error) {
@@ -316,12 +233,7 @@ func (s *Sharing) Remove(ctx context.Context, docID, fingerprint string) (int, e
 	return s.finish(ctx, docID)
 }
 
-// Repair encrypts every file of a document again to its current list and clears a pending
-// mark: the way to finish a share or removal that was cut short, whichever key it was for.
-//
-// A file whose frame is not signed in a document whose record says every file is signed is
-// ErrForgedFrame (naming the file) and nothing is written, unless the owner confirms with the
-// AcceptUnsigned option; see there for what that does and does not accept.
+// Repair encrypts every file of a document again to its recipients.
 func (s *Sharing) Repair(ctx context.Context, docID string, opts ...RepairOption) (int, error) {
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")
@@ -333,11 +245,7 @@ func (s *Sharing) Repair(ctx context.Context, docID string, opts ...RepairOption
 	return n, err
 }
 
-// Usage lists the documents (their IDs, sorted) that removing a key changes: the ones it is a
-// recipient of, and the ones with a pending re-key (a change that was cut short, whose files
-// may still be encrypted to an older list), so a caller can say what removing it will do and a
-// re-run finds what an earlier run left. A record that does not verify is skipped and
-// reported in the error, joined, beside the documents found.
+// Usage lists the documents that remove a key.
 func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, error) {
 	metas, err := s.Store.List(ctx)
 	if err != nil {
@@ -370,13 +278,7 @@ func (s *Sharing) Usage(ctx context.Context, fingerprint string) ([]string, erro
 	return docs, errors.Join(errs...)
 }
 
-// RemoveEverywhere takes a key out of every document it is shared with: each is decrypted and
-// encrypted again, with a new data key, to who is left. It returns the documents done and how
-// many files were encrypted again. A document that fails does not stop the others: every
-// failure is returned, joined and each naming its document, and running it again finishes
-// those (Usage lists a document whose re-key is pending even when the key is already out of
-// its list, and Remove finishes it). As with Remove, nothing takes back what the key's owner
-// already opened or copied.
+// RemoveEverywhere takes a key out of every document.
 func (s *Sharing) RemoveEverywhere(ctx context.Context, fingerprint string) (docs []string, files int, err error) {
 	all, uerr := s.Usage(ctx, fingerprint)
 	var errs []error
