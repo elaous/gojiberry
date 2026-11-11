@@ -413,8 +413,6 @@ func TestEditTargetThroughScrollView(t *testing.T) {
 	}
 }
 
-// --- Markdown clipboard ---------------------------------------------------
-
 func TestMarkdownFromItems(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -580,8 +578,7 @@ type featureFunc struct {
 func (f featureFunc) Name() string        { return f.name }
 func (f featureFunc) Install(r *Registry) { f.fn(r) }
 
-// Every default chord is written the way Chord builds it, or the browser
-// glue could never match it.
+// Default chords must be written as Chord builds them.
 func TestDefaultChordsMatchChord(t *testing.T) {
 	for chord := range NewRegistry(DefaultFeatures()...).Keymap() {
 		parts := strings.Split(chord, "+")
@@ -641,7 +638,7 @@ func TestBreaksFeature(t *testing.T) {
 			t.Errorf("page 2 starts with the text after the break: %+v", ln)
 		}
 	}
-	// Clicking at the start of the second page's line puts the caret after the break.
+	// Clicking a page's first line puts the caret after its break.
 	x1, y1, _, _ := ps.ContentRect(1)
 	f.MouseDown(x1, y1+5)
 	f.MouseUp(0, 0)

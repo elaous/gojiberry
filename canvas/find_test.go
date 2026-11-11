@@ -63,8 +63,7 @@ func TestFlowFindAndReplacePreserveFormatting(t *testing.T) {
 	}
 }
 
-// A pattern that looks around (\B here) means what it meant in Find when its
-// replacement is worked out: the match is not re-run on its own text.
+// A look-around pattern (\B) keeps its Find meaning in replacements.
 func TestRegexReplacementKnowsTheContext(t *testing.T) {
 	f := NewTextFlow("cat at", 0, 0, 400, 200)
 	n, err := f.ReplaceAll(FindOptions{Query: `\Bat`, Regex: true, MatchCase: true}, "[$0]")
