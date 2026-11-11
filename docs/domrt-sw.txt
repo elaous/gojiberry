@@ -1,6 +1,5 @@
 package sw // import "github.com/elaous/gojiberry/domrt/sw"
 
-Package sw lets a WASM binary run as a service worker.
 
 FUNCTIONS
 

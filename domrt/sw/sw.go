@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package sw lets a WASM binary run as a service worker.
 package sw
 
 import (
@@ -37,7 +36,6 @@ func (e FetchEvent) RespondWith(work func() (js.Value, error)) {
 }
 
 func addSelfListener(name string, fn func(js.Value)) {
-	// Listeners live for the whole service worker.
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		var v js.Value
 		if len(args) > 0 {
