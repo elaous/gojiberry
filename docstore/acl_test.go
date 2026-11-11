@@ -22,7 +22,7 @@ import (
 	"github.com/elaous/gojiberry/user"
 )
 
-// fakeOIDCProvider mirrors gojiberry/auth's test provider.
+// fakeOIDCProvider mirrors the auth test provider.
 type fakeOIDCProvider struct {
 	srv        *httptest.Server
 	oidcServer *oidctest.Server

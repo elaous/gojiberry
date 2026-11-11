@@ -72,8 +72,6 @@ func exists(t *testing.T, a Adapter, id string) bool {
 	return err == nil
 }
 
-// --- M2: orphaned hub state
-
 func TestOrphanSweepOffByDefault(t *testing.T) {
 	ctx := context.Background()
 	ea, inner, clk := newExpiringStamped(t)
@@ -93,7 +91,7 @@ func TestOrphanSweepGracePeriod(t *testing.T) {
 	ea.Orphans = CollabOrphans(2 * time.Hour)
 	_ = ea.Save(ctx, "collab:hubonly", []byte("[]"))
 
-	clk.Add(day + time.Hour) // past the TTL, inside the grace period
+	clk.Add(day + time.Hour)
 	if n, _ := ea.Sweep(ctx); n != 0 || !exists(t, inner, "collab:hubonly") {
 		t.Fatalf("removed inside the grace period (n=%d)", n)
 	}
@@ -123,7 +121,6 @@ func TestOrphanDefaultGraceIsOneHour(t *testing.T) {
 	}
 }
 
-// Every hub save bumps UpdatedAt: a hub-only document that is being edited is never swept.
 func TestOrphanSweepKeepsALiveEditedHubOnlyDocument(t *testing.T) {
 	ctx := context.Background()
 	ea, inner, clk := newExpiringStamped(t)
@@ -156,10 +153,9 @@ func TestOrphanSweepNeverTouchesStateOfALiveDocument(t *testing.T) {
 	_ = ea.Save(ctx, "exact", []byte("x"))
 	_ = ea.Save(ctx, "gen~1f2e3d4c5b6a.docx", []byte("x"))
 	clk.Add(day - time.Hour)
-	// Both documents are renewed by the hub (collab: state is old, the documents are live).
 	_ = ea.Touch(ctx, "exact")
 	_ = ea.Touch(ctx, "gen")
-	clk.Add(3 * time.Hour) // collab: entries are older than TTL + grace; the documents are not expired
+	clk.Add(3 * time.Hour)
 	n, err := ea.Sweep(ctx)
 	if err != nil || n != 1 {
 		t.Fatalf("Sweep = %d, %v; want only the ghost", n, err)
@@ -171,7 +167,6 @@ func TestOrphanSweepNeverTouchesStateOfALiveDocument(t *testing.T) {
 	}
 }
 
-// A document the policy gives no lifetime (a key with a colon) is not swept as an orphan either.
 func TestOrphanSweepOnlyForIdsThePolicyCovers(t *testing.T) {
 	ctx := context.Background()
 	ea, inner, clk := newExpiringStamped(t)
@@ -218,8 +213,6 @@ func TestWithConfiguredExpiryOrphansAndMaxAge(t *testing.T) {
 		t.Fatal("orphans / max age on by default")
 	}
 }
-
-// --- MaxAge
 
 func TestMaxAgeBoundsAnEndlesslyEditedDocument(t *testing.T) {
 	ctx := context.Background()
@@ -298,7 +291,6 @@ func TestMaxAgeSaveAtTheCapStartsANewDocument(t *testing.T) {
 }
 
 func TestMaxAgeSweepsALiveRecordPastTheCap(t *testing.T) {
-	// MaxAge switched on over documents whose recorded deadline is later than the cap.
 	ctx := context.Background()
 	ea, clk := newExpiring(NewMemoryAdapter())
 	_ = ea.Save(ctx, "doc", []byte("x"))
@@ -318,14 +310,11 @@ func TestRecordFormatBothWays(t *testing.T) {
 	ctx := context.Background()
 	inner := NewMemoryAdapter()
 	ea, clk := newExpiring(inner)
-	// An old-format record (just the deadline) still reads.
 	_ = inner.Save(ctx, "doc", []byte("x"))
 	_ = inner.Save(ctx, "expiry:doc", []byte(clk.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)))
 	if got := mustExpiry(t, ea, "doc"); !got.Equal(clk.Now().Add(time.Hour)) {
 		t.Fatalf("old record = %v", got)
 	}
-	// A new one keeps the creation time in a sibling record (the deadline record stays one line,
-	// see TestExpiryRecordsReadableByOldBuild), and a bad one reads as absent (never an error).
 	_ = ea.Save(ctx, "doc", []byte("y"))
 	if _, err := inner.Load(ctx, "expiry-created:doc"); err != nil {
 		t.Fatalf("no creation time record: %v", err)
@@ -335,8 +324,6 @@ func TestRecordFormatBothWays(t *testing.T) {
 		t.Fatalf("a corrupt record: ok=%v err=%v", ok, err)
 	}
 }
-
-// --- m1: Touch is exact-first and renews only the newest generation
 
 func TestTouchExactKeyFirst(t *testing.T) {
 	ctx := context.Background()
@@ -380,7 +367,6 @@ func TestTouchRenewsOnlyTheNewestGeneration(t *testing.T) {
 			t.Fatalf("%s deadline = %v, want renewed", k, got)
 		}
 	}
-	// The stale one is gone at its own deadline; the current one is not.
 	if n, err := ea.Sweep(ctx); err != nil || n != 1 {
 		t.Fatalf("Sweep = %d, %v; want the stale generation", n, err)
 	}
@@ -391,8 +377,6 @@ func TestTouchRenewsOnlyTheNewestGeneration(t *testing.T) {
 		t.Fatalf("current generation: %v", err)
 	}
 }
-
-// --- m2, case-insensitive reserved ids
 
 func routeReq(t *testing.T, h http.Handler, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -423,7 +407,6 @@ func TestIDsEndingInARouteAreRefused(t *testing.T) {
 	if d, err := ea.Load(context.Background(), "a"); err != nil || string(d.Data) != "doc a" {
 		t.Fatalf("document a was touched: %q %v", d.Data, err)
 	}
-	// Nested ids that do not end in a route, and the real routes, still work.
 	if rec := routeReq(t, h, http.MethodPut, "/docs/a%2Frenewed"); rec.Code != http.StatusNoContent {
 		t.Errorf("nested id a/renewed = %d", rec.Code)
 	}
@@ -444,8 +427,6 @@ func TestRenewRouteReservedIDsAreCaseInsensitive(t *testing.T) {
 		}
 	}
 }
-
-// --- n1: nothing secret in logs and errors
 
 func TestRedactURL(t *testing.T) {
 	for in, want := range map[string]string{
@@ -496,7 +477,7 @@ func TestTouchNeverShortensALife(t *testing.T) {
 	ea, clk := newExpiring(NewMemoryAdapter())
 	_ = ea.Save(ctx, "doc", []byte("x")) // deadline t+24h
 	first := mustExpiry(t, ea, "doc")
-	ea.Policy = FixedTTL(time.Hour) // a shorter lifetime from now on
+	ea.Policy = FixedTTL(time.Hour)
 	clk.Add(time.Minute)
 	if err := ea.Touch(ctx, "doc"); err != nil {
 		t.Fatal(err)

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// recordingAdapter logs the writes that reach the inner store and can fail them.
+// recordingAdapter logs the writes it receives.
 type recordingAdapter struct {
 	Adapter
 	mu     sync.Mutex

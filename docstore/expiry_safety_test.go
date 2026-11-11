@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// stepAdapter records every mutating call and fails the failAt-th (1-based; 0: none) before
-// running it, to pin the order of a multi-step operation.
+// stepAdapter records every mutation step.
 type stepAdapter struct {
 	Adapter
 	mu     sync.Mutex
@@ -88,8 +87,6 @@ func TestFixedTTLIsAnAllowlistOfDocumentKeys(t *testing.T) {
 	}
 }
 
-// The first sweep over an existing store must not touch keys that are not documents, and the
-// wrapped key of a document goes with the document (not before).
 func TestExpiryNeverSweepsKeyRecordsOrFonts(t *testing.T) {
 	ctx := context.Background()
 	inner := NewMemoryAdapter()
@@ -101,11 +98,9 @@ func TestExpiryNeverSweepsKeyRecordsOrFonts(t *testing.T) {
 	if _, err := ea.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// doc1.open is adopted at UpdatedAt+TTL with a real timestamp, so it is live under the
-	// fake clock only if UpdatedAt is recent: whatever happens to it, the system keys stay.
 	for _, id := range system {
 		if id == "acl:doc1" || id == "collab:doc1" || id == "keys:doc1" || id == "versions/doc1/1.open" {
-			continue // belong to doc1, checked below
+			continue
 		}
 		if !has(t, inner, id) {
 			t.Errorf("%s was swept", id)
@@ -114,7 +109,6 @@ func TestExpiryNeverSweepsKeyRecordsOrFonts(t *testing.T) {
 			t.Errorf("%s got a deadline", id)
 		}
 	}
-	// keys:doc1.open goes with doc1.open.
 	put(t, ea, "doc2.open")
 	put(t, inner, "keys:doc2.open", "keys:doc3")
 	put(t, ea, "doc3~0123456789ab.open")
@@ -135,7 +129,7 @@ func TestExpiryKeyRecordOfLiveDocumentSurvivesSiblingExpiry(t *testing.T) {
 	clk.Add(20 * time.Hour)
 	put(t, ea, "u1~bbbbbbbbbbbb.open") // the current one
 	put(t, inner, "keys:u1", "acl:u1", "versions/u1/1.open")
-	clk.Add(5 * time.Hour) // the previous copy is past its day, the current one is not
+	clk.Add(5 * time.Hour)
 	if n, err := ea.Sweep(ctx); err != nil || n != 1 {
 		t.Fatalf("sweep = %d %v", n, err)
 	}
@@ -270,17 +264,14 @@ func TestExpirySaveWritesRecordBeforeDocument(t *testing.T) {
 	if got, want := strings.Join(st.ops(), ","), "save:expiry-created:d,save:expiry:d,save:d"; got != want {
 		t.Fatalf("order = %s, want %s", got, want)
 	}
-	// Crash between the two writes (the document write never happens): record, no document.
 	st2 := &stepAdapter{Adapter: NewMemoryAdapter(), failAt: 3}
 	ea2, _ := newExpiring(st2)
 	if err := ea2.Save(ctx, "d", []byte("x")); err == nil {
 		t.Fatal("injected failure not reported")
 	}
-	// The rollback ran (steps after the failure are recorded but the record is removed).
 	if has(t, st2.Adapter, "d") {
 		t.Error("document written despite failure")
 	}
-	// A crash with no chance to roll back: simulate by writing only the record.
 	inner := NewMemoryAdapter()
 	ea3, clk := newExpiring(inner)
 	_ = inner.Save(ctx, "expiry:d", []byte(clk.Now().Add(day).UTC().Format(time.RFC3339Nano)))
@@ -356,8 +347,6 @@ func TestExpiryPolicyFlipOnWriteDeletesRecordAndNeverSweeps(t *testing.T) {
 	noTTL = true
 	st.reset(0)
 	put(t, ea, "d")
-	// The stale record goes before the document is written: a crash in between leaves a
-	// document with no record (lives on), never a record that outlives the policy.
 	if got, want := strings.Join(st.ops(), ","), "delete:expiry-created:d,delete:expiry:d,save:d"; got != want {
 		t.Fatalf("order = %s, want %s", got, want)
 	}
@@ -393,14 +382,13 @@ func TestExpiryDeleteOfLiveDocumentRemovesRelatedRecords(t *testing.T) {
 	if err := ea.Delete(ctx, "d.open"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second delete: %v", err)
 	}
-	// A new document with the same id starts clean.
 	put(t, ea, "d.open")
 	if has(t, inner, "acl:d.open") {
 		t.Error("new document inherited an access list")
 	}
 }
 
-// countLoads counts Loads of deadline records.
+// countLoads counts Loads of documents.
 type countLoads struct {
 	Adapter
 	mu    sync.Mutex
@@ -434,12 +422,11 @@ func TestExpiryListingsCacheDeadlines(t *testing.T) {
 	if d := cl.n() - base; d > 20 {
 		t.Errorf("5 listings of 20 records made %d record Loads, want at most one pass (20)", d)
 	}
-	// A write invalidates: the new document is visible at once, an expired one hides at once.
 	put(t, ea, "late")
 	if got := ids(t, ea); len(got) != 21 {
 		t.Errorf("list after Save = %d", len(got))
 	}
-	clk.Add(day + time.Minute) // far beyond both the deadlines and the cache window
+	clk.Add(day + time.Minute)
 	if got := ids(t, ea); len(got) != 0 {
 		t.Errorf("expired documents listed after the cache window: %v", got)
 	}
@@ -464,7 +451,6 @@ func TestExpiryCacheStalenessAcrossProcessesIsBounded(t *testing.T) {
 	clk.Add(day - 5*time.Second)
 	put(t, a, "d") // a renews; b's cache still holds the old deadline
 	clk.Add(6 * time.Second)
-	// Load always reads the record, so it is correct at once; the listing may lag the bound.
 	if !has(t, b, "d") {
 		t.Error("Load hid a renewed document")
 	}
