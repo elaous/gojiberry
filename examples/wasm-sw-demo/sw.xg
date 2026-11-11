@@ -36,7 +36,7 @@ func main() {
 			}
 			for _, name := range names {
 				if strings.HasPrefix(name, cachePrefix) && name != cacheName {
-					_ = sw.CachesDelete(name) // an old cache that cannot be deleted must not stop the worker from activating
+					_ = sw.CachesDelete(name) // a cache that cannot be deleted must not block activation
 				}
 			}
 			return sw.ClaimClients()

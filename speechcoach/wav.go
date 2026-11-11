@@ -1,23 +1,4 @@
-// Package speechcoach is the recording and personalisation side of opt-in atypical-speech support
-// (roadmap 56), in the style of the data-collection flow of Google's Project Euphonia and the
-// phrase-repeating setup of Project Relate. It is a clean-room implementation of the flow only;
-// docs/euphonia-port.md says what the original contains, under which licence, and what a Go port cannot
-// cover (a personal speech model needs training, which this package does not do).
-//
-// Everything here is plain Go with no network and no clock of its own (a caller passes the time), so
-// it builds for the server and for the browser alike:
-//
-//   - wav.go, quality.go: 16 kHz mono PCM, WAV files, resampling, and simple signal checks that give
-//     the speaker a quiet hint (too quiet, clipping, too short), never a refusal.
-//   - phrases.go, session.go: phrase sets and a forgiving recording session (record, retake, skip, go
-//     back, no time limits), with a progress record.
-//   - dataset.go: the person's own recordings and transcripts, a manifest, export as a zip and import.
-//   - bias.go, corrections.go: personalisation that needs no training: a vocabulary that becomes the
-//     recogniser's initial prompt, and a memory of corrections that is offered as suggestions.
-//   - consent.go: the optional, per-session, revocable contribution of recordings to a research endpoint
-//     the operator configures; it shows exactly what would leave the device and sends nothing otherwise.
-//   - recognise.go: a client for a recogniser endpoint of the voiceserver shape (bring your own).
-//   - seal.go: sealing the dataset with a key the caller holds (the encrypted store's, when unlocked).
+// Package speechcoach records and personalises opt-in atypical-speech support.
 package speechcoach
 
 import (

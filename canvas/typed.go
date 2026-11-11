@@ -1,8 +1,6 @@
 package canvas
 
-// TypedRange is text another person typed a moment ago: stream offsets [From, To) shown in that person's colour (the
-// colour of their cursor, so the flow's PeerPalette applies) until the host takes the range away. The host does that
-// after a short delay, which is how typing in the text shows who is writing and then goes back to normal.
+// TypedRange: peer-typed stream offsets [From, To) shown in their colour.
 type TypedRange struct {
 	From, To    int
 	Name, Color string

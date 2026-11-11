@@ -64,17 +64,7 @@ func DeriveIdent(path string) string {
 	return s
 }
 
-// ResolveResourcePath finds the file a resource import names. The path
-// is, in order:
-//
-//   - relative to in.BaseDir (the .xg file's directory), the way go:embed
-//     paths are -- "style.css", "./theme/dark.css";
-//   - a path in the current module, written as for a Go package:
-//     "<module path>/components/button.css";
-//   - a path in a module the current one requires (found with `go list
-//     -m`, so it works with the module cache, vendoring and replace).
-//
-// Exported for internal/transpile/experimental's loaders.
+// ResolveResourcePath tries BaseDir, the current module, then required modules.
 func ResolveResourcePath(in LoaderInput) (string, error) {
 	rel := filepath.Join(in.BaseDir, in.Path)
 	if _, err := os.Stat(rel); err == nil {
@@ -90,11 +80,4 @@ func FindModuleRoot(startDir string) (dir string, modulePath string, err error) 
 	return findModuleRoot(startDir)
 }
 
-// loadJSON is implemented in loader_json.go, covering .json/.jsonc/.jsonl
-// and the optional TypeName annotation.
-//
-// CSS used to have its own resource-import loader here (binding a
-// plain `"App.css"` import to its file content). It's gone in favor of
-// the @stylesheets page-metadata annotation (see page_metadata.go),
-// which reads a page component's stylesheet(s) the same way but ties
-// them to the function they style instead of a standalone import line.
+// loadJSON lives in loader_json.go; CSS uses the @stylesheets annotation.

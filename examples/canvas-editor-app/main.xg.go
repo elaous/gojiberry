@@ -167,11 +167,7 @@ func (ed *editor) redrawImpl(followCursor bool) {
 	ed.updateDebugState()
 }
 
-// scrollToCursor adjusts scrollY (if needed) so the cursor's current
-// line is within [0, viewportH) -- called on every redraw so any
-// cursor-moving operation (typing at the bottom, arrow keys, Home/End,
-// a click) automatically scrolls into view without every call site
-// needing to remember to ask for it.
+// scrollToCursor runs on every redraw: call sites need not ask.
 func (ed *editor) scrollToCursor(viewportH float64) {
 	cl := ed.lastLayout.Chars[ed.doc.Cursor]
 	top, bottom := cl.Y-fontSize, cl.Y+4
@@ -441,7 +437,7 @@ func (ed *editor) wire() {
 					ed.save()
 				}
 			}) {
-				return // no clipboard here: leave the keys to the browser, and the text where it is
+				return // no clipboard here: leave the keys to the browser
 			}
 			e.PreventDefault()
 			return // a cut finishes when the write does

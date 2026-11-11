@@ -9,13 +9,13 @@ import (
 // FileUploaderProps configures FileUploader.
 type FileUploaderProps struct {
 	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
-	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+	InputID    string // hidden file input id, to read .Files()
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
 	Multiple bool
 	Disabled bool
 
-	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	ShowProgress  bool    // the variant without progress leaves this false
 	Progress      float64 // 0-100, ignored when Indeterminate
 	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
 

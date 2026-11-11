@@ -12,8 +12,7 @@ type HomePageProps struct {
 	Documents []DocumentSummary
 }
 
-// HomePage lists existing documents and offers a way to start a new
-// one.
+// HomePage lists documents and starts a new one.
 //
 // @title xango-canvas
 func HomePage(props HomePageProps) xango.Node {
@@ -42,13 +41,7 @@ type CanvasPageProps struct {
 	Content string
 }
 
-// CanvasPage is the typing canvas for one document: a textarea seeded
-// with its current content, a status indicator, and the WASM client
-// that debounces edits into PUT /api/documents/{id} autosave calls.
-// @wasm below pulls in the wasm_exec.js loader and the
-// WebAssembly.instantiateStreaming bootstrap script automatically
-// (see internal/transpile/page_metadata.go) -- this page doesn't
-// write either <script> tag itself.
+// CanvasPage is the typing canvas for one document.
 //
 // @wasm /static/main.wasm
 // @title xango-canvas

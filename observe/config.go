@@ -9,20 +9,7 @@ import (
 	"strings"
 )
 
-// Environment variables (all start with GOJIBERRY_OBS_ except the switch itself). Errors name the
-// variable at fault and never repeat a value. See docs/observability.md for the full table.
-//
-//	GOJIBERRY_OBS                      on | off. Default off, and unset is off: that is the kill switch.
-//	GOJIBERRY_OBS_SINKS                where the operator's metrics and traces go: builtin, otlp, posthog
-//	                                   (comma separated; default builtin)
-//	GOJIBERRY_OBS_USAGE_SINKS          where the browsers' usage counts (package telemetry) are also
-//	                                   sent, besides the admin pages that always have them: otlp, posthog
-//	                                   (default none)
-//	GOJIBERRY_OBS_STATE                a file the builtin totals are kept in across restarts (default none:
-//	                                   they start from zero)
-//	GOJIBERRY_OBS_TRACE_SAMPLE         share of requests that get a trace, 0 to 1 (default 0.1)
-//	GOJIBERRY_OBS_POSTHOG_*            see PostHogConfig
-//	OTEL_EXPORTER_OTLP_*               the standard OpenTelemetry variables, read by the otlp adapter
+// Env GOJIBERRY_OBS_*; errors name the variable, never repeat a value.
 const (
 	envSwitch      = "GOJIBERRY_OBS"
 	envSinks       = "GOJIBERRY_OBS_SINKS"

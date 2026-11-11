@@ -19,9 +19,9 @@ type WizardProps struct {
 	Steps  []WizardStep
 	Active int
 
-	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnBack func()          // never called for step 0; Back renders disabled
 	OnNext func()          // called when Next/Finish is clicked
-	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+	OnStep func(index int) // optional: jumps directly to the clicked step
 }
 
 func Wizard(props WizardProps) xango.Node {

@@ -11,10 +11,7 @@ type Document struct {
 	Body  Node
 	// NoStyles leaves the registered stylesheets out.
 	NoStyles bool
-	// Styles, if not nil, limits the registered stylesheets to these: an
-	// entry is a sheet's full ID or the end of it ("components/button.css",
-	// "button.css"). An empty, non-nil slice means none -- the per-page
-	// choice (see the @styles page annotation).
+	// Styles limits the registered stylesheets: nil means all, empty means none.
 	Styles []string
 }
 

@@ -14,7 +14,7 @@ type OTPInputProps struct {
 	Length   int
 	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
 	Disabled bool
-	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+	OnChange func(index int, value string) // called with box index and new value ("" after backspace)
 }
 
 func OTPInput(props OTPInputProps) xango.Node {

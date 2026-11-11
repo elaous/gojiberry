@@ -279,7 +279,7 @@ func TestCheckPanelFixButtonsAndTheExportGate(t *testing.T) {
 	ev := xango.NewEvent("click", nil, false, nil, nil)
 	clicks[2](ev) // the warn button
 	clicks[4](ev) // override
-	clicks[5](ev) // the fix of finding 0
+	clicks[5](ev)
 	if len(gate) != 1 || gate[0] != "warn" || overrides != 1 || len(fixed) != 1 || fixed[0] != 0 {
 		t.Errorf("gate %v overrides %d fixed %v", gate, overrides, fixed)
 	}

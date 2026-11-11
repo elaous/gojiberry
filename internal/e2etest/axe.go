@@ -48,7 +48,7 @@ func (v AxeViolation) String() string {
 func (d *Tab) Axe(context string, disable ...string) []AxeViolation {
 	d.t.Helper()
 	d.Eval(`(function(){ if (!window.axe) { `+axeSource+` } return true })()`, nil)
-	// #state is the harness's JSON dump of the page's state, not part of the page.
+	// #state is the harness's state dump, not page content.
 	ctx := `{exclude: [['#state']]}`
 	if context != "" {
 		ctx = fmt.Sprintf(`{include: [[%q]], exclude: [['#state']]}`, context)

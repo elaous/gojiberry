@@ -154,7 +154,6 @@ func OriginsWith(o Options, origins ...string) Guard {
 	})
 }
 
-// constant-time compare; preflight requests pass
 // constant-time compare; an empty secret refuses every request
 func Token(secret string, opts ...Options) Guard {
 	o := pick(opts)

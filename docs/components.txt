@@ -957,13 +957,13 @@ type FidelityReport struct {
 
 type FileUploaderProps struct {
 	DropzoneID string // id on the dropzone, for a caller to attach html.Element.OnDrop
-	InputID    string // id on the hidden file input, for a caller to read .Files() after a change event
+	InputID    string // hidden file input id, to read .Files()
 
 	Accept   string // e.g. "image/*" or ".pdf,.docx"; "" allows any file
 	Multiple bool
 	Disabled bool
 
-	ShowProgress  bool    // render a progress bar at all -- the "without progress" variant just leaves this false
+	ShowProgress  bool    // the variant without progress leaves this false
 	Progress      float64 // 0-100, ignored when Indeterminate
 	Indeterminate bool    // show a moving/indeterminate bar instead of a fixed percentage
 
@@ -1347,7 +1347,7 @@ type OTPInputProps struct {
 	Length   int
 	Values   []string // one-character strings, indexed by box; short/missing entries are treated as empty
 	Disabled bool
-	OnChange func(index int, value string) // called with the changed box's index and its new value (possibly "", e.g. after a backspace)
+	OnChange func(index int, value string) // called with box index and new value ("" after backspace)
 }
     OTPInputProps configures OTPInput.
 
@@ -1795,7 +1795,7 @@ type Tab struct {
 type TabsProps struct {
 	Tabs     []Tab
 	Active   int             // index into Tabs of the currently shown tab
-	OnSelect func(index int) // called when a tab is clicked, or reached with the arrow keys, Home or End
+	OnSelect func(index int) // called on click, arrow keys, Home or End
 }
     TabsProps configures Tabs.
 
@@ -1973,9 +1973,9 @@ type WizardProps struct {
 	Steps  []WizardStep
 	Active int
 
-	OnBack func()          // called when Back is clicked (never called for step 0; Back renders disabled instead)
+	OnBack func()          // never called for step 0; Back renders disabled
 	OnNext func()          // called when Next/Finish is clicked
-	OnStep func(index int) // optional: called when a step header is clicked, to jump directly to it
+	OnStep func(index int) // optional: jumps directly to the clicked step
 }
     WizardProps configures Wizard.
 

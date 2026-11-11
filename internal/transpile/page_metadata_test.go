@@ -181,11 +181,7 @@ func main() {
 	mustCompileAndRun(t, dir, "main.go", got)
 }
 
-// TestPageMetadataInjectsWasmBootstrapScripts covers @wasm: it should
-// append the wasm_exec.js loader and an instantiateStreaming bootstrap
-// script after the page's own content -- the exact boilerplate every
-// WASM-consuming example in this repo otherwise hand-writes -- with
-// wasm_exec.js's URL derived from the .wasm URL's own directory.
+// TestPageMetadataInjectsWasmBootstrapScripts: loader and bootstrap follow the page.
 func TestPageMetadataInjectsWasmBootstrapScripts(t *testing.T) {
 	dir := setupModuleWithXango(t)
 	src := `package main

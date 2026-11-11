@@ -14,7 +14,7 @@ type Tab struct {
 type TabsProps struct {
 	Tabs     []Tab
 	Active   int             // index into Tabs of the currently shown tab
-	OnSelect func(index int) // called when a tab is clicked, or reached with the arrow keys, Home or End
+	OnSelect func(index int) // called on click, arrow keys, Home or End
 }
 
 // Tabs renders a tab strip plus the active tab's content.

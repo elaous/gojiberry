@@ -14,13 +14,7 @@ type SiteConfig struct {
 	Title string `json:"title"`
 }
 
-// Page renders the configured title as a heading. @title is metadata,
-// not a tool directive or an editor hint (see
-// internal/transpile/page_metadata.go) -- xgc reads it and wraps Page's
-// return value in xango.Document{Title: ...}.Render(), which also puts
-// every stylesheet registered by a CSS import (the blank style.css import
-// above) in the head, so Page itself only needs to return the page's
-// actual content.
+// Page renders the configured title as a heading.
 //
 // @title resource-imports-demo
 func Page(cfg SiteConfig) xango.Node {

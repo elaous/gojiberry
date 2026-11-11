@@ -274,7 +274,7 @@ func TestAtRulesDoNotSwallowOrLeakRules(t *testing.T) {
 }
 
 func TestLaterDeclarationWins(t *testing.T) {
-	for i := 0; i < 50; i++ { // used to depend on map iteration order
+	for i := 0; i < 50; i++ { // output must not depend on map iteration order
 		styles, _ := Generate(".a{border:1px solid #f00; border-color:#00f}", []string{"a"}, nil)
 		if got := styles["a"].BorderColor; got != (color.NRGBA{0, 0, 255, 255}) {
 			t.Fatalf("run %d: border colour %+v, want the later border-color (blue)", i, got)

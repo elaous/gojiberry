@@ -5,10 +5,7 @@ import "strings"
 type hunspellFlagMode int
 
 const (
-	// hunspellFlagDefault is Hunspell's own default: each flag is
-	// exactly one ASCII byte, several concatenated with no separator
-	// ("URTP" is four flags: U, R, T, P).
-	//nolint:unused // the zero value, selected by not naming a FLAG mode
+	// hunspellFlagDefault: each flag is exactly one ASCII byte.
 	hunspellFlagDefault hunspellFlagMode = iota
 	hunspellFlagUTF8
 	hunspellFlagLong

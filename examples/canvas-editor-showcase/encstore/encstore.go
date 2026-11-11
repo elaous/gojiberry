@@ -1,42 +1,4 @@
-// Package encstore is the key management behind the showcase's "Encrypt this store": a document
-// store whose files are encrypted to the owner's keys (a passkey, an SSH key, a recovery key),
-// with the owner keys as public information kept on the device and the private side in memory
-// only, while the store is unlocked.
-//
-// It is the host code that docs/encryption-and-passkeys.md leaves to an application: which keys
-// the owner has, where their public halves are kept (Config), how a key unlocks the store
-// (UnlockPasskey, UnlockRecovery, UnlockSSH), what is forgotten when it is locked, and the hooks
-// the saver asks (Check before a document is made confidential, Rekey when its level changes).
-// It has no browser code, so everything here is tested natively; the page supplies the passkey
-// ceremony, the file chooser and the persistence of Config.
-//
-// Every change to the set of keys, or to whether encryption is on at all, is a transaction over
-// the stored files (see change in transaction.go): a journal record in Config first, each file
-// re-encrypted and read back, the originals kept until all are done, and only then the new key
-// list is made current; a failure puts everything back, and a crash leaves the journal for
-// Recover to finish or undo. What it cannot do is in the "Limits" below.
-//
-// Limits (stated plainly; docs/encryption-and-passkeys.md section 5.7 has them in full):
-//
-//   - Config, with the owner signing keys, is kept next to the store. Anyone who can write this
-//     origin's storage can replace both. What catches that: the seals in Config (bind.go: a key
-//     that has a seal refuses a list its chain of links does not reach; a passkey or recovery key
-//     with no seal is refused, whatever Version says) and the anchor (anchor.go: the hash of the
-//     owner list is inside the signed frame of every document file, so a list that is not the one
-//     the files were sealed under is refused, which also catches an older valid config put back
-//     and a seal-less one for an SSH key). Both are ErrConfigChanged. What nothing here catches:
-//     a replacement of the files together with the config by an older consistent snapshot of
-//     both (a whole-store rollback), a store that holds no signed document file yet (an SSH-only
-//     store before its first save: its SSH key has nothing to check against), and an attacker who
-//     replaces every file as well as the config (the data is gone, and only what is saved
-//     afterwards is exposed). A deleted or unreadable config over encrypted files is not
-//     "encryption off": see Inspect (ErrConfigMissing, ErrConfigCorrupt).
-//   - Another tab of the same page can change the keys: the store's own lock covers this page and
-//     the browser's web lock (where it has one) serializes the tabs, but the lock does not detect
-//     a tab that is out of date. Before every write the stored config is read again and compared
-//     with the one this tab loaded (ErrStaleConfig); a tab that finds it changed locks itself.
-//   - Taking a key out stops it opening what is saved from now on; whoever held it keeps what
-//     they decrypted and any copy of old ciphertext.
+// Package encstore is the showcase's key management for its encrypted store.
 package encstore
 
 import (
