@@ -1,7 +1,3 @@
-// Package main demos SSR the way it's actually meant to be used: served
-// over real HTTP, not printed to stdout. xango.Render already takes any
-// io.Writer, and http.ResponseWriter satisfies that interface directly
-// -- no xango changes needed, just point Render at it per request.
 package main
 
 import (

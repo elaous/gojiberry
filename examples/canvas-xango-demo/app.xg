@@ -6,10 +6,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Doc is the whole canvas, described as an xango tree: a text flow over
-// three pages whose header, footer and page number come from the Pages
-// render prop. The header changes on page 3 and numbering is off on
-// page 1, to show per-page changes.
 func Doc(state State) xango.Node {
 	return <canvas.Canvas width={900} height={560} mode={state.Mode}>
 		<canvas.TextFlow

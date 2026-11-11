@@ -5,11 +5,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// OutputProps renders the exact same Blocks as Editor, but as the
-// clean, final document (an invoice, here) a client actually receives
-// — proving data capture and rendered output are decoupled: swapping
-// this component for a PDF layout or a lesson-plan template never
-// touches how blocks are edited or synced.
 type OutputProps struct {
 	Blocks []crdt.Block
 }

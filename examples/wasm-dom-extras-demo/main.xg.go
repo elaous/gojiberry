@@ -2,13 +2,6 @@
 
 //go:build js && wasm
 
-// Package main exercises the newer parts of domrt/html, domrt/svg,
-// and domrt/browser: window/document/element dimensions, scrolling,
-// inline and computed style, SVG element creation, image loading, form
-// submission via FormData, cookies, custom events, global JS error
-// capture, and geolocation -- each writing its result into its own
-// element so a real browser test can check every one actually worked,
-// not just that the code compiled.
 package main
 
 import (
@@ -21,9 +14,6 @@ import (
 	"github.com/elaous/gojiberry/domrt/svg"
 )
 
-// A real 4x3 PNG (solid rgb(200,0,50)), generated with image/png --
-// not a hand-typed guess at valid PNG bytes -- so NaturalWidth/Height
-// below are checking a real decoded image.
 const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAGElEQVR4nGI5wWDEAANMDEgAhQMIAAD//yXJAQO5Nc3AAAAAAElFTkSuQmCC"
 
 func main() {
@@ -38,7 +28,6 @@ func main() {
 		fmt.Sprintf("docElClientHeight>0=%v bodyClientWidth>0=%v",
 			document.DocumentElement().ClientHeight() > 0, document.Body().ClientWidth() > 0))
 
-	// Element scroll dimensions: scrollbox is 50px tall with 200px of content.
 	scrollbox := document.GetElementByID("scrollbox")
 	scrollHeight := scrollbox.ScrollHeight()
 	clientHeight := scrollbox.ClientHeight()
@@ -57,8 +46,6 @@ func main() {
 			strings.Contains(styled.Style().CSSText(), "bold"),
 			computed.Get("display")))
 
-	// SVG: a real circle, in the real SVG namespace, checked via its
-	// rendered bounding box (not just that SetAttribute didn't panic).
 	svgContainer := document.GetElementByID("svg-container")
 	svgEl := svg.CreateElement(document, "svg")
 	svgEl.SetAttribute("width", "100")
@@ -76,8 +63,6 @@ func main() {
 		fmt.Sprintf("fill=%s rendered=%v hasClass=%v",
 			circle.GetAttribute("fill"), rect.Width > 0 && rect.Height > 0, circle.ClassListContains("my-circle")))
 
-	// Image: load the real embedded PNG above and confirm its actual
-	// decoded dimensions once the "load" event fires.
 	imgEl := document.CreateElement("img")
 	img := imgEl.AsImage()
 	img.OnLoad(func() {
@@ -87,8 +72,6 @@ func main() {
 	img.SetSrc(tinyPNG)
 	document.GetElementByID("image-container").AppendChild(imgEl)
 
-	// Form + FormData: intercept the real submit event, build a
-	// FormData from the form's actual controls, add an extra field.
 	form := document.GetElementByID("demo-form").AsForm()
 	form.OnSubmit(func(evt html.SubmitEvent) {
 		evt.PreventDefault()
@@ -98,27 +81,17 @@ func main() {
 			fmt.Sprintf("title=%s hasDoc=%v extra=%s", fd.Get("title"), fd.Has("doc"), fd.Get("extra")))
 	})
 
-	// Cookies: a value with characters that need percent-encoding, to
-	// prove the round trip isn't just an artifact of picking an
-	// already-safe string.
 	browser.Cookies.Set("demo", "hello world! a=b;c", browser.CookieOptions{Path: "/"})
 	cookieValue, cookieOK := browser.Cookies.Get("demo")
 	document.GetElementByID("cookie-result").SetTextContent(
 		fmt.Sprintf("value=%s ok=%v", cookieValue, cookieOK))
 
-	// CustomEvent: dispatched and received on the same element,
-	// dispatchEvent being synchronous makes this deterministic with no
-	// waiting.
 	ceTarget := document.GetElementByID("customevent-target")
 	ceTarget.OnCustomEvent("demo-event", func(detail js.Value) {
 		document.GetElementByID("customevent-result").SetTextContent("received: " + detail.String())
 	})
 	ceTarget.DispatchCustomEvent("demo-event", "hello from custom event", true)
 
-	// Global JS error capture: index.html's inline script element throws
-	// a real uncaught error and triggers a real unhandled rejection
-	// shortly after load, from code this Go program doesn't control,
-	// which is exactly what OnError/OnUnhandledRejection are for.
 	window.OnError(func(err *html.JSError) {
 		document.GetElementByID("jserror-result").SetTextContent("message=" + err.Message)
 	})
@@ -126,14 +99,6 @@ func main() {
 		document.GetElementByID("rejection-result").SetTextContent("message=" + err.Message)
 	})
 
-	// QuerySelector/QuerySelectorAll: document-wide vs element-scoped.
-	// index.html's #query-fixture holds three li.item (one also
-	// .chosen), plus one p.item OUTSIDE the fixture -- so the
-	// document-wide count (4) differing from the fixture-scoped count
-	// (3) proves element-level queries really are subtree-scoped, not
-	// document-wide with a different receiver. A no-match selector must
-	// return nil (not a wrapper around JS null), and a void element
-	// (#title-input, an input field) has no descendants to match at all.
 	fixture := document.GetElementByID("query-fixture")
 	chosen := fixture.QuerySelector(".item.chosen")
 	chosenText := "(nil)"
@@ -148,9 +113,6 @@ func main() {
 		fmt.Sprintf("chosen=%s docWide=%d scoped=%d noMatchIsNil=%v voidHasNoDescendants=%v",
 			chosenText, docWide, scoped, noMatch, voidScoped))
 
-	// Geolocation: blocks on a callback-bridged browser API, so run it
-	// off the main goroutine the same way MediaDevices/Clipboard do
-	// elsewhere in this repo.
 	go func() {
 		pos, err := browser.CurrentPosition()
 		if err != nil {
