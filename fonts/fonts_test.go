@@ -97,14 +97,12 @@ func TestCachedServesStaleOnFailure(t *testing.T) {
 	if src.calls != 1 {
 		t.Fatalf("calls = %d, want the second answered from the cache", src.calls)
 	}
-	// Expire it and make the source fail.
 	r.(*cached).fetched = time.Now().Add(-2 * time.Hour)
 	src.err = errors.New("down")
 	got, err := r.Fonts(bg)
 	if err == nil || len(got) != 1 || got[0].Family != "X" {
 		t.Fatalf("got %v, %v: the stale list is served with the error", got, err)
 	}
-	// With nothing cached the error just propagates.
 	fresh := Cached(&counting{err: errors.New("down")}, time.Hour)
 	if got, err := fresh.Fonts(bg); err == nil || len(got) != 0 {
 		t.Fatalf("got %v, %v", got, err)

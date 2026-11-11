@@ -15,49 +15,29 @@ import (
 	"time"
 )
 
-// Blobs is where a Library keeps the font files it downloads: a
-// key-value store of bytes. saver.Blobs adapts any docstore backend
-// (Postgres, SQLite, S3, local files, ...) to it.
 type Blobs interface {
 	Put(ctx context.Context, key string, data []byte) error
-	// Get returns found=false, with no error, for a key that is not there.
 	Get(ctx context.Context, key string) (data []byte, found bool, err error)
 }
 
-// ErrNotAdded is returned by Use for a family that was never Added: only
-// fonts the user picked in the font selector are downloaded.
 var ErrNotAdded = errors.New("fonts: that family was not added to the library")
 
 // KeyPrefix starts the keys a Library stores font files under.
 const KeyPrefix = "fonts/"
 
-// Ready describes a font file that is now in the store and in hand.
 type Ready struct {
-	Family  string
-	Variant Variant // with Key set
-	Data    []byte
-	// Downloaded is true when this call fetched the file from its URL,
-	// false when it came from the store.
+	Family     string
+	Variant    Variant // with Key set
+	Data       []byte
 	Downloaded bool
 }
 
-// Library is a document's fonts. Fonts the user chooses in the font
-// selector are Added; the first time the document actually uses one of
-// them (Use, normally driven by canvas.Stage.OnFontUse), its file is
-// downloaded and kept in Blobs, and from then on loaded from there: a
-// lazy download, so a font that was only previewed or picked and never
-// used costs nothing.
+// Library is a document's fonts.
 type Library struct {
 	// Blobs is the store; required for Use.
-	Blobs Blobs
-	// Fetch downloads a URL; nil means http.Get with the default client.
-	Fetch func(ctx context.Context, url string) ([]byte, error)
-	// OnReady is called, once per font file, when it is in the store:
-	// load it into the browser here (see LoadFace). It may be called from
-	// a goroutine.
+	Blobs   Blobs
+	Fetch   func(ctx context.Context, url string) ([]byte, error)
 	OnReady func(Ready)
-	// OnError is called when a download or store fails (once per
-	// attempt; the next Use tries again).
 	OnError func(family string, err error)
 
 	mu       sync.Mutex
@@ -66,9 +46,7 @@ type Library struct {
 	inflight map[string]bool
 }
 
-// Add records a font chosen from the font selector. Nothing is
-// downloaded yet. Adding a family again replaces its description but
-// keeps the keys of files already stored.
+// Add records a font chosen from the font selector.
 func (l *Library) Add(f Font) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -91,8 +69,6 @@ func (l *Library) Add(f Font) {
 	l.added[f.Family] = f
 }
 
-// Added returns the added fonts, by family, with Key set on the
-// variants that have been downloaded.
 func (l *Library) Added() []Font {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -105,7 +81,6 @@ func (l *Library) Added() []Font {
 	return out
 }
 
-// Key is the store key for a variant of family: "fonts/Family/700-n.woff2".
 func Key(family string, v Variant) string {
 	style := "n"
 	if v.Italic {
@@ -122,8 +97,6 @@ func Key(family string, v Variant) string {
 	if weight == 0 {
 		weight = 400
 	}
-	// The URL's hash keeps two sources of one family (or a variant re-Added
-	// with another URL) from sharing, and so serving, the same stored file.
 	sum := sha256.Sum256([]byte(v.URL))
 	return fmt.Sprintf("%s%s/%d-%s-%x%s", KeyPrefix, family, weight, style, sum[:4], ext)
 }
@@ -154,14 +127,11 @@ func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
 		err = fmt.Errorf("fonts: %s is larger than %d bytes", u, maxFontSize)
 	}
 	if err == nil && !looksLikeFont(data) {
-		// A captive portal's or an error page's HTML must not be kept as a font.
 		err = fmt.Errorf("fonts: %s did not return a font file", u)
 	}
 	return data, err
 }
 
-// looksLikeFont checks the file's magic number: TrueType/OpenType, a
-// collection, WOFF or WOFF2.
 func looksLikeFont(b []byte) bool {
 	if len(b) < 4 {
 		return false
@@ -178,12 +148,6 @@ const (
 	maxFontSize  = 32 << 20
 )
 
-// Use makes sure the cut of family nearest weight/italic is in the store,
-// downloading it first if this is the first use, and reports it through
-// OnReady (once per file). It returns the store key, or "" for a font
-// with no file to download (one installed on the device). A family that
-// was never Added gives ErrNotAdded. Use blocks while it downloads; use
-// UseAsync from an event handler.
 func (l *Library) Use(ctx context.Context, family string, weight int, italic bool) (string, error) {
 	l.mu.Lock()
 	font, ok := l.added[family]
@@ -258,9 +222,6 @@ func (l *Library) Use(ctx context.Context, family string, weight int, italic boo
 	return key, nil
 }
 
-// UseAsync is Use in a goroutine, for calling from event handlers (the
-// result arrives through OnReady and OnError). A family that was not
-// added is ignored.
 func (l *Library) UseAsync(family string, weight int, italic bool) {
 	go func() { _, _ = l.Use(context.Background(), family, weight, italic) }()
 }
