@@ -29,7 +29,6 @@ func unseal(env []byte) ([]byte, error) {
 	return out, nil
 }
 
-// buildMixed is a pack with plain and encrypted documents.
 func buildMixed(t testing.TB, key ed25519.PrivateKey) []byte {
 	t.Helper()
 	var buf bytes.Buffer

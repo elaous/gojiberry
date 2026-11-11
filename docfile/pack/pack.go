@@ -1,4 +1,3 @@
-// Package pack reads and writes the .opendoc container format.
 package pack
 
 import (
@@ -31,19 +30,16 @@ const (
 	magic       = "OPENDOC\x00"
 	footerMagic = "OPENDEND"
 	version     = 1
-	// version2 is a pack that may hold attachments.
 	version2    = 2
 	headerFixed = 24
 	frameHead   = 16
 	footerSize  = 80
 
-	kindDocument  = 1
-	kindIndex     = 2
-	kindSignature = 3
-	// kindAttachment is a record of bytes a document refers to.
+	kindDocument   = 1
+	kindIndex      = 2
+	kindSignature  = 3
 	kindAttachment = 4
 
-	// flagEncrypted is bit 0 of the record's flags.
 	flagEncrypted = 1
 )
 
@@ -125,7 +121,6 @@ type Signer struct {
 	Valid     bool
 }
 
-// all lists the signature and the further ones.
 func (s Signature) all() []Signature {
 	return append([]Signature{{Alg: s.Alg, PublicKey: s.PublicKey, Sig: s.Sig}}, s.More...)
 }
@@ -133,7 +128,6 @@ func (s Signature) all() []Signature {
 // MaxSigners bounds the signatures of one pack.
 const MaxSigners = 16
 
-// signedDigest is what a signature covers.
 func signedDigest(headerBytes []byte, indexSum [32]byte) []byte {
 	h := sha256.New()
 	h.Write([]byte("opendoc-v1"))
@@ -189,7 +183,6 @@ func appendInt(b []byte, num int, v uint64) []byte {
 	return appendVarint(b, v)
 }
 
-// field is one field read from a message.
 type field struct {
 	num    int
 	wire   int
@@ -197,7 +190,6 @@ type field struct {
 	bytes  []byte
 }
 
-// walk reads the fields of a message one at a time.
 func walk(b []byte, fn func(field) error) error {
 	for len(b) > 0 {
 		tag, n := binary.Uvarint(b)
@@ -432,7 +424,6 @@ func (x Index) marshal() []byte {
 	return b
 }
 
-// unmarshalIndex parses the index as a stream of fields.
 func unmarshalIndex(b []byte) (x Index, err error) {
 	err = walk(b, func(f field) error {
 		if f.wire != 2 || f.num < 1 || f.num > 3 {
@@ -519,7 +510,6 @@ func unmarshalSignature(b []byte) (s Signature, err error) {
 	return s, err
 }
 
-// headerBytes is the file's fixed header.
 func headerBytes(m Meta) []byte { return headerBytesV(m, version) }
 
 func headerBytesV(m Meta, ver uint32) []byte {
@@ -533,7 +523,6 @@ func headerBytesV(m Meta, ver uint32) []byte {
 	return append(b, make([]byte, pad8(int64(len(b))))...)
 }
 
-// frame is a record: length, kind, flags, check of those, data, check of the data, padding.
 func frame(kind byte, data []byte) []byte { return frameFlags(kind, 0, data) }
 
 func frameFlags(kind, flags byte, data []byte) []byte {
@@ -546,7 +535,6 @@ func frameFlags(kind, flags byte, data []byte) []byte {
 	return append(b, make([]byte, pad8(int64(len(b))))...)
 }
 
-// recordSize is the size of a record of n data bytes.
 func recordSize(n uint64) uint64 {
 	t := uint64(frameHead) + n + 4
 	return t + uint64(pad8(int64(t)))
@@ -583,7 +571,6 @@ func parseFooter(b []byte) (footer, error) {
 	return f, nil
 }
 
-// checkName enforces the length of a name.
 func checkName(s string) error {
 	if len(s) > MaxName {
 		return fmt.Errorf("pack: a name of %d bytes (at most %d)", len(s), MaxName)
@@ -591,6 +578,5 @@ func checkName(s string) error {
 	return nil
 }
 
-// MIME is the media type of a pack. `mime/opendoc.magic` (file(1)) and `mime/opendoc.xml` (shared-mime-info)
-// let a system recognise one by its first eight bytes.
+// MIME is the media type of a pack.
 const MIME = "application/vnd.opendocs.pack"

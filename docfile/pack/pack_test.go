@@ -105,14 +105,12 @@ func TestSignature(t *testing.T) {
 	if rep := r.Verify(); !rep.OK() || !rep.Signed || !rep.SignatureOK {
 		t.Errorf("%+v", rep)
 	}
-	// Change a byte of the header (the meta name): the index still checks out, the signature does not.
 	bad := append([]byte(nil), data...)
 	i := bytes.Index(bad, []byte("Work"))
 	bad[i] = 'X'
 	if _, valid := open(t, bad).Signature(); valid {
 		t.Error("a changed header is still signed")
 	}
-	// A document and its hash rewritten together: the index hash in the footer no longer matches.
 	if _, err := Open(bytes.NewReader(flip(data, bytes.Index(data, []byte("first")))), int64(len(data))); err != nil {
 		t.Fatal(err) // opening does not read the documents
 	}
@@ -134,7 +132,6 @@ func flip(data []byte, i int) []byte {
 	return out
 }
 
-// memFile is a File in memory.
 type memFile struct{ b []byte }
 
 func (m *memFile) ReadAt(p []byte, off int64) (int, error) {
@@ -186,7 +183,6 @@ func TestAppendInPlace(t *testing.T) {
 		t.Errorf("%+v", rep)
 	}
 
-	// Remove and edit: only the index changes; the bytes stay until Compact.
 	a, _ = OpenAppend(f, int64(len(f.b)), nil)
 	if err := a.Remove(id2); err != nil {
 		t.Fatal(err)
@@ -249,8 +245,6 @@ func TestAppendToASignedPackNeedsTheKey(t *testing.T) {
 	}
 }
 
-// A pack cut at any byte is either read (cut after the footer is whole: only whole) or
-// recovered to the documents whose records are whole; nothing panics.
 func TestCutAtEveryByte(t *testing.T) {
 	data := build(t, nil)
 	r := open(t, data)
@@ -293,7 +287,6 @@ func endOfLast(e []Entry) int { return int(e[len(e)-1].Offset + recordSize(e[len
 
 func TestHostileInput(t *testing.T) {
 	data := build(t, nil)
-	// Every single bit flipped: an error or a different but valid reading, never a panic.
 	for i := range data {
 		bad := flip(data, i)
 		if r, err := Open(bytes.NewReader(bad), int64(len(bad))); err == nil {
@@ -335,7 +328,6 @@ func TestWriterRefusesBadInput(t *testing.T) {
 	}
 }
 
-// vectorKey is a fixed key so the committed test vector can be compared byte for byte.
 func vector(t *testing.T) []byte {
 	key := ed25519.NewKeyFromSeed([]byte("opendoc test vector seed 0123456")[:32])
 	return build(t, key)
@@ -382,9 +374,6 @@ func FuzzOpen(f *testing.F) {
 	})
 }
 
-// rawPack lays out a pack whose index is exactly idx (nothing checks it): the documents
-// are written first, each entry's Offset/Length/SHA256 filled in by fill, which returns
-// the entries to list.
 func rawPack(t *testing.T, docs []docfile.Document, fill func(offs []uint64, lens []uint64) Index) []byte {
 	t.Helper()
 	hdr := headerBytes(Meta{Name: "hostile"})
@@ -427,7 +416,6 @@ func TestIndexValidation(t *testing.T) {
 		}),
 		"offset past the end": one(func(e *Entry, _ *Index) { e.Offset = 1 << 40 }),
 	}
-	// Overlap: the second entry points into the first one's record, or at the same one.
 	cases["same record twice"] = rawPack(t, []docfile.Document{d1}, func(offs, lens []uint64) Index {
 		return Index{Entries: []Entry{{ID: id1, Offset: offs[0], Length: lens[0]}, {ID: id2, Offset: offs[0], Length: lens[0]}}}
 	})
@@ -439,7 +427,6 @@ func TestIndexValidation(t *testing.T) {
 			t.Errorf("%s: opened (%v)", name, err)
 		}
 	}
-	// And the good one opens.
 	data := one(func(*Entry, *Index) {})
 	if _, err := Open(bytes.NewReader(data), int64(len(data))); err != nil {
 		t.Errorf("the control pack should open: %v", err)
@@ -447,7 +434,6 @@ func TestIndexValidation(t *testing.T) {
 }
 
 func TestReadChecksTheDocumentID(t *testing.T) {
-	// The record holds the document id2, listed under id1.
 	data := rawPack(t, []docfile.Document{doc(id2, "two", "x")}, func(offs, lens []uint64) Index {
 		d, _ := docfile.Open.Marshal(doc(id2, "two", "x"))
 		return Index{Entries: []Entry{{ID: id1, Offset: offs[0], Length: lens[0], SHA256: sha256.Sum256(d)}}}
@@ -469,7 +455,6 @@ func TestWriterRefusesBadFolderReferences(t *testing.T) {
 	}
 }
 
-// A huge index of two-byte fields is refused without building a slice of its fields.
 func TestHugeIndex(t *testing.T) {
 	junk := bytes.Repeat([]byte{0x78, 0x01}, 32<<20) // 64 MiB of field 15, varint 1
 	hdr := headerBytes(Meta{})
@@ -485,11 +470,9 @@ func TestHugeIndex(t *testing.T) {
 	if err != nil || len(r.Index().Entries) != 0 {
 		t.Fatalf("%v", err)
 	}
-	// The index itself is 64 MiB; a slice of fields would be 32M * 48 bytes.
 	if grew := after.TotalAlloc - before.TotalAlloc; grew > 300<<20 {
 		t.Errorf("opening allocated %d MiB", grew>>20)
 	}
-	// Over MaxEntries entries is refused while streaming.
 	var many []byte
 	e := Entry{ID: id1}.marshal()
 	for i := 0; i <= MaxEntries; i++ {
@@ -502,7 +485,6 @@ func TestHugeIndex(t *testing.T) {
 			t.Errorf("more than MaxEntries entries: %v", err)
 		}
 	}
-	// One entry message over its cap.
 	big := appendTag(nil, 1, 2)
 	big = appendVarint(big, maxEntryBytes+1)
 	big = append(big, make([]byte, maxEntryBytes+1)...)
@@ -512,7 +494,6 @@ func TestHugeIndex(t *testing.T) {
 }
 
 func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
-	// Two records with one ID and no usable index: the last wins, and Repack works.
 	hdr := headerBytes(Meta{Name: "cut"})
 	buf := append([]byte(nil), hdr...)
 	for _, txt := range []string{"old", "new"} {
@@ -530,7 +511,6 @@ func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
 	if got := open(t, out.Bytes()).Index().Entries; len(got) != 1 {
 		t.Errorf("%+v", got)
 	}
-	// A document with a folder ID the pack never listed repacks, with a folder made for it.
 	d := doc(id2, "two", "x")
 	d.SetFolder(fid)
 	d2 := doc(id3, "three", "x")
@@ -542,7 +522,6 @@ func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
 	if r := open(t, out2.Bytes()); len(r.Index().Folders) != 1 {
 		t.Errorf("%+v", r.Index())
 	}
-	// A pack whose index is intact: a document taken out with Remove stays out.
 	mf := &memFile{b: build(t, nil)}
 	a, err := OpenAppend(mf, int64(len(mf.b)), nil)
 	if err != nil {
@@ -560,7 +539,6 @@ func TestRecoverDedupesAndHonoursTheIndex(t *testing.T) {
 	}
 }
 
-// The magic files name the first eight bytes of a pack and its media type.
 func TestMagicFilesMatchThePack(t *testing.T) {
 	vec, err := os.ReadFile("testdata/vector.opendoc")
 	if err != nil {
