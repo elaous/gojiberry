@@ -1,17 +1,4 @@
-// Package client is the browser's (or any program's) side of the public offer served by docstore/public: an
-// anonymous session kept as a token, the one document that session may have, the edit and view links, the
-// countdown to its deletion, and the report route. It holds no state beyond the token; where the token is kept
-// between visits is the caller's (the showcase keeps it in localStorage).
-//
-//	c := &client.Client{BaseURL: "https://host"}
-//	_ = c.NewSession(ctx)               // or c.Token = the one kept
-//	doc, _ := c.Create(ctx, bytes)      // first save; later c.Save(ctx, bytes) renews the 24 hours
-//	edit := client.EditLink(page, c.Token)   // anyone with it can edit: it is the session token
-//	view := client.ViewLink(page, doc.ViewID) // read only, cannot renew
-//	left := client.Remaining(doc.Expires, time.Now())
-//
-// A link is a capability: the edit link carries the session token in the URL fragment (which a browser does not
-// send to any server, so it reaches the page and nothing else), the view link carries the view ID.
+// Package client is the Go client for the public offer.
 package client
 
 import (
@@ -29,7 +16,7 @@ import (
 	"time"
 )
 
-// Errors a call may return (wrapped in *Error with the status and the wait). Test them with errors.Is.
+// Errors a call may return, wrapped in *Error.
 var (
 	ErrNoSession   = errors.New("client: no session; call NewSession or set Token")
 	ErrNotFound    = errors.New("client: not found or expired")                       // 404
@@ -45,7 +32,7 @@ var (
 // Error is a refusal by the server.
 type Error struct {
 	Status int
-	// RetryAfter is how long the server asked to wait (429, 503); zero if it did not say.
+	// RetryAfter is how long the server asked to wait.
 	RetryAfter time.Duration
 	Message    string
 	kind       error
@@ -62,27 +49,27 @@ func (e *Error) Error() string {
 	return s
 }
 
-// Unwrap lets errors.Is match the sentinel for the status.
+// Unwrap lets errors.Is match the sentinel.
 func (e *Error) Unwrap() error { return e.kind }
 
-// Client talks to a public offer. Not safe for concurrent use of Token; the calls themselves are.
+// Client talks to a public offer.
 type Client struct {
-	// BaseURL is the server ("https://host"); "" is the page's own origin in a browser.
+	// BaseURL is the server, such as https://host.
 	BaseURL string
-	// HTTP is the client to use (http.DefaultClient when nil).
+	// HTTP is the client to use.
 	HTTP *http.Client
-	// Token is the session token (the edit capability); NewSession sets it.
+	// Token is the session token.
 	Token string
-	// Terms is the link to the terms the server sent with its last answer (Link: <url>; rel="terms"), "" if none.
+	// Terms is the link to the terms the server shows.
 	Terms string
 }
 
 // Doc is the session's document as the server describes it.
 type Doc struct {
-	// ID is the document's ID (empty from Download: the edit link does not need it).
+	// ID is the document's ID.
 	ID     string `json:"id"`
 	ViewID string `json:"viewId"`
-	// Expires is when it is deleted unless edited again.
+	// Expires is when the document is deleted unless edited.
 	Expires  time.Time `json:"expires"`
 	Versions int       `json:"versions"`
 }
@@ -113,7 +100,7 @@ func (c *Client) do(ctx context.Context, method, path string, auth bool, body []
 	if err != nil {
 		return nil, nil, err
 	}
-	// A busy server may ask for a small computation before it takes a session or a document: solve it and try once more.
+	// A busy server may ask for a small computation first.
 	if ch := resp.Header.Get(pow.Header); ch != "" && resp.StatusCode == http.StatusForbidden && req.Header.Get(pow.AnswerHeader) == "" {
 		if answer, ok := pow.Answer(ch); ok {
 			_ = resp.Body.Close()
@@ -182,7 +169,7 @@ func refusal(resp *http.Response, data []byte) error {
 	return e
 }
 
-// expires reads the deadline an answer carries (X-Gojiberry-Expires).
+// expires reads the deadline an answer carries.
 func expires(resp *http.Response) time.Time {
 	t, _ := time.Parse(time.RFC3339, resp.Header.Get("X-Gojiberry-Expires"))
 	return t
@@ -204,7 +191,7 @@ func (c *Client) NewSession(ctx context.Context) error {
 	return nil
 }
 
-// Create makes the session's document from content (409 / ErrExists if it has one).
+// Create makes the session's document from content.
 func (c *Client) Create(ctx context.Context, content []byte) (Doc, error) {
 	_, data, err := c.do(ctx, http.MethodPost, "/public/doc", true, content, "application/octet-stream")
 	if err != nil {
@@ -217,8 +204,7 @@ func (c *Client) Create(ctx context.Context, content []byte) (Doc, error) {
 	return d, nil
 }
 
-// Save stores an edit and returns the new deadline: 24 hours from now. An expired document is ErrNotFound; it is
-// not revived.
+// Save stores an edit and returns the new deadline.
 func (c *Client) Save(ctx context.Context, content []byte) (time.Time, error) {
 	resp, _, err := c.do(ctx, http.MethodPut, "/public/doc", true, content, "application/octet-stream")
 	if err != nil {
@@ -227,8 +213,7 @@ func (c *Client) Save(ctx context.Context, content []byte) (time.Time, error) {
 	return expires(resp), nil
 }
 
-// Download returns the session's document with its deadline and view ID (what a browser that only has the edit link
-// needs to show both links); it does not renew the document.
+// Download returns the session's document with its metadata.
 func (c *Client) Download(ctx context.Context) (content []byte, doc Doc, err error) {
 	resp, data, err := c.do(ctx, http.MethodGet, "/public/doc", true, nil, "")
 	if err != nil {
@@ -237,13 +222,13 @@ func (c *Client) Download(ctx context.Context) (content []byte, doc Doc, err err
 	return data, Doc{ViewID: resp.Header.Get("X-Gojiberry-View-Id"), Expires: expires(resp)}, nil
 }
 
-// Discard deletes the document, freeing the session to start another.
+// Discard deletes the document, freeing the session.
 func (c *Client) Discard(ctx context.Context) error {
 	_, _, err := c.do(ctx, http.MethodDelete, "/public/doc", true, nil, "")
 	return err
 }
 
-// View returns the document a view ID names, and its deadline; it never renews it.
+// View returns the document a view ID names.
 func (c *Client) View(ctx context.Context, viewID string) (content []byte, deadline time.Time, err error) {
 	resp, data, err := c.do(ctx, http.MethodGet, "/public/view/"+url.PathEscape(viewID), false, nil, "")
 	if err != nil {
@@ -260,21 +245,17 @@ const (
 	CategoryOther   = "other"
 )
 
-// Report tells the operator about a document (id is its view ID or its document ID). The server answers 202
-// whether or not it kept the report (a duplicate, or no slot), so success here means it was received.
+// Report tells the operator about a document.
 func (c *Client) Report(ctx context.Context, id, category, reason string) error {
 	body, _ := json.Marshal(map[string]string{"id": id, "category": category, "reason": reason})
 	_, _, err := c.do(ctx, http.MethodPost, "/public/report", false, body, "application/json")
 	return err
 }
 
-// ---- links ----
-
-// EditLink is the address that opens the session's document for editing: the page with the token in the
-// fragment. Whoever has it can edit and renew the document, so it is shown to the person and shared by them.
+// EditLink is the address that opens the session's edit page.
 func EditLink(page, token string) string { return withFragment(page, "edit="+url.QueryEscape(token)) }
 
-// ViewLink is the address that opens the document read only.
+// ViewLink is the address that opens the document read-only.
 func ViewLink(page, viewID string) string { return withFragment(page, "view="+url.QueryEscape(viewID)) }
 
 func withFragment(page, frag string) string {
@@ -284,8 +265,7 @@ func withFragment(page, frag string) string {
 	return page + "#" + frag
 }
 
-// ParseLink reads the fragment of a page address ("#edit=..." or "#view=..."): kind is "edit", "view" or "" for
-// neither, and value the token or view ID.
+// ParseLink reads the fragment of a page address.
 func ParseLink(fragment string) (kind, value string) {
 	fragment = strings.TrimPrefix(fragment, "#")
 	for _, k := range []string{"edit", "view"} {
@@ -301,12 +281,10 @@ func ParseLink(fragment string) (kind, value string) {
 	return "", ""
 }
 
-// ---- the countdown ----
-
-// WarnWithin is the time left below which the page warns that the document is about to go.
+// WarnWithin is the time left below which the page warns.
 const WarnWithin = time.Hour
 
-// Remaining is the time until the deadline (never negative); a zero deadline is zero.
+// Remaining is the time until the deadline.
 func Remaining(deadline, now time.Time) time.Duration {
 	if deadline.IsZero() {
 		return 0
@@ -314,7 +292,7 @@ func Remaining(deadline, now time.Time) time.Duration {
 	return max(0, deadline.Sub(now))
 }
 
-// Countdown says a time left in words for the page: "3 h 12 min", "12 min", "under a minute"; "gone" at zero.
+// Countdown says a time left in words for the page.
 func Countdown(left time.Duration) string {
 	switch {
 	case left <= 0:
@@ -332,5 +310,5 @@ func Countdown(left time.Duration) string {
 	return fmt.Sprintf("%d h %d min", h, m)
 }
 
-// Warn says the document is in its last hour (and not yet gone).
+// Warn says the document is in its last hour.
 func Warn(left time.Duration) bool { return left > 0 && left <= WarnWithin }

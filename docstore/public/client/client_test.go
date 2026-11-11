@@ -17,7 +17,7 @@ type clock struct{ t time.Time }
 
 func (c *clock) Now() time.Time { return c.t }
 
-// offer starts the real public service over an expiring memory store.
+// offer starts the real public service over a test server.
 func offer(t *testing.T, mod func(*public.Options)) (*client.Client, *clock, *httptest.Server) {
 	t.Helper()
 	clk := &clock{t: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
@@ -60,17 +60,14 @@ func TestTheWholeVisit(t *testing.T) {
 	if c.Terms != "https://example.org/terms" {
 		t.Errorf("terms %q", c.Terms)
 	}
-	// A second document in the same session is refused.
 	if _, err := c.Create(ctx, []byte("another")); !errors.Is(err, client.ErrExists) {
 		t.Errorf("%v", err)
 	}
-	// An edit renews: ten hours later the deadline moves to 24 hours from the edit.
 	clk.t = clk.t.Add(10 * time.Hour)
 	exp, err := c.Save(ctx, []byte("second draft"))
 	if err != nil || client.Remaining(exp, clk.Now()) != 24*time.Hour {
 		t.Fatalf("%v %v", exp, err)
 	}
-	// Reading does not renew, by the owner or through the view link.
 	clk.t = clk.t.Add(5 * time.Hour)
 	got, d2, err := c.Download(ctx)
 	if err != nil || string(got) != "second draft" || d2.ViewID != doc.ViewID || client.Remaining(d2.Expires, clk.Now()) != 19*time.Hour {
@@ -84,12 +81,10 @@ func TestTheWholeVisit(t *testing.T) {
 	if _, _, err := viewer.View(ctx, "no-such-view"); !errors.Is(err, client.ErrNotFound) {
 		t.Errorf("%v", err)
 	}
-	// The edit link's token alone is enough to carry on, from another browser.
 	other := &client.Client{BaseURL: c.BaseURL, Token: c.Token}
 	if _, _, err := other.Download(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// Discard frees the session for another document.
 	if err := c.Discard(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +113,6 @@ func TestRefusalsAreTypedWithTheWait(t *testing.T) {
 	if !errors.As(err, &e) || !errors.Is(err, client.ErrRateLimited) || e.Status != http.StatusTooManyRequests || e.RetryAfter <= 0 {
 		t.Fatalf("%v", err)
 	}
-	// A wrong token is refused, not mistaken for a missing document.
 	bad := &client.Client{BaseURL: c.BaseURL, Token: "not-a-token"}
 	if _, _, err := bad.Download(ctx); !errors.Is(err, client.ErrForbidden) && !errors.Is(err, client.ErrNotFound) {
 		t.Errorf("%v", err)
@@ -135,12 +129,10 @@ func TestExpiryAndTakedownAreTold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Past 24 hours the document is gone and an edit does not revive it.
 	clk.t = clk.t.Add(25 * time.Hour)
 	if _, err := c.Save(ctx, []byte("late")); !errors.Is(err, client.ErrNotFound) && !errors.Is(err, client.ErrForbidden) {
 		t.Errorf("an expired document is not revived (and its idle session may be gone too): %v", err)
 	}
-	// A taken-down document answers 410 on its view link.
 	c2 := &client.Client{BaseURL: ts.URL}
 	if err := c2.NewSession(ctx); err != nil {
 		t.Fatal(err)
@@ -176,7 +168,6 @@ func TestReportsReachTheOperator(t *testing.T) {
 	if err := reader.Report(ctx, doc.ViewID, client.CategorySpam, "it is spam"); err != nil {
 		t.Fatal(err)
 	}
-	// The same report again is accepted (the server does not say whether it kept it).
 	if err := reader.Report(ctx, doc.ViewID, client.CategorySpam, "it is spam"); err != nil {
 		t.Fatal(err)
 	}

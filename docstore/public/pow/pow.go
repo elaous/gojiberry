@@ -1,6 +1,4 @@
-// Package pow is the client's half of the public offer's proof-of-work challenge (public.ProofOfWork):
-// reading what the server asks for and finding a nonce. It is a package of its own so that a page that only
-// needs to answer a challenge does not take in the server.
+// Package pow is the client half of proof-of-work challenges.
 package pow
 
 import (
@@ -12,14 +10,13 @@ import (
 	"strings"
 )
 
-// Header carries a challenge the server wants solved (on the 403 that asks for it, as "<challenge> <bits>") and
-// AnswerHeader the solution (on the retry, as "<challenge> <nonce>").
+// Header carries a challenge the server wants solved.
 const (
 	Header       = "X-Gojiberry-Challenge"
 	AnswerHeader = "X-Gojiberry-Challenge-Answer"
 )
 
-// MaxDifficulty is the hardest challenge a client agrees to solve; a server asking for more is refused, not obeyed.
+// MaxDifficulty is the hardest challenge a client will solve.
 const MaxDifficulty = 26
 
 // Solves reports whether SHA-256(challenge ":" nonce) starts with difficulty zero bits.
@@ -37,12 +34,12 @@ func Solves(challenge, nonce string, difficulty int) bool {
 	return n >= difficulty
 }
 
-// Solve finds a nonce for challenge at the difficulty, trying a random prefix and 0, 1, 2 ... up to limit tries (0: 1<<28).
+// Solve finds a nonce for challenge at the difficulty.
 func Solve(challenge string, difficulty int, limit uint64) (string, bool) {
 	if limit == 0 {
 		limit = 1 << 28
 	}
-	// A random start, so two answers to one challenge differ (a server takes each answer once).
+	// A random start makes each answer differ.
 	var r [4]byte
 	_, _ = rand.Read(r[:])
 	prefix := hex.EncodeToString(r[:]) + "-"
@@ -55,8 +52,7 @@ func Solve(challenge string, difficulty int, limit uint64) (string, bool) {
 	return "", false
 }
 
-// Answer reads a server's Header value and returns the AnswerHeader value that solves it. ok is false for a value
-// it cannot read, a difficulty over MaxDifficulty, or no solution within the limit.
+// Answer reads a server's Header value and returns the answer.
 func Answer(header string) (answer string, ok bool) {
 	ch, bitsText, found := strings.Cut(strings.TrimSpace(header), " ")
 	d, err := strconv.Atoi(bitsText)

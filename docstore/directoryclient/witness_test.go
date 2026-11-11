@@ -15,9 +15,6 @@ import (
 	"github.com/elaous/gojiberry/docstore/encrypt"
 )
 
-// witnessEnv is a directory server with the operator's view open to a header (X-Op: 1), the
-// witnesses' keys known, and a signer from seed (two envs on one seed are one operator showing two
-// logs).
 type witnessEnv struct {
 	*env
 	wpub  map[string]ed25519.PublicKey
@@ -52,7 +49,6 @@ func newWitnessEnv(t *testing.T, seed []byte, names ...string) *witnessEnv {
 	return w
 }
 
-// witness is the client of one witness: signed in as the operator, with the log keys pinned.
 func (w *witnessEnv) witness() *Client {
 	c := w.client(bo)
 	c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -93,12 +89,10 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	w := newWitnessEnv(t, seed, "w1", "w2", "w3")
 	w.publish(3)
 
-	// Nobody has cosigned yet: a client that requires two refuses.
 	c := w.watcher(2)
 	if _, err := c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrNotWitnessed) {
 		t.Fatalf("nothing cosigned: %v", err)
 	}
-	// One witness is not a quorum of two.
 	st1, st2 := &WitnessState{}, &WitnessState{}
 	if err := w.cosign("w1", st1); err != nil || st1.Seq != 3 {
 		t.Fatalf("%v %+v", err, st1)
@@ -114,13 +108,11 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	if err != nil || rep.Witnessed == nil || rep.Witnessed.Seq != 3 || !rep.WitnessChecked || len(rep.Witnessed.Witnesses) != 2 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// The log moves on; the newest cosigned entry is checked inside it.
 	w.publish(2)
 	rep, err = c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{})
 	if err != nil || rep.Head.Seq != 5 || rep.Witnessed.Seq != 3 || !rep.WitnessChecked {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// A witness that keeps up: its second run reads only what is new and cosigns the new head.
 	if err := w.cosign("w1", st1); err != nil || st1.Seq != 5 {
 		t.Fatalf("%v %+v", err, st1)
 	}
@@ -131,7 +123,6 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	if err != nil || rep.Witnessed.Seq != 5 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// A quorum of three needs the third witness.
 	if _, err := w.watcher(3).WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrNotWitnessed) {
 		t.Fatalf("two of three: %v", err)
 	}
@@ -141,8 +132,6 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	}
 }
 
-// The operator keeps one signing key and shows the witnesses one log and a client another. The
-// witnesses' signatures are for the first; the client, shown the second, refuses it.
 func TestAWitnessedLogShownAsAnotherLogIsASplitView(t *testing.T) {
 	ctx := context.Background()
 	seed := make([]byte, 32)
@@ -154,8 +143,6 @@ func TestAWitnessedLogShownAsAnotherLogIsASplitView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Server B: the same operator key and witnesses, a different history. The operator also
-	// serves the witnesses' genuine cosignatures there (it has them; it cannot make new ones).
 	b := newWitnessEnv(t, seed)
 	b.wpub = a.wpub
 	b.dir.Witnesses = a.wpub
@@ -177,7 +164,6 @@ func TestAWitnessedLogShownAsAnotherLogIsASplitView(t *testing.T) {
 	if _, err := a.watcher(2).WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); err != nil {
 		t.Fatalf("%v", err)
 	}
-	// A log cut back below the cosigned entry is refused too.
 	short := newWitnessEnv(t, seed)
 	short.dir.Witnesses = a.wpub
 	short.publish(2)
@@ -207,8 +193,6 @@ func TestADirectoryTakesOnlyGenuineCosignaturesOfItsOwnEntries(t *testing.T) {
 	if err := w.dir.AddCosignature(ctx, good); err != nil {
 		t.Fatal(err)
 	}
-	// A witness the directory does not know, a signature by another key, an entry that is not the
-	// log's, and a wrong log key: all refused.
 	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
 	bad := []docstore.DirectoryCosignature{
 		encrypt.CosignEntry(sign("w1"), "stranger", e1.Kid, e1.Seq, e1.Hash),
@@ -222,7 +206,6 @@ func TestADirectoryTakesOnlyGenuineCosignaturesOfItsOwnEntries(t *testing.T) {
 			t.Errorf("case %d: %v", i, err)
 		}
 	}
-	// An older cosignature does not replace a newer one.
 	e0 := entry(t, w, 1)
 	if err := w.dir.AddCosignature(ctx, encrypt.CosignEntry(sign("w1"), "w1", e0.Kid, e0.Seq, e0.Hash)); err != nil {
 		t.Fatal(err)
