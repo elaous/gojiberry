@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// furniture is what one sheet's template result asked for.
 type furniture struct {
 	header     *HeaderProps
 	footer     *FooterProps
@@ -17,7 +16,6 @@ type furniture struct {
 	background *BackgroundProps
 }
 
-// collect walks a template result for the furniture nodes.
 func collect(n xango.Node, f *furniture) {
 	if n.Kind == xango.KindHost {
 		switch p := n.Props.(type) {
@@ -84,14 +82,12 @@ func numOf(p PageNumberProps) *canvas.PageNumberConfig {
 	return c
 }
 
-// sameNumber compares two configs ignoring Start.
 func sameNumber(a, b *canvas.PageNumberConfig) bool {
 	x, y := *a, *b
 	x.Start, y.Start = 0, 0
 	return reflect.DeepEqual(x, y)
 }
 
-// insets reads CSS-style margins.
 func insets(m []float64) canvas.Insets {
 	switch len(m) {
 	case 1:
@@ -104,11 +100,6 @@ func insets(m []float64) canvas.Insets {
 	return canvas.Insets{Top: 50, Right: 50, Bottom: 50, Left: 50}
 }
 
-// buildPages evaluates the Pages template for every sheet and turns the
-// answers into canvas.Pages with inheritance: a sheet whose header,
-// footer or number equals the previous sheet's leaves it nil (so the
-// canvas inherits it), a changed one is set, a dropped one becomes an
-// empty header/footer or a hidden number.
 func buildPages(p TextFlowProps) []canvas.Page {
 	count := max(p.PageCount, 1)
 	w, h := p.PageWidth, p.PageHeight
@@ -161,8 +152,6 @@ func buildPages(p TextFlowProps) []canvas.Page {
 			pg.PageNumber, curNum = &canvas.PageNumberConfig{Show: false}, nil
 		case wantN != nil && (curNum == nil || !sameNumber(curNum, wantN) || start > 0):
 			if start == 0 {
-				// Continue the count; when numbering begins here, the
-				// number is the sheet's position.
 				start = i + 1
 				if curNum != nil {
 					start = next
@@ -199,14 +188,10 @@ func buildPages(p TextFlowProps) []canvas.Page {
 	return pages
 }
 
-// diffHF returns what to store on the Page (nil = inherit) and the new
-// effective value.
 func diffHF(cur, want *canvas.HeaderFooter) (store, eff *canvas.HeaderFooter) {
 	return diffPtr(cur, want, func() *canvas.HeaderFooter { return &canvas.HeaderFooter{} })
 }
 
-// diffPtr is diffHF for any per-page setting: none makes the "switched
-// off" value.
 func diffPtr[T any](cur, want *T, none func() *T) (store, eff *T) {
 	switch {
 	case want == nil && cur == nil:

@@ -12,15 +12,6 @@ import (
 	xg "github.com/elaous/gojiberry/xango"
 )
 
-// View is a canvas in an ordinary page with a canvas/xango tree drawn in it: the piece to reach for when a page built
-// with DOM components (the xango tree that domrt mounts) needs a canvas of text inside it. It makes the <canvas>, the
-// hidden input that takes the keys, and a visually hidden text copy of the document beside them, because a canvas
-// is opaque to a screen reader and to a page that is read without the canvas (the copy is the text you give Render).
-//
-//	v, err := xango.NewView(container, 900, 600)
-//	err = v.Render(xango.Canvas(xango.CanvasProps{...children...}), "the text of the document")
-//
-// Find reaches the components of the last tree, as Root.Find does.
 type View struct {
 	Stage *canvas.Stage
 	Root  *Root
@@ -29,7 +20,6 @@ type View struct {
 	fallback js.Value
 }
 
-// NewView appends a canvas of width x height pixels, its input and its text copy to parent, and binds a stage to them.
 func NewView(parent *html.Element, width, height int) (*View, error) {
 	if parent == nil {
 		return nil, errors.New("canvas/xango: NewView needs a parent element")
@@ -66,7 +56,6 @@ func NewView(parent *html.Element, width, height int) (*View, error) {
 	return &View{Stage: stage, Root: root, redraw: redraw, fallback: copyEl}, nil
 }
 
-// Render draws the tree n (a Canvas element) and sets the text copy beside the canvas.
 func (v *View) Render(n xg.Node, text string) error {
 	v.fallback.Set("textContent", text)
 	if err := v.Root.Render(n); err != nil {
@@ -76,5 +65,4 @@ func (v *View) Render(n xg.Node, text string) error {
 	return nil
 }
 
-// Find returns the component for the n-th element with tag in the last tree (see Root.Find).
 func (v *View) Find(tag string, n int) any { return v.Root.Find(tag, n) }

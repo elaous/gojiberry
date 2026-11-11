@@ -9,20 +9,9 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Root renders xango trees onto a stage. Render may be called as often as
-// the state changes: the first call creates the canvas components, later
-// calls update them in place, matching by position, tag and Key.
-//
-// Props describe the document -- text, pages, columns -- and are applied
-// only when they differ from what the last render applied, so the
-// document edits the canvas makes itself (a header edited on a page, a
-// column dragged, a drag of an image) are not undone by a re-render that
-// passes the same props; change a prop to push a new value down.
-// Interaction state (caret, selection, drag, popups) is never a prop.
+// Root renders xango trees onto a stage.
 type Root struct {
-	Stage *canvas.Stage
-	// Redraw, if set, is called at the end of every Render that changed
-	// something (wire it to the redraw function Stage.Bind returns).
+	Stage  *canvas.Stage
 	Redraw func()
 
 	root *canvasElem
@@ -31,11 +20,6 @@ type Root struct {
 // NewRoot returns a Root drawing into stage.
 func NewRoot(stage *canvas.Stage) *Root { return &Root{Stage: stage} }
 
-// Find returns the live component created for the n-th (from 0, in
-// document order, containers included) element with tag, for reading its
-// state or wiring callbacks: a *canvas.TextFlow for TagTextFlow, a
-// *canvas.PageSet for TagPage, a *canvas.Image, *canvas.FloatingText,
-// *canvas.TableView or *canvas.ScrollView for theirs.
 func (r *Root) Find(tag string, n int) any {
 	if r.root == nil {
 		return nil
@@ -43,8 +27,6 @@ func (r *Root) Find(tag string, n int) any {
 	return findIn(r.root.kids.elems(), tag, n)
 }
 
-// findIn is Find's search over some elements: the n-th component for tag in
-// document order, containers included.
 func findIn(es []Element, tag string, n int) any {
 	var found any
 	var walk func(es []Element) bool
@@ -69,14 +51,12 @@ func findIn(es []Element, tag string, n int) any {
 	return found
 }
 
-// redraw calls Redraw if it is set.
 func (r *Root) redraw() {
 	if r.Redraw != nil {
 		r.Redraw()
 	}
 }
 
-// Render reconciles the stage with n, which must be a Canvas node.
 func (r *Root) Render(n xango.Node) error {
 	props, ok := n.Props.(CanvasProps)
 	if n.Kind != xango.KindHost || !ok {
@@ -95,45 +75,24 @@ func (r *Root) Render(n xango.Node) error {
 	return nil
 }
 
-// --- the element registry ---------------------------------------------
-
-// An Element is the live canvas component(s) behind one element of the
-// tree. Register adds new element types; the built-in ones (Canvas
-// children: TextFlow, Image, FloatingText, Table, ScrollView) are
-// registered the same way.
 type Element interface {
-	// Drawers returns what goes on the stage (or in the container).
 	Drawers() []canvas.Drawer
-	// Update applies the node's props -- only those that changed since
-	// the last call -- and reports whether anything did.
 	Update(c *Context, props any, children []xango.Node) (changed bool, err error)
 }
 
-// Finder is implemented by elements Root.Find can look inside: it
-// returns the component for tag, or nil.
 type Finder interface{ Find(tag string) any }
 
-// Closer is implemented by elements that must undo something when they
-// leave the tree (stop obstructing a flow's text, say).
 type Closer interface{ Close() }
 
-// Holder is implemented by container elements, so Root.Find can look at
-// their children.
 type Holder interface{ Elements() []Element }
 
 // Context is what an element sees while it updates.
 type Context struct {
 	Stage *canvas.Stage
 	// Mode is the Canvas's mode, for elements that create children.
-	Mode canvas.Mode
-	// Flow and Pages are the nearest TextFlow before this element in the
-	// same container, and its sheets (nil if there is none): floating
-	// objects wrap around it and anchor to its pages.
-	Flow  *canvas.TextFlow
-	Pages *canvas.PageSet
-	// Redraw asks the Root's owner to redraw the canvas; elements that
-	// change state outside a Render (a background connection, a timer) call
-	// it. It is never nil while an element updates.
+	Mode   canvas.Mode
+	Flow   *canvas.TextFlow
+	Pages  *canvas.PageSet
 	Redraw func()
 }
 
@@ -142,9 +101,6 @@ var (
 	factories = map[string]func() Element{}
 )
 
-// Register makes tag a known element: factory is called the first time a
-// node with that tag appears at some place in the tree. It panics on a
-// duplicate tag.
 func Register(tag string, factory func() Element) {
 	regMu.Lock()
 	defer regMu.Unlock()
@@ -184,15 +140,11 @@ func init() {
 	Register(TagScrollView, func() Element { return &scrollElem{sv: canvas.NewScrollView(0, 0, 0, 0)} })
 }
 
-// --- children -------------------------------------------------------------
-
 type slot struct {
 	tag, key string
 	elem     Element
 }
 
-// childList reconciles a list of child nodes against the elements made
-// for them last time.
 type childList struct{ slots []slot }
 
 func (l *childList) elems() []Element {
@@ -203,8 +155,6 @@ func (l *childList) elems() []Element {
 	return out
 }
 
-// flattenHosts expands fragments (what a {expr} child or <>...</> makes)
-// into the host nodes inside them.
 func flattenHosts(nodes []xango.Node) []xango.Node {
 	var out []xango.Node
 	for _, n := range nodes {
@@ -217,11 +167,6 @@ func flattenHosts(nodes []xango.Node) []xango.Node {
 	return out
 }
 
-// update matches nodes to existing elements -- the first unused one with
-// the same tag and key, so inserting or removing an element in the middle
-// leaves the others (and their state) alone -- creates what is new, and
-// updates all. It returns the drawers (in order), whether anything
-// changed, and whether an element was created.
 func (l *childList) update(parent *Context, nodes []xango.Node) (ds []canvas.Drawer, changed, created bool, err error) {
 	nodes = flattenHosts(nodes)
 	var next []slot
@@ -272,8 +217,6 @@ func (l *childList) update(parent *Context, nodes []xango.Node) (ds []canvas.Dra
 	return ds, changed, created, nil
 }
 
-// --- Canvas ---------------------------------------------------------------
-
 type canvasElem struct {
 	props CanvasProps
 	has   bool
@@ -289,7 +232,7 @@ func (c *canvasElem) update(r *Root, p CanvasProps, children []xango.Node) (bool
 	}
 	modeChanged := !c.has || p.Mode != c.props.Mode || p.Role != c.props.Role
 	if !c.has || p.Role != c.props.Role {
-		st.Role = p.Role // a prop change; otherwise a role the app set (from a server, say) stays
+		st.Role = p.Role
 	}
 	mode := p.Role.Mode(p.Mode)
 	if p.Features != nil && !sameFeatures(p.Features, c.props.Features) {

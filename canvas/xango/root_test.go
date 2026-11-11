@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// painter records fillText calls; every rune is 8px wide.
 type painter struct{ texts []string }
 
 func (p *painter) SetFillStyle(string)           {}
@@ -124,7 +123,6 @@ func TestPerPageTemplateChanges(t *testing.T) {
 	if ps.PageNumberText(0) != "" || ps.PageNumberText(1) != "7" {
 		t.Errorf("numbers: %q %q", ps.PageNumberText(0), ps.PageNumberText(1))
 	}
-	// Page 2's config equals page 1's apart from Start, so it continues: 8.
 	if ps.PageNumberText(2) != "8" {
 		t.Errorf("page 3 number = %q, want 8", ps.PageNumberText(2))
 	}
@@ -136,7 +134,6 @@ func TestUpdateKeepsIdentityAndEdits(t *testing.T) {
 	flow := r.Find(TagTextFlow, 0).(*canvas.TextFlow)
 	ps := r.Find(TagPage, 0).(*canvas.PageSet)
 	flow.SetSelection(0, 2)
-	// An edit made on the canvas survives a re-render with the same props.
 	ps.Pages[0].Header = &canvas.HeaderFooter{Text: "edited"}
 
 	redraws := 0
@@ -155,7 +152,6 @@ func TestUpdateKeepsIdentityAndEdits(t *testing.T) {
 		t.Errorf("selection lost: %d..%d", from, to)
 	}
 
-	// A changed prop is pushed down.
 	_ = r.Render(tree("two", 2, template))
 	if flow.Text != "two" || redraws != 1 {
 		t.Errorf("text = %q, redraws = %d", flow.Text, redraws)
