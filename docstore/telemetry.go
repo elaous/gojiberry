@@ -14,16 +14,13 @@ import (
 	"github.com/elaous/gojiberry/telemetry"
 )
 
-// TelemetryKey is where the usage totals are kept when the server persists them (WithTelemetry): one
-// small record, written through the same Adapter as the documents. The "telemetry:" keyspace is reserved
-// from the /docs API (a client cannot read or write it) and is not a document (it never expires by itself).
+// TelemetryKey is where the usage totals are kept.
 const TelemetryKey = "telemetry:totals"
 
-// telemetrySaveDelay is how long a change waits before the totals are written, so a burst of
-// batches is one write.
+// telemetrySaveDelay is how long a change waits before saving.
 var telemetrySaveDelay = 5 * time.Second
 
-// telemetryStore keeps the totals under TelemetryKey in the server's Adapter.
+// telemetryStore keeps the totals under TelemetryKey.
 type telemetryStore struct{ a Adapter }
 
 func (t telemetryStore) Load(ctx context.Context) ([]byte, bool, error) {
@@ -41,8 +38,7 @@ func (t telemetryStore) Save(ctx context.Context, data []byte) error {
 	return t.a.Save(ctx, TelemetryKey, data)
 }
 
-// telemetryShared is telemetryStore on an adapter with conditional writes: several server processes on one store
-// then add their counts to each other's (telemetry.Counters.PersistShared) instead of overwriting them.
+// telemetryShared is telemetryStore on a shared store.
 type telemetryShared struct {
 	telemetryStore
 	c ConditionalAdapter
@@ -64,8 +60,7 @@ func (t telemetryShared) SaveIf(ctx context.Context, data []byte, version string
 	return err
 }
 
-// telemetryPerMinute is how many batches one client may send a minute (a page sends one every
-// minute at most).
+// telemetryPerMinute is how many batches one client may send per minute.
 const telemetryPerMinute = 6
 
 // WithTelemetry mounts the usage receiver (package telemetry): POST /telemetry takes a batch of
