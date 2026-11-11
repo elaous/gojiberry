@@ -1,9 +1,5 @@
 //go:build js && wasm
 
-// Command passkey-demo is a page that signs in with passkeys: components.Passkey over
-// auth/passkey/client, talking to a server that mounts auth/passkey (cmd/server here, or
-// cmd/docstore with GOJIBERRY_DOCSTORE_PASSKEY_RPID set). The page must be served over HTTPS, or
-// from localhost, which the browser treats as secure.
 package main
 
 import (
@@ -108,7 +104,7 @@ func main() {
 							return err
 						}
 						r, err := encrypt.PRFRecipient(secret, "", id)
-						clear(secret) // the secret is the root of the key: do not keep it around
+						clear(secret)
 						if err != nil {
 							return err
 						}
