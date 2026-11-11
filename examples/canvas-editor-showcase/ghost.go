@@ -68,6 +68,7 @@ func (u *ui) refreshGhost(flow *canvas.TextFlow, redraw, renderUI func()) {
 	}
 	flow.Ghost = g.state.Suffix
 	redraw()
+	// said once after typing stops: fast typing is not interrupted by speech
 	gen := g.gen
 	time.AfterFunc(600*time.Millisecond, func() {
 		if g.gen != gen || !g.state.Visible() {

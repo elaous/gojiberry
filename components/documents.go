@@ -448,6 +448,7 @@ func folderRows(p DocListProps, busy bool) []xango.Node {
 		id := f.ID
 		nameNodes := []xango.Node{xango.Text("📁 " + f.shown())}
 		if f.Confidential {
+			// the name is the placeholder until revealed: a lock says why
 			nameNodes = append(nameNodes, xango.Text(" "), Icon(IconProps{Glyph: "🔒", Size: 14, Label: tr("docs.folderConfidential", "Confidential folder")}))
 		}
 		row := []xango.Node{xango.El("span", []xango.Attr{xango.A("class", "gj-doc-name"+confidentialClass(f.Confidential))}, nameNodes...)}

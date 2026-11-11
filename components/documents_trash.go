@@ -154,6 +154,7 @@ func Versions(p VersionsProps) xango.Node {
 			row = append(row, docButton("gj-versions-open", tr("docs.open", "Open"), busy, actOne(p.Pending, p.Open, v.Key)))
 		}
 		if p.Delete != nil {
+			// a kept version is not deleted until it is let go
 			row = append(row, docButton("gj-versions-delete", tr("docs.delete", "Delete"), busy || v.Pinned, actOne(p.Pending, p.Delete, v.Key)))
 		}
 		rows = append(rows, xango.El("li", []xango.Attr{xango.A("class", "gj-versions-item"), xango.A("data-key", v.Key)}, row...))

@@ -130,6 +130,7 @@ const (
 	frameBytes  = 200
 	configSlack = 8 << 10
 	roomMargin  = 2
+	// the key and JSON around the base64 body, in characters
 	recordSlack = 100
 )
 
@@ -392,11 +393,13 @@ func (s *Store) verifyAll(ctx context.Context, view docstore.Adapter, to []Owner
 }
 
 type change struct {
-	op     string
-	to     []Owner
-	keys   []NewKey
+	op   string
+	to   []Owner
+	keys []NewKey
+	// owner signing keys left the list: lists are signed again by a staying key
 	resign bool
-	rekey  bool
+	// files are already encrypted to keys the change does not know (a restore)
+	rekey bool
 }
 
 func (s *Store) unlockedNow() (ids []age.Identity, sigs []*encrypt.Signer, holders []string) {
@@ -479,6 +482,7 @@ func (s *Store) run(ctx context.Context, c change) (err error) {
 	if err != nil {
 		return err
 	}
+	// the journal, before anything is written to a file
 	jr := cloneConfig(old)
 	jr.Pending = &Pending{Op: c.op, To: slices.Clone(c.to), Seals: pendingSeals(c.to, allSigs), Link: journalLink(old.Owners, c.to, allSigs)}
 	if len(old.Owners) > 0 {

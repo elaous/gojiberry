@@ -90,6 +90,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 	if online != a.online {
 		switch {
 		case online && !a.wasOnline:
+		// the first time it is connected is not news
 		case online:
 			a.cause = "online"
 		default:
@@ -106,6 +107,7 @@ func (a *CollabAnnouncer) Update(now time.Time, online bool, people []string, pr
 		a.problemSaid = problem
 		return ""
 	}
+	// a person who joined and left before anything was said cancels out
 	for i := 0; i < len(a.joined); i++ {
 		if j := slices.Index(a.left, a.joined[i]); j >= 0 {
 			a.left = slices.Delete(a.left, j, j+1)

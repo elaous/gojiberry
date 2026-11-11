@@ -24,11 +24,12 @@ type langState struct {
 	selFrom    int // the selection that was translated
 	selTo      int
 	transText  string
-	issues     []grammar.Issue
-	text       string // the text the issues were found in
-	checked    bool
-	busy       bool
-	err        string
+	// offsets mean something only in the whole text
+	issues  []grammar.Issue
+	text    string // the text the issues were found in
+	checked bool
+	busy    bool
+	err     string
 }
 
 var translateTargets = []components.LanguageTarget{

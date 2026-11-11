@@ -336,6 +336,7 @@ func (p *publicUI) openLink(ready func() bool) {
 		p.remember()
 		p.u.load(doc)
 	}
+	// the token does not stay in the address bar or history
 	js.Global().Get("history").Call("replaceState", nil, "", js.Global().Get("location").Get("pathname").String()+js.Global().Get("location").Get("search").String())
 	p.render()
 }

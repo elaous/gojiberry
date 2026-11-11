@@ -14,6 +14,7 @@ type inlinePattern struct {
 	make func(m []string) xango.Node
 }
 
+// set in init: the makers call inlineNodes, which reads it
 var inlinePatterns []inlinePattern
 
 func init() {

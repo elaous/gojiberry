@@ -68,6 +68,7 @@ func (v *DataView[T]) load(clamp bool) error {
 	}
 	v.Items, v.Total, v.TotalPages = result.Items, result.Total, result.TotalPages
 	if clamp && v.TotalPages > 0 && v.Page > v.TotalPages {
+		// fewer pages than this one: go to the last and fetch again
 		v.Page = v.TotalPages
 		return v.load(false)
 	}

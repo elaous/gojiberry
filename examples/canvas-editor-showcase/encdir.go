@@ -84,6 +84,7 @@ func newDirUI() dirUI {
 			d.url = clean
 		}
 	}
+	// the token belongs to the address it was given for
 	d.requireOwner = lsGet(dirRequireKey) == "1"
 	d.token = lsGet(dirTokenKey)
 	if d.token != "" && (d.url == "" || lsGet(dirTokenURLKey) != d.url) {
@@ -279,6 +280,7 @@ func (d *dirUI) wire(props *components.RecipientsProps, e *encUI) {
 			return nil, dirErr(err)
 		}
 		if unenrolled {
+			// the server's word alone is not a verification: no verified mark
 			for i := range keys {
 				if !keys[i].OwnerEnrolled {
 					keys[i].Verified = false
@@ -322,6 +324,7 @@ func (d *dirUI) publish(ctx context.Context, e *encUI) error {
 		if o.Kind == encstore.KindRecovery {
 			continue
 		}
+		// proof of possession needs the private side, held only while unlocked
 		id, _ := e.store.IdentityFor(o.Public)
 		req := dirclient.PublishRequest{Key: o.Public, Label: o.Label, Identity: id, Email: d.owner.email, Owner: d.owner.key}
 		if _, err := d.dir.Publish(ctx, req); err != nil {

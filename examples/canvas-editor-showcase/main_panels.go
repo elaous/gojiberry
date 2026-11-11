@@ -210,6 +210,7 @@ func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 			}
 		}
 	}
+	// one element always, so the panel keeps its order
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-toc-controls")}, children...)
 	}

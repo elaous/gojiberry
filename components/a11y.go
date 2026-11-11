@@ -153,6 +153,7 @@ func AccessibleText(p AccessibleTextProps) xango.Node {
 	if len(p.Comments) > 0 {
 		kids = append(kids, a11yCommentList(id, p.Comments))
 	}
+	// the outline comes first: a reader finds it as a landmark
 	if len(outline) > 0 {
 		kids = append([]xango.Node{a11yOutline(id, outline, p.OnGoto)}, kids...)
 	}
@@ -174,6 +175,7 @@ type a11yHeadingRef struct {
 func a11yBlockAttrs(b A11yBlock, extra ...xango.Attr) []xango.Attr {
 	attrs := append([]xango.Attr(nil), extra...)
 	if hasRTL(b.Text) || hasRTLRuns(b.Runs) {
+		// dir=auto: the browser takes the block direction from its first strong letter
 		attrs = append(attrs, xango.A("dir", "auto"))
 	}
 	if b.Mapped {
@@ -199,6 +201,7 @@ func a11yOutline(id string, hs []a11yHeadingRef, onGoto func(string, int, bool))
 		for i < len(hs) && hs[i].level >= level {
 			h := hs[i]
 			if h.level > level {
+				// a deeper heading with no parent at this level: nest it where it is
 				sub, n := build(i, h.level)
 				items = append(items, xango.El("li", nil, xango.El("ul", nil, sub...)))
 				i = n

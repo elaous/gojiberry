@@ -16,6 +16,7 @@ func (u *ui) noteTyping(flow func() *canvas.TextFlow, renderUI func()) {
 	fl := flow()
 	if fl == nil || !fl.Editing() || (u.typing.Level == components.TypingOff && !u.typing.Formatting && !u.typing.Lines) {
 		u.typing.Reset()
+		// when editing starts again the document is only remembered, not pasted
 		return
 	}
 	if msg := u.typing.Update(time.Now(), typingState(fl, u.typing.Formatting)); msg != "" {

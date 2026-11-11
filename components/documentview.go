@@ -47,6 +47,7 @@ func DocumentView(props DocumentViewProps) xango.Node {
 		xango.El("nav", []xango.Attr{xango.A("class", "gj-skip"), xango.A("aria-label", tr("docview.skip", "Skip links"))}, links...),
 		xango.El("header", []xango.Attr{xango.A("class", "gj-docview-top")}, title,
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-menubar")}, props.MenuBar)),
+		// a labelled region, so the toolbar is inside a landmark
 		xango.El("div", []xango.Attr{xango.A("role", "region"), xango.A("aria-label", tr("docview.toolbar", "Toolbar"))},
 			xango.El("div", []xango.Attr{xango.A("class", "gj-docview-toolbar"), xango.A("role", "toolbar"), xango.A("aria-label", tr("docview.toolbar", "Toolbar"))}, props.Toolbar)),
 		xango.El("main", []xango.Attr{xango.A("class", "gj-docview-main")}, main...),

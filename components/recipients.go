@@ -164,6 +164,7 @@ func Recipients(p RecipientsProps) xango.Node {
 		if p.OnDraft != nil {
 			keyAttrs = append(keyAttrs, xango.On("input", func(e xango.Event) { p.OnDraft(xango.EventValue[string](e), "") }))
 		}
+		// the draft is both the value attribute and the textarea child text
 		form := []xango.Node{xango.El("textarea", keyAttrs, xango.Text(p.Draft))}
 		draft := p.Draft
 		ready := false

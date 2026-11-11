@@ -1048,9 +1048,10 @@ type GhostAction int
     GhostAction is what a key did to the ghost text.
 
 const (
-	GhostNone    GhostAction = iota
-	GhostAccept              // insert Suffix at the caret
-	GhostDismiss             // hide it
+	GhostNone GhostAction = iota
+	// the key is not for the ghost text: let it through
+	GhostAccept  // insert Suffix at the caret
+	GhostDismiss // hide it
 )
 type GhostState struct {
 	Word, Suffix string

@@ -7,6 +7,7 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
+// encrypt.TypePasskey: components does not import encryption
 const passkeyType = "passkey-prf"
 
 func needsSecondKey(p RecipientsProps) bool {
@@ -119,6 +120,7 @@ func myKeyControl(p RecipientsProps, busy bool) []xango.Node {
 		box = append(box,
 			xango.El("p", append(cls("gj-doc-error gj-recip-need-second"), xango.A("role", "alert")), xango.Text(msg)),
 			docButton("gj-recip-add-mine", tr("recipients.addMine", "Add my passkey as a key"), true, nil))
+		// without OnRecoveryKey the secret could not be shown: button left out
 		if p.CreateRecoveryKey != nil && p.OnRecoveryKey != nil && p.RecoverySecret == "" {
 			box = append(box, docButton("gj-recip-recovery", tr("recipients.createRecovery", "Create a recovery key"), busy, func() {
 				p.Pending.Run(func(ctx context.Context) error {
@@ -177,6 +179,7 @@ func recoveryKeyShown(p RecipientsProps) []xango.Node {
 		nodes = append(nodes, docButton("gj-recip-download", tr("recipients.download", "Download"), false, func() { p.Download("recovery-key.txt", secret+"\n") }))
 	}
 	if p.CommitRecoveryKey != nil {
+		// not an owner key yet: it becomes one after the person confirms saving the secret
 		nodes = append(nodes,
 			xango.El("div", cls("gj-recip-recovery-ack"), Checkbox(CheckboxProps{Label: tr("recipients.recoveryAck", "I have saved this recovery key somewhere safe"),
 				Checked: p.RecoveryAcknowledged, OnChange: p.OnRecoveryAcknowledge})),

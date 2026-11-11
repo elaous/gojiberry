@@ -318,6 +318,7 @@ func main() {
 	}
 	u.enc, err = newEnc(encRaw, func() { renderUI(); u.publishEncState() })
 	if err != nil {
+		// an unreadable key list is not guessed at: encryption starts off
 		u.enc, _ = newEncOff(encRaw, func() { renderUI(); u.publishEncState() }, err)
 	}
 	targets := []saver.Target{
@@ -668,6 +669,7 @@ func main() {
 				fidelity,
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
+					// file worker formats run in their own goroutine, never in the JS handler
 					OnExport: func(name string) {
 						u.fidelity.format = name
 						doc := currentDoc()
