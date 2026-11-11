@@ -65,6 +65,7 @@ const mutateAttempts = 5
 type mutateOpts struct {
 	recover bool
 	minSeq  uint64
+	// skips frame cross-check (not floor): only for recording an unsigned file
 	noCheck bool
 }
 
@@ -97,6 +98,7 @@ func (s *Sharing) mutateWith(ctx context.Context, docID string, o mutateOpts, fn
 		if !o.recover && !o.noCheck && s.Adapter != nil {
 			if err := s.Adapter.checkDocumentByID(ctx, docID, before); err != nil {
 				if !raced && errors.Is(err, ErrDowngrade) && !errors.Is(err, ErrForgedFrame) {
+					// a client's switch between record and files: read the record once more
 					raced = true
 					continue
 				}

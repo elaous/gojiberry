@@ -179,6 +179,7 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 			if flipped {
 				late, err := s.Adapter.unsignedFiles(ctx, docID)
 				if errors.Is(err, ErrForgedFrame) {
+					// a v3 file whose signature fails is not one saved unsigned
 					return n, nil, nil, fmt.Errorf("encrypt: a file with a bad signature was found after the record was written: %w", err)
 				}
 				if err != nil {
@@ -262,7 +263,8 @@ func (s *Sharing) clearUnsignedLate(ctx context.Context, docID string) error {
 
 // UnsignedDoc is a document whose re-key ended with unsigned files.
 type UnsignedDoc struct {
-	Doc   string
+	Doc string
+	// at most 64 ids (first by id); Count is the total
 	Files []string
 	Count int
 	// Since is when the re-key found them.

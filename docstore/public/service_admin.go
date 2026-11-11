@@ -118,6 +118,7 @@ func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 	}
 	unlock := s.lock(docID)
 	defer unlock()
+	// tombstone first: view ID answers 410 whatever fails below
 	if err := tomb(view); err != nil {
 		s.fail(w, err)
 		return

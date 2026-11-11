@@ -58,6 +58,7 @@ func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Tim
 		}
 		rec.Docs[burstDoc(doc)] = now.Unix()
 		for len(rec.Docs) > limit+1 {
+			// past the limit the exact count does not matter: drop the oldest
 			oldest, ot := "", int64(0)
 			for k, t := range rec.Docs {
 				if oldest == "" || t < ot {

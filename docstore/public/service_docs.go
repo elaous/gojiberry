@@ -125,6 +125,7 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	if !s.writeAllowed(w, r, sess) {
 		return
 	}
+	// one document per session: taken down ends it; gone frees it
 	old := sess.DocID
 	if old != "" {
 		if gone, err := s.removed(ctx, old); err != nil {

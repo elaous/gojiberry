@@ -324,6 +324,7 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	}
 	full := s.dirAdmin != nil && s.dirAdmin(r)
 	if !full && u.VerifiedEmail && ValidAddress(u.Email) && !strings.HasPrefix(u.ID, "passkey:") {
+		// an unverified e-mail is whatever the provider's user typed
 		enr, err := s.directory.Enrollment(r.Context(), u.Email)
 		if err != nil {
 			directoryError(w, err)

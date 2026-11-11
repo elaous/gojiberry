@@ -24,6 +24,7 @@ const (
 // UsageSeriesKey is where the series is stored.
 const UsageSeriesKey = "usage:series"
 
+// reserved keyspace of the persisted series
 const usageKeyspace = "usage:"
 
 const usageSaveEvery = 10 * time.Minute

@@ -62,6 +62,7 @@ type Error struct {
 	Body   string
 }
 
+// a server cannot make the client hold or print more
 const maxErrorBody = 4 << 10
 
 func (e *Error) Error() string { return fmt.Sprintf("directory: server said %d: %s", e.Status, e.Body) }
@@ -251,7 +252,8 @@ type PublishRequest struct {
 	Identity age.Identity
 	// SSHPrivateKey is an unencrypted ssh-ed25519 private key.
 	SSHPrivateKey []byte
-	Owner         OwnerSigner
+	// nil: the server refuses with 428 if the address has an owner key
+	Owner OwnerSigner
 }
 
 // Publish publishes a key for the signed-in account.
@@ -432,6 +434,7 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		}
 		merged := seen
 		merged.Enrolled = merged.Enrolled || anyEvidence
+		// trust on first use: remembered in State, not in Pins
 		if merged.FirstOwner == "" {
 			merged.FirstOwner = ref
 		}

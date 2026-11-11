@@ -67,6 +67,7 @@ func webLock(ctx context.Context, name string) (func(), error) {
 		return func() {}, nil
 	case <-acquired:
 	case <-ctx.Done():
+		// still queued: give the lock back the moment it is granted
 		go func() { <-acquired; close(release) }()
 		return nil, ctx.Err()
 	}

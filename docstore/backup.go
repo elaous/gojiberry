@@ -168,6 +168,7 @@ func verifyBackup(r io.Reader) (BackupManifest, error) {
 	return man, nil
 }
 
+// anything past 64 MiB is cut so the JSON fails to read
 type limitedBuf struct{ b []byte }
 
 func (l *limitedBuf) Write(p []byte) (int, error) {

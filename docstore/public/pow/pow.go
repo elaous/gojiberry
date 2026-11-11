@@ -37,6 +37,7 @@ func Solve(challenge string, difficulty int, limit uint64) (string, bool) {
 	if limit == 0 {
 		limit = 1 << 28
 	}
+	// random start: two answers to one challenge differ
 	var r [4]byte
 	_, _ = rand.Read(r[:])
 	prefix := hex.EncodeToString(r[:]) + "-"

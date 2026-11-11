@@ -79,8 +79,9 @@ type RateLimiter struct {
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
 
-	mu        sync.Mutex
-	buckets   map[string]*list.Element
+	mu      sync.Mutex
+	buckets map[string]*list.Element
+	// value *bucket; ordered by last use, newest first
 	order     *list.List
 	lastSweep time.Time
 }
@@ -192,6 +193,7 @@ func NewStoreLimiter(store Adapter, name string, perMinute float64, burst int) *
 
 const maxClockSkew = 5 * time.Second
 
+// lost only under very hot contention
 const maxCASRounds = 64
 
 type limitState struct {
@@ -415,6 +417,7 @@ func SweepRateLimitsStats(ctx context.Context, store Adapter, now time.Time, max
 				out.Deleted++
 				out.Evicted++
 				if k.full != math.MaxInt64 && k.full > now.UnixNano() {
+					// an unreadable record's date is unknown: not counted
 					out.EvictedLive++
 				}
 			}
@@ -436,6 +439,7 @@ func deleteRateLimit(ctx context.Context, store Adapter, id string, data []byte)
 			return false, err
 		}
 	}
+	// no conditional delete: claim with a conditional write first
 	if c, ok := store.(ConditionalAdapter); ok {
 		blank, _ := json.Marshal(limitState{})
 		switch err := c.SaveIf(ctx, id, blank, prev); {

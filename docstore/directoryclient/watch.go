@@ -363,6 +363,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		}
 	}
 
+	// witnesses: the log must be the one a quorum cosigned
 	if c.WitnessQuorum > 0 {
 		w, checked, err := c.checkWitnessed(ctx, head, entries, keys)
 		if err != nil {
@@ -371,6 +372,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		rep.Witnessed, rep.WitnessChecked = &w, checked
 	}
 
+	// the pseudonym is the server's word, confirmed by the client's entries
 	known := map[string]bool{}
 	var addrs []string
 	for _, a := range append(append([]string(nil), st.Addresses...), append([]string{addr.Address}, addr.Previous...)...) {
@@ -462,6 +464,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 			rep.Notes = append(rep.Notes, n)
 		}
 	}
+	// the server's enrollment must match what the log shows
 	if enr, err := c.Enrollment(ctx, email); err != nil {
 		return rep, err
 	} else {
@@ -507,6 +510,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		rep.Foreign = append(rep.Foreign, Foreign{Entry: e, Message: foreignMessage(e), Voided: voided})
 	}
 
+	// settle only what no void can still reach
 	lastAt := head.At
 	if n := len(entries); n > 0 && !filtered {
 		lastAt = max(lastAt, entries[n-1].At)

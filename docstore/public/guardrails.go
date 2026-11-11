@@ -42,6 +42,7 @@ func (b *budget) full(limit int64) bool {
 	return b.total+b.pending >= limit
 }
 
+// exactly one of commit and cancel ends it
 type reservation struct {
 	b     *budget
 	doc   string
@@ -356,6 +357,7 @@ func (r *reportStats) held(reporter string) (all, mine int) {
 	return r.n, r.reporters[reporter]
 }
 
+// counters unknown: guessing zero would admit writes past the budget
 const reconcileBackoff = 15 * time.Second
 
 // own context: the starting request's disconnect must not fail it

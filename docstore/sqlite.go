@@ -47,6 +47,7 @@ func NewSQLiteAdapter(ctx context.Context, path string) (*SQLiteAdapter, error) 
 	if err != nil {
 		return nil, err
 	}
+	// one connection: :memory: databases are per connection
 	db.SetMaxOpenConns(1)
 	_, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
 		id TEXT PRIMARY KEY,

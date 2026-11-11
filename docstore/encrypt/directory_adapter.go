@@ -21,6 +21,7 @@ var ErrNotPublishable = errors.New("encrypt: only a signed-in account with an ex
 
 const directoryPrefix = "directory/"
 
+// a record means the challenge was answered once
 const popPrefix = directoryPrefix + "pop/"
 
 const passkeySessionPrefix = "passkey:"
@@ -52,7 +53,8 @@ type AdapterDirectory struct {
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 
-	report         atomic.Pointer[docstore.DirectoryHealth]
+	report atomic.Pointer[docstore.DirectoryHealth]
+	// striped by address hash, this process only
 	locks          [64]sync.Mutex
 	casMu          sync.Mutex
 	idxMu          sync.Mutex

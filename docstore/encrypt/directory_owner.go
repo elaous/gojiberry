@@ -20,6 +20,7 @@ import (
 
 const DefaultResetWait = 24 * time.Hour
 
+// max clock difference for an owner signature
 const ownerSkew = 10 * time.Minute
 
 const auditSkew = ownerSkew + time.Minute
@@ -257,6 +258,7 @@ func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, re
 		return err
 	}
 	if prev != "" {
+		// the record may sit under a retired name: the current name is new
 		if _, err := d.Store.Load(ctx, id); errors.Is(err, docstore.ErrNotFound) {
 			prev = ""
 		}
@@ -382,6 +384,7 @@ func (d *AdapterDirectory) checkEnrollToken(user auth.User, token string, now ti
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
+	// only the current key: a retired key may have leaked
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, enrollMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}

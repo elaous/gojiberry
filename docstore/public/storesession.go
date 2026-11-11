@@ -170,6 +170,7 @@ func (m *StoreSessions) recount(ctx context.Context, now time.Time, reap bool) (
 	m.refreshing = false
 	if err == nil {
 		for _, d := range m.during {
+			// what this process did while the scan read
 			counts.add(d.s, d.sign)
 		}
 		m.counts, m.counted = counts, now

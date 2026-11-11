@@ -153,6 +153,7 @@ func (f *StorageSeqFloor) Raise(ctx context.Context, docID string, seq uint64) e
 	target, _ := f.mem.Get(ctx, docID)
 	n, err := f.stored(docID)
 	if err != nil {
+		// writing over a damaged value is the one way to repair it
 		if serr := f.Store.Set(f.Prefix+docID, strconv.FormatUint(target, 10)); serr != nil {
 			return f.fail(errors.Join(err, serr))
 		}

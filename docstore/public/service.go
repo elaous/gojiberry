@@ -109,6 +109,7 @@ var ErrAdminNeedsProxyConfig = errors.New("public: the admin route is enabled bu
 // ErrExpiryRequired is returned by New for a store without expiry.
 var ErrExpiryRequired = errors.New("public: the store must expire documents (the 24 hour promise): wrap it in docstore.ExpiringAdapter and set GOJIBERRY_DOCSTORE_EXPIRY_TTL")
 
+// plain expiring documents, not a system keyspace
 const docKeyPrefix = "pubdoc/"
 
 // HiddenPrefixes are the ids the generic routes must hide.
@@ -302,6 +303,7 @@ func (s *Service) headers(next http.Handler) http.Handler {
 			rc := http.NewResponseController(w)
 			now := time.Now()
 			_ = rc.SetReadDeadline(now.Add(d))
+			// not supported by every writer: server timeouts apply then
 			_ = rc.SetWriteDeadline(now.Add(2 * d))
 		}
 		h := w.Header()
@@ -343,6 +345,7 @@ func validID(id string) bool {
 	return true
 }
 
+// holds no content and no token
 type docMeta struct {
 	Owner    string    `json:"owner"`
 	ViewID   string    `json:"view"`
@@ -520,6 +523,7 @@ func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := s.now()
+	// a session without a document is short-lived: the first write extends it
 	addr := s.clientIP(r)
 	sess := Session{ID: id, Client: ClientKey(addr), Net: NetKey(addr), Wide: WideKey(addr), Created: now, Expires: now.Add(s.cfg.SessionIdleTTL)}
 	caps := SessionCaps{PerClient: s.cfg.MaxSessionsPerAddress, PerNet: s.cfg.MaxSessionsPerNet, PerWide: s.cfg.MaxSessionsPerWide, ReservePercent: max(0, s.cfg.SessionReservePercent)}

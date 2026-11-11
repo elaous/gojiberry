@@ -169,6 +169,7 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 					Why: "the entry is dated ahead of the auditor's clock: a fast clock on a replica, or the auditor's own"})
 			}
 		}
+		// a voided entry is checked like any other but changes nothing
 		_, isVoided := out.Voided[e.Seq]
 		effect := func(f func()) {
 			if !isVoided {
@@ -189,6 +190,7 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 			case !verifyOwnerVersion(pub, e.OwnerV, e.Op, email, e.Fingerprint, e.LabelHash, e.OpTime, e.OwnerPrev, e.OwnerSig):
 				bad(e, "the owner signature does not verify under the current owner key")
 			}
+		// v1 signatures do not cover the label: accepted for old entries
 		case OpOperatorReset:
 			out.OperatorResets = append(out.OperatorResets, e)
 			effect(func() {

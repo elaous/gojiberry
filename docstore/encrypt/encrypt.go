@@ -59,6 +59,7 @@ func (s Static) Identities(context.Context, string) ([]age.Identity, error) { re
 
 // DefaultSkip lists items stored unencrypted.
 func DefaultSkip(id string) bool {
+	// compared without case: a case-folding backend would alias
 	lower := strings.ToLower(id)
 	for _, p := range defaultSkipPrefixes {
 		if strings.HasPrefix(lower, p) {
@@ -110,6 +111,7 @@ func (a *Adapter) skip(id string) bool {
 
 // Binding ties a stored file to the signed key record.
 type Binding struct {
+	// set only by the keyring's reading of the record, never a frame
 	Exists bool
 	// Level is "" (server) or ProtectionE2EE.
 	Level string
@@ -208,6 +210,7 @@ func (k ConfidentialKeyring) ownerSignerKeys() []ed25519.PublicKey { return k.Pe
 
 // DocID finds the document a stored item belongs to.
 func DocID(id string) string {
+	// folder-secret/<id> follows the folder's own keys:<ID> record
 	if rest, ok := strings.CutPrefix(id, docstore.FolderSecretPrefix); ok {
 		if docfile.ValidID(rest) {
 			return rest

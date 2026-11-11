@@ -116,6 +116,7 @@ func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []strin
 		case err == nil:
 			found = append(found, evidence{id, fi})
 		case errors.Is(err, ErrNoKey):
+		// provably someone else's: no evidence from this one
 		case errors.Is(err, ErrNotEncrypted) && a.AllowPlaintext:
 		case errors.Is(err, ErrForgedFrame):
 			return err
@@ -123,6 +124,7 @@ func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []strin
 			return fmt.Errorf("%w: %s: %w", ErrUnreadable, id, err)
 		}
 	}
+	// highest seq first: it names the record most precisely
 	sort.SliceStable(found, func(i, j int) bool { return found[i].fi.b.Seq > found[j].fi.b.Seq })
 	for _, e := range found {
 		if err := crossCheck(e.id, e.fi, r, false); err != nil {

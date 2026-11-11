@@ -406,6 +406,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	i64("_MAX_INFLIGHT_PER_CLIENT", &c.MaxInflightPerClient)
 	i64("_MAX_INFLIGHT_PER_NET", &c.MaxInflightPerNet)
 	i64("_MIN_UPLOAD_RATE", &c.MinUploadRate)
+	// 0..90 percent; 0 means none (stored as -1)
 	share := func(name string, dst *int, top int) {
 		if v := get(name); v != "" {
 			n, err := strconv.Atoi(v)

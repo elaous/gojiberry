@@ -233,6 +233,7 @@ func (e *ExpiringAdapter) relatedFor(ctx context.Context, id string) (exact, pre
 	return append(own, group...), append(ownP, groupP...), nil
 }
 
+// another process renewed it: nothing else was deleted
 var errRenewed = errors.New("docstore: the document was renewed while it was being expired")
 
 func (e *ExpiringAdapter) deleteExpired(ctx context.Context, id string) (found bool, err error) {
@@ -334,6 +335,7 @@ func (e *ExpiringAdapter) renewed(ctx context.Context, id string, write func() e
 	if had && !now.Before(e.effective(prev)) {
 		switch _, err := e.purgeLocked(ctx, id, true); {
 		case errors.Is(err, errRenewed):
+			// renewed meanwhile: live now, so this write extends it
 			if prev, had, err = e.readRecordFull(ctx, id); err != nil {
 				return err
 			}

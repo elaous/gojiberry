@@ -61,6 +61,7 @@ var ErrBadSignature = errors.New("encrypt: the recipient list's signature is not
 // ErrNoSigner is returned by Sharing operations that need a Signer.
 var ErrNoSigner = errors.New("encrypt: sharing needs the owner's signing key")
 
+// separates what the owner signs here from other key uses
 const recordContext = "gojiberry/keys-record/v1"
 
 // Signer is the owner's key for signing recipient records.

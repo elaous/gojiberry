@@ -27,6 +27,7 @@ type blockedRecord struct {
 	Reason string    `json:"reason,omitempty"`
 }
 
+// the first list that refuses or fails decides
 type chainBlocklist []Blocklist
 
 // Blocked implements Blocklist.

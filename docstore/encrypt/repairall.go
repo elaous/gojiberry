@@ -174,6 +174,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			if !same {
 				rep.IndexErr = fmt.Errorf("%w: the Sharing's Signer is not the Adapter's", ErrNoFrameSigner)
 			} else if rep.IndexErr = s.ResignIndex(ctx); rep.IndexErr == nil {
+				// ResignIndex does not say whether it wrote: check who signed it
 				rep.IndexResigned = bytes.Equal(s.indexSigner(ctx), s.Adapter.Signer.Public())
 			}
 		}
@@ -226,6 +227,7 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 			var n int
 			var err error
 			if resign && recKey != nil && !bytes.Equal(recKey, s.Signer.Public()) {
+				// record first: later files sit at its seq or below
 				err = s.Resign(ctx, doc)
 			}
 			if err == nil {
@@ -422,6 +424,7 @@ func (a *Adapter) scanFrames(ctx context.Context, ids []string, encryptPlain boo
 		fi, err := a.peekFrameWith(ctx, id, data, true)
 		settled := whole || errors.Is(err, ErrNoKey) || (errors.Is(err, ErrNotEncrypted) && len(data) >= len(header))
 		if err != nil && !settled {
+			// cut short: head may lack the age header; judge the whole file
 			d, lerr := a.Inner.Load(ctx, id)
 			if errors.Is(lerr, docstore.ErrNotFound) {
 				continue

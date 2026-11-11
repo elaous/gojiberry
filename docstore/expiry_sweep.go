@@ -42,6 +42,7 @@ func (e *ExpiringAdapter) adopt(ctx context.Context) error {
 			base = m.UpdatedAt
 		}
 		e.mu.Lock()
+		// a Save since the listing wrote its own record: keep it
 		_, has, err := e.readRecord(ctx, m.ID)
 		if err == nil && !has {
 			err = e.writeRecord(ctx, m.ID, expiryRecord{deadline: base.Add(ttl), created: base})
@@ -102,6 +103,7 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 			found, rerr = e.purgeLocked(ctx, id, true)
 			if errors.Is(rerr, errRenewed) {
 				rerr = nil
+				// another process renewed it: live, not an error
 			} else if rerr == nil && found {
 				deleted++
 			}

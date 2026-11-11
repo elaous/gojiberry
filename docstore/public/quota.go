@@ -115,6 +115,7 @@ func (q *MemoryQuota) TakeIn(_ context.Context, key string, n int64) (bool, int6
 				q.dropLocked(w)
 			}
 		}
+		// when full the least recently used keys go, not arbitrary ones
 		dropped := 0
 		for q.keys[key] == nil && len(q.keys) >= max {
 			q.dropLocked(q.lru.Back().Value.(*quotaWindow))

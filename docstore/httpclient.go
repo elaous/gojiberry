@@ -207,6 +207,7 @@ func (a *HTTPAdapter) Renew(ctx context.Context, id string) error {
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
+		// the URL may hold credentials: it ends up in the hub's log
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			ue.URL = RedactURL(ue.URL)

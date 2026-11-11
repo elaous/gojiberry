@@ -116,6 +116,7 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 		if cur, ok := state.best[r.Fingerprint]; (!ok || cur.rec.Revoked > 0) && counted >= maxKeys {
 			return PublishedKey{}, ErrTooManyKeys
 		}
+		// single use: claimed after all checks, logged before the record
 		if proven && !claimed {
 			if err := d.claimChallenge(ctx, tok); err != nil {
 				return PublishedKey{}, err

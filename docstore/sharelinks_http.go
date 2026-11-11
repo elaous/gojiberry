@@ -14,6 +14,7 @@ type createLinkRequest struct {
 	Hours float64 `json:"hours"`
 }
 
+// the token is shown here and nowhere else
 type createLinkResponse struct {
 	Token   string    `json:"token"`
 	ID      string    `json:"id"`

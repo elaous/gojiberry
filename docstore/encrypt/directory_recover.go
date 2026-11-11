@@ -58,6 +58,7 @@ func (d *AdapterDirectory) stateEntries(ctx context.Context, addrs []string) ([]
 	for _, a := range addrs {
 		out = append(out, d.idx.byAddr[a]...)
 	}
+	// rotated directory keys interleave: sort by number
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out, nil
 }
@@ -358,6 +359,7 @@ func (d *AdapterDirectory) OperatorResetEnrollment(ctx context.Context, pseudony
 			ref = enr.Seq
 		}
 	}
+	// logged first, like every owner-state change; record after
 	seq, err := d.appendLog(ctx, logInput{Op: OpOperatorReset, Address: pseudonym, Ref: ref}, d.now())
 	if err != nil {
 		return docstore.DirectoryEnrollment{}, err

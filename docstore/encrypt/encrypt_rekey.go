@@ -79,6 +79,7 @@ func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string, rk rekeyOpt
 		_, err := a.plan(ctx, id, rk)
 		switch {
 		case errors.Is(err, docstore.ErrNotFound):
+		// deleted since listed: nothing to re-key
 		case err != nil:
 			errs = append(errs, fmt.Errorf("%s: %w", id, err))
 			if !errors.Is(err, ErrDowngrade) {
@@ -291,6 +292,7 @@ func (a *Adapter) RekeyAll(ctx context.Context) (int, error) {
 	for i, g := range order {
 		if err := ctx.Err(); err != nil {
 			errs = append(errs, err)
+			// stopped between two documents: none is left half done
 			break
 		}
 		k, err := a.rekeyGroup(ctx, groups[g])

@@ -17,7 +17,8 @@ type Recipient struct {
 	Label       string
 	Type        string // "ssh-ed25519", "ssh-rsa" or "age-x25519"
 	Fingerprint string
-	Key         age.Recipient
+	// "SHA256:..." for an SSH key, the key itself for an age key
+	Key age.Recipient
 	// Text is the public key as it was read.
 	Text string
 	// Hint is, for a passkey key, the credential ID.

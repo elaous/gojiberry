@@ -89,6 +89,7 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 	if err := json.Unmarshal(doc.Data, &acl); err != nil {
 		return ACL{}, err
 	}
+	// grants match by normalised address: spelling is irrelevant
 	for k, v := range acl.Grants {
 		if n := NormalizeAddress(k); n != k {
 			delete(acl.Grants, k)
@@ -101,6 +102,7 @@ func (s *Server) loadACL(ctx context.Context, id string) (ACL, error) {
 			acl.Until[n] = v
 		}
 	}
+	// an ended grant opens nothing, whoever asks
 	return acl.Active(s.clock()), nil
 }
 
@@ -116,6 +118,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 	}
 	acl, err := s.loadACL(r.Context(), id)
 	if docID, isVersion := versionDocID(id); isVersion && errors.Is(err, ErrNotFound) {
+		// a document's history follows its access list
 		var found bool
 		if acl, found, err = s.versionACL(r.Context(), docID); found {
 			err = nil
@@ -287,6 +290,7 @@ func writeACLJSON(w http.ResponseWriter, acl ACL) {
 	_ = json.NewEncoder(w).Encode(acl)
 }
 
+// reserved keyspace of the usage totals
 const telemetryKeyspace = "telemetry:"
 
 func isReservedDocID(id string) bool {

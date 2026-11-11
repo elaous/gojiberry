@@ -218,6 +218,7 @@ func (s *Sharing) SetProtection(ctx context.Context, docID, protection string) (
 	}
 	if cur.Protection == want && !cur.Pending {
 		if digest == "" && s.Adapter != nil {
+			// no record: server level is believed only if no file says one existed
 			if err := s.Adapter.checkDocumentByID(ctx, docID, Binding{}); err != nil {
 				return 0, err
 			}

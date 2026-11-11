@@ -213,7 +213,8 @@ type Server struct {
 	now        func() time.Time
 	aclMu      sync.Mutex
 	telemetry  *telemetry.Counters
-	obs        *observe.Observer
+	// nil is off
+	obs *observe.Observer
 
 	auditLog        *audit.Logger
 	auditKey        []byte
@@ -229,7 +230,8 @@ type Server struct {
 	dirPolicy       DirectoryPolicy
 	dirDomainBudget bool
 	dirAdmin        func(*http.Request) bool
-	dirClientIP     func(*http.Request) string
+	// nil is the connection's remote address
+	dirClientIP func(*http.Request) string
 }
 
 type extraRoute struct {
@@ -519,6 +521,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		if s.reserved(m.ID) {
 			continue
 		}
+		// with sign-in on, list only what the caller may read
 		if allowed, _ := s.checkPermission(r, m.ID, http.MethodGet); !allowed {
 			continue
 		}
@@ -613,6 +616,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		s.setExpires(w, r, id)
 		if strings.TrimSpace(r.Header.Get("If-None-Match")) == "*" {
+			// saved only if there was none: a new document
 			s.audit(audit.DocumentCreated, audit.OK, s.auditActor(r, id), audit.NoReason, 0, id)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -641,6 +645,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		actor := s.auditActor(r, id)
+		// before the delete takes the access list with it
 		done := s.opStart(r.Context(), "delete")
 		err := s.adapter.Delete(r.Context(), id)
 		done(err, -1)
@@ -688,6 +693,7 @@ func (s *Server) handleRenew(w http.ResponseWriter, r *http.Request, id string) 
 	done(err, -1)
 	switch {
 	case errors.Is(err, ErrNotFound):
+		// the marker tells a real "document gone" from any other 404
 		w.Header().Set(GoneHeader, "1")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)

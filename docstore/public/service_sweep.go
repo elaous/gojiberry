@@ -118,6 +118,7 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		return 0, err
 	}
 	s.bytes.set(bytesWin, listed)
+	// version snapshots count with their documents
 	live := make(map[string]bool, len(listed))
 	for id, e := range listed {
 		if e.doc > 0 {
@@ -190,6 +191,7 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 		ok := json.Unmarshal(raw, &r) == nil
 		return r.At, reportInfo{reporter: r.Reporter, doc: r.DocID, priority: r.Priority, at: r.At}, ok
 	}, del, note, func(key string, info reportInfo) {
+		// a report past its TTL leaves its document record too
 		s.dropRef(ctx, info.doc, strings.TrimPrefix(key, docstore.ReportPrefix))
 	})
 	if kept != nil {

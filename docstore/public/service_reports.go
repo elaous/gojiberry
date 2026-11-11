@@ -40,9 +40,10 @@ type Report struct {
 }
 
 const (
-	maxReportBody    = 8 << 10
-	maxReasonBytes   = 2000
-	maxReportsOfDoc  = 20
+	maxReportBody   = 8 << 10
+	maxReasonBytes  = 2000
+	maxReportsOfDoc = 20
+	// half the slots: a priority flood cannot pin them all
 	maxPriorityOfDoc = maxReportsOfDoc / 2
 )
 
@@ -111,6 +112,7 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ensureCounters(ctx)
+	// counters are for eviction only: a report is taken regardless
 	var rep Report
 	notify := false
 	needEvict, stored, err := func() (bool, string, error) {
@@ -165,6 +167,7 @@ func (s *Service) reporterSalt(ctx context.Context) ([]byte, error) {
 	if now.Before(s.saltRetry) {
 		return nil, errSaltUnavailable
 	}
+	// own context: a slow store or leaving client must not decide
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	salt, err := s.loadOrCreateSalt(ctx)
@@ -197,6 +200,7 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 				return salt, nil
 			}
 			prev = docstore.Digest(d.Data)
+		// damaged: replace exactly that
 		case errors.Is(err, docstore.ErrNotFound):
 		default:
 			return nil, err
@@ -287,6 +291,7 @@ func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (id string, stored, over bool, err error) {
 	pruned := false
 	defer func() {
+		// a prune is worth keeping even when the report is dropped
 		if pruned && !stored {
 			if e := s.putJSON(ctx, docRecordPrefix+rep.DocID, *meta); e != nil {
 				log.Printf("public docstore: updating a document's report list: %s", redact(e))

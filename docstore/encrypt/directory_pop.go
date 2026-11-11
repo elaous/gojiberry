@@ -123,6 +123,7 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
+	// only the current key: a retired key may have leaked
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, challengeMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}

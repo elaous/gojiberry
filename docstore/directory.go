@@ -16,6 +16,7 @@ import (
 // DirectoryPrefix is the keyspace of the key directory.
 const DirectoryPrefix = "directory/"
 
+// written only by the directory, reserved from /docs
 const DirectoryLogPrefix = "directory-log/"
 
 const DirectoryEnrollPrefix = "directory-enroll/"
@@ -428,15 +429,16 @@ func (s *Server) WithDirectoryPolicy(p DirectoryPolicy) *Server {
 }
 
 const (
-	maxDirectoryBody       = 4 << 10
-	maxLookupKeys          = 50
-	maxLogEntries          = 200
-	publishesPerMinute     = 10
-	logReadsPerMinute      = 30
-	challengesPerMin       = 20
-	lookupsPerMinute       = 60
-	lookupsPerIP           = 120
-	lookupsInTotal         = 1200
+	maxDirectoryBody   = 4 << 10
+	maxLookupKeys      = 50
+	maxLogEntries      = 200
+	publishesPerMinute = 10
+	logReadsPerMinute  = 30
+	challengesPerMin   = 20
+	lookupsPerMinute   = 60
+	lookupsPerIP       = 120
+	lookupsInTotal     = 1200
+	// log reads have own budgets: a hard poller must not starve lookups
 	logsPerIP              = 120
 	logsInTotal            = 1200
 	adminFailuresPerMinute = 10
