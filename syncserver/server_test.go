@@ -77,16 +77,12 @@ func TestServerRelaysDeltaBetweenTwoClients(t *testing.T) {
 	phone.Put(crdt.Block{ID: "1", Kind: "heading", Content: "Fatura", Order: 0})
 	postOps(t, srv, phone.Drain())
 
-	// A second, brand-new device pulls the full snapshot to onboard.
 	laptop := crdt.NewDoc("laptop")
 	laptop.Apply(getSnapshot(t, srv)...)
 	if len(laptop.Blocks()) != 1 {
 		t.Fatalf("expected laptop to onboard 1 block from server snapshot, got %d", len(laptop.Blocks()))
 	}
 
-	// The laptop edits offline, then pushes its delta back through the
-	// same relay -- the server never needs to know this is an edit
-	// versus a create, it's all just Ops merged by LWW.
 	laptop.Put(crdt.Block{ID: "2", Kind: "note", Content: "desconto", Order: 1})
 	postOps(t, srv, laptop.Drain())
 
@@ -96,16 +92,6 @@ func TestServerRelaysDeltaBetweenTwoClients(t *testing.T) {
 	}
 }
 
-// TestMergeCharCRDTServerConvergesConcurrentEdits is the regression
-// case for the bug Config.Strategy fixes: relaying MergeCharCRDT
-// clients through a MergeLWW server (the old, only option) doesn't
-// merely lose the fine-grained merge, it silently empties the block's
-// Content for any client applying an op the LWW-strategy server
-// stripped CharOps from (see Config.Strategy's doc comment). A server
-// configured with the matching strategy must both onboard a fresh
-// client with real content and converge two concurrent edits to
-// different parts of the same block, same as two directly-connected
-// peers would (crdt.TestConcurrentEditSameBlockConvergesRegardlessOfOrder).
 func TestMergeCharCRDTServerConvergesConcurrentEdits(t *testing.T) {
 	s := NewServer(Config{Region: "br-datacenter-1", Strategy: crdt.MergeCharCRDT})
 	srv := httptest.NewServer(s.Handler())
@@ -121,8 +107,6 @@ func TestMergeCharCRDTServerConvergesConcurrentEdits(t *testing.T) {
 		t.Fatalf("expected b to onboard Content %q, got %+v (ok=%v)", "hello", blk, ok)
 	}
 
-	// Concurrent edits to different parts of the same block, each
-	// pushed through the relay without ever syncing directly.
 	a.Put(crdt.Block{ID: "x", Kind: "paragraph", Content: "hello there", Order: 0})
 	b.Put(crdt.Block{ID: "x", Kind: "paragraph", Content: "well hello", Order: 0})
 	postOps(t, srv, a.Drain())
@@ -158,15 +142,6 @@ func TestHealthReportsConfiguredRegion(t *testing.T) {
 	}
 }
 
-// TestCORSHeadersAllowCrossOriginClients is this relay's whole reason
-// for existing: a client's own static assets are almost never served
-// from the same origin as the sync relay (a different host, port, or
-// both), and a browser's fetch() enforces CORS before a request ever
-// reaches handleOps at all. Confirms both a preflight OPTIONS request
-// (what the browser sends ahead of the client's actual POST, since a
-// JSON body with an explicit Content-Type isn't a CORS "simple
-// request") and the real POST/GET calls carry the header a
-// cross-origin fetch() requires.
 func TestCORSHeadersAllowCrossOriginClients(t *testing.T) {
 	s := NewServer(Config{Region: "br-datacenter-1"})
 	srv := httptest.NewServer(s.Handler())
@@ -228,11 +203,6 @@ func getPresence(t *testing.T, srv *httptest.Server, self string) []Presence {
 	return peers
 }
 
-// TestPresenceRoundTripsAndExcludesSelf mirrors
-// TestServerRelaysDeltaBetweenTwoClients's own two-client shape, but
-// for the ephemeral presence channel instead of real document Ops:
-// each replica's own last-broadcast position should be visible to
-// every *other* replica, but never echoed back to itself.
 func TestPresenceRoundTripsAndExcludesSelf(t *testing.T) {
 	s := NewServer(Config{Region: "br-datacenter-1"})
 	srv := httptest.NewServer(s.Handler())
@@ -251,7 +221,6 @@ func TestPresenceRoundTripsAndExcludesSelf(t *testing.T) {
 		t.Fatalf("GET /presence?replica=laptop = %+v, want exactly phone's entry", fromLaptop)
 	}
 
-	// A repeat POST from the same replica overwrites, not accumulates.
 	postPresence(t, srv, Presence{Replica: "phone", Name: "Alice", Color: "#e11d48", BlockID: "b1", Col: 9})
 	fromLaptop = getPresence(t, srv, "laptop")
 	if len(fromLaptop) != 1 || fromLaptop[0].Col != 9 {
@@ -259,11 +228,6 @@ func TestPresenceRoundTripsAndExcludesSelf(t *testing.T) {
 	}
 }
 
-// TestPresenceExpiresAfterTTL confirms a replica that stops POSTing
-// (tab closed, network dropped) eventually disappears from its peers'
-// own GET /presence rather than lingering forever -- using Server's
-// own injectable now func to fast-forward past presenceTTL
-// deterministically instead of a real sleep.
 func TestPresenceExpiresAfterTTL(t *testing.T) {
 	s := NewServer(Config{Region: "br-datacenter-1"})
 	current := time.Now()
