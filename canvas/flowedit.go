@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// TextFlow is editable in edit mode; clicking places the caret.
-
 // ContentItems returns the content stream as Items.
 func (f *TextFlow) ContentItems() []Item { return slices.Clone(f.items()) }
 
@@ -23,7 +21,6 @@ func (f *TextFlow) Editing() bool { return f.mode == ModeEdit && f.editing }
 
 func (f *TextFlow) stopEditing() { f.editing, f.extra, f.pending = false, nil, Format{} }
 
-// materialize makes Items the content, so it can be edited.
 func (f *TextFlow) materialize() {
 	if f.edited {
 		f.hist.start(f.histSnap())
@@ -41,7 +38,6 @@ func (f *TextFlow) changed() {
 	f.notify()
 }
 
-// notify tells OnChange and the Subscribe listeners that the content changed.
 func (f *TextFlow) notify() {
 	if f.OnChange != nil {
 		f.OnChange(f)
@@ -54,7 +50,6 @@ func (f *TextFlow) notify() {
 // Subscribe registers fn to run after every edit, like OnChange.
 func (f *TextFlow) Subscribe(fn func(*TextFlow)) { f.listeners = append(f.listeners, fn) }
 
-// EditTarget returns the flow while the caret is in it, else nil.
 func (f *TextFlow) EditTarget() EditTarget {
 	if f.Editing() {
 		return f
@@ -64,7 +59,6 @@ func (f *TextFlow) EditTarget() EditTarget {
 
 func (f *TextFlow) HoldsObjects() bool { return true }
 
-// EditText returns the text, with each inline object as one rune.
 func (f *TextFlow) EditText() string { return string(f.flatten().runes) }
 
 func (f *TextFlow) Cursors() []Cursor {
@@ -119,7 +113,7 @@ func (f *TextFlow) Slice(from, to int) []Item {
 func (f *TextFlow) Replace(edits []Edit) {
 	f.materialize()
 	es := slices.Clone(edits)
-	slices.SortStableFunc(es, func(a, b Edit) int { // last first; at one offset the side behind the breaks is later
+	slices.SortStableFunc(es, func(a, b Edit) int {
 		if a.From == b.From && a.AfterOps != b.AfterOps {
 			if a.AfterOps {
 				return -1
@@ -143,7 +137,6 @@ func (f *TextFlow) clampCursors() {
 	}
 }
 
-// replaceRange swaps stream range [from, to) of Items for ins.
 func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 	n := len(f.flatten().runes)
 	from, to = min(max(from, 0), n), min(max(to, 0), n)
@@ -204,7 +197,6 @@ func (f *TextFlow) replaceRange(from, to int, ins []Item, after bool) {
 	f.Items = mergeChars(out)
 }
 
-// mergeChars joins neighbouring Chars with equal formats.
 func mergeChars(items []Item) []Item {
 	var out []Item
 	for _, it := range items {
@@ -223,7 +215,6 @@ func mergeChars(items []Item) []Item {
 	return out
 }
 
-// opAt returns the index of the break or column config at o, or -1.
 func (f *TextFlow) opAt(o int) int {
 	off := 0
 	for i, it := range f.Items {
@@ -242,7 +233,6 @@ func (f *TextFlow) opAt(o int) int {
 	return -1
 }
 
-// typeFormat is the format text typed at offset o takes.
 func (f *TextFlow) typeFormat(d *flowData, o int) Format {
 	fm := f.typeFormatRaw(d, o)
 	fm.Proposal = "" // New text is a proposal only while suggesting.
@@ -366,7 +356,6 @@ func (f *TextFlow) CutText() (string, bool) {
 	return text, true
 }
 
-// HandleKey handles editing keys while the caret is in the text.
 func (f *TextFlow) HandleKey(key string, shift bool) bool {
 	if f.Editing() && f.suggestKey(key) {
 		return true
@@ -460,7 +449,6 @@ func (f *TextFlow) editKey(key string, shift bool) bool {
 		})
 	case "Backspace", "Delete":
 		f.materialize()
-		// Delete removes a break before the caret; Backspace one behind it.
 		if len(f.extra) == 0 && !f.HasSelection() && (key == "Delete" || f.sel.after) {
 			if i := f.opAt(f.sel.caret); i >= 0 {
 				f.sel.after = false
@@ -512,7 +500,6 @@ func (f *TextFlow) SetCaretVisible(on bool) bool {
 	return f.Editing()
 }
 
-// WantsFocus: a selection needs the keyboard for Copy and Select all.
 func (f *TextFlow) WantsFocus() bool { return f.HasSelection() || f.Editing() }
 
 // MouseDownMods: Ctrl/Cmd+click adds a cursor.
@@ -529,7 +516,6 @@ func (f *TextFlow) MouseDownMods(x, y float64, m Mods) bool {
 	return f.mouseDown(x, y)
 }
 
-// drawCarets draws a caret at every cursor while editing.
 func (f *TextFlow) drawCarets() {
 	if !f.Editing() || f.caretOff || f.Painter == nil {
 		return
@@ -540,7 +526,6 @@ func (f *TextFlow) drawCarets() {
 		}
 		if x, y, h, ok := f.caretRect(c); ok {
 			if f.StrongCaret {
-				// The caret is a dark bar with a light edge.
 				f.Painter.SetFillStyle(StrongCaretEdge)
 				f.Painter.FillRect(x-1.5, y+1, 5, h-2)
 				f.Painter.SetFillStyle(StrongCaretColor)
@@ -553,7 +538,6 @@ func (f *TextFlow) drawCarets() {
 	}
 }
 
-// current returns the styles the selections (or the carets) cover.
 func (f *TextFlow) current() []TextStyle {
 	d := f.flatten()
 	var out []TextStyle
@@ -572,7 +556,6 @@ func (f *TextFlow) current() []TextStyle {
 	return out
 }
 
-// ApplyFormat applies fn to selected characters, or the next typed text.
 func (f *TextFlow) ApplyFormat(fn func(*Format)) bool {
 	cs := normalize(f.Cursors())
 	any := false
@@ -653,7 +636,6 @@ func ValidLang(s string) bool {
 	return true
 }
 
-// SetLanguage tags the selection or next text with a BCP 47 language.
 func (f *TextFlow) SetLanguage(tag string) bool {
 	if !ValidLang(tag) {
 		return false
@@ -674,7 +656,6 @@ func (f *TextFlow) toggle(has func(TextStyle) bool, set func(*Format, bool)) boo
 	return f.ApplyFormat(func(fm *Format) { set(fm, !all) })
 }
 
-// ToggleBold makes the selection bold, or regular if it all is bold.
 func (f *TextFlow) ToggleBold() bool {
 	return f.toggle(func(s TextStyle) bool { return s.FontWeight >= 600 }, func(fm *Format, on bool) {
 		if on {
@@ -726,7 +707,6 @@ func (f *TextFlow) ToggleSubscript() bool {
 // PasteFormat gives the selection format fm.
 func (f *TextFlow) PasteFormat(fm Format) bool {
 	return f.ApplyFormat(func(x *Format) {
-		// The target keeps its own comment, bookmark and index marks.
 		comment, bookmark, index, proposal := x.Comment, x.Bookmark, x.Index, x.Proposal
 		*x = fm
 		x.Comment, x.Bookmark, x.Index, x.Proposal = comment, bookmark, index, proposal
@@ -788,7 +768,6 @@ func (f *TextFlow) HandleCommand(cmd Command) bool {
 	return true
 }
 
-// commonOfSelection is CommonFormat, or the typing format at the caret.
 func (f *TextFlow) commonOfSelection() Format {
 	if f.HasSelection() {
 		return f.CommonFormat()
@@ -796,7 +775,6 @@ func (f *TextFlow) commonOfSelection() Format {
 	return f.typeFormat(f.flatten(), f.sel.caret)
 }
 
-// caretRect returns the caret rectangle for a cursor.
 func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
 	if c.After {
 		for _, ln := range f.Layout().Lines {
@@ -808,7 +786,6 @@ func (f *TextFlow) caretRect(c Cursor) (x, y, h float64, ok bool) {
 	return f.CaretRect(c.Caret)
 }
 
-// hasOpAt reports whether a break or column config is at o.
 func (d *flowData) hasOpAt(o int) bool {
 	for _, op := range d.ops {
 		if op.at == o {

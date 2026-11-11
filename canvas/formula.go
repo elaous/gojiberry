@@ -7,8 +7,6 @@ import (
 	"unicode"
 )
 
-// Table formulas: a cell starting with "=" is a formula over other cells.
-
 // Values returns the cells as readers see them, formulas computed.
 func Values(cells [][]string) [][]string {
 	out := make([][]string, len(cells))
@@ -32,7 +30,7 @@ func (t *Table) Values() [][]string {
 		return Values(t.Cells)
 	}
 	out := Values(t.valueCells())
-	for p, f := range t.Fields { // a field cell is its words for a reader; formulas read its value
+	for p, f := range t.Fields {
 		if t.InRange(p.Row, p.Col) {
 			out[p.Row][p.Col] = f.Words()
 		}
@@ -55,7 +53,6 @@ func (t *Table) Display(row, col int) string {
 
 func isFormula(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), "=") }
 
-// plainText returns a non-formula cell as readers see it.
 func plainText(s string) string {
 	t := strings.TrimLeftFunc(s, unicode.IsSpace)
 	if strings.HasPrefix(t, "\\=") {
@@ -64,7 +61,6 @@ func plainText(s string) string {
 	return s
 }
 
-// ColumnName is the column letter for a 0-based index: A, AA, etc.
 func ColumnName(col int) string {
 	name := ""
 	for n := col + 1; n > 0; n = (n - 1) / 26 {
@@ -114,7 +110,6 @@ type formulaEval struct {
 	busy  map[[2]int]bool
 }
 
-// cell returns one cell's value; formulas are computed once.
 func (e *formulaEval) cell(r, c int) fval {
 	if r < 0 || r >= len(e.cells) || c < 0 || c >= len(e.cells[r]) {
 		return ferr("#REF!")
@@ -139,7 +134,7 @@ func (e *formulaEval) cell(r, c int) fval {
 }
 
 type ftok struct {
-	kind byte // n number, s string, i identifier, o operator or punctuation, x bad
+	kind byte
 	text string
 }
 
@@ -390,7 +385,6 @@ func (p *formulaParser) primary() fval {
 	return ferr("#ERR!")
 }
 
-// call evaluates NAME(args); the opening parenthesis is next.
 func (p *formulaParser) call(name string) fval {
 	p.pos++ // (
 	var nums []float64
@@ -507,7 +501,6 @@ func (p *formulaParser) call(name string) fval {
 	return ferr("#NAME?")
 }
 
-// cellName reads "B7" as a row and a column (0-based).
 func cellName(s string) (row, col int, ok bool) {
 	i := 0
 	for i < len(s) && (s[i]|0x20) >= 'a' && (s[i]|0x20) <= 'z' {

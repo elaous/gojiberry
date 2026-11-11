@@ -122,7 +122,6 @@ func TestTallHeaderAndFooterShrinkTheContentArea(t *testing.T) {
 		PageNumber: &PageNumberConfig{Show: true, Start: 1, TextStyle: TextStyle{FontSize: 12, LineHeight: 20}},
 	})
 	_, y, _, h := ps.ContentRect(0)
-	// Header height moves the text top below the header.
 	if y != 24+71 || h != 200-71-30 {
 		t.Fatalf("content y=%g h=%g", y, h)
 	}
@@ -162,7 +161,6 @@ func TestHeaderPartsAreDrawnLeftCentreAndRight(t *testing.T) {
 	ps := NewPageSet(Page{Width: 200, Height: 100, Margin: Insets{20, 10, 20, 10}, Header: &HeaderFooter{Parts: [3]string{"L", "CC", "RRR"}}})
 	ps.SetPainter(p)
 	ps.Draw()
-	// The text area is x 44 to 204; every run stays inside it.
 	var got []string
 	for _, c := range p.calls {
 		if strings.HasPrefix(c, "fillText") {

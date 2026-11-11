@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// Test: three 200x120 pages with margins and padding.
-
 func docPages() *PageSet {
 	pg := func() Page {
 		return Page{Width: 200, Height: 120, Margin: Insets{Left: 20, Top: 40, Right: 20, Bottom: 40}}
@@ -17,7 +15,6 @@ func docPages() *PageSet {
 	return ps
 }
 
-// headerPoint is a point inside page k's header zone.
 func headerPoint(k int) (float64, float64) { return 100, 40 + 144*float64(k) }
 func footerPoint(k int) (float64, float64) { return 100, 124 + 144*float64(k) }
 
@@ -97,7 +94,7 @@ func TestHeaderEditKeys(t *testing.T) {
 	if ps.Pages[0].Header.Text != "abc\nde" {
 		t.Fatalf("text = %q", ps.Pages[0].Header.Text)
 	}
-	ps.HandleKey("ArrowUp", false) // caret was at 6 (col 2 of line 2) -> col 2 of line 1
+	ps.HandleKey("ArrowUp", false)
 	ps.InsertText("X")
 	if ps.Pages[0].Header.Text != "abXc\nde" {
 		t.Fatalf("text = %q", ps.Pages[0].Header.Text)
@@ -148,7 +145,6 @@ func TestClickPlacesTheCaretAndClickingElsewhereEndsTheEdit(t *testing.T) {
 	ps := docPages()
 	ps.Pages[0].Header = &HeaderFooter{Text: "abcdef"}
 	ps.DoubleClick(headerPoint(0))
-	// Header text is left-aligned at x=44 (page x 24 + margin 20), 8px per rune.
 	if !ps.MouseDown(44+8*2+1, 30) || ps.edit.caret != 2 {
 		t.Fatalf("caret = %d", ps.edit.caret)
 	}
@@ -212,7 +208,6 @@ func TestBadgeAlignButtons(t *testing.T) {
 	if ps.ResolvedFooter(2).Align != AlignCenter {
 		t.Fatal("page 2 inherits the alignment too")
 	}
-	// Left alignment of a not-yet-owned page creates its own footer.
 	ps.HandleKey("Escape", false)
 	ps.DoubleClick(footerPoint(2))
 	_, _, buttons = ps.badge()
@@ -258,7 +253,6 @@ func numbered() *PageSet {
 	return ps
 }
 
-// numberPoint is a point on page k's number text.
 func numberPoint(t *testing.T, ps *PageSet, k int) (float64, float64) {
 	t.Helper()
 	r, ok := ps.numberRect(k)
@@ -310,7 +304,6 @@ func TestClickingThePageNumberSelectsItAndOpensTheMenu(t *testing.T) {
 			t.Errorf("menu lacks %q: %q", want, labels)
 		}
 	}
-	// "Same as previous page" is disabled: page 1 has no config of its own.
 	for _, it := range ps.Menu().items {
 		if it.Label == "Same as previous page" && !it.Disabled {
 			t.Fatal("nothing to revert to on an inheriting page")
@@ -385,8 +378,6 @@ func TestTurningNumbersBackOnReusesTheirLook(t *testing.T) {
 	if cfg == nil || !cfg.Show || cfg.Start != 3 {
 		t.Fatalf("config = %+v", cfg)
 	}
-	// The latest explicit config at or before page 2 is the "off" one on page 1,
-	// whose (empty) look is what is reused.
 	if ps.PageNumberText(2) != "3" {
 		t.Fatalf("text = %q", ps.PageNumberText(2))
 	}

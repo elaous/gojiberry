@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// Comments are notes on text; the text carries the comment ID in Format.Comment.
-
 // Reply is a follow-up to a comment.
 type Reply struct {
 	Author  string
@@ -30,10 +28,8 @@ type Comment struct {
 
 // CommentSet holds a document's comments.
 type CommentSet struct {
-	// IDPrefix starts every ID Add makes, so replicas do not collide.
 	IDPrefix string
-	// Roster, when set, keeps e-mail addresses out of comments (see Roster).
-	Roster Roster
+	Roster   Roster
 
 	list []Comment
 	next int
@@ -48,7 +44,6 @@ func NewCommentSet(comments ...Comment) *CommentSet {
 	return s
 }
 
-// Add stores c, assigning an ID if it has none; an existing ID is replaced.
 func (s *CommentSet) Add(c Comment) Comment {
 	if c.ID == "" {
 		for {
@@ -134,25 +129,21 @@ const (
 
 // Mention is a person named in a comment.
 type Mention struct {
-	Kind MentionKind
-	// Text is the written form; Name is the user name without the @.
+	Kind       MentionKind
 	Text, Name string
-	// Start and End are the byte range of Text in the comment.
 	Start, End int
 }
 
 var (
-	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`)
-	reHandle = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
-	reLinkMD = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
-	reMarks  = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
-	// Emphasis markers count only at word edges, so snake_case stays.
+	reEmail     = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`)
+	reHandle    = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
+	reLinkMD    = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	reMarks     = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
 	reEmphLead  = regexp.MustCompile(`(^|[^\w*_])[*_]+`)
 	reEmphTrail = regexp.MustCompile(`[*_]+([^\w*_]|$)`)
 	reSpaces    = regexp.MustCompile(`\s+`)
 )
 
-// Mentions finds the @usernames and e-mail addresses in text, in order.
 func Mentions(text string) []Mention {
 	var out []Mention
 	var taken [][2]int
@@ -198,9 +189,6 @@ func CommentSummary(text string, max int) string {
 	return s
 }
 
-// Format.Comment holds comma-separated IDs; IDs never contain commas.
-
-// commentList splits a Format.Comment value into IDs.
 func commentList(s string) []string {
 	if s == "" {
 		return nil
@@ -208,7 +196,6 @@ func commentList(s string) []string {
 	return strings.Split(s, ",")
 }
 
-// commentHas reports whether the value includes id.
 func commentHas(s, id string) bool {
 	for _, c := range commentList(s) {
 		if c == id {
@@ -218,7 +205,6 @@ func commentHas(s, id string) bool {
 	return false
 }
 
-// commentAdd returns the value with id included.
 func commentAdd(s, id string) string {
 	if commentHas(s, id) {
 		return s
@@ -229,7 +215,6 @@ func commentAdd(s, id string) string {
 	return s + "," + id
 }
 
-// commentRemove returns the value without id.
 func commentRemove(s, id string) string {
 	var keep []string
 	for _, c := range commentList(s) {

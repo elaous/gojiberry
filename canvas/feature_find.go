@@ -1,6 +1,5 @@
 package canvas
 
-// FindFeature adds find and replace commands; the canvas does the search.
 type FindFeature struct {
 	// OnOpen runs on find.open and find.replace; replace marks the latter.
 	OnOpen func(replace bool)

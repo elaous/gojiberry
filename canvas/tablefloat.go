@@ -2,7 +2,6 @@ package canvas
 
 import "math"
 
-// tablePress is a press on the table icon, not yet known as a click.
 type tablePress struct {
 	x, y           float64
 	startX, startY float64
@@ -29,7 +28,6 @@ func (v *TableView) pageSet() *PageSet {
 	return nil
 }
 
-// resolve updates X, Y from the Anchor.
 func (v *TableView) resolve() {
 	if ps := v.pageSet(); v.Anchor != nil && ps != nil {
 		v.X, v.Y = ps.Resolve(*v.Anchor)
@@ -56,7 +54,6 @@ func (v *TableView) Rect() (x, y, w, h float64) {
 	return v.X, v.Y, g.right() - v.X, g.bottom() - v.Y
 }
 
-// Exclusion: with Wrap on, the table plus margin is an obstacle.
 func (v *TableView) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	if !v.Wrap {
 		return 0, 0, false
@@ -78,7 +75,6 @@ func (v *TableView) ContainsPoint(x, y float64) bool {
 	return v.mode == ModeEdit && (v.HitTest(x, y).Kind != HitNone || v.menu.HitTest(x, y) >= 0)
 }
 
-// dragTable moves the table while its icon is held and the pointer moves.
 func (v *TableView) dragTable(x, y float64) bool {
 	p := v.press
 	dx, dy := x-p.x, y-p.y
@@ -110,7 +106,6 @@ func (v *TableView) dragTable(x, y float64) bool {
 	return true
 }
 
-// MouseUp ends a press on the table icon; a press without movement is a click.
 func (v *TableView) MouseUp(x, y float64) bool {
 	p := v.press
 	if p == nil {
@@ -123,7 +118,6 @@ func (v *TableView) MouseUp(x, y float64) bool {
 	return true
 }
 
-// Moving reports whether the table is being dragged to a new position.
 func (v *TableView) Moving() bool { return v.press != nil && v.press.moved }
 
 var (

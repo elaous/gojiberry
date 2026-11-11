@@ -2,7 +2,6 @@ package canvas
 
 import "strings"
 
-// ListKind says what kind of list a paragraph is an item of.
 type ListKind int
 
 const (
@@ -19,7 +18,6 @@ type ListStyle struct {
 	Level int
 	// Marker is the ListBullet character; the default cycles by level.
 	Marker string
-	// Number is how an ordered list counts: 1, i, I, a, A.
 	Number PageNumberStyle
 	// Start restarts an ordered list at this number; zero continues.
 	Start int
@@ -37,8 +35,7 @@ type ParaFormat struct {
 	// LineSpacing multiplies the line height; zero means 1.
 	LineSpacing float64
 	List        ListStyle
-	// QuoteBar draws a bar of this colour left of the paragraph.
-	QuoteBar string
+	QuoteBar    string
 	// Style names a paragraph style whose formatting this paragraph gets.
 	Style string
 	// DropCap makes the first letter this many lines tall.
@@ -73,8 +70,7 @@ var NumberFormats = []struct {
 // LineMarker is a list item's bullet, number or check box.
 type LineMarker struct {
 	Text string
-	// X is where it is drawn (left edge), in the line's coordinates.
-	X float64
+	X    float64
 	// Font and Color are the text's.
 	Font, Color string
 	W           float64
@@ -82,7 +78,6 @@ type LineMarker struct {
 	Check, Checked bool
 }
 
-// leftIndent is how far in the paragraph's lines start, list included.
 func (p ParaFormat) leftIndent() float64 {
 	in := p.IndentLeft
 	if p.List.Kind != ListNone {
@@ -98,7 +93,6 @@ func (l ListStyle) bullet() string {
 	return DefaultBullets[l.Level%len(DefaultBullets)]
 }
 
-// markerText writes the marker of a list item with the given number.
 func (l ListStyle) markerText(n int) string {
 	switch l.Kind {
 	case ListBullet:
@@ -118,10 +112,8 @@ func (l ListStyle) markerText(n int) string {
 	return ""
 }
 
-// listNumbers tracks the numbers of consecutive ordered list items.
 type listNumbers struct{ counters []int }
 
-// next returns the number for an item of list l, updating the counters.
 func (n *listNumbers) next(l ListStyle) int {
 	if l.Kind == ListNone {
 		n.counters = n.counters[:0]
@@ -147,7 +139,6 @@ func (n *listNumbers) next(l ListStyle) int {
 	return n.counters[lv]
 }
 
-// ListPrefix is the marker as plain text with a trailing space.
 func ListPrefix(l ListStyle, number int) string {
 	if l.Kind == ListNone {
 		return ""

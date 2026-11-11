@@ -9,15 +9,14 @@ import (
 
 // Markdown is a Transform for extended Markdown syntax.
 type Markdown struct {
-	CodeFamily     string     // default "monospace"
-	HeadingScale   [6]float64 // size multipliers for # to ######; default 2, 1.6, 1.35, 1.2, 1.05, 1
-	LinkColor      string     // default LinkColor ("#1a5fb4")
-	CodeBackground string     // default "#eceef1"
-	MarkBackground string     // ==highlight==, default "#fff3a3"
-	QuoteColor     string     // default "#5b616b"
-	QuoteBar       string     // the bar beside a block quote, default "#c4c7cd"
-	// Images turns ![alt](url) into an object; nil or declined means alt text.
-	Images func(url, alt string) InlineObject
+	CodeFamily     string // default "monospace"
+	HeadingScale   [6]float64
+	LinkColor      string // default LinkColor ("#1a5fb4")
+	CodeBackground string // default "#eceef1"
+	MarkBackground string // ==highlight==, default "#fff3a3"
+	QuoteColor     string // default "#5b616b"
+	QuoteBar       string // the bar beside a block quote, default "#c4c7cd"
+	Images         func(url, alt string) InlineObject
 }
 
 func (m Markdown) codeFamily() string { return orStr(m.CodeFamily, "monospace") }
@@ -54,7 +53,6 @@ func (m Markdown) Transform(src string) []Item {
 	var out []Item
 	text := func(s string, f Format) { out = append(out, Chars{Text: s, Format: f}) }
 
-	// isBlockStart reports whether a line starts a non-paragraph block.
 	isBlockStart := func(i int) bool {
 		l := lines[i]
 		return strings.TrimSpace(l) == "" || reHeading.MatchString(l) || reRule.MatchString(l) ||
@@ -62,7 +60,6 @@ func (m Markdown) Transform(src string) []Item {
 			strings.HasPrefix(l, `\`) && isDirective(l) || (strings.Contains(l, "|") && i+1 < len(lines) && reTableSep.MatchString(lines[i+1]))
 	}
 
-	// gap is the blank line between blocks.
 	gap := func(i int) {
 		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
 			i++
@@ -216,7 +213,6 @@ func isDirective(line string) bool {
 	return d == `\pagebreak` || d == `\columnbreak` || reColumns.MatchString(d)
 }
 
-// trimTrailingNewlines drops trailing blank lines.
 func trimTrailingNewlines(items []Item) []Item {
 	for len(items) > 0 {
 		c, ok := items[len(items)-1].(Chars)
@@ -233,7 +229,6 @@ func trimTrailingNewlines(items []Item) []Item {
 	return items
 }
 
-// cells splits a table row into trimmed, inline-markup-stripped cells.
 func (m Markdown) cells(row string) []string {
 	row = strings.TrimSpace(row)
 	row = strings.TrimPrefix(row, "|")
@@ -258,7 +253,6 @@ func (m Markdown) cells(row string) []string {
 	return append(cells, m.plain(cur.String()))
 }
 
-// plain renders inline markup to unformatted text.
 func (m Markdown) plain(s string) string {
 	var b strings.Builder
 	for _, it := range m.inline(strings.TrimSpace(s), Format{}) {
@@ -289,7 +283,6 @@ func (st mdState) format(base Format, m Markdown) Format {
 	return f
 }
 
-// delimiters, longest first at each position.
 var mdDelims = []string{"***", "**", "__", "~~", "++", "==", "*", "_", "~", "^"}
 
 func (st *mdState) flag(tok string) []*bool {
@@ -316,7 +309,6 @@ func (st *mdState) flag(tok string) []*bool {
 
 func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
 
-// runLen counts consecutive copies of c starting at i.
 func runLen(r []rune, i int, c rune) int {
 	n := 0
 	for i+n < len(r) && r[i+n] == c {
@@ -325,7 +317,6 @@ func runLen(r []rune, i int, c rune) int {
 	return n
 }
 
-// findCloser finds the next closing delimiter tok after from, or -1.
 func findCloser(r []rune, from int, tok string) int {
 	c := []rune(tok)[0]
 	for j := from; j < len(r); j++ {
@@ -357,7 +348,6 @@ func containsSpace(r []rune) bool {
 	return false
 }
 
-// inline parses inline markup into Chars (and Inline objects for images).
 func (m Markdown) inline(s string, base Format) []Item {
 	var out []Item
 	var sb strings.Builder
@@ -437,7 +427,6 @@ func (m Markdown) inline(s string, base Format) []Item {
 	return out
 }
 
-// delimAt reports whether a delimiter at r[i] opens or closes emphasis.
 func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 	for _, tok := range mdDelims {
 		n := len(tok)
@@ -460,7 +449,6 @@ func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 			}
 			return tok, true
 		}
-		// an opener
 		if nextSpace || (c == '_' && i > 0 && isWordRune(r[i-1])) {
 			return "", false
 		}
@@ -472,7 +460,6 @@ func (m Markdown) delimAt(r []rune, i int, st *mdState) (string, bool) {
 	return "", false
 }
 
-// findRun finds the next run of exactly n copies of c at or after from.
 func findRun(r []rune, from int, c rune, n int) int {
 	for j := from; j < len(r); j++ {
 		if r[j] != c {
@@ -487,7 +474,6 @@ func findRun(r []rune, from int, c rune, n int) int {
 	return -1
 }
 
-// parseLink parses [label](url) starting at the '[' at r[i].
 func parseLink(r []rune, i int) (label, url string, end int, ok bool) {
 	depth, j := 0, i
 	for ; j < len(r); j++ {

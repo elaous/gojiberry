@@ -69,7 +69,6 @@ func (f *TextFlow) OffsetAt(x, y float64) int {
 	return o
 }
 
-// offsetAt is OffsetAt; also reports whether the point is on text.
 func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 	lay := f.Layout()
 	if len(lay.Lines) == 0 {
@@ -117,14 +116,12 @@ func (f *TextFlow) offsetAt(x, y float64) (offset int, afterBreak bool) {
 	return ln.End, false
 }
 
-// gripRect returns the grip above gap g of band b.
 func (f *TextFlow) gripRect(b Band, g int) [4]float64 {
 	cx := b.Xs[g] + b.Widths[g] + b.Gap/2
 	s := f.ChromeStyle
 	return [4]float64{cx - s.GripW/2, b.Top - 2 - s.GripH, s.GripW, s.GripH}
 }
 
-// GripAt returns the band and gap index of the grip at (x, y).
 func (f *TextFlow) GripAt(x, y float64) (band, gap int) {
 	g := f.gripAt(f.Layout().Bands, x, y)
 	return g.band, g.gap
@@ -144,19 +141,16 @@ func (f *TextFlow) gripAt(bands []Band, x, y float64) grip {
 // Dragging reports whether a gap is being dragged.
 func (f *TextFlow) Dragging() bool { return f.drag != nil }
 
-// MouseDown starts dragging a gap if (x, y) is on its grip.
 func (f *TextFlow) MouseDown(x, y float64) bool {
 	x, y = f.vpt(x, y)
 	return f.mouseDown(x, y)
 }
 
-// mouseDown is MouseDown for a point in layout coordinates.
 func (f *TextFlow) mouseDown(x, y float64) bool {
 	if id, ok := f.footnoteAt(x, y); ok && f.OnFootnote != nil && f.mode == ModeEdit {
 		f.OnFootnote(id)
 		return true
 	}
-	// A press on a table-of-contents row goes to its heading.
 	if off, ok := f.tocTargetAt(x, y); ok && !f.suggestionsOpen() {
 		f.GotoOffset(off)
 		return true
@@ -290,7 +284,6 @@ func (f *TextFlow) CSSCursor() string {
 	return ""
 }
 
-// Draw paints the text, and the page for a single-page flow.
 func (f *TextFlow) Draw() {
 	p, cs := f.Painter, f.ChromeStyle
 	if f.Pages == nil && !f.Transparent {
@@ -310,7 +303,6 @@ func (f *TextFlow) Draw() {
 	f.drawBody(lay)
 }
 
-// drawBody draws the text of a layout, its marks and editing chrome.
 func (f *TextFlow) drawBody(lay Layout) {
 	p, cs := f.Painter, f.ChromeStyle
 	f.drawSearch(lay)

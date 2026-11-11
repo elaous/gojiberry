@@ -7,7 +7,6 @@ import (
 
 // CommentHost is implemented by targets that hold comments (a TextFlow).
 type CommentHost interface {
-	// CommentSet returns the comments, making the set if there is none.
 	CommentSet() *CommentSet
 	// CommentAuthor is who new comments are by.
 	CommentAuthor() string
@@ -41,7 +40,6 @@ func (Comments) Name() string { return "comments" }
 
 const commentPrompt = "Comment (Markdown; @name or an e-mail address mentions someone)"
 
-// askComment asks the person for a comment's text.
 func askComment(c *CommandContext, set *CommentSet, initial string) (string, bool) {
 	prompt := commentPrompt
 	for range 5 {
@@ -71,7 +69,6 @@ func (Comments) Install(r *Registry) {
 			return false
 		}
 		from, to := cur.Range()
-		// Start history before the record is added, so undo removes it.
 		if b, ok := c.Target.(interface{ BeginEdit() }); ok {
 			b.BeginEdit()
 		}
@@ -117,7 +114,6 @@ func (Comments) Install(r *Registry) {
 	})
 }
 
-// charComments lists the comment IDs on each character.
 func charComments(items []Item) []string {
 	var out []string
 	for _, it := range items {
@@ -133,7 +129,6 @@ func charComments(items []Item) []string {
 	return out
 }
 
-// commentAtCursor returns the target and comment ID at the primary cursor.
 func commentAtCursor(t EditTarget) (CommentHost, string) {
 	h, ok := t.(CommentHost)
 	if !ok {
@@ -157,7 +152,6 @@ func commentAtCursor(t EditTarget) (CommentHost, string) {
 	return nil, ""
 }
 
-// retag rewrites the comment of the characters in [from, to) with fn.
 func retag(t EditTarget, from, to int, fn func(old string) string) {
 	items := t.Slice(from, to)
 	out := make([]Item, len(items))
@@ -173,12 +167,10 @@ func retag(t EditTarget, from, to int, fn func(old string) string) {
 	t.SetCursors(cs)
 }
 
-// tagComment puts comment id on [from, to).
 func tagComment(t EditTarget, from, to int, id string) {
 	retag(t, from, to, func(old string) string { return commentAdd(old, id) })
 }
 
-// untagComment removes comment id from the text, keeping other comments.
 func untagComment(t EditTarget, id string) {
 	ids := charComments(t.Slice(0, len([]rune(t.EditText()))))
 	for i := 0; i < len(ids); {
@@ -195,7 +187,6 @@ func untagComment(t EditTarget, id string) {
 	}
 }
 
-// touch tells a target with side data that it changed (see TextFlow.Touch).
 func touch(t EditTarget) {
 	if tt, ok := t.(interface{ Touch() }); ok {
 		tt.Touch()

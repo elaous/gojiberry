@@ -2,9 +2,7 @@ package canvas
 
 // Review adds the suggestion-mode commands.
 type Review struct {
-	// OnMode, when set, is told when suggestion mode is turned on or off (to announce it).
-	OnMode func(on bool)
-	// OnSettle, when set, is told which suggestion was accepted or rejected.
+	OnMode   func(on bool)
 	OnSettle func(accepted bool, p Proposal)
 }
 
@@ -53,7 +51,6 @@ func (rv Review) Install(r *Registry) {
 	r.AddCommand(CmdReviewReject, "Reject suggestion", "Mod+Alt+D", settle(false))
 }
 
-// ProposalNear returns the suggestion containing offset o, or the next one.
 func (f *TextFlow) ProposalNear(o int) (Proposal, bool) {
 	ps := f.Proposals()
 	for _, p := range ps {

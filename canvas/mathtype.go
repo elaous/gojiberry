@@ -6,28 +6,25 @@ import (
 	"unicode"
 )
 
-// The typesetter for equations; it reads package export's linear notation.
-
 type mkind int
 
 const (
-	mRow    mkind = iota // kids in a line
-	mIdent               // a variable: italic
-	mNum                 // a number: upright
-	mOp                  // an operator or a bracket
-	mFunc                // a function name: upright
-	mBig                 // sum, integral
-	mSqrt                // kids[0] under a radical
-	mFrac                // kids[0] over kids[1]
-	mScript              // kids[0] with kids[1] below and kids[2] above (either may be nil)
-	mTable               // rows of cells: kids are rows (mRow), a row's kids are cells (mRow); text is "matrix" or "aligned"
+	mRow   mkind = iota // kids in a line
+	mIdent              // a variable: italic
+	mNum                // a number: upright
+	mOp                 // an operator or a bracket
+	mFunc               // a function name: upright
+	mBig                // sum, integral
+	mSqrt               // kids[0] under a radical
+	mFrac               // kids[0] over kids[1]
+	mScript
+	mTable
 )
 
 type mnode struct {
-	kind mkind
-	text string
-	kids []*mnode
-	// limits puts sum or lim scripts above and below, not beside.
+	kind   mkind
+	text   string
+	kids   []*mnode
 	limits bool
 }
 
@@ -43,7 +40,6 @@ type mparser struct {
 	pos int
 }
 
-// parseMath reads a formula; unbalanced braces are closed leniently.
 func parseMath(formula string) *mnode {
 	p := &mparser{src: []rune(formula)}
 	return p.row(false)
@@ -51,7 +47,6 @@ func parseMath(formula string) *mnode {
 
 func (p *mparser) more() bool { return p.pos < len(p.src) }
 
-// nextIs says the next rune, after spaces, is r.
 func (p *mparser) nextIs(r rune) bool {
 	i := p.pos
 	for i < len(p.src) && unicode.IsSpace(p.src[i]) {
@@ -64,7 +59,6 @@ func (p *mparser) nextIs(r rune) bool {
 	return false
 }
 
-// table reads matrix{...} contents: cells split by &, rows by \\.
 func (p *mparser) table(kind string) *mnode {
 	t := &mnode{kind: mTable, text: kind}
 	row, cell := &mnode{kind: mRow}, &mnode{kind: mRow}
@@ -197,7 +191,7 @@ func (p *mparser) atom() *mnode {
 			return &mnode{kind: mFunc, text: word}
 		}
 		letters := []rune(word)
-		if len(letters) > 1 { // one identifier per letter; a script applies to the last one
+		if len(letters) > 1 {
 			p.pos--
 			row := &mnode{kind: mRow}
 			for _, l := range letters[:len(letters)-1] {
@@ -211,13 +205,11 @@ func (p *mparser) atom() *mnode {
 	return &mnode{kind: mOp, text: string(r)}
 }
 
-// mbox is a typeset piece: width, ascent and descent.
 type mbox struct {
 	w, asc, desc float64
 	draw         func(p Painter, x, y float64)
 }
 
-// typeset lays n out at the font size with the painter's metrics.
 func typeset(p Painter, n *mnode, size float64) mbox {
 	switch n.kind {
 	case mIdent, mNum, mFunc:
@@ -280,7 +272,6 @@ func typesetOp(p Painter, op string, size float64) mbox {
 	}}
 }
 
-// binary says a character is a spaced operator between operands.
 func binary(op string) bool { return strings.Contains("+-*=<>", op) }
 
 func typesetRow(p Painter, n *mnode, size float64) mbox {
@@ -290,7 +281,7 @@ func typesetRow(p Painter, n *mnode, size float64) mbox {
 	}
 	var parts []placed
 	x := 0.0
-	prevOperand := false // something that can be the left side of a binary operator came before
+	prevOperand := false
 	boxes := make([]mbox, len(n.kids))
 	for i, k := range n.kids {
 		boxes[i] = typeset(p, k, size)
@@ -424,7 +415,6 @@ func MathSymbols(formula string) []string {
 	return out
 }
 
-// markLimits sets sum and lim scripts to draw above and below.
 func markLimits(n *mnode) {
 	if n == nil {
 		return
@@ -437,7 +427,6 @@ func markLimits(n *mnode) {
 	}
 }
 
-// typesetLimits draws the base with scripts centred above and below.
 func typesetLimits(p Painter, n *mnode, base mbox, small float64) mbox {
 	var sub, sup *mbox
 	if n.kids[1] != nil {
@@ -479,7 +468,6 @@ func typesetLimits(p Painter, n *mnode, base mbox, small float64) mbox {
 	return out
 }
 
-// typesetTable lays out a matrix, with a bracket on each side.
 func typesetTable(p Painter, n *mnode, size float64) mbox {
 	cols := 0
 	for _, r := range n.kids {
@@ -547,7 +535,6 @@ func typesetTable(p Painter, n *mnode, size float64) mbox {
 	return out
 }
 
-// drawBracket strokes a bracket of height h at x.
 func drawBracket(p Painter, kind string, x, top, h, size float64) {
 	d := 0.28 * size
 	dir := 1.0
@@ -565,7 +552,7 @@ func drawBracket(p Painter, kind string, x, top, h, size float64) {
 	case "|":
 		p.MoveTo(x, top)
 		p.LineTo(x, top+h)
-	default: // ( and ): a bowed line of segments, farthest out in the middle
+	default:
 		const steps = 12
 		for i := 0; i <= steps; i++ {
 			t := float64(i)/steps*2 - 1
@@ -580,7 +567,6 @@ func drawBracket(p Painter, kind string, x, top, h, size float64) {
 	p.Stroke()
 }
 
-// growBrackets enlarges brackets around tall content.
 func growBrackets(kids []*mnode, boxes []mbox, size float64) {
 	var open []int
 	for i, k := range kids {

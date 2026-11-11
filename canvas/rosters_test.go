@@ -17,7 +17,6 @@ func (r fakeRoster) Has(h string) bool {
 	return false
 }
 
-// An address of a person with access is written as their handle.
 func TestCheckMentionsKeepsAddressesOutOfComments(t *testing.T) {
 	s := NewCommentSet()
 	s.Roster = fakeRoster{"ana@example.com": "ana", "bo@example.com": "bo"}
@@ -36,14 +35,12 @@ func TestCheckMentionsKeepsAddressesOutOfComments(t *testing.T) {
 	if m := p.Message(); !strings.Contains(m, "eve@example.org has no access") || !strings.Contains(m, "Share the document") {
 		t.Errorf("message = %q", m)
 	}
-	// no roster: nothing changes
 	plain := NewCommentSet()
 	if c, pr := plain.CheckMentions("ask eve@example.org"); c != "ask eve@example.org" || pr != nil {
 		t.Errorf("without a roster: %q %v", c, pr)
 	}
 }
 
-// An address from elsewhere is hidden in shown comments.
 func TestVisibleHidesAddressesFromReaders(t *testing.T) {
 	s := NewCommentSet()
 	s.Add(Comment{ID: "c1", Text: "see eve@example.org and ana@example.com", Replies: []Reply{{Text: "or bo@example.com"}}})

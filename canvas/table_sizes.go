@@ -1,7 +1,5 @@
 package canvas
 
-// Column widths and row heights set by dragging a grip; 0 means unset.
-
 // Smallest sizes a drag can make.
 const (
 	MinSetColumnWidth = 24.0
@@ -19,10 +17,8 @@ func (t *Table) SetRowHeight(row int, h float64) {
 	t.RowHeights = setSize(t.RowHeights, row, h, t.Rows(), MinSetRowHeight)
 }
 
-// ColumnWidth is the width set for the column, 0 when there is none.
 func (t *Table) ColumnWidth(col int) float64 { return sizeAt(t.ColWidths, col) }
 
-// RowHeightSet is the height set for the row, 0 when there is none.
 func (t *Table) RowHeightSet(row int) float64 { return sizeAt(t.RowHeights, row) }
 
 func sizeAt(s []float64, i int) float64 {

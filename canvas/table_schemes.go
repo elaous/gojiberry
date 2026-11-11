@@ -7,8 +7,6 @@ import (
 	"sync"
 )
 
-// Table schemes: named looks for a whole table.
-
 // TableScheme is a named look for a table.
 type TableScheme struct {
 	Name string `json:"name"`
@@ -22,7 +20,6 @@ type TableScheme struct {
 	FirstColBold bool `json:"firstColBold,omitempty"`
 }
 
-// TableSchemes are the styles the editor offers; the first is Plain.
 func TableSchemes() []TableScheme {
 	return append(builtinSchemes(), CustomTableSchemes()...)
 }
@@ -73,7 +70,6 @@ func (t *Table) ApplyScheme(s TableScheme) {
 	}
 }
 
-// SchemeOf returns the scheme the table is dressed in, if any.
 func (t *Table) SchemeOf() string {
 	for _, s := range TableSchemes() {
 		probe := &Table{Cells: t.Cells, Merges: t.Merges, Styles: map[CellPos]CellStyle{}}
@@ -100,7 +96,6 @@ func sameStyles(a, b map[CellPos]CellStyle) bool {
 	return true
 }
 
-// keepScheme keeps the table's dress across structural changes.
 func (t *Table) keepScheme(change func()) {
 	name := t.SchemeOf()
 	change()
@@ -150,7 +145,6 @@ func (s TableScheme) Valid() error {
 	return nil
 }
 
-// AddTableScheme keeps a custom scheme, replacing one of the same name.
 func AddTableScheme(s TableScheme) error {
 	s.Name = strings.TrimSpace(s.Name)
 	if err := s.Valid(); err != nil {

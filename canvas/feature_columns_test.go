@@ -33,7 +33,6 @@ func TestColumnCommandsStartARegionAtTheParagraph(t *testing.T) {
 	if n := len(lay.Bands[len(lay.Bands)-1].Xs); n != 2 {
 		t.Errorf("the second region has %d columns", n)
 	}
-	// Choosing again at the same place replaces rather than stacks.
 	st.RunCommand(CmdColumns3)
 	st.RunCommand(CmdColumns4)
 	n := 0
@@ -99,7 +98,6 @@ func TestResetColumnWidthsMakesThemEqualAgain(t *testing.T) {
 	if got := f.ColumnsAt(16); len(got.Widths) != 0 || got.Count != 2 || got.Gap != 48 {
 		t.Fatalf("after: equal columns, same count and space: %+v", got)
 	}
-	// One column: nothing to reset.
 	st.RunCommand(CmdColumns1)
 	st.RunCommand(CmdColumnsReset)
 	if got := f.ColumnsAt(16); got.Count > 1 {

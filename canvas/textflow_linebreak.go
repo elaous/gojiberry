@@ -4,9 +4,6 @@ import (
 	"unicode"
 )
 
-// line places one line starting at rune p of the paragraph ending at pe
-// (p == pe: a blank paragraph's line), returning where the next line
-// starts.
 func (l *layouter) line(p, pe int) (int, bool) {
 	d := l.d
 	pf := l.para.pf
@@ -15,7 +12,6 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		base *= pf.LineSpacing
 	}
 	lh := base
-	// A drop cap takes the paragraph's first letter out of its text.
 	textStart := p
 	var capText string
 	var capStyle TextStyle
@@ -33,8 +29,6 @@ func (l *layouter) line(p, pe int) (int, bool) {
 			l.overflowAt(p)
 			return 0, false
 		}
-		// The paragraph's indents narrow the free span; if that leaves too
-		// little (a narrow column), ignore them.
 		left, right := l.para.left, pf.IndentRight
 		if l.para.first && pf.List.Kind == ListNone {
 			left += pf.FirstLine
@@ -44,7 +38,7 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		}
 		ax0, ax1 := x0+max(left, 0), x1-right
 		if l.para.rtl {
-			ax0, ax1 = x0+max(right, 0), x1-left // the indents are at the start and the end of the line
+			ax0, ax1 = x0+max(right, 0), x1-left
 		}
 		if ax1-ax0 < min(60, x1-x0) {
 			ax0, ax1 = x0, x1
@@ -70,13 +64,12 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		case lp.block:
 			h = lp.objH
 		case len(lp.objs) > 0:
-			// Objects sit on the baseline; leave room under it for descenders.
 			below := max(lp.objBelow, 0.2*lp.size)
 			h = max(lp.height, lp.objAbove+0.05*lp.size+below)
 			baselineOff = h - below
 		}
 		if h > lh+1e-9 && try < 3 {
-			lh = h // taller than the band we tried: look again with the real height
+			lh = h
 			continue
 		}
 		if !lp.block {
@@ -91,7 +84,7 @@ func (l *layouter) line(p, pe int) (int, bool) {
 		}
 		x := ax0
 		align := pf.Align
-		if l.para.rtl { // left and right mean the start and the end of the line in a right-to-left paragraph
+		if l.para.rtl {
 			switch align {
 			case AlignLeft:
 				align = AlignRight
@@ -143,8 +136,6 @@ func (l *layouter) line(p, pe int) (int, bool) {
 	}
 }
 
-// marker builds the list marker of the paragraph's first line, right
-// aligned just left of the text at x.
 func (l *layouter) marker(p int, x float64) *LineMarker {
 	d := l.d
 	st := l.f.Style
@@ -163,10 +154,6 @@ func (l *layouter) marker(p int, x float64) *LineMarker {
 	return m
 }
 
-// breakLine picks how much of runes[start:end] fits in width w: it
-// returns where the line's text ends (trailing spaces excluded) and
-// where the next line starts (skipping the spaces). An inline object is
-// one unbreakable word; a block object gets a line to itself.
 func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	d := l.d
 	textEnd, next = -1, start
@@ -190,7 +177,6 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 			return e + 1, e + 1
 		}
 		if j > start && d.measure(start, j) > w {
-			// This word does not fit: hyphenate it to fill the line, if it can be.
 			if pos, hw, ok := l.hyphenate(start, e, j, w); ok {
 				l.hyph, l.hyphW = true, hw
 				return pos, pos
@@ -203,8 +189,6 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	if textEnd > start {
 		return textEnd, next
 	}
-	// A single word wider than the line: break inside it (at a hyphenation
-	// point if there is a Hyphenator and one fits).
 	if end > start {
 		j := start
 		for j < end && !isSpace(d.runes[j]) && !d.isObj(j) {
@@ -222,17 +206,12 @@ func (l *layouter) breakLine(start, end int, w float64) (textEnd, next int) {
 	return c, c
 }
 
-// hyphenate finds where to break the word runes[e:j] so that the line that
-// starts at start, with a hyphen after it, fits in w: the last hyphenation
-// point that does. ok is false without a Hyphenator, for a word with an inline
-// object or a symbol in it, or when no point fits.
 func (l *layouter) hyphenate(start, e, j int, w float64) (pos int, hyphW float64, ok bool) {
 	h := l.f.Hyphenator
 	d := l.d
 	if h == nil || j-e < 5 {
 		return 0, 0, false
 	}
-	// The letters of the word, without the punctuation around it.
 	a, b := e, j
 	for a < b && !isHyphenWordRune(d.runes[a]) {
 		a++
@@ -262,11 +241,8 @@ func (l *layouter) hyphenate(start, e, j int, w float64) (pos int, hyphW float64
 	return best, hyphW, true
 }
 
-// isHyphenWordRune is a character a word may be hyphenated through: letters and
-// an apostrophe.
 func isHyphenWordRune(r rune) bool { return unicode.IsLetter(r) || r == '\'' }
 
-// hyphenWidth is the width of a hyphen in the style of the rune at i.
 func (l *layouter) hyphenWidth(i int) float64 {
 	p := l.f.Painter
 	p.SetFont(l.d.styles[l.d.rs[i]].Font())
@@ -275,7 +251,5 @@ func (l *layouter) hyphenWidth(i int) float64 {
 
 // Hyphenator says where a word may be broken.
 type Hyphenator interface {
-	// Positions returns, in ascending order, the rune offsets k in word at which
-	// word[:k] (plus a hyphen) may end a line and word[k:] start the next.
 	Positions(word string) []int
 }

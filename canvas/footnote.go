@@ -2,12 +2,10 @@ package canvas
 
 import "strconv"
 
-// Footnotes: FootnoteRef is an inline mark that moves with its text.
-
 // Footnote is a note's text.
 type Footnote struct {
 	ID   string
-	Text string // plain text, or Markdown (shown with its marks stripped on the page)
+	Text string
 }
 
 // FootnoteSet holds a document's footnotes.
@@ -93,7 +91,6 @@ func (s *FootnoteSet) Len() int {
 	return len(s.list)
 }
 
-// FootnoteRef is the footnote mark in the text, used in an Inline item.
 type FootnoteRef struct {
 	ID string
 	N  int
@@ -120,15 +117,12 @@ const (
 	footnoteMarkFont = "bold 10px sans-serif"
 	footnoteFont     = "11px sans-serif"
 	footnoteLineH    = 14.0
-	// footnotePad is the space around a page's notes.
-	footnotePad = 8.0
-	// footnoteCapShare is the page share notes may take without FootnoteBand.
+	footnotePad      = 8.0
 	footnoteCapShare = 0.4
 	// MaxFootnoteRunes is the longest note; Add truncates longer text.
 	MaxFootnoteRunes = 1000
 )
 
-// footnoteBandOf returns the height kept at a page bottom for its notes.
 func (f *TextFlow) footnoteBandOf(page int) float64 {
 	if f.Footnotes.Len() == 0 || page < 0 || page >= len(f.fnBands) {
 		return 0
@@ -164,7 +158,6 @@ func (f *TextFlow) FootnoteList() []FootnoteEntry {
 	return out
 }
 
-// drawFootnotes draws each page's notes in their band.
 func (f *TextFlow) drawFootnotes(lay Layout) {
 	if f.Painter == nil || len(f.fnLines) == 0 {
 		return
@@ -190,10 +183,8 @@ func (f *TextFlow) drawFootnotes(lay Layout) {
 	}
 }
 
-// fnLine is one line of a page's notes.
 type fnLine struct{ text, id string }
 
-// footnoteAt returns the note whose line holds point (x, y), if any.
 func (f *TextFlow) footnoteAt(x, y float64) (string, bool) {
 	for pg, lines := range f.fnLines {
 		if len(lines) == 0 {
@@ -209,7 +200,6 @@ func (f *TextFlow) footnoteAt(x, y float64) (string, bool) {
 	return "", false
 }
 
-// footnotePlan decides which note lines each page shows.
 func (f *TextFlow) footnotePlan(lay Layout) (bands []float64, lines [][]fnLine) {
 	n := f.pageCount()
 	bands, lines = make([]float64, n), make([][]fnLine, n)
@@ -262,7 +252,6 @@ func (f *TextFlow) footnotePlan(lay Layout) (bands []float64, lines [][]fnLine) 
 	return bands, lines
 }
 
-// pageContent is a page's text area before notes take their share.
 func (f *TextFlow) pageContent(page int) (x, y, w, h float64) {
 	if f.Pages != nil {
 		return f.Pages.ContentRect(page)
@@ -270,7 +259,6 @@ func (f *TextFlow) pageContent(page int) (x, y, w, h float64) {
 	return f.X, f.Y, f.Width, f.Height
 }
 
-// wrapToWidth breaks text into lines no wider than w, at spaces.
 func wrapToWidth(p Painter, text string, w float64) []string {
 	var lines []string
 	cur := ""
@@ -311,7 +299,6 @@ func splitWords(s string) []string {
 	return out
 }
 
-// ellipsize shortens l so l+"…" fits in w.
 func ellipsize(p Painter, l string, w float64) string {
 	rs := []rune(l)
 	for len(rs) > 0 && p.MeasureTextWidth(string(rs)+"…") > w {

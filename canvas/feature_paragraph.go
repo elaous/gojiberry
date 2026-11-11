@@ -24,7 +24,6 @@ const (
 
 func (Paragraphs) Name() string { return "paragraphs" }
 
-// ParagraphGap is the space that the space-before and after commands toggle.
 const ParagraphGap = 12.0
 
 func (Paragraphs) Install(r *Registry) {
@@ -37,7 +36,6 @@ func (Paragraphs) Install(r *Registry) {
 			return pe.ApplyParagraph(fn)
 		})
 	}
-	// toggle makes a command that switches a setting on or off.
 	toggle := func(name Command, title, chord string, has func(ParaFormat) bool, on, off func(*ParaFormat)) {
 		r.AddCommand(name, title, chord, func(c *CommandContext) bool {
 			pe, ok := c.Target.(ParagraphEditor)

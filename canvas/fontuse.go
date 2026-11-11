@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// FontUse is one font cut a document uses: family, weight and style.
 type FontUse struct {
 	Family string
 	Weight int // CSS weight; 400 when nothing says
@@ -17,13 +16,11 @@ type FontUser interface {
 	UsedFonts() []FontUse
 }
 
-// firstFamily returns the first family of a CSS font-family list.
 func firstFamily(list string) string {
 	name, _, _ := strings.Cut(list, ",")
 	return strings.Trim(strings.TrimSpace(name), `"'`)
 }
 
-// fontUses collects distinct uses of formats over a base style.
 type fontUses struct {
 	base TextStyle
 	set  map[FontUse]bool
@@ -127,7 +124,6 @@ func (s *Stage) UsedFonts() []FontUse {
 
 func (sv *ScrollView) UsedFonts() []FontUse { return sv.content.UsedFonts() }
 
-// reportFonts tells OnFontUse about each new font cut in use.
 func (s *Stage) reportFonts() {
 	if s.OnFontUse == nil {
 		return
@@ -143,5 +139,4 @@ func (s *Stage) reportFonts() {
 	}
 }
 
-// ForgetFonts makes OnFontUse report all fonts again at the next draw.
 func (s *Stage) ForgetFonts() { s.fontsSeen = nil }

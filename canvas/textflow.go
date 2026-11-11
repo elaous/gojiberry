@@ -4,7 +4,6 @@ import (
 	"slices"
 )
 
-// Obstacle is something text must flow around, such as an image.
 type Obstacle interface {
 	Exclusion(y0, y1 float64) (x0, x1 float64, ok bool)
 }
@@ -38,7 +37,6 @@ func DefaultFlowStyle() FlowStyle {
 	}
 }
 
-// Run is a stretch of a Line in one font and color.
 type Run struct {
 	Text       string
 	X, W       float64 // offset from the line's X, and measured width
@@ -51,8 +49,7 @@ type Run struct {
 	Background        string
 	DY, Size          float64
 	// Link is the URL the run links to, if any.
-	Link string
-	// Comment is the ID of the comment on the run, if any.
+	Link    string
 	Comment string
 	// Level is the bidi embedding level: odd for right-to-left.
 	Level uint8
@@ -61,23 +58,20 @@ type Run struct {
 // Line is one laid-out line of text.
 type Line struct {
 	Text       string
-	X, Y, W, H float64 // left edge, top of the line box, measured text width, line height
+	X, Y, W, H float64
 	Baseline   float64 // y to draw the runs' text at
 	Page, Col  int
 	Start, End int
 	ColX, ColW float64 // the column the line is in
 	Runs       []Run
 	Objects    []PlacedObject // inline objects on this line
-	// Marker is the list marker, on the first line of a list item.
-	Marker *LineMarker
-	// Hyphen is true when the line ends inside a hyphenated word.
-	Hyphen  bool
-	HyphenW float64
+	Marker     *LineMarker
+	Hyphen     bool
+	HyphenW    float64
 	// QuoteBar is a block quote's bar colour.
 	QuoteBar string
 	BarX     float64
-	// DropCap is the large initial of a paragraph, on its first line.
-	DropCap *DropCapMark
+	DropCap  *DropCapMark
 	// RTL is true when the paragraph is right-to-left.
 	RTL, Bidi bool
 }
@@ -96,26 +90,23 @@ type BreakMark struct {
 	Offset    int
 }
 
-// Band is a stretch of a page's text area with one column layout.
 type Band struct {
 	Page        int
 	Top, Bottom float64   // vertical extent actually used
 	Xs, Widths  []float64 // each column's left edge and width
 	Gap         float64
 	Avail       float64 // the text area's width
-	Cfg         int     // index of the ColumnConfig in Items, or -1 for the base Columns/Gap
+	Cfg         int
 }
 
 // Layout is the result of flowing text into pages.
 type Layout struct {
-	Lines  []Line
-	Breaks []BreakMark
-	Bands  []Band
-	// Overflow is true if the text did not fit in the pages.
+	Lines    []Line
+	Breaks   []BreakMark
+	Bands    []Band
 	Overflow bool
 	End      int
-	// Pages is how many pages the text reached, at least 1.
-	Pages int
+	Pages    int
 }
 
 // TextFlow lays out a content stream into pages, word-wrapping it.
@@ -126,16 +117,13 @@ type TextFlow struct {
 	// TextScale multiplies the size and line height of every run.
 	TextScale float64
 	// Ghost is a suggestion drawn faintly at the primary caret.
-	Ghost string
-	// preedit is the text an input method is composing.
+	Ghost   string
 	preedit string
-	// reading is the sentence and word being read aloud.
 	reading readMarks
 	// Vertical lays text out in vertical lines.
-	Vertical bool
-	vpage    int  // the page being drawn, in a vertical flow
-	vdrawing bool // a vertical flow is drawing one page
-	// LinkColor is the colour of linked text with no colour of its own.
+	Vertical  bool
+	vpage     int  // the page being drawn, in a vertical flow
+	vdrawing  bool // a vertical flow is drawing one page
 	LinkColor string
 	// StrongCaret draws the caret thicker, with a light edge.
 	StrongCaret bool
@@ -195,8 +183,7 @@ type TextFlow struct {
 	FootnoteBand float64
 	fnBands      []float64  // room each page keeps for notes.
 	fnLines      [][]fnLine // the lines of notes each page shows
-	// OnFootnote receives the ID of a note clicked in the text.
-	OnFootnote func(id string)
+	OnFootnote   func(id string)
 	// Author is who new comments are by.
 	Author string
 	// OnHoverComment receives the ID of the hovered comment.
@@ -204,23 +191,22 @@ type TextFlow struct {
 	// Suggesting makes typing, pasting and deleting propose changes.
 	Suggesting bool
 
-	derived    []Item
-	derivedSrc string
-	derivedOK  bool
-	// objDrag is the inline object being dragged.
+	derived            []Item
+	derivedSrc         string
+	derivedOK          bool
 	objDrag            DragObject
 	objDragX, objDragY float64
 
 	sel     flowSel
 	formats *FormatClipboard
 
-	editing  bool     // the caret is in the text (edit mode, after a click)
+	editing  bool
 	caretOff bool     // blink: the caret is hidden right now
 	extra    []Cursor // further cursors; sel is the primary one
 	pending  Format   // format for the next typed text when nothing is selected
 	edited   bool     // Items hold the content now (see materialize)
 	hist     snapshotHistory[flowSnap]
-	histKind string // the kind of the change being made, for merging typing runs
+	histKind string
 
 	obstacles []Obstacle
 	mode      Mode
@@ -228,16 +214,15 @@ type TextFlow struct {
 	drag      *flowDrag
 	data      *flowData // from the latest Layout, for caret queries
 
-	stageLink     func(url string)
-	hoverLink     string
-	hoverComment  string
-	listeners     []func(*TextFlow)
-	revealAt      int
-	revealPending bool
-	lastLay       Layout        // the layout of the latest Draw, for objects that show the document's own structure
-	search        searchState   // the matches a search highlights (see SetSearch)
-	squiggles     squiggleState // wavy underlines (see SetSquiggles)
-	// Hyphenator, if set, breaks words that do not fit at hyphens.
+	stageLink      func(url string)
+	hoverLink      string
+	hoverComment   string
+	listeners      []func(*TextFlow)
+	revealAt       int
+	revealPending  bool
+	lastLay        Layout
+	search         searchState   // the matches a search highlights (see SetSearch)
+	squiggles      squiggleState // wavy underlines (see SetSquiggles)
 	Hyphenator     Hyphenator
 	hoverCRect     [4]float64
 	sugg           *Menu // completion popup
@@ -247,7 +232,6 @@ type TextFlow struct {
 	hoverX, hoverY float64
 }
 
-// NewTextFlow returns a flow in a single width x height page.
 func NewTextFlow(text string, x, y, width, height float64) *TextFlow {
 	return &TextFlow{
 		Text: text, Style: DefaultTextStyle(), X: x, Y: y, Width: width, Height: height,
@@ -325,7 +309,6 @@ func (f *TextFlow) pageCount() int {
 	return 1
 }
 
-// pageRect is the rectangle text flows into on a page.
 func (f *TextFlow) pageRect(page int) (x, y, w, h float64) {
 	px, py, pw, ph := f.physRect(page)
 	if !f.Vertical {
@@ -336,7 +319,6 @@ func (f *TextFlow) pageRect(page int) (x, y, w, h float64) {
 	return vx, vy, ph, pw
 }
 
-// config returns column config idx (-1: the base Columns and Gap).
 func (f *TextFlow) config(idx int) ColumnConfig {
 	if idx >= 0 {
 		if c, ok := f.items()[idx].(ColumnConfig); ok {
@@ -346,7 +328,6 @@ func (f *TextFlow) config(idx int) ColumnConfig {
 	return ColumnConfig{Widths: f.Columns, Gap: f.Gap}
 }
 
-// setConfigWidths writes widths back to config idx (-1: base).
 func (f *TextFlow) setConfigWidths(idx int, widths []float64) {
 	if idx >= 0 {
 		items := f.items()

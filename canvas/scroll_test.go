@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// A 100x80 viewport at (10, 20) over 300x400 content.
 func newScroll() (*ScrollView, *fakePainter) {
 	p := &fakePainter{}
 	sv := NewScrollView(10, 20, 100, 80)
@@ -14,7 +13,6 @@ func newScroll() (*ScrollView, *fakePainter) {
 	return sv, p
 }
 
-// probe is a content object that records the events it receives.
 type probe struct {
 	downs, moves, ups [][2]float64
 	wheelHandled      bool
@@ -152,7 +150,6 @@ func TestDrawClipsAndTranslates(t *testing.T) {
 	if content(sv).drew != 1 {
 		t.Fatal("content should be drawn once, between save and restore")
 	}
-	// The content draws inside the clip, after the transform.
 	var order []string
 	for _, c := range p.calls {
 		if c == "translate -5 -5" || c == "restore" {
@@ -239,7 +236,6 @@ func TestScrollbarThumbDrag(t *testing.T) {
 	if track[3] != 70 || thumb[3] < sv.Style.MinThumb {
 		t.Fatalf("track=%v thumb=%v", track, thumb)
 	}
-	// The thumb is clamped to MinThumb (24).
 	if !sv.MouseDown(thumb[0]+5, thumb[1]+5) {
 		t.Fatal("press on the thumb")
 	}
@@ -275,7 +271,6 @@ func TestScrollbarTrackClickCentersThumb(t *testing.T) {
 func TestHorizontalScrollbar(t *testing.T) {
 	sv, _ := newScroll()
 	track, thumb := sv.bar(false)
-	// Width 100 minus the vertical bar's 10.
 	if track[2] != 90 || track[1] != 90 {
 		t.Fatalf("track = %v", track)
 	}

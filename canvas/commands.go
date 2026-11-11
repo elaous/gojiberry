@@ -97,7 +97,6 @@ func CommonFormat(fs ...Format) Format {
 		return Format{}
 	}
 	c := fs[0]
-	// Comments, bookmarks and index entries are not formatting and are not copied.
 	c.Comment, c.Bookmark, c.Index, c.Proposal = "", "", "", ""
 	for _, f := range fs[1:] {
 		if f.FontFamily != c.FontFamily {
@@ -147,7 +146,6 @@ func (k Keymap) Chords(cmd Command) []string {
 	return out
 }
 
-// Owner returns the command chord is bound to ("" if none).
 func (k Keymap) Owner(chord string) Command { return k[chord] }
 
 // EffectiveKeymap returns the Keymap or default, plus feature chords.
@@ -173,7 +171,6 @@ func (s *Stage) EffectiveKeymap() Keymap {
 	return out
 }
 
-// Rebind makes chord the only binding of cmd, taking it from others.
 func (s *Stage) Rebind(cmd Command, chord string) (previous Command) {
 	eff := s.EffectiveKeymap()
 	if s.Keymap == nil {

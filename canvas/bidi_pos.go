@@ -1,8 +1,5 @@
 package canvas
 
-// Caret and selection positions on lines with mixed bidirectional text.
-
-// piece is a run or inline object on a line, with its X offset.
 type piece struct {
 	start, end int
 	x, w       float64
@@ -11,7 +8,6 @@ type piece struct {
 
 func (p piece) rtl() bool { return p.level%2 == 1 }
 
-// pieces lists a line's runs and objects in text order.
 func (ln Line) pieces() []piece {
 	var out []piece
 	base := uint8(0)
@@ -24,7 +20,6 @@ func (ln Line) pieces() []piece {
 	for _, o := range ln.Objects {
 		out = append(out, piece{start: o.Offset, end: o.Offset + 1, x: o.X - ln.X, w: o.W, level: base})
 	}
-	// insertion sort by start: a line has few pieces
 	for i := 1; i < len(out); i++ {
 		for j := i; j > 0 && out[j].start < out[j-1].start; j-- {
 			out[j], out[j-1] = out[j-1], out[j]
@@ -33,7 +28,6 @@ func (ln Line) pieces() []piece {
 	return out
 }
 
-// pieceX is the x of offset o within piece p.
 func (f *TextFlow) pieceX(p piece, o int) float64 {
 	var w float64
 	switch {
@@ -52,7 +46,6 @@ func (f *TextFlow) pieceX(p piece, o int) float64 {
 	return p.x + w
 }
 
-// lineX is the caret x at offset on the line.
 func (f *TextFlow) lineX(ln Line, offset int) float64 {
 	if !ln.Bidi {
 		return ln.X + f.data.measure(ln.Start, min(max(offset, ln.Start), ln.End))
@@ -88,14 +81,12 @@ func (f *TextFlow) lineX(ln Line, offset int) float64 {
 	case after == nil:
 		return ln.X + f.pieceX(*before, offset)
 	}
-	// Between two pieces the caret goes to the paragraph's direction side.
 	if before.rtl() != ln.RTL && after.rtl() == ln.RTL {
 		return ln.X + f.pieceX(*after, offset)
 	}
 	return ln.X + f.pieceX(*before, offset)
 }
 
-// lineOffsetAt returns the offset whose caret is nearest x.
 func (f *TextFlow) lineOffsetAt(ln Line, x float64) int {
 	ps := ln.pieces()
 	best, bestD := ln.Start, 1e18
@@ -117,7 +108,6 @@ func abs(v float64) float64 {
 	return v
 }
 
-// lineRects returns the x ranges covered by offsets s..e of the line.
 func (f *TextFlow) lineRects(ln Line, s, e int) [][2]float64 {
 	s, e = max(s, ln.Start), min(e, ln.End)
 	if s >= e {
@@ -137,7 +127,6 @@ func (f *TextFlow) lineRects(ln Line, s, e int) [][2]float64 {
 			x0, x1 = x1, x0
 		}
 		x0, x1 = ln.X+x0, ln.X+x1
-		// join with a neighbour it touches
 		merged := false
 		for i := range out {
 			if abs(out[i][1]-x0) < 0.01 {
@@ -156,7 +145,6 @@ func (f *TextFlow) lineRects(ln Line, s, e int) [][2]float64 {
 	return out
 }
 
-// visualStep returns the offset the arrow key moves the caret to.
 func (f *TextFlow) visualStep(caret int, right bool) int {
 	lines := f.Layout().Lines
 	idx := -1
@@ -173,7 +161,6 @@ func (f *TextFlow) visualStep(caret int, right bool) int {
 		return caret - 1
 	}
 	ln := lines[idx]
-	// The step by text equals the step by screen in one-direction lines.
 	forward := right != ln.RTL // the arrow goes towards the end of the text
 	if ln.Bidi {
 		x := f.lineX(ln, caret)
@@ -190,7 +177,6 @@ func (f *TextFlow) visualStep(caret int, right bool) int {
 		if best >= 0 {
 			return best
 		}
-		// At a line's edge the arrow moves to the adjacent line in text order.
 		switch {
 		case forward && idx+1 < len(lines):
 			return lines[idx+1].Start

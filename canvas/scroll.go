@@ -29,8 +29,7 @@ type ScrollView struct {
 	LockH, LockV        bool
 	Style               ScrollStyle
 	// OnScroll is called after the scroll position changes.
-	OnScroll func(*ScrollView)
-	// Typewriter keeps the typed line at a fixed height in the view.
+	OnScroll     func(*ScrollView)
 	Typewriter   bool
 	TypewriterAt float64
 	// TypewriterX makes the typed letter stay put horizontally too.
@@ -42,7 +41,7 @@ type ScrollView struct {
 
 	drag        *scrollDrag
 	hoverBar    byte // 'v', 'h' or 0
-	contentDown bool // a press started in the content, so moves keep going to it
+	contentDown bool
 }
 
 type scrollDrag struct {
@@ -132,7 +131,6 @@ func (sv *ScrollView) ScrollBy(dx, dy float64) bool {
 func (sv *ScrollView) showV() bool { return !sv.LockV && sv.ch > sv.Height }
 func (sv *ScrollView) showH() bool { return !sv.LockH && sv.cw > sv.Width }
 
-// bar returns a scrollbar's track and thumb rectangles.
 func (sv *ScrollView) bar(vertical bool) (track, thumb [4]float64) {
 	s := sv.Style
 	mx, my := sv.maxScroll()
@@ -162,7 +160,6 @@ func (sv *ScrollView) bar(vertical bool) (track, thumb [4]float64) {
 	return track, [4]float64{track[0] + pos, track[1], tl, s.BarSize}
 }
 
-// barAt returns 'v' or 'h' over a visible scrollbar.
 func (sv *ScrollView) barAt(x, y float64) byte {
 	if sv.showV() {
 		if t, _ := sv.bar(true); inRect(x, y, t) {
@@ -177,7 +174,6 @@ func (sv *ScrollView) barAt(x, y float64) byte {
 	return 0
 }
 
-// scrollForThumbPos converts a thumb position to a scroll offset.
 func (sv *ScrollView) scrollForThumbPos(vertical bool, pos float64) float64 {
 	track, thumb := sv.bar(vertical)
 	mx, my := sv.maxScroll()
@@ -199,12 +195,10 @@ func (sv *ScrollView) inside(x, y float64) bool {
 	return inRect(x, y, [4]float64{sv.X, sv.Y, sv.Width, sv.Height})
 }
 
-// toContent maps viewport-space (canvas) coordinates into content space.
 func (sv *ScrollView) toContent(x, y float64) (float64, float64) {
 	return x - sv.X + sv.ScrollX, y - sv.Y + sv.ScrollY
 }
 
-// MouseDown grabs a thumb, jumps along a track, or passes the press on.
 func (sv *ScrollView) MouseDown(x, y float64) bool { return sv.MouseDownMods(x, y, Mods{}) }
 
 // MouseDownMods is MouseDown with modifier keys passed to the content.
@@ -240,7 +234,6 @@ func (sv *ScrollView) MouseDownMods(x, y float64, m Mods) bool {
 // EditTarget returns the content's edit target.
 func (sv *ScrollView) EditTarget() EditTarget { return sv.content.EditTarget() }
 
-// DoubleClick hands a double click to the content (inside the viewport).
 func (sv *ScrollView) DoubleClick(x, y float64) bool {
 	if !sv.inside(x, y) || sv.barAt(x, y) != 0 {
 		return false
@@ -377,9 +370,6 @@ func (sv *ScrollView) CSSCursor() string {
 	return ""
 }
 
-// --- drawing -------------------------------------------------------
-
-// Draw paints the content clipped to the viewport, then frame and scrollbars.
 func (sv *ScrollView) Draw() {
 	p := sv.painter
 	for _, c := range sv.content.Components {
@@ -414,10 +404,8 @@ func (sv *ScrollView) Draw() {
 	}
 }
 
-// carriage reports whether the view works as a typewriter carriage.
 func (sv *ScrollView) carriage() bool { return sv.Typewriter && sv.TypewriterX }
 
-// typewriterAt is the typed line's height, from 0 (top) to 1 (bottom).
 func (sv *ScrollView) typewriterAt() float64 {
 	if sv.TypewriterAt <= 0 || sv.TypewriterAt >= 1 {
 		return 0.5

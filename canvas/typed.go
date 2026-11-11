@@ -8,7 +8,6 @@ type TypedRange struct {
 	Name, Color string
 }
 
-// typedAt returns the range covering stream offset o, if any.
 func (f *TextFlow) typedAt(o int) (TypedRange, bool) {
 	for _, t := range f.TypedRanges {
 		if o >= t.From && o < t.To {
@@ -18,7 +17,6 @@ func (f *TextFlow) typedAt(o int) (TypedRange, bool) {
 	return TypedRange{}, false
 }
 
-// typedOverlaps says whether any typed range touches the stream offsets [from, to).
 func (f *TextFlow) typedOverlaps(from, to int) bool {
 	for _, t := range f.TypedRanges {
 		if t.From < to && t.To > from {
@@ -28,8 +26,6 @@ func (f *TextFlow) typedOverlaps(from, to int) bool {
 	return false
 }
 
-// typedColour is the colour of the character at index i of the run when somebody just typed it, and whether somebody did.
-// A run whose text does not match its offsets is never tinted.
 func (f *TextFlow) typedColour(r Run, rs []rune, i int) (string, bool) {
 	if len(f.TypedRanges) == 0 || len(rs) != r.End-r.Start {
 		return "", false
@@ -40,8 +36,6 @@ func (f *TextFlow) typedColour(r Run, rs []rune, i int) (string, bool) {
 	return "", false
 }
 
-// fillRunTyped draws a run, in pieces when part of it was just typed by somebody else, each piece in its own colour: left
-// to right, right to left (the first characters are at the right end of the run) or, in vertical text, along the line.
 func (f *TextFlow) fillRunTyped(r Run, ln Line, x, y float64) {
 	rs := []rune(r.Text)
 	if len(f.TypedRanges) == 0 || len(rs) != r.End-r.Start || !f.typedOverlaps(r.Start, r.End) {
@@ -73,7 +67,7 @@ func (f *TextFlow) fillRunTyped(r Run, ln Line, x, y float64) {
 		}
 		seg := string(rs[i:j])
 		at := x + p.MeasureTextWidth(string(rs[:i]))
-		if rtl { // the characters before i are to the right of this piece
+		if rtl {
 			at = x + r.W - p.MeasureTextWidth(string(rs[:j]))
 		}
 		p.FillText(seg, at, y)
@@ -82,9 +76,6 @@ func (f *TextFlow) fillRunTyped(r Run, ln Line, x, y float64) {
 	p.SetFillStyle(r.Color)
 }
 
-// drawTypedObject outlines an inline object that somebody just put in or changed (a picture, a table, a field), in
-// their colour: an object has no text to colour. It is the same range that colours typed text, over the object's
-// character.
 func (f *TextFlow) drawTypedObject(o PlacedObject) {
 	t, ok := f.typedAt(o.Offset)
 	if !ok {

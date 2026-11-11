@@ -52,6 +52,5 @@ type ImagePainter interface {
 	Rotate(angle float64)
 	ClipRect(x, y, w, h float64)
 
-	// DrawImage draws a source region of src into a destination rectangle.
 	DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64)
 }

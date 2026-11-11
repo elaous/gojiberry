@@ -17,7 +17,6 @@ var (
 	errNoContext = errors.New("canvas: browser gave no 2D context")
 )
 
-// jsPainter adapts *html.Context2D to ImagePainter.
 type jsPainter struct{ *html.Context2D }
 
 // NewPainter adapts a canvas 2D context to ImagePainter.
@@ -51,7 +50,6 @@ func (i *HTMLImage) Size() (w, h float64) {
 	return i.v.Get("naturalWidth").Float(), i.v.Get("naturalHeight").Float()
 }
 
-// Pixels returns a small RGBA copy, at most maxSide on the long side.
 func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
 	nw, nh := i.Size()
 	if nw <= 0 || nh <= 0 || maxSide <= 0 {
@@ -85,7 +83,6 @@ func (i *HTMLImage) Pixels(maxSide int) (rgba []byte, w, h int, ok bool) {
 	return rgba, w, h, ok
 }
 
-// PNG returns the picture as PNG bytes, scaled down to maxSide.
 func (i *HTMLImage) PNG(maxSide int) (png []byte, ok bool) {
 	nw, nh := i.Size()
 	if nw <= 0 || nh <= 0 || maxSide <= 0 {
@@ -118,7 +115,6 @@ func (i *HTMLImage) PNG(maxSide int) (png []byte, ok bool) {
 	return data, true
 }
 
-// LoadImage loads url and calls onLoad on the event loop once decoded.
 func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 	el := js.Global().Get("Image").New()
 	var load, fail js.Func
@@ -140,7 +136,6 @@ func LoadImage(url string, onLoad func(*HTMLImage), onError func()) {
 	el.Set("src", url)
 }
 
-// Bind wires the stage to a canvas and a hidden text input for keyboard.
 func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	cv := canvasEl.AsCanvas()
 	if cv == nil {
@@ -169,7 +164,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return v.String(), true
 	}
 	s.OpenLink = func(url string) { js.Global().Call("open", url, "_blank", "noopener") }
-	// The async clipboard API needs a secure context and permission.
 	if cb := js.Global().Get("navigator").Get("clipboard"); cb.Truthy() {
 		s.Clipboard = Clipboard{
 			Write: func(text string) { cb.Call("writeText", text) },
@@ -189,7 +183,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return e.X - r.Left, e.Y - r.Top
 	}
 
-	// focusByPointer is true while a click gives the input focus.
 	focusByPointer := false
 	focusInput := func() {
 		focusByPointer = true
@@ -200,16 +193,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		if e.Button != 0 {
 			return
 		}
-		// The canvas is not focusable; the input keeps focus after this handler.
 		e.PreventDefault()
 		x, y := local(e)
 		s.MouseDownMods(x, y, Mods{Ctrl: e.CtrlKey, Shift: e.ShiftKey, Alt: e.AltKey, Meta: e.MetaKey})
 		if e.Detail == 2 { // the second press of a double click
 			s.DoubleClick(x, y)
 		}
-		// The input needs focus to receive keys.
 		if s.WantsFocus() {
-			// preventScroll stops focusing the offscreen input from scrolling the page.
 			focusInput()
 		}
 		redraw()
@@ -220,13 +210,11 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	})
-	// Listen on window so a drag ending outside still ends.
 	up := js.Global()
 	up.Call("addEventListener", "mouseup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		r := canvasEl.BoundingRect()
 		ev := args[0]
 		if s.MouseUp(ev.Get("clientX").Float()-r.Left, ev.Get("clientY").Float()-r.Top) {
-			// A drag-selection only has something selected once it ends.
 			if s.WantsFocus() {
 				focusInput()
 			}
@@ -248,14 +236,12 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 
-	// Composition (IME): keys go to the input while composing.
 	composing := false
 	insert := func(t string) {
 		if t != "" && s.InsertText(t) {
 			redraw()
 		}
 	}
-	// The preedit text is drawn at the caret.
 	place := func() {
 		x, y, h, ok := s.CompositionAnchor()
 		if !ok {
@@ -272,7 +258,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	}
-	// Keyboard input starts editing; there is no click to do it.
 	input.AddEventListener("focus", js.FuncOf(func(js.Value, []js.Value) any {
 		if !focusByPointer && s.FocusIn() {
 			redraw()
@@ -317,17 +302,14 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 	input.OnKeyDown(func(e html.KeyEvent) {
-		// While composing, IME keys are not treated as commands.
 		if composing || e.Value.Get("isComposing").Bool() || e.Value.Get("keyCode").Int() == 229 {
 			return
 		}
 		if e.CtrlKey || e.MetaKey || e.AltKey {
 			key := e.Key
-			// Alt changes characters on some layouts; shortcuts use the physical key.
 			if strings.HasPrefix(e.Code, "Key") && len(e.Code) == 4 {
 				key = e.Code[3:]
 			}
-			// Shift+Digit keys type symbols; use the physical digit.
 			if strings.HasPrefix(e.Code, "Digit") && len(e.Code) == 6 {
 				key = e.Code[5:]
 			}
@@ -343,7 +325,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		}
 	})
 
-	// System clipboard via browser events, the only allowed route.
 	clip := func(args []js.Value) js.Value { return args[0].Get("clipboardData") }
 	input.AddEventListener("copy", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if text, ok := s.Copy(); ok {
@@ -368,7 +349,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return nil
 	}))
 
-	// Blink carets.
 	on := true
 	blink := js.FuncOf(func(js.Value, []js.Value) any {
 		on = !on
@@ -383,7 +363,6 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 	return redraw, nil
 }
 
-// Bind wires v to a canvas and hidden input for a single component.
 func (v *TableView) Bind(canvasEl, input *html.Element) error {
 	st := NewStage(nil, 0, 0, v)
 	redraw, err := st.Bind(canvasEl, input)

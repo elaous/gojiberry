@@ -2,7 +2,6 @@ package canvas
 
 // CaretBoxer reports where an editable component's caret is.
 type CaretBoxer interface {
-	// CaretBox returns the caret x, top, height; ok false when no caret.
 	CaretBox() (x, y, h float64, ok bool)
 }
 
@@ -45,10 +44,8 @@ func (sv *ScrollView) CaretBox() (x, y, h float64, ok bool) {
 	return x - sv.ScrollX + sv.X, y - sv.ScrollY + sv.Y, h, true
 }
 
-// scrollMargin is the room kept around a scrolled-into-view caret.
 const scrollMargin = 16
 
-// RevealCaret scrolls minimally to show the caret; reports whether it moved.
 func (sv *ScrollView) RevealCaret() bool {
 	x, y, h, ok := sv.content.CaretBox()
 	if !ok {
@@ -96,7 +93,6 @@ func (sv *ScrollView) RevealPending() bool {
 	return sv.ScrollTo(sv.ScrollX, y-scrollMargin)
 }
 
-// afterEvent keeps the view on the requested position, else the caret.
 func (sv *ScrollView) afterEvent() {
 	if !sv.RevealPending() {
 		sv.RevealCaret()

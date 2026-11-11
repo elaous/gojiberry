@@ -23,12 +23,10 @@ func (LineOps) Install(r *Registry) {
 	r.AddCommand(CmdDeleteLine, "Delete line", "Mod+Shift+K", func(c *CommandContext) bool { return deleteLines(c.Target) })
 }
 
-// lineBlock is a run of whole lines, from a to b.
 type lineBlock struct{ a, b int }
 
 func (l lineBlock) has(o int) bool { return o >= l.a && o <= l.b }
 
-// blocksOf returns the lines the cursors touch, merged.
 func blocksOf(rs []rune, cs []Cursor) []lineBlock {
 	var bs []lineBlock
 	for _, c := range cs {
@@ -60,7 +58,6 @@ func join(parts ...[]Item) []Item {
 	return out
 }
 
-// mapCursors moves every cursor end with fn.
 func mapCursors(cs []Cursor, fn func(o int) int) []Cursor {
 	out := make([]Cursor, len(cs))
 	for i, c := range cs {

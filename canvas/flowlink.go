@@ -2,9 +2,6 @@ package canvas
 
 import "strings"
 
-// Links: Format.Link text is drawn as a link and shows its URL.
-
-// linkAt returns the URL of the link at (x, y), or "".
 func (f *TextFlow) linkAt(x, y float64) (url string, rect [4]float64) {
 	for _, ln := range f.Layout().Lines {
 		if y < ln.Y || y >= ln.Y+ln.H {
@@ -22,7 +19,6 @@ func (f *TextFlow) linkAt(x, y float64) (url string, rect [4]float64) {
 // HoveredLink returns the URL under the pointer, or "".
 func (f *TextFlow) HoveredLink() string { return f.hoverLink }
 
-// updateLinkHover tracks the hovered link; reports if a redraw is needed.
 func (f *TextFlow) updateLinkHover(x, y float64) bool {
 	cid, crect := f.commentAt(x, y)
 	commentChanged := f.setHoverComment(cid, crect)
@@ -42,7 +38,6 @@ func (f *TextFlow) updateLinkHover(x, y float64) bool {
 	return true
 }
 
-// openLinkAt opens the link at (x, y), if one is listening.
 func (f *TextFlow) openLinkAt(x, y float64) bool {
 	url, _ := f.linkAt(x, y)
 	if name, ok := strings.CutPrefix(url, "#"); ok {
@@ -50,7 +45,7 @@ func (f *TextFlow) openLinkAt(x, y float64) bool {
 			return true
 		}
 		if f.OnLink == nil {
-			return false // the default would open this page again in a new tab
+			return false
 		}
 	}
 	open := f.OnLink
@@ -99,7 +94,6 @@ var _ Overlayer = (*TextFlow)(nil)
 // SetLinkHandler sets the handler the Stage uses to open links.
 func (f *TextFlow) SetLinkHandler(open func(url string)) { f.stageLink = open }
 
-// SafeLinkURL reports whether a link may be opened or shown as href.
 func SafeLinkURL(u string) bool {
 	u = strings.TrimSpace(u)
 	i := strings.IndexAny(u, ":/?#")

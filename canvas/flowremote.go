@@ -2,8 +2,6 @@ package canvas
 
 import "slices"
 
-// Keeps a TextFlow in step with a remote copy of the document.
-
 // SetRemoteContent replaces the content with a copy of items.
 func (f *TextFlow) SetRemoteContent(items []Item, cs []Cursor) {
 	wasEditing := f.editing
@@ -27,7 +25,6 @@ func (f *TextFlow) SetRemoteContent(items []Item, cs []Cursor) {
 	f.editing = wasEditing
 }
 
-// Touch tells the flow its side data changed without a text edit.
 func (f *TextFlow) Touch() { f.changed() }
 
 // ReplaceAll makes the comment set hold exactly comments, in place.

@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// Preedit is drawn at the caret, underlined; the caret position is reported.
 func TestPreeditIsDrawnAtTheCaretAndNotInTheDocument(t *testing.T) {
 	f, p := selFlow(Chars{Text: "hello wor", Format: Format{FontSize: 20}})
 	f.SetMode(ModeEdit)
@@ -40,7 +39,6 @@ func TestPreeditIsDrawnAtTheCaretAndNotInTheDocument(t *testing.T) {
 	if strings.Contains(f.Text, "ni") {
 		t.Error("the preedit is in the document")
 	}
-	// It ends with the composition.
 	s.SetComposition("")
 	if _, _, _, ok := s.CompositionAnchor(); ok {
 		t.Error("an anchor after the composition")
@@ -54,7 +52,6 @@ func TestPreeditIsDrawnAtTheCaretAndNotInTheDocument(t *testing.T) {
 	}
 }
 
-// A text that is not being edited takes no preedit.
 func TestNoPreeditWhenNotEditing(t *testing.T) {
 	f, p := selFlow(Chars{Text: "hello"})
 	s := NewStage(p, 400, 400, f)
@@ -63,7 +60,6 @@ func TestNoPreeditWhenNotEditing(t *testing.T) {
 	}
 }
 
-// Read-aloud marks are faint and do not move the caret.
 func TestReadMarksAreDrawnUnderTheText(t *testing.T) {
 	f, p := newFlow("one two three", 400, 100)
 	if sf, _, wf, _ := f.ReadMarks(); sf >= 0 || wf >= 0 {

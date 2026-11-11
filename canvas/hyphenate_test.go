@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// breaks a word after every second letter: "internationalization" -> in-te-rn-...
 type everyOther struct{}
 
 func (everyOther) Positions(w string) []int {
@@ -58,7 +57,6 @@ func TestWordsAreBrokenAtHyphenationPointsWhenTheyDoNotFit(t *testing.T) {
 }
 
 func TestAHyphenFillsTheLineAndFits(t *testing.T) {
-	// Plain wrapping puts the long word on its own line.
 	hyph := layoutLines(t, everyOther{}, "short internationalization", 160)
 	if len(hyph) < 2 || !hyph[0].Hyphen || !strings.HasPrefix(hyph[0].Text, "short ") {
 		t.Fatalf("lines %+v", hyph)
@@ -76,7 +74,6 @@ func TestNothingIsHyphenatedThatFitsOrIsNotAWord(t *testing.T) {
 			}
 		}
 	}
-	// A symbol inside the token keeps it whole.
 	for _, ln := range layoutLines(t, everyOther{}, "see re-implementation notes", 60) {
 		if ln.Hyphen && strings.Contains(ln.Text, "-") {
 			t.Errorf("hyphenated across an existing hyphen: %q", ln.Text)

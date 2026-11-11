@@ -1,7 +1,5 @@
 package canvas
 
-// FormatEditor is implemented by targets that format characters (a
-// TextFlow, a FloatingText).
 type FormatEditor interface {
 	ApplyFormat(fn func(*Format)) bool
 	CommonFormat() Format
@@ -12,10 +10,6 @@ var (
 	_ FormatEditor = (*FloatingText)(nil)
 )
 
-// TextCase changes how letters are displayed -- UPPER, lower, Title Case,
-// small caps -- without touching the text (a Format.Case): Ctrl/Cmd+Alt+U,
-// L, T and M. Each toggles back to normal when the selection already has
-// it.
 type TextCase struct{}
 
 // Command names.
@@ -50,11 +44,6 @@ func (TextCase) Install(r *Registry) {
 	add(CmdSmallCaps, "Small caps", "Mod+Alt+M", CaseSmallCaps)
 }
 
-// Links edits the links of a text (Format.Link): Ctrl/Cmd+K asks for an
-// address and links the selection to it (with the caret in a link, the
-// whole link; with nothing selected and no link, the address itself is
-// inserted as one), Ctrl/Cmd+Alt+K removes the link at the caret or in
-// the selection, and Ctrl/Cmd+Alt+O opens it.
 type Links struct{}
 
 // Command names.
@@ -81,9 +70,6 @@ func (Links) Install(r *Registry) {
 	})
 }
 
-// linkAtCursor returns the link at the primary cursor (the first
-// selected character's, or the one at or before the caret) and the range
-// of the whole link around it.
 func linkAtCursor(t EditTarget) (url string, from, to int) {
 	cur := t.Cursors()[0]
 	n := len([]rune(t.EditText()))
@@ -107,8 +93,6 @@ func linkAtCursor(t EditTarget) (url string, from, to int) {
 	return "", 0, 0
 }
 
-// charLinks lists the link of every character of items (one entry per
-// stream offset; objects have none).
 func charLinks(items []Item) []string {
 	var out []string
 	for _, it := range items {

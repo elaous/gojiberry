@@ -10,10 +10,8 @@ type squiggleSet struct {
 	color string
 }
 
-// squiggleState holds the sets of wavy underlines, by name.
 type squiggleState struct{ sets map[string]squiggleSet }
 
-// SetSquiggles underlines ranges with a wavy line, as spelling marks do.
 func (f *TextFlow) SetSquiggles(spans []Match, color string) { f.SetSquigglesAs("", spans, color) }
 
 // SetSquigglesAs sets the named squiggle set; no spans removes it.

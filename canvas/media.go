@@ -2,29 +2,24 @@ package canvas
 
 import "strings"
 
-// MediaObject is an audio or video clip in the text, a block object.
 type MediaObject struct {
 	// Kind is "audio" or "video" ("" is video).
 	Kind string
 	URL  string
 	// Title names the clip.
-	Title string
-	// Captions is a WebVTT track; CaptionsURL is where it is fetched from.
+	Title                             string
 	Captions, CaptionsURL, Transcript string
 	// Width and Height are the size of a video's picture.
 	Width, Height float64
-	// Needs is true while the clip lacks text a reader needs.
-	Needs bool
-	w, h  float64
+	Needs         bool
+	w, h          float64
 }
 
-// mediaHeight is the height of the card.
 const mediaHeight = 52.0
 
 // IsAudio says the clip is sound only.
 func (m *MediaObject) IsAudio() bool { return strings.EqualFold(strings.TrimSpace(m.Kind), "audio") }
 
-// label is the text on the card: the title, else the address.
 func (m *MediaObject) label() string {
 	if t := strings.TrimSpace(m.Title); t != "" {
 		return t
@@ -44,7 +39,6 @@ func (m *MediaObject) Measure(p Painter, maxW, _ float64) (float64, float64) {
 	return m.w, m.h
 }
 
-// DrawAt draws a card with a play or sound mark, kind and title.
 func (m *MediaObject) DrawAt(p Painter, x, y float64) {
 	p.SetFillStyle("#eef0f4")
 	p.FillRect(x, y+2, m.w, m.h-4)

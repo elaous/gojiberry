@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// editFlow is selFlow in edit mode, caret at offset o.
 func editFlow(t *testing.T, o int, items ...Item) (*TextFlow, *Stage) {
 	t.Helper()
 	f, p := selFlow(items...)
@@ -73,7 +72,6 @@ func TestFlowEditKeepsFormattingAndStructure(t *testing.T) {
 	if _, ok := items[2].(Break); !ok {
 		t.Fatalf("the page break survives typing: %+v", items)
 	}
-	// Select across the break: it goes with the deleted range.
 	f.SetCursors([]Cursor{{Anchor: 4, Caret: 6}})
 	st.HandleKey("Delete", false)
 	if flowText(f) != "abXcf" {
@@ -121,7 +119,6 @@ func TestFlowMaterializesTransformAndText(t *testing.T) {
 		t.Fatalf("ResetContent brings the source back: %q", flowText(f))
 	}
 
-	// A flow with plain Text edits too, and can be emptied.
 	g, p2 := selFlow()
 	g.Text = "ab"
 	g.SetMode(ModeEdit)
@@ -227,7 +224,6 @@ func TestFlowFormatting(t *testing.T) {
 		t.Errorf("color/highlight: %+v", fm)
 	}
 
-	// No selection: the format is for the next typed text.
 	f.SetCursors([]Cursor{At(11)})
 	st.HandleChord("Mod+B")
 	st.InsertText("!")
@@ -236,7 +232,6 @@ func TestFlowFormatting(t *testing.T) {
 		t.Errorf("typed text takes the pending format: %+v", last)
 	}
 
-	// Format painter: copy from one place, paste on another.
 	f.SetCursors([]Cursor{{Anchor: 0, Caret: 5}})
 	st.HandleChord("Mod+Alt+C")
 	f.SetCursors([]Cursor{{Anchor: 6, Caret: 11}})
@@ -314,7 +309,6 @@ func TestFlowMultiCursorAndFeatures(t *testing.T) {
 	if flowText(f) != "line two\nline two\nX bar X" {
 		t.Fatalf("copy line: %q", flowText(f))
 	}
-	// Ctrl-click adds a cursor.
 	x, y, h, _ := f.CaretRect(1)
 	st.MouseDownMods(x, y+h/2, Mods{Ctrl: true})
 	if len(f.Cursors()) < 2 {
@@ -347,7 +341,6 @@ func TestFlowMarkdownPasteKeepsStructure(t *testing.T) {
 	if !strings.Contains(fc.written, "**x**") {
 		t.Errorf("copy as Markdown: %q", fc.written)
 	}
-	// Without object support, structure flattens to text.
 	if got := flattenItems([]Item{Chars{Text: "a"}, Break{Kind: BreakPage}, Chars{Text: "b"}, Inline{}}, false); plainOf(got) != "a\nb" {
 		t.Errorf("flatten without objects: %+v", got)
 	}
@@ -400,7 +393,6 @@ func TestFlowOnChangeAndSelectionDraw(t *testing.T) {
 	}
 }
 
-// Two cursors at a page break: one before, one after it.
 func TestMultiCursorKeepsItsSideOfABreak(t *testing.T) {
 	f, st := editFlow(t, 0, Chars{Text: "ab"}, Break{Kind: BreakPage}, Chars{Text: "cd"})
 	f.SetCursors([]Cursor{At(2), {Anchor: 2, Caret: 2, After: true}, At(0)})
@@ -430,7 +422,7 @@ func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
 		for i, l := range lines {
 			st.InsertText(l)
 			if i < len(lines)-1 {
-				st.InsertText("\n") // typed line breaks, so Enter itself is only pressed at the end
+				st.InsertText("\n")
 			}
 		}
 		return f, st
@@ -450,7 +442,6 @@ func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
 		t.Fatalf("the lines are replaced and the caret is below the table: %q", got)
 	}
 
-	// not a table: the columns do not match, no separator row, a bar-less line
 	for _, lines := range [][]string{
 		{"| A | B |", "|---|---|", "| a |"},
 		{"| A | B |", "| x | y |", "| a | b |"},
@@ -467,7 +458,6 @@ func TestEnterAfterThreeMarkdownTableLinesMakesATable(t *testing.T) {
 	}
 }
 
-// Typing $x^2$ makes an inline formula; prices stay text.
 func TestTypingDollarsMakesAnInlineFormula(t *testing.T) {
 	typeAll := func(s string) *TextFlow {
 		f, st := editFlow(t, 0, Chars{Text: ""})

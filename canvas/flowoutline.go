@@ -4,21 +4,16 @@ import (
 	"strings"
 )
 
-// Outline lists the document's headings, from heading styles.
-
 // OutlineEntry is one heading.
 type OutlineEntry struct {
-	// Level is 1 for the biggest heading, then 2 to 6.
 	Level int
 	// Text is the heading's text.
 	Text string
 	// Start and End are the stream range of the paragraph.
 	Start, End int
-	// Style is the paragraph style that made it a heading, if any.
-	Style string
+	Style      string
 }
 
-// styleLevel returns the outline level of a style name, or 0.
 func styleLevel(style string) int {
 	switch style {
 	case "Title":
@@ -39,7 +34,6 @@ func styleLevel(style string) int {
 	return 0
 }
 
-// scaleLevel returns the heading level of bold, scaled text, or 0.
 func scaleLevel(fm Format) int {
 	if fm.FontWeight < 700 {
 		return 0
@@ -57,7 +51,6 @@ func scaleLevel(fm Format) int {
 	return 0
 }
 
-// charFormats lists the format of every character of items.
 func charFormats(items []Item) []Format {
 	var out []Format
 	for _, it := range items {
@@ -109,7 +102,6 @@ func (f *TextFlow) OutlineIndexAt(o int) int {
 	return idx
 }
 
-// GotoOffset moves the caret to stream offset o and scrolls it into view.
 func (f *TextFlow) GotoOffset(o int) {
 	f.SetCursors([]Cursor{At(o)})
 	f.revealAt, f.revealPending = o, true
@@ -130,10 +122,8 @@ type Revealer interface {
 	TakeReveal() (x, y, h float64, ok bool)
 }
 
-// flowBinder is implemented by inline objects that show the flow's structure.
 type flowBinder interface{ bindFlow(f *TextFlow) }
 
-// SectionRange returns the stream range of the section opened by heading i.
 func (f *TextFlow) SectionRange(i int) (from, to int, ok bool) {
 	es := f.Outline()
 	if i < 0 || i >= len(es) {
@@ -168,7 +158,6 @@ func (f *TextFlow) MoveSection(i, before int) bool {
 	moved := f.Slice(from, to)
 	delFrom := from
 	if to == n && (n == 0 || runes[n-1] != '\n') && from > 0 {
-		// The last section takes the preceding paragraph end.
 		moved = append(moved, Chars{Text: "\n"})
 		delFrom = from - 1
 	}

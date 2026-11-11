@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 )
 
-// Undo and redo for editable text: each change is recorded as a step.
-
 // DefaultHistoryLimit is the default number of undo steps.
 const DefaultHistoryLimit = 200
 
@@ -26,7 +24,6 @@ func HistoryLimit() int { return int(historyLimit.Load()) }
 
 // Historian is implemented by targets with undo and redo.
 type Historian interface {
-	// Undo reverts the last change; it reports whether there was one.
 	Undo() bool
 	// Redo re-applies the last undone change.
 	Redo() bool
@@ -37,7 +34,6 @@ var (
 	_ Historian = (*FloatingText)(nil)
 )
 
-// snapshotHistory keeps whole-state snapshots, simple and cheap enough.
 type snapshotHistory[S any] struct {
 	undo, redo []S
 	last       S // the state after the latest change (or the start)
@@ -45,14 +41,12 @@ type snapshotHistory[S any] struct {
 	kind       string // what the latest change was, for merging runs
 }
 
-// start records s as the state to go back to, if nothing is yet.
 func (h *snapshotHistory[S]) start(s S) {
 	if !h.hasLast {
 		h.last, h.hasLast = s, true
 	}
 }
 
-// commit records the state after a change of the given kind.
 func (h *snapshotHistory[S]) commit(cur S, kind string) {
 	if !h.hasLast {
 		return
@@ -70,13 +64,10 @@ func (h *snapshotHistory[S]) commit(cur S, kind string) {
 	h.last, h.kind = cur, kind
 }
 
-// breakRun ends a run of merged changes.
 func (h *snapshotHistory[S]) breakRun() { h.kind = "" }
 
-// reset forgets everything.
 func (h *snapshotHistory[S]) reset() { *h = snapshotHistory[S]{} }
 
-// back pops an undo step; cur is the state being left.
 func (h *snapshotHistory[S]) back(cur S) (S, bool) {
 	var zero S
 	if len(h.undo) == 0 {
@@ -89,7 +80,6 @@ func (h *snapshotHistory[S]) back(cur S) (S, bool) {
 	return prev, true
 }
 
-// forward pops a redo step.
 func (h *snapshotHistory[S]) forward(cur S) (S, bool) {
 	var zero S
 	if len(h.redo) == 0 {
@@ -103,9 +93,8 @@ func (h *snapshotHistory[S]) forward(cur S) (S, bool) {
 }
 
 type flowSnap struct {
-	items   []Item
-	cursors []Cursor
-	// comments holds the comment records that item marks refer to.
+	items    []Item
+	cursors  []Cursor
 	comments []Comment
 }
 
@@ -204,7 +193,6 @@ func (History) Install(r *Registry) {
 	r.Bind("Mod+Y", CmdRedo)
 }
 
-// endsRun reports whether a key ends a run of typing or deleting.
 func endsRun(key string) bool {
 	switch key {
 	case "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter", "Tab", "Escape":

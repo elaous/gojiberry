@@ -26,16 +26,12 @@ const (
 	NumUpperAlpha                        // A, B, C
 )
 
-// HeaderFooter is the text of a header or footer; '
-// ' starts a new line.
 type HeaderFooter struct {
-	Text  string
-	Style TextStyle // zero value: DefaultTextStyle at 12px
-	Align Align
-	// Offset is the distance from the page edge to the text.
+	Text   string
+	Style  TextStyle // zero value: DefaultTextStyle at 12px
+	Align  Align
 	Offset float64
-	// Parts are left, centre and right text of one line, when set.
-	Parts [3]string
+	Parts  [3]string
 }
 
 // HasParts says the header or footer is made of Parts.
@@ -44,7 +40,7 @@ func (h *HeaderFooter) HasParts() bool { return h.Parts != [3]string{} }
 // PageNumberConfig turns on and formats page numbers.
 type PageNumberConfig struct {
 	Show   bool
-	Format string // "{n}" is the number, "{total}" the page count; empty means "{n}"
+	Format string
 	Style  PageNumberStyle
 	Start  int
 	Align  Align
@@ -52,7 +48,6 @@ type PageNumberConfig struct {
 	TextStyle TextStyle
 }
 
-// Page is one sheet: size, margins, header, footer and page number.
 type Page struct {
 	Width, Height float64
 	Margin        Insets
@@ -97,8 +92,7 @@ type PageSet struct {
 	// Spread lays sheets two per row, as facing pages.
 	Spread, SpreadBook bool
 	Gutter             float64
-	// OnTurn, when set, draws a folded corner on each outer sheet edge.
-	OnTurn func(page int)
+	OnTurn             func(page int)
 
 	Style   PageStyle
 	Painter Painter
@@ -116,7 +110,6 @@ type PageSet struct {
 	hover    string
 }
 
-// NewPageSet returns a PageSet of pages at (0, 0) in ModeView.
 func NewPageSet(pages ...Page) *PageSet {
 	return &PageSet{Pages: pages, Gap: 24, Style: DefaultPageStyle()}
 }
@@ -143,7 +136,6 @@ func (ps *PageSet) SetMode(m Mode) bool {
 	return true
 }
 
-// rows groups sheets into the rows they are laid out in.
 func (ps *PageSet) rows() [][]int {
 	var rows [][]int
 	n := len(ps.Pages)
@@ -175,7 +167,6 @@ func (ps *PageSet) rows() [][]int {
 	return rows
 }
 
-// rowSize returns a row's width and height.
 func (ps *PageSet) rowSize(row []int) (w, h float64) {
 	for k, i := range row {
 		if i < 0 {
@@ -193,7 +184,6 @@ func (ps *PageSet) rowSize(row []int) (w, h float64) {
 	return w, h
 }
 
-// Size returns the width and height needed to show every page.
 func (ps *PageSet) Size() (w, h float64) {
 	pad := ps.Style.Pad
 	for r, row := range ps.rows() {
@@ -232,7 +222,6 @@ func (ps *PageSet) PageRect(i int) (x, y, w, h float64) {
 	return x, y, pg.Width, pg.Height
 }
 
-// PageAt returns the first sheet of the row containing y, or -1.
 func (ps *PageSet) PageAt(y float64) int {
 	for _, row := range ps.rows() {
 		first := row[len(row)-1]
@@ -315,7 +304,6 @@ func formatPageNumber(n int, style PageNumberStyle) string {
 	return strconv.Itoa(n)
 }
 
-// roman writes n in upper-case Roman numerals; other values fall back.
 func roman(n int) string {
 	if n < 1 || n >= 4000 {
 		return strconv.Itoa(n)
@@ -333,7 +321,6 @@ func roman(n int) string {
 	return b.String()
 }
 
-// alpha writes n as a, b, ... z, aa, ab; other values fall back.
 func alpha(n int, base rune) string {
 	if n < 1 {
 		return strconv.Itoa(n)
@@ -347,7 +334,6 @@ func alpha(n int, base rune) string {
 	return string(out)
 }
 
-// footerStyle is the font for header, footer and number text.
 func footerStyle(s TextStyle) TextStyle {
 	if s == (TextStyle{}) {
 		s = DefaultTextStyle()
@@ -356,10 +342,8 @@ func footerStyle(s TextStyle) TextStyle {
 	return s
 }
 
-// textBlockHeight returns the height of n lines in style s.
 func textBlockHeight(s TextStyle, n int) float64 { return float64(n) * footerStyle(s).Leading() }
 
-// ContentRect returns the rectangle of page i where body text flows.
 func (ps *PageSet) ContentRect(i int) (x, y, w, h float64) {
 	px, py, pw, ph := ps.PageRect(i)
 	pg := ps.Pages[i]
@@ -383,7 +367,6 @@ func (ps *PageSet) ContentRect(i int) (x, y, w, h float64) {
 	return px + pg.Margin.Left, py + top, pw - pg.Margin.Left - pg.Margin.Right, ph - top - bottom
 }
 
-// headerOffset is the distance from the top edge to the header text.
 func (ps *PageSet) headerOffset(h *HeaderFooter, topMargin float64) float64 {
 	if h.Offset > 0 {
 		return h.Offset
@@ -391,7 +374,6 @@ func (ps *PageSet) headerOffset(h *HeaderFooter, topMargin float64) float64 {
 	return max((topMargin-textBlockHeight(h.Style, strings.Count(h.Text, "\n")+1))/2, 4)
 }
 
-// footerOffset is the distance from the bottom edge to the footer.
 func (ps *PageSet) footerOffset(footH, bottomMargin float64, f *HeaderFooter) float64 {
 	if f != nil && f.Offset > 0 {
 		return f.Offset
@@ -399,7 +381,6 @@ func (ps *PageSet) footerOffset(footH, bottomMargin float64, f *HeaderFooter) fl
 	return max((bottomMargin-footH)/2, 4)
 }
 
-// Draw paints the desk, then each sheet with its header and footer.
 func (ps *PageSet) Draw() {
 	p, s := ps.Painter, ps.Style
 	w, h := ps.Size()
@@ -439,7 +420,6 @@ func (ps *PageSet) drawHeaderFooter(i int) {
 
 var _ Component = (*PageSet)(nil)
 
-// Anchor pins a floating object to a page; (X, Y) are relative to it.
 type Anchor struct {
 	Page int
 	X, Y float64
@@ -454,7 +434,6 @@ func (ps *PageSet) Resolve(a Anchor) (x, y float64) {
 	return px + a.X, py + a.Y
 }
 
-// AnchorAt anchors the absolute point (x, y) to the page it is on.
 func (ps *PageSet) AnchorAt(x, y float64) Anchor {
 	if len(ps.Pages) == 0 {
 		return Anchor{X: x, Y: y}

@@ -30,7 +30,6 @@ func (MultiCursor) Install(r *Registry) {
 	})
 }
 
-// wordBounds returns the word around offset o; ok is false if none.
 func wordBounds(rs []rune, o int) (from, to int, ok bool) {
 	from, to = o, o
 	for from > 0 && isIdentRune(rs[from-1]) {
@@ -42,7 +41,6 @@ func wordBounds(rs []rune, o int) (from, to int, ok bool) {
 	return from, to, from < to
 }
 
-// findRunes returns the first index of needle in hay from from, or -1.
 func findRunes(hay, needle []rune, from int) int {
 	for i := max(from, 0); i+len(needle) <= len(hay); i++ {
 		match := true
@@ -79,7 +77,6 @@ func addNextMatch(t EditTarget) bool {
 		f, _ := c.Range()
 		taken[f] = true
 	}
-	// Next occurrence after the last cursor, wrapping around.
 	var first, after = -1, -1
 	for p := 0; ; {
 		i := findRunes(rs, needle, p)
@@ -143,7 +140,6 @@ func cursorsAtLineEnds(t EditTarget) bool {
 			out = append(out, At(lineEnd(rs, from)))
 			continue
 		}
-		// A selection ending at a line start excludes that line.
 		if to > from && rs[to-1] == '\n' {
 			to--
 		}

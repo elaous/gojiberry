@@ -1,6 +1,5 @@
 package canvas
 
-// Composer shows the text an input method is composing (the preedit).
 type Composer interface {
 	// SetComposition shows preedit text at the caret; "" ends it.
 	SetComposition(text string) bool
@@ -8,7 +7,6 @@ type Composer interface {
 	CompositionAnchor() (x, y, h float64, ok bool)
 }
 
-// SetComposition gives the preedit to the topmost component that takes it.
 func (s *Stage) SetComposition(text string) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if c, ok := s.Components[i].(Composer); ok && c.SetComposition(text) {
@@ -45,7 +43,6 @@ func (f *TextFlow) CompositionAnchor() (x, y, h float64, ok bool) {
 	return f.caretRect(f.Cursors()[0])
 }
 
-// drawPreedit draws the preedit at the caret, on the page colour.
 func (f *TextFlow) drawPreedit(lay Layout) {
 	if f.preedit == "" || f.Painter == nil || !f.Editing() || len(f.Cursors()) != 1 {
 		return
@@ -88,7 +85,6 @@ func (f *TextFlow) drawPreedit(lay Layout) {
 // SetComposition implements Composer: the content shows the preedit.
 func (sv *ScrollView) SetComposition(text string) bool { return sv.content.SetComposition(text) }
 
-// CompositionAnchor implements Composer, in the coordinates of the view's own parent.
 func (sv *ScrollView) CompositionAnchor() (x, y, h float64, ok bool) {
 	x, y, h, ok = sv.content.CompositionAnchor()
 	return sv.X - sv.ScrollX + x, sv.Y - sv.ScrollY + y, h, ok

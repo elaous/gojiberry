@@ -2,8 +2,6 @@ package canvas
 
 import "slices"
 
-// Named styles: a StyleDef bundles character and paragraph formatting.
-
 // StyleDef is a named style.
 type StyleDef struct {
 	Name string
@@ -34,7 +32,6 @@ func DefaultStyles() []StyleDef {
 	}
 }
 
-// mergeFormat lays over on top of under; set fields of over win.
 func mergeFormat(under, over Format) Format {
 	out := under
 	if over.FontFamily != "" {
@@ -89,7 +86,6 @@ func mergeFormat(under, over Format) Format {
 	return out
 }
 
-// mergePara lays over on top of under; set fields of over win.
 func mergePara(under, over ParaFormat) ParaFormat {
 	out := under
 	if over.Align != AlignLeft {
@@ -139,7 +135,6 @@ func (f *TextFlow) StyleByName(name string) (StyleDef, bool) {
 	return StyleDef{}, false
 }
 
-// DefineStyle adds or replaces a named style everywhere it is used.
 func (f *TextFlow) DefineStyle(def StyleDef) {
 	for i, s := range f.Styles {
 		if s.Name == def.Name {
@@ -150,7 +145,6 @@ func (f *TextFlow) DefineStyle(def StyleDef) {
 	f.Styles = append(f.Styles, def)
 }
 
-// styleNames lists the names of the flow's styles of one kind.
 func (f *TextFlow) styleNames(paragraph bool) []string {
 	var out []string
 	for _, s := range f.Styles {
@@ -161,7 +155,6 @@ func (f *TextFlow) styleNames(paragraph bool) []string {
 	return slices.Clone(out)
 }
 
-// expand resolves fm's character style over its paragraph style's format.
 func (f *TextFlow) expand(base, fm Format) Format {
 	out := base
 	if fm.Style != "" {
@@ -172,7 +165,6 @@ func (f *TextFlow) expand(base, fm Format) Format {
 	return mergeFormat(out, fm)
 }
 
-// expandPara resolves pf's paragraph style.
 func (f *TextFlow) expandPara(pf ParaFormat) (ParaFormat, Format) {
 	if pf.Style == "" {
 		return pf, Format{}

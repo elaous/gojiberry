@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// Busy marks an inline object being changed by someone, drawn with an outline.
 type Busy struct {
 	Name  string
 	Color string // their colour, a CSS hex colour; else grey.
@@ -41,7 +40,6 @@ func (f *TextFlow) drawBusy(o PlacedObject) {
 	p.SetTextBaseline("alphabetic")
 }
 
-// safeColor returns c if it is a hex colour, else grey.
 func safeColor(c string) string {
 	if len(c) == 4 || len(c) == 7 {
 		if _, err := strconv.ParseUint(c[1:], 16, 32); err == nil && c[0] == '#' {
@@ -51,7 +49,6 @@ func safeColor(c string) string {
 	return "#6b7280"
 }
 
-// readableOn returns white or black, whichever reads on c.
 func readableOn(c string) string {
 	h := strings.TrimPrefix(c, "#")
 	if len(h) == 3 {

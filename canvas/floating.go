@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// FloatingStyle is the look of a FloatingText's box and edit chrome.
 type FloatingStyle struct {
 	Background   string // box fill; empty for transparent
 	BorderColor  string // drawn in view mode too; empty for none
@@ -46,12 +45,9 @@ type FloatingText struct {
 	BoundsW             float64   // if non-zero, keeps the box within x in [0, BoundsW]
 	Wrap                bool
 	WrapMargin          float64
-	// Opacity is 0..1 for the whole box, text and all; zero means opaque.
-	Opacity float64
-	// Anchor pins the box to a page; X and Y are derived from it.
-	Anchor *Anchor
-	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
-	Pages *PageSet
+	Opacity             float64
+	Anchor              *Anchor
+	Pages               *PageSet
 	// AutoClose maps each opening character to its closer.
 	AutoClose map[rune]rune
 	// Completer suggests completions for the word before the caret.
@@ -68,9 +64,9 @@ type FloatingText struct {
 	hist     snapshotHistory[boxSnap]
 	histKind string
 	caret    int
-	anchor   int      // the other end of the selection
-	extra    []Cursor // further cursors (multi-cursor); the caret and anchor are the primary one
-	pending  Format   // format for the next typed text when nothing is selected
+	anchor   int // the other end of the selection
+	extra    []Cursor
+	pending  Format // format for the next typed text when nothing is selected
 	editing  bool
 	caretOn  bool
 
@@ -119,14 +115,12 @@ func (ft *FloatingText) pageSet() *PageSet {
 	return nil
 }
 
-// resolve updates X, Y from the Anchor.
 func (ft *FloatingText) resolve() {
 	if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
 		ft.X, ft.Y = ps.Resolve(*ft.Anchor)
 	}
 }
 
-// SetFlow sets the text flow to wrap around; the box becomes an obstacle.
 func (ft *FloatingText) SetFlow(f *TextFlow) {
 	if ft.flow != nil {
 		ft.flow.RemoveObstacle(ft)
@@ -149,7 +143,6 @@ func (ft *FloatingText) Text() string {
 	return b.String()
 }
 
-// SetText replaces content with plain text; the caret goes to the end.
 func (ft *FloatingText) SetText(s string) {
 	ft.runes = ft.runes[:0]
 	for _, r := range s {
@@ -159,7 +152,6 @@ func (ft *FloatingText) SetText(s string) {
 	ft.hist.reset()
 }
 
-// Items returns the content as TextFlow items, one per format run.
 func (ft *FloatingText) Items() []Item {
 	var items []Item
 	for i := 0; i < len(ft.runes); {
@@ -191,7 +183,6 @@ func (ft *FloatingText) Selection() (from, to int) {
 	return min(ft.caret, ft.anchor), max(ft.caret, ft.anchor)
 }
 
-// Editing reports whether the caret is active (edit mode, clicked into).
 func (ft *FloatingText) Editing() bool { return ft.editing }
 
 // Box returns the box rectangle: x, y, w, h.
@@ -200,7 +191,6 @@ func (ft *FloatingText) Box() (x, y, w, h float64) {
 	return ft.X, ft.Y, ft.Width, ft.Height
 }
 
-// Exclusion makes the box, plus WrapMargin, an obstacle while Wrap is on.
 func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	ft.resolve()
 	if !ft.Wrap || y1 <= ft.Y-ft.WrapMargin || y0 >= ft.Y+ft.Height+ft.WrapMargin {
@@ -209,7 +199,6 @@ func (ft *FloatingText) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	return ft.X - ft.WrapMargin, ft.X + ft.Width + ft.WrapMargin, true
 }
 
-// ContainsPoint: the box, and its toolbar and handle in edit mode.
 func (ft *FloatingText) ContainsPoint(x, y float64) bool {
 	ft.resolve()
 	if ft.inBox(x, y) {
@@ -246,7 +235,6 @@ func (ft *FloatingText) changed() {
 	}
 }
 
-// sync pushes the content and geometry into the inner flow.
 func (ft *FloatingText) sync() {
 	ft.resolve()
 	f := ft.inner
@@ -262,14 +250,12 @@ func (ft *FloatingText) snap(v float64) float64 {
 	return math.Round(v/ft.Snap) * ft.Snap
 }
 
-// replace swaps runes [from, to) for ins; the caret follows them.
 func (ft *FloatingText) replace(from, to int, ins []fRune) {
 	ft.runes = slices.Replace(ft.runes, from, to, ins...)
 	ft.caret = from + len(ins)
 	ft.anchor = ft.caret
 }
 
-// typingFormat is the format new text takes.
 func (ft *FloatingText) typingFormat() Format {
 	if !ft.pending.IsZero() {
 		return ft.pending
@@ -283,7 +269,6 @@ func (ft *FloatingText) typingFormat() Format {
 	return Format{}
 }
 
-// insertPlain inserts s at the caret without auto-closing.
 func (ft *FloatingText) insertPlain(s string) bool {
 	s = strings.ReplaceAll(s, "\r", "")
 	if ft.mode != ModeEdit || !ft.editing || s == "" {
@@ -302,7 +287,6 @@ func (ft *FloatingText) insertPlain(s string) bool {
 	return true
 }
 
-// lineOf returns the laid-out line containing offset o.
 func (ft *FloatingText) lineOf(o int) (Line, bool) {
 	lines := ft.inner.Layout().Lines
 	for _, ln := range lines {
@@ -316,7 +300,6 @@ func (ft *FloatingText) lineOf(o int) (Line, bool) {
 	return Line{}, false
 }
 
-// handleEditKey handles editing keys; HandleKey adds the popups.
 func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	if ft.mode != ModeEdit || !ft.editing {
 		return false
@@ -398,7 +381,6 @@ func (ft *FloatingText) handleEditKey(key string, shift bool) bool {
 	return true
 }
 
-// ApplyFormat applies fn to selected characters, or the next typed text.
 func (ft *FloatingText) ApplyFormat(fn func(*Format)) bool {
 	from, to := ft.Selection()
 	if from == to {
@@ -425,7 +407,6 @@ func (ft *FloatingText) ApplyFormat(fn func(*Format)) bool {
 	return changed
 }
 
-// current returns the formats the selection covers, resolved to the base style.
 func (ft *FloatingText) current() []TextStyle {
 	from, to := ft.Selection()
 	if from == to {
@@ -438,7 +419,6 @@ func (ft *FloatingText) current() []TextStyle {
 	return out
 }
 
-// ToggleBold toggles bold for the selection or the next typed text.
 func (ft *FloatingText) ToggleBold() bool {
 	all := true
 	for _, s := range ft.current() {
@@ -505,7 +485,6 @@ func (ft *FloatingText) inBox(x, y float64) bool {
 	return inRect(x, y, [4]float64{ft.X, ft.Y, ft.Width, ft.Height})
 }
 
-// whatAt returns what a press at (x, y) grabs.
 func (ft *FloatingText) whatAt(x, y float64) string {
 	for i := range floatButtons {
 		if inRect(x, y, ft.buttonRect(i)) {
@@ -617,7 +596,6 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 	case "move":
 		nx, ny := max(ft.snap(d.boxX+dx), 0), max(ft.snap(d.boxY+dy), 0)
 		if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
-			// Re-anchor to the page the box is over, and snap relative to it.
 			a := ps.AnchorAt(d.boxX+dx, d.boxY+dy)
 			a.X, a.Y = ft.snap(a.X), ft.snap(a.Y)
 			nx, ny = ps.Resolve(a)
@@ -688,7 +666,6 @@ func (ft *FloatingText) CSSCursor() string {
 	return ft.hover
 }
 
-// Draw paints the box, its text and, in edit mode, the overlays.
 func (ft *FloatingText) Draw() {
 	p, cs := ft.Painter, ft.ChromeStyle
 	ft.sync()
@@ -755,7 +732,6 @@ func (ft *FloatingText) Draw() {
 	p.FillRect(h[0], h[1], h[2], h[3])
 }
 
-// drawSelection tints the selected text, line by line.
 func (ft *FloatingText) drawSelection() {
 	p := ft.Painter
 	p.SetFillStyle(ft.ChromeStyle.SelectColor)

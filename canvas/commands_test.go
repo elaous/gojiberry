@@ -53,12 +53,10 @@ func TestCommonFormat(t *testing.T) {
 	if got := CommonFormat(bold, bold); got != bold {
 		t.Fatalf("identical formats: %+v", got)
 	}
-	// Everything differs -> nothing common.
 	other := Format{FontWeight: 400, Color: "#00f", FontFamily: "Arial", FontSize: 10, Scale: 1, Background: "#0ff", FontStyle: StyleNormal}
 	if got := CommonFormat(bold, other); got != (Format{}) {
 		t.Fatalf("nothing in common: %+v", got)
 	}
-	// Partial overlap keeps only what all share.
 	a := Format{FontWeight: 700, Color: "#f00", Underline: true, Strike: true}
 	b := Format{FontWeight: 700, Color: "#00f", Underline: true}
 	c := Format{FontWeight: 700, Underline: true, Strike: true}
@@ -87,7 +85,6 @@ func TestFormatClipboard(t *testing.T) {
 	}
 }
 
-// cmdSpy records commands and clipboard calls.
 type cmdSpy struct {
 	spy
 	cmds    []Command
@@ -149,14 +146,12 @@ func TestStageChordsAndClipboardRouting(t *testing.T) {
 	if s.Paste("x") {
 		t.Fatal("nobody took it")
 	}
-	// A component with only InsertText takes a paste as typed text.
 	var log2 []string
 	ty := &typerSpy{spy: spy{name: "t", log: &log2}}
 	s2 := NewStage(&fakePainter{}, 1, 1, ty)
 	if !s2.Paste("hello") || !reflect.DeepEqual(ty.typed, []string{"hello"}) {
 		t.Fatalf("typed = %v", ty.typed)
 	}
-	// Replacing the clipboard re-shares it.
 	nc := &FormatClipboard{}
 	s.SetFormatClipboard(nc)
 	if a.formats != nc || s.Formats != nc {

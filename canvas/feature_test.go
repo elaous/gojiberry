@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// stageWith returns a Stage with an editing FloatingText in it.
 func stageWith(t *testing.T, text string) (*Stage, *FloatingText) {
 	t.Helper()
 	ft := editing(t, text)
@@ -50,12 +49,10 @@ func TestRegistry(t *testing.T) {
 		r.AddCommand("x", "X", "", nil)
 		r.AddCommand("x", "X", "", nil)
 	})
-	// A registry without a feature has no such command.
 	r := NewRegistry(LineOps{})
 	if r.Has(CmdAddNextMatch) || r.Run(CmdMoveLineUp, &CommandContext{}) {
 		t.Error("only registered commands run, and only on a target")
 	}
-	// A user keymap wins over a feature chord.
 	st2, ft := stageWith(t, "a\nb")
 	st2.Keymap = Keymap{"Alt+ArrowUp": CmdSelectAll}
 	ft.caret, ft.anchor = 2, 2
@@ -149,7 +146,6 @@ func TestCursorsAtLineEnds(t *testing.T) {
 	if ft.Text() != "ab;\ncd;\nef;" {
 		t.Errorf("text = %q", ft.Text())
 	}
-	// A selection ending at the start of a line leaves that line out.
 	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 4}})
 	st.HandleChord("Alt+Shift+I")
 	if got := ft.Cursors(); len(got) != 1 || got[0] != At(3) {
@@ -193,13 +189,11 @@ func TestCtrlClickAddsCursor(t *testing.T) {
 	if strings.Count(ft.Text(), "_") != 2 {
 		t.Fatalf("text = %q", ft.Text())
 	}
-	// A plain click goes back to one cursor.
 	st.MouseDown(x, y+h/2)
 	st.MouseUp(0, 0)
 	if len(ft.Cursors()) != 1 {
 		t.Error("plain click should drop the extra cursors")
 	}
-	// Cmd works like Ctrl; a Ctrl+click outside the box is not ours.
 	x2, _, _, _ := ft.inner.CaretRect(2)
 	st.MouseDownMods(x2, y+h/2, Mods{Meta: true})
 	if len(ft.Cursors()) != 2 {
@@ -331,7 +325,6 @@ func TestMoveSelectedBlockAndSeveralBlocks(t *testing.T) {
 	if ft.Text() != "2\n1\n4\n3\n5" {
 		t.Fatalf("two blocks up: %q", ft.Text())
 	}
-	// A selection ending at the start of a line excludes that line.
 	ft.SetText("a\nb\nc")
 	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 2}})
 	st.HandleChord("Alt+ArrowDown")
@@ -355,7 +348,6 @@ func TestDuplicateLines(t *testing.T) {
 	if ft.Text() != "ab\nab\nab\ncd" || ft.Cursors()[0] != At(4) {
 		t.Fatalf("copy up keeps the cursor on the upper copy: %q %v", ft.Text(), ft.Cursors())
 	}
-	// Several cursors duplicate their own lines.
 	ft.SetText("x\ny\nz")
 	ft.SetCursors([]Cursor{At(0), At(4)})
 	st.HandleChord("Alt+Shift+ArrowDown")
@@ -518,7 +510,6 @@ func TestCopyAndPasteMarkdownCommands(t *testing.T) {
 		t.Errorf("redraws = %d, caret = %d", redraws, ft.Caret())
 	}
 
-	// No clipboard: the commands decline.
 	st.Clipboard = Clipboard{}
 	ft.SetCursors([]Cursor{{Anchor: 0, Caret: 4}})
 	if st.HandleChord("Mod+Shift+C") || st.HandleChord("Mod+Shift+V") {
@@ -578,7 +569,6 @@ type featureFunc struct {
 func (f featureFunc) Name() string        { return f.name }
 func (f featureFunc) Install(r *Registry) { f.fn(r) }
 
-// Default chords must be written as Chord builds them.
 func TestDefaultChordsMatchChord(t *testing.T) {
 	for chord := range NewRegistry(DefaultFeatures()...).Keymap() {
 		parts := strings.Split(chord, "+")
@@ -638,7 +628,6 @@ func TestBreaksFeature(t *testing.T) {
 			t.Errorf("page 2 starts with the text after the break: %+v", ln)
 		}
 	}
-	// Clicking a page's first line puts the caret after its break.
 	x1, y1, _, _ := ps.ContentRect(1)
 	f.MouseDown(x1, y1+5)
 	f.MouseUp(0, 0)
@@ -646,12 +635,10 @@ func TestBreaksFeature(t *testing.T) {
 		t.Fatalf("click after the break: %+v", c)
 	}
 	st.Draw() // the caret is drawn on page 2
-	// Backspace there removes the break.
 	st.HandleKey("Backspace", false)
 	if len(f.ContentItems()) != 1 || f.Layout().Pages != 1 {
 		t.Fatalf("backspace after a break removes it: %+v", f.ContentItems())
 	}
-	// A column break, then Delete in front of it.
 	f.SetCursors([]Cursor{At(1)})
 	st.HandleChord("Mod+Shift+Enter")
 	var kinds []BreakKind
@@ -668,7 +655,6 @@ func TestBreaksFeature(t *testing.T) {
 	if len(f.ContentItems()) != 1 {
 		t.Fatalf("delete in front of a break removes it: %+v", f.ContentItems())
 	}
-	// A selection is replaced by the break; a FloatingText declines.
 	f.SetCursors([]Cursor{{Anchor: 1, Caret: 3}})
 	st.HandleChord("Mod+Enter")
 	if flowText(f) != "acd" || len(f.ContentItems()) != 3 {
@@ -693,12 +679,10 @@ func TestMarkdownListsAndQuotesRoundTrip(t *testing.T) {
 	if again != got {
 		t.Errorf("round trip changed it:\n%q\n%q", got, again)
 	}
-	// Into a plain target the structure becomes text prefixes.
 	flat := plainOf(flattenItems(items, false))
 	if !strings.HasPrefix(flat, "• a\n  ◦ nested\n☐ todo\n☑ done") || !strings.Contains(flat, "3. c\n4. d") || !strings.Contains(flat, "▌ quoted text") {
 		t.Errorf("flattened: %q", flat)
 	}
-	// A numbered item after a ")" marker keeps it.
 	if got := MarkdownFromItems(Markdown{}.Transform("1) x\n2) y")); got != "1) x\n2) y" {
 		t.Errorf("paren numbering: %q", got)
 	}
@@ -728,7 +712,6 @@ func TestEffectiveKeymapAndRebind(t *testing.T) {
 	if got := eff.Chords(CmdMoveLineDown); len(got) != 1 || got[0] != "Alt+ArrowDown" {
 		t.Errorf("chords = %v", got)
 	}
-	// Rebinding a feature command moves it: the new chord works, the old one stops.
 	if prev := st.Rebind(CmdMoveLineDown, "Mod+J"); prev != "" {
 		t.Errorf("Mod+J was free, previous owner %q", prev)
 	}
@@ -739,14 +722,12 @@ func TestEffectiveKeymapAndRebind(t *testing.T) {
 	if !st.HandleChord("Mod+J") || ft.Text() != "b\na" {
 		t.Errorf("the new chord works: %q", ft.Text())
 	}
-	// Taking a chord that another command has reports it, and takes it.
 	if prev := st.Rebind(CmdBold, "Mod+J"); prev != CmdMoveLineDown {
 		t.Errorf("previous owner = %q", prev)
 	}
 	if got := st.EffectiveKeymap().Chords(CmdMoveLineDown); len(got) != 0 {
 		t.Errorf("the displaced command has no chord now: %v", got)
 	}
-	// A built-in (non feature) command can be rebound and unbound too.
 	st.Rebind(CmdItalic, "")
 	if st.HandleChord("Mod+I") {
 		t.Error("unbound italic")

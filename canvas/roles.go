@@ -1,10 +1,8 @@
 package canvas
 
-// Role is what a user may do with a document; the zero value is owner.
 type Role string
 
 const (
-	// RoleOwner may do everything: edit, comment and manage who has access.
 	RoleOwner Role = "owner"
 	// RoleEditor may edit and comment.
 	RoleEditor Role = "editor"
@@ -34,7 +32,6 @@ func (r Role) CanComment() bool {
 // CanManage reports whether the role may change who has access.
 func (r Role) CanManage() bool { return r == "" || r == RoleOwner }
 
-// Mode returns the mode a role allows for the wanted mode.
 func (r Role) Mode(want Mode) Mode {
 	if want == ModeEdit && !r.CanEdit() {
 		return ModeView

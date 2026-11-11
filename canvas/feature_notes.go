@@ -4,7 +4,6 @@ import "strings"
 
 // FootnoteHost is implemented by targets with footnotes (a TextFlow).
 type FootnoteHost interface {
-	// FootnoteSet returns the notes, making the set if there is none.
 	FootnoteSet() *FootnoteSet
 }
 
@@ -33,7 +32,6 @@ const (
 
 func (Notes) Name() string { return "notes" }
 
-// footnoteAtCursor finds the footnote mark at or before the caret.
 func footnoteAtCursor(t EditTarget) (FootnoteHost, *FootnoteRef, int) {
 	h, ok := t.(FootnoteHost)
 	if !ok {
@@ -59,7 +57,6 @@ func footnoteAtCursor(t EditTarget) (FootnoteHost, *FootnoteRef, int) {
 	return nil, nil, 0
 }
 
-// insertObject puts an inline object at the end of the selection.
 func insertObject(t EditTarget, in Inline) {
 	cur := t.Cursors()[0]
 	_, at := cur.Range()

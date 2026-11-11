@@ -32,7 +32,6 @@ const (
 
 func (Styles) Name() string { return "styles" }
 
-// ensureStyle makes sure the host has a style called name.
 func ensureStyle(h StyleHost, name string) bool {
 	if _, ok := h.StyleByName(name); ok {
 		return true
@@ -126,7 +125,6 @@ func (Styles) Install(r *Registry) {
 				}
 			}
 			h.DefineStyle(def)
-			// Tag the text with it, so editing the style later restyles it.
 			if paragraph {
 				if pe, ok := c.Target.(ParagraphEditor); ok {
 					pe.ApplyParagraph(func(p *ParaFormat) { *p = ParaFormat{List: p.List, Style: name} })

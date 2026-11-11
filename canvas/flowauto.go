@@ -1,7 +1,5 @@
 package canvas
 
-// Auto-closing pairs and completion for TextFlow, as in FloatingText.
-
 func (f *TextFlow) isCloser(r rune) bool {
 	for _, c := range f.AutoClose {
 		if c == r {
@@ -11,7 +9,6 @@ func (f *TextFlow) isCloser(r rune) bool {
 	return false
 }
 
-// typePaired types one character at every cursor, auto-closing.
 func (f *TextFlow) typePaired(d *flowData, r rune) {
 	closer, isOpener := f.AutoClose[r]
 	rs := textRunes(f)
@@ -73,7 +70,6 @@ func (f *TextFlow) wordBeforeCaret() (string, int) {
 	return string(rs[start:caret]), start
 }
 
-// defaultComplete suggests longer words that start with prefix.
 func (f *TextFlow) defaultComplete(prefix string) []string {
 	return completeWords(string(textRunes(f)), f.Vocabulary, prefix)
 }
@@ -95,7 +91,6 @@ func (f *TextFlow) closeSuggestions() {
 	}
 }
 
-// updateSuggestions recomputes the completion popup for the caret word.
 func (f *TextFlow) updateSuggestions() {
 	f.closeSuggestions()
 	if !f.completionOn() || !f.Editing() || len(f.extra) > 0 || f.sel.caret != f.sel.anchor || f.Painter == nil {
@@ -129,7 +124,6 @@ func (f *TextFlow) updateSuggestions() {
 	m.SetHover(0)
 }
 
-// acceptSuggestion replaces the word being typed with the completion.
 func (f *TextFlow) acceptSuggestion(word string) {
 	f.materialize()
 	d := f.flatten()
@@ -137,7 +131,6 @@ func (f *TextFlow) acceptSuggestion(word string) {
 	caret := f.sel.caret
 	items := []Item{Chars{Text: word, Format: format}}
 	if f.proposalsOn() {
-		// While suggesting, completion is a proposal like other typing.
 		repl, at := f.proposalRewrite(d, Cursor{Anchor: caret, Caret: caret}, f.suggFrom, caret, items)
 		f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: repl}})
 		f.SetCursors([]Cursor{At(f.suggFrom + at)})
@@ -161,7 +154,6 @@ func (f *TextFlow) SuggestionMenu() *Menu { return f.suggestMenu() }
 // SetViewport keeps the popup inside the visible part.
 func (f *TextFlow) SetViewport(x, y, w, h float64) { f.viewport = [4]float64{x, y, w, h} }
 
-// suggestKey drives the popup: arrows choose, Tab or Enter accept, Escape dismisses.
 func (f *TextFlow) suggestKey(key string) bool {
 	if !f.suggestionsOpen() {
 		return false

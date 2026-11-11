@@ -4,7 +4,6 @@ import (
 	"strings"
 )
 
-// textBox is header, footer or page-number text laid out in a page.
 type textBox struct {
 	lines       []string
 	orig        TextStyle // as configured; its Color overrides the page style's
@@ -26,7 +25,6 @@ func (ps *PageSet) mkBox(hf *HeaderFooter, text string, left, right, top float64
 	}
 }
 
-// lineX returns the x a line of the box starts at.
 func (ps *PageSet) lineX(b *textBox, line string) float64 {
 	ps.Painter.SetFont(b.style.Font())
 	switch b.align {
@@ -38,7 +36,6 @@ func (ps *PageSet) lineX(b *textBox, line string) float64 {
 	return b.left
 }
 
-// boxes lays out page i's header, footer and page number.
 func (ps *PageSet) boxes(i int) pageBoxes {
 	px, py, pw, ph := ps.PageRect(i)
 	pg := ps.Pages[i]
@@ -102,7 +99,6 @@ func (ps *PageSet) drawBox(b *textBox) {
 	}
 }
 
-// numberRect returns the on-page rectangle of page i's number text.
 func (ps *PageSet) numberRect(i int) ([4]float64, bool) {
 	b := ps.boxes(i).number
 	if b == nil {
@@ -119,7 +115,6 @@ func (ps *PageSet) PageNumberRect(i int) (x, y, w, h float64, ok bool) {
 	return r[0], r[1], r[2], r[3], ok
 }
 
-// zone returns the part of page i where its header or footer lies.
 func (ps *PageSet) zone(i int, footer bool) [4]float64 {
 	px, py, pw, ph := ps.PageRect(i)
 	pg := ps.Pages[i]
@@ -131,7 +126,6 @@ func (ps *PageSet) zone(i int, footer bool) [4]float64 {
 	return [4]float64{left, py, w, cy - py}
 }
 
-// hfEdit is a header or footer being edited, with its starting state.
 type hfEdit struct {
 	page   int
 	footer bool
@@ -144,7 +138,6 @@ func (ps *PageSet) editing(page int, footer bool) bool {
 	return ps.edit != nil && ps.edit.page == page && ps.edit.footer == footer
 }
 
-// effHeader returns page i's header as drawn, including edits.
 func (ps *PageSet) effHeader(i int) *HeaderFooter {
 	if ps.editing(i, false) {
 		return ps.edit.current()
@@ -159,7 +152,6 @@ func (ps *PageSet) effFooter(i int) *HeaderFooter {
 	return ps.ResolvedFooter(i)
 }
 
-// current returns the header or footer the buffer represents.
 func (e *hfEdit) current() *HeaderFooter {
 	if len(e.buf) == 0 {
 		return nil
@@ -187,7 +179,6 @@ func (ps *PageSet) BeginEdit(page int, footer bool) {
 // EndEdit stops editing the header/footer.
 func (ps *PageSet) EndEdit() { ps.edit = nil }
 
-// Editing returns the page and kind of the header/footer being edited.
 func (ps *PageSet) Editing() (page int, footer, ok bool) {
 	if ps.edit == nil {
 		return 0, false, false
@@ -201,7 +192,6 @@ func (ps *PageSet) changed() {
 	}
 }
 
-// commit gives the edited page its own header or footer with the buffer.
 func (ps *PageSet) commit() {
 	e := ps.edit
 	h := e.base
@@ -214,7 +204,6 @@ func (ps *PageSet) commit() {
 	ps.changed()
 }
 
-// ownHF gives the page its own header or footer, not inherited.
 func (ps *PageSet) ownHF(page int, footer bool) *HeaderFooter {
 	slot := &ps.Pages[page].Header
 	resolved := ps.ResolvedHeader(page)
@@ -249,7 +238,6 @@ func (ps *PageSet) InsertText(s string) bool {
 	return true
 }
 
-// lineStart returns the buffer offset of the line containing off.
 func (e *hfEdit) lineStart(off int) int {
 	for off > 0 && e.buf[off-1] != '\n' {
 		off--
@@ -346,7 +334,6 @@ const (
 	badgeFont = "11px sans-serif"
 )
 
-// badge lays out the strip beside the header or footer being edited.
 func (ps *PageSet) badge() (label string, labelRect [4]float64, buttons []badgeButton) {
 	e := ps.edit
 	px, py, _, ph := ps.PageRect(e.page)
@@ -431,12 +418,11 @@ func (ps *PageSet) badge() (label string, labelRect [4]float64, buttons []badgeB
 	return label, labelRect, buttons
 }
 
-// updateNumber changes page i's page-number settings.
 func (ps *PageSet) updateNumber(i int, fn func(*PageNumberConfig)) {
 	var c PageNumberConfig
 	cfg, n := ps.ResolvedPageNumber(i)
 	switch prev := ps.latestNumberConfig(i); {
-	case cfg != nil: // numbering is on: copy it, numbered so this page keeps its number
+	case cfg != nil:
 		c = *cfg
 		c.Start = n
 	case prev != nil: // switched off earlier: turning it on again reuses that look
@@ -450,7 +436,6 @@ func (ps *PageSet) updateNumber(i int, fn func(*PageNumberConfig)) {
 	ps.changed()
 }
 
-// latestNumberConfig returns the latest explicit page-number config.
 func (ps *PageSet) latestNumberConfig(i int) *PageNumberConfig {
 	for j := i; j >= 0; j-- {
 		if c := ps.Pages[j].PageNumber; c != nil {
@@ -479,7 +464,6 @@ func check(on bool, label string) string {
 	return "   " + label
 }
 
-// numberMenu builds the page-number settings menu for page i.
 func (ps *PageSet) numberMenu(i int) []MenuItem {
 	cfg, _ := ps.ResolvedPageNumber(i)
 	if cfg == nil {
@@ -568,7 +552,6 @@ func (ps *PageSet) selectNumber(i int, r [4]float64) {
 	ps.Menu().OpenWithin(ps.numberMenu(i), r[0], r[1]+r[3]+4, ps.viewport)
 }
 
-// MouseDown handles the page-number menu, the edit badge and caret placement.
 func (ps *PageSet) MouseDown(x, y float64) bool {
 	if ps.turnAt(x, y) {
 		return true
@@ -615,7 +598,6 @@ func (ps *PageSet) MouseDown(x, y float64) bool {
 	return was
 }
 
-// caretAt returns the buffer offset nearest (x, y).
 func (ps *PageSet) caretAt(x, y float64) int {
 	e := ps.edit
 	b := ps.editBox()

@@ -6,7 +6,6 @@ import (
 	"unicode"
 )
 
-// TextStats counts text the way a word processor's status bar does.
 type TextStats struct {
 	Words int
 	// Characters counts visible characters, including spaces.
@@ -17,7 +16,6 @@ type TextStats struct {
 	Sentences  int
 }
 
-// wordsPerMinute is the reading speed ReadingTime assumes.
 const wordsPerMinute = 238
 
 // ReadingTime estimates the time to read the text.
@@ -25,7 +23,6 @@ func (s TextStats) ReadingTime() time.Duration {
 	return time.Duration(float64(s.Words) / wordsPerMinute * float64(time.Minute))
 }
 
-// isBreak reports whether r separates words without being a character.
 func isBreak(r rune) bool {
 	return r == '\n' || r == ' ' || r == ' ' || r == objectRune
 }
@@ -80,11 +77,9 @@ type FlowStats struct {
 	// Text counts the whole text; Selection counts the selected part.
 	Text, Selection TextStats
 	HasSelection    bool
-	// Pages is how many pages the text reached in the latest layout.
-	Pages int
+	Pages           int
 }
 
-// Stats counts the flow's text and, if there is one, its selection.
 func (f *TextFlow) Stats() FlowStats {
 	st := FlowStats{Text: CountText(f.EditText()), Pages: f.lastLay.Pages}
 	if f.HasSelection() {

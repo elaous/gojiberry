@@ -11,7 +11,6 @@ type MenuItem struct {
 	Swatch string
 }
 
-// swatchW is the room a swatch takes before the label.
 const swatchW = 22
 
 // MenuStyle controls how a Menu looks.
@@ -67,7 +66,6 @@ func NewMenu(p Painter) *Menu {
 // Hover returns the highlighted item's index, or -1.
 func (m *Menu) Hover() int { return m.hover }
 
-// SetHover highlights item i if it can be chosen; -1 clears.
 func (m *Menu) SetHover(i int) {
 	if i < 0 || m.enabled(i) {
 		m.hover = i
@@ -77,7 +75,6 @@ func (m *Menu) SetHover(i int) {
 // Activate runs item i as if clicked.
 func (m *Menu) Activate(i int) { m.activate(i) }
 
-// Rect returns the open menu's rectangle (x, y, w, h), zero while closed.
 func (m *Menu) Rect() (x, y, w, h float64) {
 	if !m.open {
 		return 0, 0, 0, 0
@@ -85,7 +82,6 @@ func (m *Menu) Rect() (x, y, w, h float64) {
 	return m.x, m.y, m.w, m.height()
 }
 
-// Labels returns the open menu's item labels, with "" for separators.
 func (m *Menu) Labels() []string {
 	var out []string
 	for _, it := range m.items {
@@ -115,7 +111,6 @@ func (m *Menu) itemHeight(it MenuItem) float64 {
 	return m.Style.ItemHeight
 }
 
-// Open shows the menu with its top-left at (x, y), shifted to fit.
 func (m *Menu) Open(items []MenuItem, x, y, boundsW, boundsH float64) {
 	m.OpenWithin(items, x, y, [4]float64{0, 0, boundsW, boundsH})
 }
@@ -147,7 +142,6 @@ func (m *Menu) OpenWithin(items []MenuItem, x, y float64, bounds [4]float64) {
 	m.hover = -1
 }
 
-// HitTest returns the index of the item at (x, y), or -1.
 func (m *Menu) HitTest(x, y float64) int {
 	if !m.open || x < m.x || x >= m.x+m.w || y < m.y {
 		return -1
@@ -181,7 +175,6 @@ func (m *Menu) MouseMove(x, y float64) bool {
 	return changed
 }
 
-// MouseDown handles a press at (x, y); reports whether the menu took it.
 func (m *Menu) MouseDown(x, y float64) bool {
 	if !m.open {
 		return false
@@ -206,7 +199,6 @@ func (m *Menu) activate(i int) {
 	}
 }
 
-// HandleKey moves the highlight with arrows, skipping separators and disabled items.
 func (m *Menu) HandleKey(key string) bool {
 	if !m.open {
 		return false

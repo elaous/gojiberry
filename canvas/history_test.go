@@ -31,7 +31,6 @@ func TestUndoRedoTypingRunsAndDeletes(t *testing.T) {
 	if st.HandleChord("Mod+Y") {
 		t.Error("nothing more to redo")
 	}
-	// A new change drops the redo steps.
 	st.HandleChord("Mod+Z")
 	st.InsertText("!")
 	if st.HandleChord("Mod+Y") {
@@ -149,7 +148,6 @@ func TestUndoInAFloatingText(t *testing.T) {
 	if ft.Text() != "hello wor" || ft.FormatAt(0).FontWeight != 700 {
 		t.Errorf("redo all: %q", ft.Text())
 	}
-	// SetText starts over.
 	ft.SetText("fresh")
 	if st.HandleChord("Mod+Z") {
 		t.Error("history is gone after SetText")
@@ -195,7 +193,6 @@ func TestHistoryLimitsAndReset(t *testing.T) {
 	if f.Undo() || f.Redo() {
 		t.Error("ResetContent forgets history")
 	}
-	// A box with nothing done has nothing to undo; unknown targets decline.
 	bst, _ := stageWith(t, "x")
 	if bst.HandleChord("Mod+Z") || bst.HandleChord("Mod+Y") {
 		t.Error("nothing to undo or redo")

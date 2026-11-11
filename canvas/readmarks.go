@@ -1,14 +1,11 @@
 package canvas
 
-// Marks for reading aloud: the sentence and word being spoken.
-
 // The colours of the marks.
 const (
 	ReadSentenceColor = "rgba(124, 92, 255, 0.20)"
 	ReadWordColor     = "rgba(255, 190, 0, 0.60)"
 )
 
-// readMarks holds the sentence and word ranges, each [from, to).
 type readMarks struct {
 	sentFrom, sentTo, wordFrom, wordTo int
 }
@@ -21,7 +18,6 @@ func (f *TextFlow) SetReadMarks(sentFrom, sentTo, wordFrom, wordTo int) {
 // ClearReadMarks removes the marks.
 func (f *TextFlow) ClearReadMarks() { f.reading = readMarks{sentFrom: -1, wordFrom: -1} }
 
-// ReadMarks returns the sentence and word ranges, or -1 if unset.
 func (f *TextFlow) ReadMarks() (sentFrom, sentTo, wordFrom, wordTo int) {
 	r := f.reading
 	if r.sentFrom == 0 && r.sentTo == 0 && r.wordFrom == 0 && r.wordTo == 0 { // never set

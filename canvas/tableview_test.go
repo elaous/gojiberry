@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// newView returns a 2x2 table view at (10,10).
 func newView() (*TableView, *fakePainter) {
 	p := &fakePainter{}
 	v := NewTableView(NewTableFrom([][]string{{"A", "B"}, {"c", "d"}}), p)
@@ -65,7 +64,6 @@ func TestClickPlusBarsAddColumnAndRow(t *testing.T) {
 		t.Fatalf("active = %d,%d,%v, want header of new column", r, c, ok)
 	}
 
-	// Table is now 3 columns wide.
 	v.MouseDown(50, 90)
 	if v.Table.Rows() != 3 {
 		t.Fatalf("after row click: %d rows", v.Table.Rows())
@@ -227,7 +225,6 @@ func TestHoverRevealsBars(t *testing.T) {
 	if !p.has("fillText \"+\"") {
 		t.Fatal("bars should show while hovered")
 	}
-	// Moving across the gap to a bar keeps them visible.
 	v.MouseMove(172, 40)
 	if !v.inRegion {
 		t.Fatal("gap should count as part of the hover region")
@@ -330,7 +327,6 @@ func TestNewTableViewReservesHandleGutter(t *testing.T) {
 	}
 }
 
-// clickMenuItem opens the menu and clicks the named item.
 func clickMenuItem(t *testing.T, v *TableView, label string) {
 	t.Helper()
 	m := v.Menu()
@@ -493,7 +489,7 @@ func TestTableHandleMenu(t *testing.T) {
 func TestClickOutsideMenuClosesAndPassesThrough(t *testing.T) {
 	v, _ := newView()
 	v.MouseDown(100, 3)
-	v.MouseDown(20, 20) // column 1's menu starts at x=90, so this is outside it
+	v.MouseDown(20, 20)
 	if v.Menu().IsOpen() {
 		t.Fatal("menu should close")
 	}
@@ -572,7 +568,6 @@ func TestEdges(t *testing.T) {
 	}
 }
 
-// clickTableHandle presses and releases the table handle.
 func clickTableHandle(v *TableView) {
 	v.MouseDown(3, 3)
 	v.MouseUp(3, 3)
@@ -587,7 +582,7 @@ func TestHandlesAreGripPills(t *testing.T) {
 	var names, pillRows int
 	for _, c := range p.calls {
 		if strings.HasPrefix(c, "fillText") && strings.Contains(c, "-2") {
-			names++ // the grips sit outside the table, at negative coordinates in this view
+			names++
 		}
 		if strings.HasPrefix(c, "fillRect") && strings.HasSuffix(c, " 1") {
 			pillRows++
@@ -776,7 +771,6 @@ func TestPasteIntoATableFillsCellsFromTheActiveOne(t *testing.T) {
 	if tb.Cols() != 3 || tb.Cell(1, 2) != "z" || tb.Cell(2, 0) != "1" {
 		t.Fatalf("tabs: %q", tb.Cells)
 	}
-	// plain text goes in as typing, on one line
 	v.HandleKey("End", false)
 	if !v.PasteText("end\nof it") || !strings.HasSuffix(tb.Cell(1, 0), "endof it") {
 		t.Fatalf("one line: %q", tb.Cell(1, 0))

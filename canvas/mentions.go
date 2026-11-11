@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// MentionNotice is one mention of a person by handle in a comment or reply.
 type MentionNotice struct {
 	CommentID string
 	Reply     int // reply index, or -1 for the comment itself.
@@ -15,7 +14,6 @@ type MentionNotice struct {
 	Created   time.Time
 }
 
-// Key identifies the notice so a host can skip shown ones.
 func (n MentionNotice) Key() string { return n.CommentID + "#" + strconv.Itoa(n.Reply) }
 
 // MentionsOf lists comments and replies that mention handle, oldest first.
@@ -35,7 +33,7 @@ func (s *CommentSet) MentionsOf(handle string) []MentionNotice {
 		}
 		return false
 	}
-	who := func(author string) string { // the handle, not the address, when the roster knows the person
+	who := func(author string) string {
 		if s.Roster != nil {
 			if h, ok := s.Roster.HandleOf(author); ok {
 				return h

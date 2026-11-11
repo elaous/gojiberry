@@ -6,8 +6,6 @@ import (
 	"unicode"
 )
 
-// Paragraph formatting is set by ParaFormat items.
-
 // ParagraphEditor is implemented by targets with paragraph formats.
 type ParagraphEditor interface {
 	// ApplyParagraph applies fn to the paragraphs the cursors touch.
@@ -18,13 +16,11 @@ type ParagraphEditor interface {
 
 var _ ParagraphEditor = (*TextFlow)(nil)
 
-// paraBounds returns the paragraph around offset o: start and end.
 func paraBounds(rs []rune, o int) (ps, pe int) {
 	o = min(max(o, 0), len(rs))
 	return lineStart(rs, o), lineEnd(rs, o)
 }
 
-// touchedParagraphs lists start offsets of paragraphs the cursors touch.
 func touchedParagraphs(rs []rune, cs []Cursor) []int {
 	var starts []int
 	for _, c := range normalize(cs) {
@@ -63,7 +59,6 @@ func (f *TextFlow) ParagraphAt(o int) ParaFormat {
 	return d.paraIn(ps, pe)
 }
 
-// paraIndex returns the index of the paragraph's ParaFormat, or -1.
 func (f *TextFlow) paraIndex(ps, pe int) int {
 	off := 0
 	for i, it := range f.Items {
@@ -81,7 +76,6 @@ func (f *TextFlow) paraIndex(ps, pe int) int {
 	return -1
 }
 
-// setParagraph applies fn to the format of the paragraph [ps, pe].
 func (f *TextFlow) setParagraph(ps, pe int, fn func(*ParaFormat)) bool {
 	f.materialize()
 	idx := f.paraIndex(ps, pe)
@@ -126,7 +120,6 @@ func (f *TextFlow) ToggleCheckAt(x, y float64) bool {
 	return f.toggleCheckAt(x, y)
 }
 
-// toggleCheckAt is ToggleCheckAt in layout coordinates.
 func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		m := ln.Marker
@@ -143,7 +136,6 @@ func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	return false
 }
 
-// enter handles Enter, continuing list and paragraph formats.
 func (f *TextFlow) enter() bool {
 	if len(f.extra) > 0 || f.HasSelection() {
 		return f.InsertText("\n")
@@ -172,7 +164,6 @@ func (f *TextFlow) enter() bool {
 	return ok
 }
 
-// indentList changes the list nesting level at the caret.
 func (f *TextFlow) indentList(delta int) bool {
 	if len(f.extra) > 0 {
 		return false
@@ -189,7 +180,6 @@ func (f *TextFlow) indentList(delta int) bool {
 	return true
 }
 
-// markdownTableOnEnter turns three typed Markdown table lines into a table.
 func (f *TextFlow) markdownTableOnEnter() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret
@@ -222,7 +212,6 @@ func (f *TextFlow) markdownTableOnEnter() bool {
 	return f.InsertText("\n")
 }
 
-// dollarMathOnType turns $formula$ typed text into an inline formula.
 func (f *TextFlow) dollarMathOnType() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret

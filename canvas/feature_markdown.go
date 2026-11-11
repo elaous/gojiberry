@@ -7,7 +7,6 @@ import (
 
 // MarkdownClipboard copies selections as Markdown and pastes Markdown as formatting.
 type MarkdownClipboard struct {
-	// Markdown is the converter used to paste; zero value means default.
 	Markdown Markdown
 }
 
@@ -84,7 +83,6 @@ func PasteMarkdown(t EditTarget, md Markdown, text string) bool {
 	return true
 }
 
-// flattenItems prepares converted Markdown for insertion.
 func flattenItems(items []Item, keep bool) []Item {
 	var out []Item
 	var pending ParaFormat
@@ -244,10 +242,8 @@ func MarkdownFromItems(items []Item) string {
 	return strings.Join(out, "\n")
 }
 
-// rawRun marks Markdown that must not be marked again.
 const rawRun = "\x00"
 
-// inlineMarkdown writes inline objects that have a Markdown form.
 func inlineMarkdown(in Inline) (md string, block bool) {
 	switch o := in.Object.(type) {
 	case *Rule:
@@ -294,7 +290,6 @@ func inlineMarkdown(in Inline) (md string, block bool) {
 	return "", false
 }
 
-// headingLevel returns the heading level of a line, or 0.
 func headingLevel(runs []Chars) int {
 	if len(runs) == 0 {
 		return 0
@@ -314,7 +309,6 @@ func headingLevel(runs []Chars) int {
 	return 0
 }
 
-// styleHeadingLevel returns 1-6 for Title or Heading N styles, else 0.
 func styleHeadingLevel(style string) int {
 	if strings.EqualFold(style, "title") {
 		return 1
@@ -336,7 +330,6 @@ func escapeLineStart(line string) string {
 	return line
 }
 
-// markRun writes one run's formatting as marks around its text.
 func markRun(r Chars) string {
 	body := strings.TrimSpace(r.Text)
 	if body == "" {
@@ -354,7 +347,6 @@ func markRun(r Chars) string {
 			s = mark + s + mark
 		}
 	}
-	// Innermost first, so the outermost mark is written first.
 	wrap(f.Subscript, "~")
 	wrap(f.Superscript, "^")
 	wrap(f.Background != "", "==")
@@ -368,7 +360,6 @@ func markRun(r Chars) string {
 	return lead + s + trail
 }
 
-// escapeInline backslash-escapes Markdown marks.
 func escapeInline(s string) string {
 	rs := []rune(s)
 	var b strings.Builder
@@ -392,7 +383,6 @@ func escapeInline(s string) string {
 
 func itoa(n int) string { return strconv.Itoa(max(n, 1)) }
 
-// escapeMarkdownLegend escapes asterisks and underscores in legends.
 func escapeMarkdownLegend(s string) string {
 	return strings.NewReplacer("*", `\*`, "_", `\_`).Replace(s)
 }

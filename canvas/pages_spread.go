@@ -5,12 +5,8 @@ import (
 	"slices"
 )
 
-// Spread view: a shade in the fold between two facing sheets.
-
-// foldTab is the side of the square corner tab.
 const foldTab = 22
 
-// drawGutterShade darkens the inner edge of each facing sheet.
 func (ps *PageSet) drawGutterShade() {
 	s := ps.Style
 	if !ps.Spread || s.GutterShade <= 0 || s.GutterShadeWidth <= 0 {
@@ -34,7 +30,6 @@ func (ps *PageSet) drawGutterShade() {
 	}
 }
 
-// turnTab is where a sheet's corner tab sits: the bottom outer corner.
 func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	if !ps.Spread || ps.OnTurn == nil {
 		return 0, 0, false, false
@@ -44,7 +39,6 @@ func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	if r < 0 {
 		return 0, 0, false, false
 	}
-	// A left sheet, or a lone last sheet, turns back.
 	left = len(rows[r]) == 1 || rows[r][0] == i
 	if _, can := ps.TurnTarget(i, left); !can {
 		return 0, 0, false, false
@@ -56,7 +50,6 @@ func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	return px + pw - foldTab, py + ph - foldTab, false, true
 }
 
-// TurnTarget returns the first sheet of the pair before or after.
 func (ps *PageSet) TurnTarget(i int, back bool) (page int, ok bool) {
 	rows := ps.rows()
 	r := slices.IndexFunc(rows, func(row []int) bool { return slices.Contains(row, i) })
@@ -79,7 +72,6 @@ func (ps *PageSet) TurnTarget(i int, back bool) (page int, ok bool) {
 	return 0, false
 }
 
-// drawTurnTabs draws a folded corner on each sheet with a neighbour.
 func (ps *PageSet) drawTurnTabs() {
 	p, s := ps.Painter, ps.Style
 	for i := range ps.Pages {
@@ -87,7 +79,6 @@ func (ps *PageSet) drawTurnTabs() {
 		if !ok {
 			continue
 		}
-		// A right triangle built from one-pixel strips.
 		for k := range foldTab {
 			w := float64(foldTab - k)
 			p.SetFillStyle(s.Shadow)
@@ -100,7 +91,6 @@ func (ps *PageSet) drawTurnTabs() {
 	}
 }
 
-// turnAt handles a press on a corner tab.
 func (ps *PageSet) turnAt(x, y float64) bool {
 	for i := range ps.Pages {
 		tx, ty, left, ok := ps.turnTab(i)

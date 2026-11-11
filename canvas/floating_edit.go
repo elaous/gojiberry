@@ -7,7 +7,6 @@ import (
 	"github.com/elaous/gojiberry/complete"
 )
 
-// DefaultAutoClose is the code-editor set: " ' ` ( [ {.
 func DefaultAutoClose() map[rune]rune {
 	return map[rune]rune{'(': ')', '[': ']', '{': '}', '"': '"', '\'': '\'', '`': '`'}
 }
@@ -21,7 +20,6 @@ func (ft *FloatingText) isCloser(r rune) bool {
 	return false
 }
 
-// betweenPair reports whether the caret is between an opener and closer.
 func (ft *FloatingText) betweenPair() bool {
 	if ft.caret != ft.anchor || ft.caret == 0 || ft.caret >= len(ft.runes) {
 		return false
@@ -30,7 +28,6 @@ func (ft *FloatingText) betweenPair() bool {
 	return ok && closer == ft.runes[ft.caret].r
 }
 
-// typeRune types one character, auto-closing and wrapping selections.
 func (ft *FloatingText) typeRune(r rune) {
 	closer, isOpener := ft.AutoClose[r]
 	from, to := ft.Selection()
@@ -122,7 +119,6 @@ const (
 
 func isIdentRune(r rune) bool { return isWordRune(r) || r == '_' }
 
-// wordBeforeCaret returns the word prefix before the caret and its start.
 func (ft *FloatingText) wordBeforeCaret() (string, int) {
 	start := ft.caret
 	for start > 0 && isIdentRune(ft.runes[start-1].r) {
@@ -135,7 +131,6 @@ func (ft *FloatingText) wordBeforeCaret() (string, int) {
 	return b.String(), start
 }
 
-// defaultComplete suggests longer words that start with prefix.
 func (ft *FloatingText) defaultComplete(prefix string) []string {
 	rs := make([]rune, len(ft.runes))
 	for i, fr := range ft.runes {
@@ -144,7 +139,6 @@ func (ft *FloatingText) defaultComplete(prefix string) []string {
 	return completeWords(string(rs), ft.Vocabulary, prefix)
 }
 
-// completeWords ranks completions for every popup in the canvas.
 func completeWords(text string, vocabulary []string, prefix string) []string {
 	var ix complete.Index
 	ix.AddText(text)
@@ -173,7 +167,6 @@ func (ft *FloatingText) closeSuggestions() {
 	}
 }
 
-// updateSuggestions recomputes the completion popup.
 func (ft *FloatingText) updateSuggestions() {
 	ft.closeSuggestions()
 	if ft.mode != ModeEdit || !ft.editing || ft.caret != ft.anchor || ft.Painter == nil {
@@ -208,7 +201,6 @@ func (ft *FloatingText) updateSuggestions() {
 	m.SetHover(0)
 }
 
-// acceptSuggestion replaces the word being typed with the completion.
 func (ft *FloatingText) acceptSuggestion(word string) {
 	f := ft.typingFormat()
 	ins := make([]fRune, 0, len(word))
@@ -250,7 +242,6 @@ func (ft *FloatingText) palMenu() *Menu {
 
 func (ft *FloatingText) palOpen() bool { return ft.pal != nil && ft.pal.IsOpen() }
 
-// openPalette shows the color menu under toolbar button i.
 func (ft *FloatingText) openPalette(i int, kind string) {
 	ft.closeSuggestions()
 	if ft.palOpen() && ft.palKind == kind { // clicking the button again closes it
@@ -276,7 +267,6 @@ func (ft *FloatingText) openPalette(i int, kind string) {
 	ft.palMenu().OpenWithin(items, b[0], b[1]+b[3]+2, ft.viewport)
 }
 
-// SetTextColor colors the selection or next typed text; "" resets it.
 func (ft *FloatingText) SetTextColor(css string) bool {
 	return ft.ApplyFormat(func(f *Format) { f.Color = css })
 }
@@ -328,10 +318,8 @@ func (ft *FloatingText) closePopups() {
 	}
 }
 
-// popupsMouseDown lets an open palette or popup take a press.
 func (ft *FloatingText) popupsMouseDown(x, y float64) bool {
 	if ft.palOpen() {
-		// The button that opened the palette closes it again.
 		if w := ft.whatAt(x, y); (w == "button:6" && ft.palKind == "text") || (w == "button:7" && ft.palKind == "highlight") {
 			ft.pal.Close()
 			return true
@@ -529,7 +517,6 @@ var (
 	_ ViewportSetter        = (*FloatingText)(nil)
 )
 
-// PaletteMenu returns the color palette's menu (open while it is showing).
 func (ft *FloatingText) PaletteMenu() *Menu { return ft.palMenu() }
 
 // SuggestionMenu returns the completion popup's menu.

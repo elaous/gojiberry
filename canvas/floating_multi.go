@@ -5,11 +5,8 @@ import (
 	"strings"
 )
 
-// FloatingText is an EditTarget that edits at several cursors.
-
 var _ Editable = (*FloatingText)(nil)
 
-// EditTarget returns the box while it is being edited, else nil.
 func (ft *FloatingText) EditTarget() EditTarget {
 	if ft.mode != ModeEdit || !ft.editing {
 		return nil
@@ -80,7 +77,6 @@ func (ft *FloatingText) Replace(edits []Edit) {
 	ft.changed()
 }
 
-// formatBefore is the format new text typed at o takes.
 func (ft *FloatingText) formatBefore(o int) Format {
 	switch {
 	case o > 0 && o <= len(ft.runes):
@@ -91,7 +87,6 @@ func (ft *FloatingText) formatBefore(o int) Format {
 	return Format{}
 }
 
-// editAll applies gen at every cursor, in document order.
 func (ft *FloatingText) editAll(gen func(c Cursor) (from, to int, ins []fRune)) {
 	cs := normalize(ft.Cursors())
 	type ed struct {
@@ -117,7 +112,6 @@ func (ft *FloatingText) editAll(gen func(c Cursor) (from, to int, ins []fRune)) 
 	ft.changed()
 }
 
-// multiInsert types s at every cursor, replacing selections.
 func (ft *FloatingText) multiInsert(s string) {
 	s = strings.ReplaceAll(s, "\r", "")
 	ft.editAll(func(c Cursor) (int, int, []fRune) {
@@ -132,7 +126,6 @@ func (ft *FloatingText) multiInsert(s string) {
 	ft.closeSuggestions()
 }
 
-// multiPaste pastes one line per cursor when counts match.
 func (ft *FloatingText) multiPaste(text string) {
 	text = strings.ReplaceAll(text, "\r", "")
 	cs := normalize(ft.Cursors())
@@ -155,7 +148,6 @@ func (ft *FloatingText) multiPaste(text string) {
 	ft.closeSuggestions()
 }
 
-// multiSelectedText joins every cursor's selection with newlines.
 func (ft *FloatingText) multiSelectedText() (string, bool) {
 	var parts []string
 	for _, c := range normalize(ft.Cursors()) {
@@ -172,7 +164,6 @@ func (ft *FloatingText) multiSelectedText() (string, bool) {
 	return strings.Join(parts, "\n"), len(parts) > 0
 }
 
-// multiKey is handleEditKey with several cursors.
 func (ft *FloatingText) multiKey(key string, shift bool) bool {
 	move := func(to func(c Cursor) int) {
 		cs := ft.Cursors()

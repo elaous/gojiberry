@@ -48,7 +48,6 @@ func TableFromMarkdown(md string) (*Table, bool) {
 	return t, true
 }
 
-// splitPipes cuts a table line at bars, not escaped bars.
 func splitPipes(line string) []string {
 	line = strings.TrimSpace(line)
 	var cells []string

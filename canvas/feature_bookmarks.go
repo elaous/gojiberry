@@ -63,7 +63,6 @@ func (Bookmarks) Install(r *Registry) {
 	})
 }
 
-// bookmarkAtCursor returns the bookmark at the primary cursor.
 func bookmarkAtCursor(t EditTarget) string {
 	if _, ok := t.(BookmarkHost); !ok {
 		return ""
@@ -82,7 +81,6 @@ func bookmarkAtCursor(t EditTarget) string {
 	return ""
 }
 
-// retagRange rewrites the format of [from, to) with fn.
 func retagRange(t EditTarget, from, to int, fn func(*Format)) {
 	items := t.Slice(from, to)
 	out := make([]Item, len(items))
@@ -98,7 +96,6 @@ func retagRange(t EditTarget, from, to int, fn func(*Format)) {
 	t.SetCursors(cs)
 }
 
-// retagAll applies fn to every character's format.
 func retagAll(t EditTarget, fn func(*Format)) {
 	n := len([]rune(t.EditText()))
 	fms := charFormats(t.Slice(0, n))

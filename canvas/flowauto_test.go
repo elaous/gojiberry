@@ -23,7 +23,6 @@ func TestTextFlowAutoClose(t *testing.T) {
 	if flowText(f) != `x(a[b "c"])` || f.Cursors()[0] != At(11) {
 		t.Fatalf("closers are stepped over: %q %v", flowText(f), f.Cursors())
 	}
-	// An apostrophe after a word and an opener before a word stay single.
 	f.SetCursors([]Cursor{At(2)})
 	typeFlow(f, "'")
 	if flowText(f) != `x('a[b "c"])` {
@@ -44,7 +43,6 @@ func TestTextFlowAutoCloseWrapsSelectionAndManyCursors(t *testing.T) {
 	if flowText(f) != "(foo) bar" || f.Cursors()[0] != (Cursor{Anchor: 1, Caret: 4}) {
 		t.Fatalf("wrap: %q %v", flowText(f), f.Cursors())
 	}
-	// Two cursors, each wrapping its own word, then each typing a pair.
 	f.SetCursors([]Cursor{{Anchor: 1, Caret: 4}, {Anchor: 6, Caret: 9}})
 	f.InsertText("[")
 	if flowText(f) != "([foo]) [bar]" {
@@ -96,7 +94,6 @@ func TestTextFlowCompletion(t *testing.T) {
 	if flowText(f) != "alpha alpine alps\nalmond" || f.Cursors()[0] != At(24) || len(f.Suggestions()) != 0 {
 		t.Fatalf("accepted: %q %v", flowText(f), f.Cursors())
 	}
-	// Backspace re-offers, Escape dismisses, other keys close.
 	f.HandleKey("Backspace", false)
 	if len(f.Suggestions()) == 0 {
 		t.Fatal("Backspace keeps completing")

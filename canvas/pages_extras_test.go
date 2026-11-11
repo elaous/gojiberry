@@ -44,12 +44,10 @@ func TestSpreadLayout(t *testing.T) {
 	if a := ps.AnchorAt(50, 60); a.Page != 0 {
 		t.Errorf("left: %+v", a)
 	}
-	// An anchor beyond the sheet's edge reaches across the gutter.
 	if x, _ := ps.Resolve(Anchor{Page: 0, X: 98}); x != 108 {
 		t.Errorf("resolve = %g", x)
 	}
 
-	// A book: the first sheet stands alone on the right.
 	ps.SpreadBook = true
 	if r := rect(ps, 0); r != [4]float64{114, 10, 100, 150} {
 		t.Errorf("book page 0 on the right: %v", r)
@@ -60,7 +58,6 @@ func TestSpreadLayout(t *testing.T) {
 	if r := rect(ps, 2); r != [4]float64{114, 180, 100, 150} {
 		t.Errorf("book page 2 faces it: %v", r)
 	}
-	// Centered in a wide container, and a lone last sheet.
 	ps = sheets(3)
 	ps.Spread, ps.Width = true, 500
 	if r := rect(ps, 0); r[0] != 150 || rect(ps, 1)[0] != 250 {
@@ -69,7 +66,6 @@ func TestSpreadLayout(t *testing.T) {
 	if r := rect(ps, 2); r[0] != 200 {
 		t.Errorf("a lone sheet is centered: %v", r)
 	}
-	// Different heights share a row's top; the row is as tall as the tallest.
 	ps = sheets(4)
 	ps.Pages[1].Height = 200
 	ps.Spread = true
@@ -177,7 +173,6 @@ func TestWatermarkAndBackgroundDrawing(t *testing.T) {
 			t.Errorf("fit %d: want %q in %v", fit, want, p.calls)
 		}
 	}
-	// Without a painter there is nothing to draw on, and no crash.
 	ps.Painter = nil
 	ps.drawBackdrop(0)
 }
@@ -192,7 +187,6 @@ func TestRemovingFurniture(t *testing.T) {
 		ps.Pages[0].Background = &Background{Image: fakeImage{1, 1}}
 		return ps
 	}
-	// One row per page: header and footer, the number ("_" none), watermark and background.
 	shown := func(ps *PageSet) string {
 		flag := func(on bool, c string) string {
 			if on {
@@ -222,9 +216,6 @@ func TestRemovingFurniture(t *testing.T) {
 	ps.RemovePageNumber(2, RemoveThisPage)
 	ps.RemoveWatermark(3, RemoveForward)
 	ps.RemoveBackground(1, RemoveThisPage)
-	// The header is off on page 3 only; the footer from page 3 on; the number
-	// skips page 3 but the count goes on; the watermark is off from page 4;
-	// the background from page 2 only.
 	want := "hf|1|wb hf|2|w- --|_|wb h-|4|-b h-|5|-b"
 	if got := shown(ps); got != want {
 		t.Errorf("after removals:\n got %s\nwant %s", got, want)
@@ -250,7 +241,6 @@ func TestRemovingFurniture(t *testing.T) {
 	if ps.ResolvedHeader(0) != nil || ps.ResolvedHeader(4) != nil {
 		t.Error("forward from the first page removes everywhere")
 	}
-	// Removing a page's own number when the next page has its own leaves that alone.
 	ps = mk()
 	ps.Pages[2].PageNumber = &PageNumberConfig{Show: true, Start: 10, Format: "{n}"}
 	ps.RemovePageNumber(1, RemoveThisPage)
@@ -283,7 +273,6 @@ func TestPageFurnitureCommands(t *testing.T) {
 	if ps.ResolvedWatermark(0) == nil || ps.ResolvedWatermark(1) != nil {
 		t.Error("watermark removed from the caret's page on")
 	}
-	// Setting a watermark: prompts, applies from the caret's page, keeps the look.
 	asked := ""
 	answer := "DRAFT"
 	st.Prompt = func(msg, initial string) (string, bool) { asked = initial; return answer, true }
@@ -311,7 +300,6 @@ func TestPageFurnitureCommands(t *testing.T) {
 	if st.RunCommand(CmdSetWatermark) {
 		t.Error("no prompt")
 	}
-	// Spread toggles.
 	st.RunCommand(CmdSpread)
 	if !ps.Spread || ps.SpreadBook {
 		t.Error("spread on")
@@ -325,7 +313,6 @@ func TestPageFurnitureCommands(t *testing.T) {
 	if ps.Spread {
 		t.Error("toggles off")
 	}
-	// A flow with no pages, or a box, declines.
 	plain, _ := editFlow(t, 0, Chars{Text: "x"})
 	pst := NewStage(&fakePainter{}, 10, 10, plain)
 	if pst.RunCommand(CmdSpread) || pst.RunCommand(CmdPageRemove("header", RemoveAll)) {
@@ -364,7 +351,6 @@ func TestRemoveMenuInTheHeaderBadge(t *testing.T) {
 	if ps.edit != nil {
 		t.Error("editing ends")
 	}
-	// The page-number menu has the same choices.
 	ps.Pages[0].PageNumber = &PageNumberConfig{Show: true, Start: 1}
 	ps.selectNumber(1, [4]float64{10, 10, 8, 16})
 	labels = ps.Menu().Labels()
@@ -401,7 +387,6 @@ func TestRuleCommand(t *testing.T) {
 	if f.Cursors()[0].Caret != 4 {
 		t.Errorf("the caret goes after the rule and its line break: %v", f.Cursors())
 	}
-	// Two cursors, two separate rules.
 	f.SetCursors([]Cursor{At(0), At(6)})
 	st.HandleChord("Mod+Alt+Enter")
 	var objs []InlineObject
@@ -467,7 +452,6 @@ func TestSpreadDrawsTheFoldShadeAndTurnTabs(t *testing.T) {
 	if !fp.has("fillStyle rgba(0, 0, 0, 0.220)") {
 		t.Errorf("the fold is shaded strongest at the spine: %v", fp.calls)
 	}
-	// Not a spread: no shade.
 	ps.Spread = false
 	fp2 := &fakePainter{}
 	ps.Painter = fp2
@@ -479,7 +463,6 @@ func TestSpreadDrawsTheFoldShadeAndTurnTabs(t *testing.T) {
 	ps.Spread = true
 	var got []int
 	ps.OnTurn = func(page int) { got = append(got, page) }
-	// Rows: [0 1] [2 3] [4]. Sheet 1 is the right of the first pair: its tab turns forward to sheet 2.
 	x, y, left, ok := ps.turnTab(1)
 	if !ok || left {
 		t.Fatalf("right sheet tab: %v %v", left, ok)
@@ -487,7 +470,6 @@ func TestSpreadDrawsTheFoldShadeAndTurnTabs(t *testing.T) {
 	if !ps.MouseDown(x+3, y+3) || len(got) != 1 || got[0] != 2 {
 		t.Fatalf("turning forward: %v", got)
 	}
-	// Sheet 2 is the left of the second pair: back to sheet 0.
 	x, y, left, ok = ps.turnTab(2)
 	if !ok || !left {
 		t.Fatalf("left sheet tab: %v %v", left, ok)
@@ -496,14 +478,12 @@ func TestSpreadDrawsTheFoldShadeAndTurnTabs(t *testing.T) {
 	if len(got) != 2 || got[1] != 0 {
 		t.Fatalf("turning back: %v", got)
 	}
-	// The first pair has nothing before it; the last sheet nothing after.
 	if _, _, _, ok := ps.turnTab(0); ok {
 		t.Error("nothing before the first pair")
 	}
 	if _, can := ps.TurnTarget(4, false); can {
 		t.Error("nothing after the last")
 	}
-	// Without a host there are no tabs.
 	ps.OnTurn = nil
 	if _, _, _, ok := ps.turnTab(1); ok {
 		t.Error("no OnTurn, no tabs")

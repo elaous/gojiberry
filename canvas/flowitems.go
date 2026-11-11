@@ -2,11 +2,10 @@ package canvas
 
 import "unicode"
 
-// Format overrides a TextFlow's base TextStyle for a run of characters.
 type Format struct {
 	FontFamily string
 	FontSize   float64
-	// Scale multiplies the font size and line height, e.g. 2 for double.
+	// Scale multiplies the font size and line height, e.g.
 	Scale      float64
 	FontWeight int
 	FontStyle  string
@@ -24,15 +23,11 @@ type Format struct {
 	// Style names a character style whose formatting this text gets.
 	Style string
 	// Link makes the text a link to this URL.
-	Link string
-	// Comment is the ID of a comment (see CommentSet) on this text.
-	Comment string
-	// Bookmark names this text as a place a link ("#name") can jump to.
+	Link     string
+	Comment  string
 	Bookmark string
-	// Index marks this text as an index entry under this term.
-	Index string
-	// Lang is the BCP 47 language of this text; "" inherits the document's.
-	Lang string
+	Index    string
+	Lang     string
 	// Proposal marks text that is part of a suggested change.
 	Proposal string
 }
@@ -48,7 +43,6 @@ const (
 	CaseSmallCaps          // lower-case letters as smaller capitals
 )
 
-// LinkColor is the color of linked text unless its Format sets one.
 const LinkColor = "#1a5fb4"
 
 // IsZero reports whether f changes nothing.
@@ -57,7 +51,6 @@ func (f Format) IsZero() bool { return f == Format{} }
 // Resolve applies f over base.
 func (f Format) Resolve(base TextStyle) TextStyle { return f.resolve(base) }
 
-// resolve applies f over base; size changes adjust a set line height.
 func (f Format) resolve(base TextStyle) TextStyle {
 	s := base
 	if f.FontFamily != "" {
@@ -103,7 +96,6 @@ func (f Format) resolve(base TextStyle) TextStyle {
 	return s
 }
 
-// displayRune returns the letter as shown under case kind c.
 func displayRune(c CaseKind, r rune, prevLetter bool) (rune, bool) {
 	switch c {
 	case CaseUpper:
@@ -123,12 +115,8 @@ func displayRune(c CaseKind, r rune, prevLetter bool) (rune, bool) {
 	return r, false
 }
 
-// Item is one element of the content stream: Chars, ColumnConfig or Break.
 type Item interface{ flowItem() }
 
-// Chars is a run of text with one Format;
-//
-//	starts a paragraph.
 type Chars struct {
 	Text   string
 	Format Format

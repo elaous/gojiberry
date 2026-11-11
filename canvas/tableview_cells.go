@@ -1,6 +1,5 @@
 package canvas
 
-// cellRange is a block of cells selected by extending from the active cell.
 type cellRange struct {
 	on                       bool
 	anchorR, anchorC, hr, hc int
@@ -47,7 +46,6 @@ func (v *TableView) Range() (r0, c0, r1, c1 int, ok bool) {
 	return r0, c0, r1, c1, true
 }
 
-// extendRange moves the selection head by (dr, dc).
 func (v *TableView) extendRange(dr, dc int) {
 	t := v.Table
 	if !v.rng.on {
@@ -118,7 +116,6 @@ func (v *TableView) MouseDownMods(x, y float64, m Mods) bool {
 	return v.MouseDown(x, y)
 }
 
-// drawRange tints the Shift-selected block.
 func (v *TableView) drawRange(g geometry) {
 	if !v.rng.on {
 		return
@@ -137,7 +134,6 @@ func (v *TableView) drawRange(g geometry) {
 	p.StrokeRect(x0+1, y0+1, x1+w1-x0-2, y1+h1-y0-2)
 }
 
-// cellMenu is the cell part of the table handle's menu.
 func (v *TableView) cellMenu() []MenuItem {
 	r0, c0, r1, c1, ok := v.Range()
 	merged := false

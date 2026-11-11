@@ -6,7 +6,6 @@ type FocusEnterer interface {
 	FocusIn() bool
 }
 
-// FocusIn tells the components that the keyboard is in the editor.
 func (s *Stage) FocusIn() bool {
 	if s.EditTarget() != nil {
 		return false

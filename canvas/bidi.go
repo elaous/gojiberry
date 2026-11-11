@@ -2,8 +2,6 @@ package canvas
 
 import "unicode"
 
-// Bidi: paragraph direction and per-character levels, per the Unicode algorithm.
-
 type bidiClass uint8
 
 const (
@@ -13,7 +11,7 @@ const (
 	bcAL                       // strong right-to-left (Arabic, ...)
 	bcEN                       // European number
 	bcAN                       // Arabic-Indic number
-	bcMark                     // a combining mark: takes the class of the letter before it
+	bcMark
 )
 
 func classOf(r rune) bidiClass {
@@ -60,7 +58,6 @@ func IsRTLText(rs []rune) bool {
 	return false
 }
 
-// bidiLevels returns each rune's embedding level, or nil if all are level 0.
 func bidiLevels(rs []rune, rtl bool) []uint8 {
 	cls := make([]bidiClass, len(rs))
 	any := false
@@ -81,7 +78,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 	if rtl {
 		baseClass = bcR
 	}
-	// Marks follow the letter before them.
 	prev := baseClass
 	for i, c := range cls {
 		if c == bcMark {
@@ -90,7 +86,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 			prev = c
 		}
 	}
-	// W2: a European number after an Arabic letter is an Arabic number.
 	last := baseClass
 	for i, c := range cls {
 		switch c {
@@ -102,7 +97,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 			}
 		}
 	}
-	// W4, W5: separators and signs join adjacent numbers.
 	for i := 1; i+1 < len(rs); i++ {
 		if cls[i] == bcNeutral && cls[i-1] == cls[i+1] && (cls[i-1] == bcEN || cls[i-1] == bcAN) {
 			switch rs[i] {
@@ -122,7 +116,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 			}
 		}
 	}
-	// N1, N2: neutrals between two strong sides of one direction take it.
 	strong := func(c bidiClass) (bidiClass, bool) {
 		switch c {
 		case bcL:
@@ -159,7 +152,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 		}
 		i = j
 	}
-	// I1, I2.
 	lv := make([]uint8, len(rs))
 	for i, c := range res {
 		l := base
@@ -181,7 +173,6 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 	return lv
 }
 
-// visualOrder returns piece drawing order, as indexes into levels (rule L2).
 func visualOrder(levels []uint8) []int {
 	order := make([]int, len(levels))
 	for i := range order {

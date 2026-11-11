@@ -19,13 +19,10 @@ const (
 type ImagePlacement int
 
 const (
-	// PlaceFloating positions the image by X, Y or Anchor over the text.
 	PlaceFloating ImagePlacement = iota
-	// PlaceInline makes the image part of the text, as an inline item.
 	PlaceInline
 )
 
-// Insets are pixels cropped from each side of an image's frame.
 type Insets struct{ Left, Top, Right, Bottom float64 }
 
 // ImageStyle is the chrome Image draws in edit mode.
@@ -64,7 +61,6 @@ func DefaultImageStyle() ImageStyle {
 	}
 }
 
-// Image draws a bitmap with crop and opacity, edit-mode chrome included.
 type Image struct {
 	Src        ImageSource
 	X, Y, W, H float64
@@ -72,13 +68,11 @@ type Image struct {
 	Placement ImagePlacement
 	// Anchor, if set, pins a floating image to a page.
 	Anchor *Anchor
-	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
-	Pages *PageSet
-	Clip  Insets
-	Alpha float64 // 0 (transparent) to 1 (opaque)
+	Pages  *PageSet
+	Clip   Insets
+	Alpha  float64 // 0 (transparent) to 1 (opaque)
 	// Snap is the drag granularity in px (NewImage sets 5).
-	Snap float64
-	// BoundsW, if set, keeps the visible rectangle within x in [0, BoundsW].
+	Snap    float64
 	BoundsW float64
 	// Wrap turns on text wrap-around once a Flow is set.
 	Wrap bool
@@ -93,14 +87,11 @@ type Image struct {
 	Decorative bool
 	// LongDesc is a longer description for complex images.
 	LongDesc string
-	// Diagram is the kind of diagram, such as flowchart or map.
-	Diagram string
-	// Legend is the caption under the picture, drawn in small text.
-	Legend string
+	Diagram  string
+	Legend   string
 	// Credit and SourceURL give the picture's source.
 	Credit, SourceURL string
 
-	// OnChange is called after any change made by dragging or the toolbar.
 	OnChange func(*Image)
 
 	flow  *TextFlow
@@ -118,7 +109,6 @@ type imageDrag struct {
 	startClip      Insets
 }
 
-// NewImage returns an image of src shown at its natural size.
 func NewImage(src ImageSource, x, y float64) *Image {
 	w, h := src.Size()
 	return &Image{
@@ -129,7 +119,6 @@ func NewImage(src ImageSource, x, y float64) *Image {
 
 func (im *Image) SetPainter(p ImagePainter) { im.Painter = p }
 
-// SetFlow sets the flow to wrap around; the image becomes an obstacle.
 func (im *Image) SetFlow(f *TextFlow) {
 	if im.flow != nil {
 		im.flow.RemoveObstacle(im)
@@ -151,7 +140,6 @@ func (im *Image) SetWrap(on bool) {
 // Dragging reports whether a drag is in progress.
 func (im *Image) Dragging() bool { return im.drag != nil }
 
-// ContainsPoint: a floating image's visible part, and handles in edit mode.
 func (im *Image) ContainsPoint(x, y float64) bool {
 	if im.Placement != PlaceFloating {
 		return false
@@ -188,7 +176,6 @@ func (im *Image) Visible() (x, y, w, h float64) {
 		(im.W - im.Clip.Left - im.Clip.Right) * sc, (im.H - im.Clip.Top - im.Clip.Bottom) * sc
 }
 
-// sc is the displayed-to-nominal scale; 1 unless fitted.
 func (im *Image) sc() float64 {
 	if im.Placement == PlaceInline && im.scale > 0 {
 		return im.scale
@@ -206,14 +193,12 @@ func (im *Image) pageSet() *PageSet {
 	return nil
 }
 
-// resolve updates X, Y from the Anchor.
 func (im *Image) resolve() {
 	if ps := im.pageSet(); im.Anchor != nil && ps != nil && im.Placement == PlaceFloating {
 		im.X, im.Y = ps.Resolve(*im.Anchor)
 	}
 }
 
-// syncAnchor re-derives the Anchor from X, Y after a drag.
 func (im *Image) syncAnchor() {
 	if ps := im.pageSet(); im.Anchor != nil && ps != nil {
 		*im.Anchor = ps.AnchorAt(im.X, im.Y)
@@ -230,7 +215,6 @@ func (im *Image) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	return vw * im.scale, vh*im.scale + im.legendHeight(p, vw*im.scale)
 }
 
-// DrawAt draws the visible part with its top-left at (x, y).
 func (im *Image) DrawAt(p Painter, x, y float64) {
 	sc := im.sc()
 	im.X, im.Y = x-im.Clip.Left*sc, y-im.Clip.Top*sc
@@ -255,7 +239,6 @@ const (
 	legendMinW  = 100.0
 )
 
-// legendLines wraps the legend to the picture's width.
 func (im *Image) legendLines(p Painter, w float64) []string {
 	if strings.TrimSpace(im.Legend) == "" || p == nil {
 		return nil
@@ -264,7 +247,6 @@ func (im *Image) legendLines(p Painter, w float64) []string {
 	return wrapToWidth(p, im.Legend, max(w, legendMinW))
 }
 
-// legendHeight is the room the legend takes under the picture.
 func (im *Image) legendHeight(p Painter, w float64) float64 {
 	n := len(im.legendLines(p, w))
 	if n == 0 {
@@ -273,7 +255,6 @@ func (im *Image) legendHeight(p Painter, w float64) float64 {
 	return legendGap + float64(n)*legendLineH
 }
 
-// drawLegend writes the legend under a picture.
 func (im *Image) drawLegend(p Painter, x, y, w float64) {
 	lines := im.legendLines(p, w)
 	if len(lines) == 0 {
@@ -289,7 +270,6 @@ func (im *Image) drawLegend(p Painter, x, y, w float64) {
 	p.SetTextAlign("left")
 }
 
-// Exclusion: with Wrap on, the visible rectangle plus WrapMargin is an obstacle.
 func (im *Image) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	if !im.Wrap || im.Placement == PlaceInline {
 		return 0, 0, false
@@ -320,21 +300,18 @@ func (im *Image) changed() {
 
 var toolbarLabels = [...]string{"Move", "Clip", "Alpha", "Wrap"}
 
-// buttonRect returns toolbar button i (0-2 tools, 3 Wrap): x, y, w, h.
 func (im *Image) buttonRect(i int) [4]float64 {
 	s := im.ChromeStyle
 	vx, vy, _, _ := im.Visible()
 	return [4]float64{vx + float64(i)*(s.ButtonW+4), max(vy-s.ButtonH-6, 0), s.ButtonW, s.ButtonH}
 }
 
-// sliderRect returns the alpha slider's track: x, y, w, h.
 func (im *Image) sliderRect() [4]float64 {
 	s := im.ChromeStyle
 	vx, vy, vw, vh := im.Visible()
 	return [4]float64{vx, vy + vh + s.SliderGap, vw, s.SliderH}
 }
 
-// handleRect returns the crop handle rectangle for an edge.
 func (im *Image) handleRect(edge string) [4]float64 {
 	hs := im.ChromeStyle.HandleSize
 	vx, vy, vw, vh := im.Visible()
@@ -355,7 +332,6 @@ func (im *Image) contains(x, y float64) bool {
 	return inRect(x, y, [4]float64{vx, vy, vw, vh})
 }
 
-// whatAt returns what a press grabs: a toolbar button, handle or image.
 func (im *Image) whatAt(x, y float64) string {
 	for i := range toolbarLabels {
 		if inRect(x, y, im.buttonRect(i)) {
@@ -382,7 +358,6 @@ func (im *Image) whatAt(x, y float64) string {
 	return ""
 }
 
-// MouseDown handles toolbar clicks and starts a drag with the active tool.
 func (im *Image) MouseDown(x, y float64) bool {
 	if im.mode != ModeEdit {
 		return false
@@ -514,7 +489,6 @@ func (im *Image) CSSCursor() string {
 	return im.hover
 }
 
-// Draw paints the image at Alpha and, in edit mode, the toolbar.
 func (im *Image) Draw() {
 	p, s := im.Painter, im.ChromeStyle
 	nw, nh := im.Src.Size()
@@ -523,7 +497,6 @@ func (im *Image) Draw() {
 	sc := im.sc()
 
 	if im.mode == ModeEdit && im.tool == ToolClip {
-		// Show what's cropped away, dimmed, behind the kept part.
 		p.SetGlobalAlpha(im.Alpha * s.GhostAlpha)
 		p.DrawImage(im.Src, 0, 0, nw, nh, im.X, im.Y, im.W*sc, im.H*sc)
 	}

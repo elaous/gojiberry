@@ -42,12 +42,10 @@ func TestParagraphAndCharacterStylesLayOut(t *testing.T) {
 	if !strings.Contains(strong.Font, "400") {
 		t.Errorf("direct formatting beats the style: %q", strong.Font)
 	}
-	// The paragraph style's spacing applies; the next paragraph is unaffected.
 	if lines[1].Y-lines[0].Y != 44+4 { // line height + Heading 1's SpaceAfter
 		t.Errorf("space after the heading: %g", lines[1].Y-lines[0].Y)
 	}
 
-	// Redefining a style restyles its uses.
 	f.DefineStyle(StyleDef{Name: "Heading 1", Paragraph: true, Format: Format{Scale: 3}})
 	if h := f.Layout().Lines[0].H; h != 66 {
 		t.Errorf("redefined heading: %g", h)
@@ -59,14 +57,12 @@ func TestParagraphAndCharacterStylesLayOut(t *testing.T) {
 	if got := f.styleNames(false); len(got) != 3 {
 		t.Errorf("character styles: %v", got)
 	}
-	// Unknown names, and a character style used as a paragraph style, do nothing.
 	g, _ := styledFlow(ParaFormat{Style: "Emphasis"}, Chars{Text: "a\n"}, ParaFormat{Style: "Nope"}, Chars{Text: "b", Format: Format{Style: "Heading 1"}})
 	for _, ln := range g.Layout().Lines {
 		if ln.H != 22 || strings.Contains(ln.Runs[0].Font, "italic") {
 			t.Errorf("ignored styles: %+v", ln)
 		}
 	}
-	// A paragraph style's character format does not leak into the next paragraph.
 	h, _ := styledFlow(ParaFormat{Style: "Heading 1"}, Chars{Text: "A\nB"})
 	if lines := h.Layout().Lines; lines[1].H != 22 {
 		t.Errorf("next paragraph is plain: %g", lines[1].H)
@@ -118,7 +114,6 @@ func TestStyleCommands(t *testing.T) {
 		st.RunCommand(cmd)
 	}
 
-	// Character styles toggle on the selection.
 	f.SetCursors([]Cursor{{Anchor: 0, Caret: 2}})
 	if !st.RunCommand(CmdStyleEmphasis) || f.Slice(0, 1)[0].(Chars).Format.Style != "Emphasis" {
 		t.Fatalf("emphasis: %+v", f.ContentItems())
@@ -129,7 +124,6 @@ func TestStyleCommands(t *testing.T) {
 	}
 	st.RunCommand(CmdStyleStrong)
 
-	// Clear formatting keeps links and lists, and drops the rest.
 	f.ApplyFormat(func(x *Format) { x.Link = "http://x"; x.Color = "#f00" })
 	f.ApplyParagraph(func(p *ParaFormat) { p.Align = AlignRight; p.List = ListStyle{Kind: ListBullet}; p.Style = "Heading 2" })
 	if !st.HandleChord("Mod+\\") {
@@ -164,7 +158,6 @@ func TestDefineStyleFromTheText(t *testing.T) {
 	if got := f.ParagraphAt(0); got.Style != "Callout" || got.IndentLeft != 0 {
 		t.Errorf("the paragraph now uses the style: %+v", got)
 	}
-	// Redefining the style restyles the paragraph.
 	def.Para.IndentLeft = 50
 	f.DefineStyle(def)
 	if x := f.Layout().Lines[0].X; x != 10+50 {
@@ -191,7 +184,6 @@ func TestDefineStyleFromTheText(t *testing.T) {
 	if st.RunCommand(CmdDefineParaStyle) {
 		t.Error("no prompt")
 	}
-	// A box has no styles.
 	bst, _ := stageWith(t, "x")
 	if bst.HandleChord("Mod+Alt+1") || bst.RunCommand(CmdStyleEmphasis) {
 		t.Error("a floating text has no named styles")
@@ -201,7 +193,6 @@ func TestDefineStyleFromTheText(t *testing.T) {
 	}
 }
 
-// firstChars is the first Chars item of the flow's content.
 func firstChars(f *TextFlow) Chars {
 	for _, it := range f.ContentItems() {
 		if c, ok := it.(Chars); ok {

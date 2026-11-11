@@ -82,11 +82,9 @@ func TestTypesetReadsTheNotationLikeTheMathMLExport(t *testing.T) {
 	if got != want {
 		t.Fatalf("\n got %q\nwant %q", got, want)
 	}
-	// two letters are two identifiers; the script goes to the last
 	if got := strings.Join(MathSymbols("ab^2"), " "); got != "a b 2" {
 		t.Fatalf("%q", got)
 	}
-	// broken input still gives a tree
 	for _, f := range []string{"{{", "}}", "^", "frac{a", "sqrt", "x^", "_1", "\x00 1"} {
 		MathSymbols(f)
 		drawn(f, 16)

@@ -2,10 +2,9 @@ package canvas
 
 import "strings"
 
-// flowSel is a text selection: stream offsets, anchor to caret.
 type flowSel struct {
 	anchor, caret int
-	after         bool // the caret is after the breaks at its offset (see Cursor.After)
+	after         bool
 	dragging      bool
 }
 
@@ -70,7 +69,6 @@ func (f *TextFlow) CommonFormat() Format {
 	return CommonFormat(fs...)
 }
 
-// obstructed reports whether (x, y) is on something over the text.
 func (f *TextFlow) obstructed(x, y float64) bool {
 	if f.Vertical { // floating objects are not laid around vertical text
 		return false
@@ -86,7 +84,6 @@ func (f *TextFlow) obstructed(x, y float64) bool {
 	return false
 }
 
-// inText reports whether (x, y) is inside some page's text area.
 func (f *TextFlow) inText(x, y float64) bool {
 	for i := range f.pageCount() {
 		px, py, pw, ph := f.pageRect(i)
@@ -97,7 +94,6 @@ func (f *TextFlow) inText(x, y float64) bool {
 	return false
 }
 
-// beginSelect starts a selection drag at (x, y), if on the text.
 func (f *TextFlow) beginSelect(x, y float64) bool {
 	had := f.HasSelection()
 	if f.Painter == nil || f.obstructed(x, y) || !f.inText(x, y) {
@@ -141,7 +137,6 @@ func (f *TextFlow) DoubleClick(x, y float64) bool {
 	return true
 }
 
-// drawSelection tints selected text, line by line.
 func (f *TextFlow) drawSelection(lay Layout) {
 	p := f.Painter
 	p.SetFillStyle(f.ChromeStyle.SelectColor)

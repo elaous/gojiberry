@@ -11,7 +11,6 @@ type CellPos struct{ Row, Col int }
 // Merge is a block of cells shown as one cell.
 type Merge struct{ Row, Col, Rows, Cols int }
 
-// CellStyle is one cell's formatting; the zero value inherits the table's.
 type CellStyle struct {
 	// Background and Color are CSS colours ("" keeps the table's).
 	Background, Color string
@@ -22,7 +21,6 @@ type CellStyle struct {
 // IsZero reports whether the style changes nothing.
 func (c CellStyle) IsZero() bool { return c == CellStyle{} }
 
-// MergeAt returns the merge holding the cell, as owner or covered cell.
 func (t *Table) MergeAt(row, col int) (Merge, bool) {
 	for _, m := range t.Merges {
 		if row >= m.Row && row < m.Row+m.Rows && col >= m.Col && col < m.Col+m.Cols {
@@ -32,7 +30,6 @@ func (t *Table) MergeAt(row, col int) (Merge, bool) {
 	return Merge{}, false
 }
 
-// Owner returns the cell that shows (row, col): its merge's top-left cell.
 func (t *Table) Owner(row, col int) (int, int) {
 	if m, ok := t.MergeAt(row, col); ok {
 		return m.Row, m.Col
@@ -40,7 +37,6 @@ func (t *Table) Owner(row, col int) (int, int) {
 	return row, col
 }
 
-// Covered reports whether the cell is hidden under another cell's merge.
 func (t *Table) Covered(row, col int) bool {
 	m, ok := t.MergeAt(row, col)
 	return ok && (m.Row != row || m.Col != col)
@@ -120,7 +116,6 @@ func (t *Table) Unmerge(row, col int) bool {
 	return true
 }
 
-// SetCellStyle sets a cell's style; a covered cell uses its owner.
 func (t *Table) SetCellStyle(row, col int, st CellStyle) {
 	if !t.InRange(row, col) {
 		return
@@ -142,7 +137,6 @@ func (t *Table) StyleAt(row, col int) CellStyle {
 	return t.Styles[CellPos{row, col}]
 }
 
-// shift moves merges and styles for an inserted or deleted row or column.
 func (t *Table) shift(atRow, atCol, dRow, dCol int) {
 	at, d, rowWise := atCol, dCol, false
 	if dRow != 0 {
@@ -189,7 +183,6 @@ func (t *Table) shift(atRow, atCol, dRow, dCol int) {
 	})
 }
 
-// remapStyles moves each style to the position f returns; negative drops it.
 func (t *Table) remapStyles(f func(CellPos) CellPos) {
 	if len(t.Fields) > 0 { // the fields follow their cells
 		fields := make(map[CellPos]*FormFieldObject, len(t.Fields))
@@ -212,7 +205,6 @@ func (t *Table) remapStyles(f func(CellPos) CellPos) {
 	t.Styles = out
 }
 
-// removeRowOfMerges shrinks merges before a row is deleted.
 func (t *Table) removeRowOfMerges(at int) {
 	for i, m := range t.Merges {
 		if m.Row == at && m.Rows > 1 {
@@ -223,13 +215,12 @@ func (t *Table) removeRowOfMerges(at int) {
 				}
 				t.Styles[CellPos{at + 1, m.Col}] = st
 			}
-			t.Merges[i].Row++ // shift moves it back up, and it is a row shorter
+			t.Merges[i].Row++
 			t.Merges[i].Rows--
 		}
 	}
 }
 
-// removeColumnOfMerges is removeRowOfMerges for a column.
 func (t *Table) removeColumnOfMerges(at int) {
 	for i, m := range t.Merges {
 		if m.Col == at && m.Cols > 1 {

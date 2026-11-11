@@ -2,39 +2,18 @@ package canvas
 
 import "math"
 
-// Vertical text (TextFlow.Vertical): lines run from the top of the page to the bottom and follow one another
-// from the right of the page to the left (vertical-rl, as in Chinese, Japanese and Korean books).
-//
-// The text is laid out as ordinary horizontal text in a virtual plane, and the plane is turned a quarter turn
-// when it is drawn: a virtual point (u, v) of page p is the physical point
-//
-//	X = px + pw - (v - vy), Y = py + (u - vx)
-//
-// where (px, py, pw, ph) is the page's text area and (vx, vy) the origin of the page in the virtual plane (pages
-// are stacked there so that no two overlap, whatever the shape of the page). A virtual line, left to right, is a
-// column going down; the line that comes next, below it, is the one to its left. Everything that works in the
-// plane (the layout, the carets, the selection, hit testing) is unchanged; the places where the plane meets the
-// screen convert: drawing (drawVertical), the mouse (toVirtual), the keys (verticalKey) and the box the scroll
-// view keeps in sight (physicalCaret). Latin text and digits are turned with the plane (they read sideways, as they
-// do in vertical Japanese); ideographs, kana and hangul are turned back, so that they stand upright.
-
-// verticalGap is the space between two pages in the virtual plane.
 const verticalGap = 24
 
-// physRect is the rectangle the text of a page flows into, on the screen.
 func (f *TextFlow) physRect(page int) (x, y, w, h float64) {
 	x, y, w, h = f.pageContent(page)
 	return x, y, w, max(h-f.footnoteBandOf(page), 0)
 }
 
-// virtualOrigin is where page's text area starts in the virtual plane.
 func (f *TextFlow) virtualOrigin(page int) (vx, vy float64) {
 	px, _, pw, _ := f.physRect(page)
 	return px, float64(page) * (pw + verticalGap)
 }
 
-// toVirtual turns a point on the screen into the point of the virtual plane it is, and the page it is on: the
-// page whose text area holds it, or the nearest.
 func (f *TextFlow) toVirtual(x, y float64) (u, v float64, page int) {
 	best, bestD := 0, math.Inf(1)
 	for i := range f.pageCount() {
@@ -61,7 +40,6 @@ func (f *TextFlow) toVirtual(x, y float64) (u, v float64, page int) {
 	return vx + (y - py), vy + (px + pw - x), best
 }
 
-// vpt is toVirtual for a flow that may not be vertical.
 func (f *TextFlow) vpt(x, y float64) (float64, float64) {
 	if !f.Vertical {
 		return x, y
@@ -70,14 +48,12 @@ func (f *TextFlow) vpt(x, y float64) (float64, float64) {
 	return u, v
 }
 
-// toPhysical is the screen point of a point of the virtual plane on the page.
 func (f *TextFlow) toPhysical(u, v float64, page int) (x, y float64) {
 	px, py, pw, _ := f.physRect(page)
 	vx, vy := f.virtualOrigin(page)
 	return px + pw - (v - vy), py + (u - vx)
 }
 
-// lineOffsetPage is the page the line holding the offset is on.
 func (f *TextFlow) lineOffsetPage(o int) int {
 	lines := f.Layout().Lines
 	for _, ln := range lines {
@@ -91,9 +67,6 @@ func (f *TextFlow) lineOffsetPage(o int) int {
 	return 0
 }
 
-// physicalCaret is the box of a caret on the screen, as CaretBox says it: the point (x, y) and a height. In
-// vertical text a caret is a short horizontal stroke, so the box is a point on it and the height of the stroke's
-// thickness, enough to keep it in view.
 func (f *TextFlow) physicalCaret(x, y, h float64, ok bool, o int) (float64, float64, float64, bool) {
 	if !ok || !f.Vertical {
 		return x, y, h, ok
@@ -103,8 +76,6 @@ func (f *TextFlow) physicalCaret(x, y, h float64, ok bool, o int) (float64, floa
 	return px, py, 2, true
 }
 
-// verticalKey turns an arrow key on the screen into the key for the virtual plane: down the column is forward
-// along the line, and the column to the left is the next line.
 func (f *TextFlow) verticalKey(key string) string {
 	if !f.Vertical {
 		return key
@@ -122,11 +93,8 @@ func (f *TextFlow) verticalKey(key string) string {
 	return key
 }
 
-// SetVertical sets the writing mode of the flow: true for vertical text.
 func (f *TextFlow) SetVertical(on bool) { f.Vertical = on }
 
-// uprightRune reports whether a character stands upright in vertical text: the East Asian ideographs, kana,
-// hangul and the full-width forms. The rest (Latin letters, digits, Arabic ...) is turned with the line.
 func uprightRune(r rune) bool {
 	switch {
 	case r >= 0x1100 && r <= 0x11FF, // hangul jamo
@@ -142,7 +110,6 @@ func uprightRune(r rune) bool {
 	return false
 }
 
-// drawVertical draws a vertical flow: the sheet, then each page's lines in the plane turned onto the page.
 func (f *TextFlow) drawVertical(lay Layout) {
 	ip, ok := f.Painter.(ImagePainter)
 	if !ok {
@@ -170,14 +137,10 @@ func (f *TextFlow) drawVertical(lay Layout) {
 	f.drawFootnotes(lay)
 }
 
-// skipCaretOnOtherPage says whether the caret at offset o is not on the page being drawn (a vertical flow draws
-// one page at a time).
 func (f *TextFlow) skipCaretOnOtherPage(o int) bool {
 	return f.Vertical && f.vdrawing && f.lineOffsetPage(o) != f.vpage
 }
 
-// fillRun draws a run's text at (x, y). In vertical text the characters that stand upright are turned back about
-// their own centres and the rest is drawn along the line.
 func (f *TextFlow) fillRun(r Run, ln Line, x, y float64) {
 	p := f.Painter
 	ip, ok := p.(ImagePainter)
@@ -188,7 +151,6 @@ func (f *TextFlow) fillRun(r Run, ln Line, x, y float64) {
 	rs := []rune(r.Text)
 	at := x
 	for i := 0; i < len(rs); {
-		// a piece is characters of one kind that are drawn in one colour (what somebody just typed is in theirs)
 		colour, tinted := f.typedColour(r, rs, i)
 		same := func(k int) bool {
 			c, in := f.typedColour(r, rs, k)
@@ -228,8 +190,6 @@ func (f *TextFlow) fillRun(r Run, ln Line, x, y float64) {
 	p.SetFillStyle(r.Color)
 }
 
-// drawObject draws an inline object. In vertical text the object stands upright: the plane reserved its size
-// the other way round, and it is turned back about its centre.
 func (f *TextFlow) drawObject(o PlacedObject) {
 	ip, ok := f.Painter.(ImagePainter)
 	if !f.Vertical || !ok {

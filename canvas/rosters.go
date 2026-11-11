@@ -5,11 +5,8 @@ import (
 	"strings"
 )
 
-// Roster says who has access, so a comment can name a person safely.
 type Roster interface {
-	// HandleOf gives the handle (without the @) of the person with this e-mail address, if they have access.
 	HandleOf(address string) (handle string, ok bool)
-	// Has says whether a handle is that of someone with access.
 	Has(handle string) bool
 }
 
@@ -29,10 +26,8 @@ type MentionProblem struct {
 	Kind    MentionProblemKind
 }
 
-// Blocks says whether the problem keeps the comment from being saved.
 func (p MentionProblem) Blocks() bool { return p.Kind == MentionNoAccess }
 
-// Message says what is wrong, in words, and what to do.
 func (p MentionProblem) Message() string {
 	if p.Kind == MentionNoAccess {
 		return fmt.Sprintf("%s has no access to this document, so writing the address would show it to everyone who reads the comment. Share the document with them first, or write their name instead.", p.Mention.Text)
@@ -67,7 +62,6 @@ func (s *CommentSet) CheckMentions(text string) (clean string, problems []Mentio
 	return b.String(), problems
 }
 
-// BlockingMention returns the first problem that keeps a comment from being saved.
 func BlockingMention(problems []MentionProblem) (MentionProblem, bool) {
 	for _, p := range problems {
 		if p.Blocks() {
@@ -77,7 +71,6 @@ func BlockingMention(problems []MentionProblem) (MentionProblem, bool) {
 	return MentionProblem{}, false
 }
 
-// hideAddresses replaces addresses of people with access by their handles.
 func (s *CommentSet) hideAddresses(text string) string {
 	var b strings.Builder
 	last := 0

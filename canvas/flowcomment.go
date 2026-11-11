@@ -10,7 +10,6 @@ func (f *TextFlow) commentResolved(id string) bool {
 	return ok && c.Resolved
 }
 
-// commentsOpen reports whether any comment in the value is unresolved.
 func (f *TextFlow) commentsOpen(value string) bool {
 	for _, id := range commentList(value) {
 		if !f.commentResolved(id) {
@@ -20,7 +19,6 @@ func (f *TextFlow) commentsOpen(value string) bool {
 	return false
 }
 
-// commentAt returns the comment ID and rectangle of the run at (x, y).
 func (f *TextFlow) commentAt(x, y float64) (string, [4]float64) {
 	if f.Comments.Len() == 0 {
 		return "", [4]float64{}
@@ -42,10 +40,8 @@ func (f *TextFlow) commentAt(x, y float64) (string, [4]float64) {
 	return "", [4]float64{}
 }
 
-// HoveredComment returns the ID of the comment under the pointer, or "".
 func (f *TextFlow) HoveredComment() string { return f.hoverComment }
 
-// setHoverComment records the hovered comment and reports a change.
 func (f *TextFlow) setHoverComment(id string, rect [4]float64) bool {
 	if id == f.hoverComment && rect == f.hoverCRect {
 		return false
@@ -58,7 +54,6 @@ func (f *TextFlow) setHoverComment(id string, rect [4]float64) bool {
 	return true
 }
 
-// wrapWords breaks text into lines of at most n characters.
 func wrapWords(text string, n int) []string {
 	var lines []string
 	cur := ""
@@ -79,7 +74,6 @@ func wrapWords(text string, n int) []string {
 	return lines
 }
 
-// drawCommentTip draws the tip for the hovered comment.
 func (f *TextFlow) drawCommentTip() {
 	if f.hoverComment == "" || f.Painter == nil {
 		return
@@ -150,7 +144,6 @@ func (f *TextFlow) drawCommentTip() {
 	}
 }
 
-// CommentRange returns the stream range of text the comment is on.
 func (f *TextFlow) CommentRange(id string) (from, to int, ok bool) {
 	ids := charComments(f.ContentItems())
 	from, to = -1, 0

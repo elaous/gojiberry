@@ -1,7 +1,5 @@
 package canvas
 
-// Remote cursors: other people's cursors when several edit a document.
-
 // RemoteCursor is another person's cursor, as stream offsets.
 type RemoteCursor struct {
 	Name, Color   string
@@ -18,10 +16,8 @@ func peerColor(c RemoteCursor) string {
 	return c.Color
 }
 
-// ColourBlindPalette is colours that people with colour blindness can tell apart.
 var ColourBlindPalette = []string{"#4477AA", "#EE6677", "#228833", "#AA3377", "#BB5500", "#006D77"}
 
-// peerColour returns the cursor colour: its own, else from PeerPalette.
 func (f *TextFlow) peerColour(c RemoteCursor) string {
 	if len(f.PeerPalette) == 0 {
 		return peerColor(c)

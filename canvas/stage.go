@@ -47,7 +47,6 @@ type (
 // Mods are the modifier keys held during a pointer event.
 type Mods struct{ Ctrl, Shift, Alt, Meta bool }
 
-// Stage draws components onto one canvas and routes pointer and key events.
 type Stage struct {
 	composer      Composer // the component showing an input method's preedit, if any
 	Painter       ImagePainter
@@ -64,16 +63,13 @@ type Stage struct {
 	// Redraw, if set, redraws the stage.
 	Redraw func()
 	// Prompt asks the user for a line of text.
-	Prompt func(message, initial string) (string, bool)
-	// EditNote asks for footnote text in a dialog with a length counter.
+	Prompt   func(message, initial string) (string, bool)
 	EditNote func(title, initial string, max int, done func(text string, ok bool))
 	// OpenLink opens a clicked link's URL.
 	OpenLink func(url string)
 	// OnDraw, if set, runs after every Draw.
-	OnDraw func()
-	// Role is what the user may do; the zero value is owner.
-	Role Role
-	// OnFontUse is told each font cut the first time content uses it.
+	OnDraw    func()
+	Role      Role
 	OnFontUse func(FontUse)
 	fontsSeen map[FontUse]bool
 }
@@ -139,7 +135,6 @@ func (s *Stage) Paint() {
 	}
 }
 
-// Draw clears the canvas and draws every component, back to front.
 func (s *Stage) Draw() {
 	s.Painter.ClearRect(0, 0, s.Width, s.Height)
 	s.Paint()
@@ -149,7 +144,6 @@ func (s *Stage) Draw() {
 	}
 }
 
-// each calls fn on every component, topmost first, until one returns true.
 func (s *Stage) each(fn func(Drawer) bool) bool {
 	changed := false
 	for i := len(s.Components) - 1; i >= 0; i-- {
@@ -216,7 +210,6 @@ func (s *Stage) MouseLeave() bool {
 	})
 }
 
-// HandleKey offers a key to components, topmost first, until one consumes it.
 func (s *Stage) HandleKey(key string, shift bool) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(KeyHandler); ok && h.HandleKey(key, shift) {
@@ -252,7 +245,6 @@ func (s *Stage) HandleChord(chord string) bool {
 	return s.RunCommand(cmd)
 }
 
-// RunCommand offers cmd to components, topmost first, until one applies it.
 func (s *Stage) RunCommand(cmd Command) bool {
 	if s.Features != nil && s.Features.Has(cmd) {
 		t := s.EditTarget()

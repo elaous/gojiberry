@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Proposals are suggested changes that stay in the text until accepted or rejected.
-
 // ProposalKind marks a suggested addition or removal.
 type ProposalKind int
 
@@ -64,7 +62,6 @@ func ParseProposalMark(s string) (ProposalMark, bool) {
 	return m, true
 }
 
-// proposalIDs and proposalClock make suggestion ids and times; tests replace them.
 var (
 	proposalID = func() string {
 		var b [6]byte
@@ -74,7 +71,6 @@ var (
 	proposalClock = time.Now
 )
 
-// proposalColors are suggestion colours, one per author.
 var proposalColors = []string{"#b3261e", "#1a5fb4", "#1a7f37", "#9a6700", "#8250df", "#0e7490"}
 
 // ProposalColor picks a stable colour for a person's suggestions.
@@ -84,7 +80,6 @@ func ProposalColor(author string) string {
 	return proposalColors[int(h.Sum32())%len(proposalColors)]
 }
 
-// proposalStyle draws added text underlined and removed text struck through.
 func proposalStyle(st *TextStyle, value string) {
 	m, ok := ParseProposalMark(value)
 	if !ok {
@@ -142,7 +137,6 @@ func (f *TextFlow) Proposals() []Proposal {
 	return out
 }
 
-// AcceptProposal makes the change permanent: added text stays, struck text goes.
 func (f *TextFlow) AcceptProposal(id string) bool { return f.resolveProposals(id, true) != 0 }
 
 // RejectProposal undoes the change: added text goes, struck text stays.
@@ -154,7 +148,6 @@ func (f *TextFlow) AcceptAllProposals() int { return f.resolveProposals("", true
 // RejectAllProposals rejects every suggestion and returns how many there were.
 func (f *TextFlow) RejectAllProposals() int { return f.resolveProposals("", false) }
 
-// resolveProposals accepts or rejects one suggestion id, or all if empty.
 func (f *TextFlow) resolveProposals(id string, accept bool) int {
 	d := f.flatten()
 	var edits []Edit
@@ -165,7 +158,6 @@ func (f *TextFlow) resolveProposals(id string, accept bool) int {
 			i++
 			continue
 		}
-		// the run of characters with this very mark
 		j := i + 1
 		for j < len(d.runes) && !d.isObj(j) && d.formats[d.rs[j]].Proposal == d.formats[d.rs[i]].Proposal {
 			j++
@@ -194,10 +186,8 @@ func (f *TextFlow) resolveProposals(id string, accept bool) int {
 	return len(settled)
 }
 
-// proposalsOn reports whether edits made now are proposals.
 func (f *TextFlow) proposalsOn() bool { return f.Suggesting && f.Editing() }
 
-// proposalRewrite turns an edit into suggestion marks.
 func (f *TextFlow) proposalRewrite(d *flowData, c Cursor, from, to int, ins []Item) (repl []Item, caret int) {
 	now := proposalClock()
 	author := f.Author
@@ -217,7 +207,6 @@ func (f *TextFlow) proposalRewrite(d *flowData, c Cursor, from, to int, ins []It
 		}
 		switch m, marked := ParseProposalMark(ch.Format.Proposal); {
 		case marked && m.Kind == ProposalInsert:
-			// a proposed addition that is deleted is simply not proposed any more
 		case marked:
 			repl = append(repl, ch) // already struck
 		default:
@@ -234,7 +223,6 @@ func (f *TextFlow) proposalRewrite(d *flowData, c Cursor, from, to int, ins []It
 		case struck:
 			mark = ProposalMark{Kind: ProposalInsert, ID: id, Author: author, Time: now}.String()
 		default:
-			// text typed right after the person's own proposed addition continues it
 			if prev, ok := f.markBefore(d, from); ok && prev.Kind == ProposalInsert && prev.Author == author {
 				mark = ProposalMark{Kind: ProposalInsert, ID: prev.ID, Author: author, Time: prev.Time}.String()
 			} else {
@@ -251,12 +239,11 @@ func (f *TextFlow) proposalRewrite(d *flowData, c Cursor, from, to int, ins []It
 		return repl, kept + insLen
 	}
 	if c.Caret >= to {
-		return repl, 0 // backspace, or a selection made forward: the caret goes to its start
+		return repl, 0
 	}
 	return repl, kept // the Delete key: the caret goes past what was struck
 }
 
-// markBefore returns the suggestion mark before offset o.
 func (f *TextFlow) markBefore(d *flowData, o int) (ProposalMark, bool) {
 	if o <= 0 || o > len(d.runes) || d.isObj(o-1) {
 		return ProposalMark{}, false
@@ -264,7 +251,6 @@ func (f *TextFlow) markBefore(d *flowData, o int) (ProposalMark, bool) {
 	return ParseProposalMark(d.formats[d.rs[o-1]].Proposal)
 }
 
-// proposalEdits is editCursors for suggestion mode.
 func (f *TextFlow) proposalEdits(gen func(c Cursor, rs []rune) (from, to int, ins []Item)) {
 	rs := textRunes(f)
 	d := f.flatten()

@@ -38,7 +38,6 @@ type Hit struct {
 	Row, Col int // valid for HitCell
 }
 
-// TableView draws a Table on a canvas and edits it in ModeEdit.
 type TableView struct {
 	Table   *Table
 	Style   TableStyle
@@ -51,9 +50,7 @@ type TableView struct {
 	// OnFieldFill and OnFieldEdit run when a field cell is pressed.
 	OnFieldFill, OnFieldEdit func(row, col int, f *FormFieldObject)
 
-	// RenderCell, if set, draws each cell's content.
-	penSwitch bool
-	// showSwitch draws the formula switch.
+	penSwitch  bool
 	showSwitch bool
 
 	// ShowFormulas shows formula text instead of calculated values.
@@ -65,10 +62,8 @@ type TableView struct {
 	OnDeleteTable func()
 
 	// Anchor, if set, pins the table to a page.
-	Anchor *Anchor
-	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
-	Pages *PageSet
-	// Wrap makes text flow around the table once a Flow is set.
+	Anchor     *Anchor
+	Pages      *PageSet
 	Wrap       bool
 	WrapMargin float64 // clear space around the table (NewTableView sets 8)
 	// Snap is the move granularity in px (NewTableView sets 5).
@@ -76,32 +71,27 @@ type TableView struct {
 	// OnMove runs as the table is dragged.
 	OnMove func(*TableView)
 
-	// CanvasW and CanvasH keep context menus inside the canvas, if non-zero.
 	CanvasW, CanvasH float64
 
-	menu     *Menu
-	press    *tablePress
-	flow     *TextFlow
-	viewport [4]float64
-	sel      Selection
-	mode     Mode
-	refresh  func() // set by Bind
-	editing  bool
-	row, col int
-	cursor   int       // rune index into the active cell's text
-	rng      cellRange // the block of cells selected with Shift (see SelectRange)
-	// active is true once a cell was edited or selected.
+	menu       *Menu
+	press      *tablePress
+	flow       *TextFlow
+	viewport   [4]float64
+	sel        Selection
+	mode       Mode
+	refresh    func() // set by Bind
+	editing    bool
+	row, col   int
+	cursor     int       // rune index into the active cell's text
+	rng        cellRange // the block of cells selected with Shift (see SelectRange)
 	everActive bool
-	// locked says the active cell holds a formula opened for editing.
-	locked bool
-	// editedAt orders tables by when a cell was last edited.
-	editedAt uint64
-	// tip is the formula cell the pointer is over.
-	tip      Hit
-	tipSet   bool
-	hover    Hit
-	inRegion bool // pointer is over the table or its "+" bars (or their gap)
-	caretOn  bool
+	locked     bool
+	editedAt   uint64
+	tip        Hit
+	tipSet     bool
+	hover      Hit
+	inRegion   bool
+	caretOn    bool
 }
 
 // NewTableView returns a view of t, drawn with DefaultTableStyle.
@@ -117,7 +107,6 @@ func (v *TableView) SetPainter(p ImagePainter) {
 // SetViewport keeps menus inside the visible part.
 func (v *TableView) SetViewport(x, y, w, h float64) { v.viewport = [4]float64{x, y, w, h} }
 
-// WantsFocus: a cell is being edited or a menu is open.
 func (v *TableView) WantsFocus() bool { return v.editing || v.menu.IsOpen() }
 
 func (v *TableView) CSSCursor() string {
@@ -158,10 +147,8 @@ func (v *TableView) Refresh() {
 	}
 }
 
-// Active returns the cell being edited, and whether there is one.
 func (v *TableView) Active() (row, col int, ok bool) { return v.row, v.col, v.editing }
 
-// Cursor is the caret's rune offset within the active cell's text.
 func (v *TableView) Cursor() int { return v.cursor }
 
 // Hover returns what the pointer was last over.
@@ -181,7 +168,6 @@ func (v *TableView) font(row int) string {
 	return v.Style.Font
 }
 
-// geometry is the computed layout of the table.
 type geometry struct {
 	colX, rowY []float64
 }
@@ -206,7 +192,7 @@ func (v *TableView) layout() geometry {
 			widths[c] = max(widths[c], v.Painter.MeasureTextWidth(text)+2*s.PadX)
 		}
 	}
-	for _, m := range t.Merges { // a merged cell wider than its columns widens the last of them
+	for _, m := range t.Merges {
 		if m.Cols < 2 {
 			continue
 		}
@@ -239,7 +225,6 @@ func (v *TableView) layout() geometry {
 	return g
 }
 
-// cellFont returns a cell's font, including its own style.
 func (v *TableView) cellFont(row int, st CellStyle) string {
 	f := v.font(row)
 	if st.Italic && !strings.Contains(f, "italic") {
@@ -251,14 +236,12 @@ func (v *TableView) cellFont(row int, st CellStyle) string {
 	return f
 }
 
-// cellRect is where the cell at (row, col) is drawn.
 func (g geometry) cellRect(t *Table, row, col int) (x, y, w, h float64) {
 	r, c := t.Owner(row, col)
 	rs, cs := t.Span(r, c)
 	return g.colX[c], g.rowY[r], g.colX[c+cs] - g.colX[c], g.rowY[r+rs] - g.rowY[r]
 }
 
-// Size returns the canvas width and height needed to draw the table.
 func (v *TableView) Size() (w, h float64) {
 	g := v.layout()
 	s := v.Style
@@ -277,7 +260,6 @@ func (v *TableView) Selection() Selection { return v.sel }
 // Menu returns the view's context menu while it is open.
 func (v *TableView) Menu() *Menu { return v.menu }
 
-// barRects returns the add-column and add-row bar rectangles.
 func (v *TableView) barRects(g geometry) (col, row [4]float64) {
 	s := v.Style
 	col = [4]float64{g.right() + s.BarGap, v.Y, s.BarSize, g.bottom() - v.Y}
@@ -314,7 +296,6 @@ func (v *TableView) HitTest(x, y float64) Hit {
 	return Hit{Kind: HitCell, Row: r, Col: c}
 }
 
-// indexAt returns the index whose span contains pos.
 func indexAt(edges []float64, pos float64) int {
 	i := 0
 	for i+2 < len(edges) && pos >= edges[i+1] {
@@ -350,7 +331,6 @@ func (v *TableView) MouseLeave() bool {
 	return changed
 }
 
-// MouseDown handles a press: starts editing, selects, or uses a handle.
 func (v *TableView) MouseDown(x, y float64) bool {
 	if v.mode != ModeEdit {
 		return false
@@ -362,7 +342,6 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	v.hover = h
 	switch h.Kind {
 	case HitTableHandle:
-		// A press on the table icon selects the table on click.
 		v.press = &tablePress{x: x, y: y, startX: v.X, startY: v.Y, hit: h}
 		return true
 	case HitColumnHandle, HitRowHandle:
@@ -396,7 +375,6 @@ func (v *TableView) MouseDown(x, y float64) bool {
 	return true
 }
 
-// pressField makes a press on a field cell tick a box or fill it.
 func (v *TableView) pressField(row, col int, f *FormFieldObject) {
 	switch {
 	case v.ShowFormulas:
@@ -416,7 +394,6 @@ func (v *TableView) pressField(row, col int, f *FormFieldObject) {
 	}
 }
 
-// fieldText returns what a field cell shows.
 func (v *TableView) fieldText(f *FormFieldObject) (text string, ink string) {
 	if v.ShowFormulas {
 		text = "[" + string(f.Kind) + "] " + f.Label
@@ -434,7 +411,6 @@ func (v *TableView) fieldText(f *FormFieldObject) (text string, ink string) {
 	return f.Words(), orStr(v.Style.ValueColor, "#1c5fb4")
 }
 
-// cursorAt returns the rune offset in cell (row, col) nearest x.
 func (v *TableView) cursorAt(x float64, row, col int) int {
 	g := v.layout()
 	cx, _, cw, _ := g.cellRect(v.Table, row, col)
@@ -584,14 +560,12 @@ func (v *TableView) HandleKey(key string, shift bool) bool {
 	return true
 }
 
-// moveTo activates (row, col), keeping the caret column when possible.
 func (v *TableView) moveTo(row, col int) {
 	old := v.cursor
 	v.edit(row, col)
 	v.cursor = min(old, len([]rune(v.Table.Cell(row, col))))
 }
 
-// step moves delta cells in reading order.
 func (v *TableView) step(delta int) {
 	t := v.Table
 	i := v.nextCell(v.row*t.Cols()+v.col, delta)
@@ -609,7 +583,6 @@ func (v *TableView) step(delta int) {
 	v.cursor = 0
 }
 
-// nextCell returns the index delta cells on in reading order.
 func (v *TableView) nextCell(i, delta int) int {
 	t := v.Table
 	for {
@@ -623,7 +596,6 @@ func (v *TableView) nextCell(i, delta int) int {
 	}
 }
 
-// stepNoGrow moves right from a cell's end without growing the table.
 func (v *TableView) stepNoGrow(delta int) {
 	t := v.Table
 	i := v.nextCell(v.row*t.Cols()+v.col, delta)
@@ -634,7 +606,6 @@ func (v *TableView) stepNoGrow(delta int) {
 	v.cursor = 0
 }
 
-// Draw paints the table; in edit mode it shows handles and the caret.
 func (v *TableView) Draw() {
 	p, s, t := v.Painter, v.Style, v.Table
 	t.SyncFields()
@@ -762,7 +733,6 @@ func (v *TableView) SetShowFormulas(on bool) {
 	v.changed()
 }
 
-// tipText is the formula shown in a calculated cell's tooltip.
 func (v *TableView) tipText() (row, col int, text string, ok bool) {
 	if v.ShowFormulas {
 		return 0, 0, "", false
@@ -782,7 +752,6 @@ func (v *TableView) tipText() (row, col int, text string, ok bool) {
 	return row, col, t, true
 }
 
-// drawFormulaTip paints the tooltip of a calculated cell.
 func (v *TableView) drawFormulaTip(g geometry) {
 	row, col, text, ok := v.tipText()
 	if !ok || !v.Table.InRange(row, col) || v.Painter == nil {
@@ -806,7 +775,6 @@ func (v *TableView) drawFormulaTip(g geometry) {
 	p.FillText(text, tx+8, ty+h/2)
 }
 
-// trackTip notes the formula cell under the pointer.
 func (v *TableView) trackTip(x, y float64) bool {
 	was, wasAt := v.tipSet, v.tip
 	v.tipSet = false
@@ -865,5 +833,4 @@ func (v *TableView) Dress(s TableScheme) {
 
 var editSeq uint64
 
-// EditedAt says how recently a cell of the table was entered.
 func (v *TableView) EditedAt() uint64 { return v.editedAt }

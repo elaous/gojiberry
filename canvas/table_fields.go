@@ -1,7 +1,5 @@
 package canvas
 
-// A form field in a table cell holds a value a person fills in.
-
 // SetField makes a cell a form field.
 func (t *Table) SetField(row, col int, f *FormFieldObject) {
 	if !t.InRange(row, col) || f == nil {
@@ -15,7 +13,6 @@ func (t *Table) SetField(row, col int, f *FormFieldObject) {
 	t.syncField(row, col, f)
 }
 
-// FieldAt is the field of the cell (of the owner, for a covered one), nil for an ordinary cell.
 func (t *Table) FieldAt(row, col int) *FormFieldObject {
 	row, col = t.Owner(row, col)
 	return t.Fields[CellPos{row, col}]
@@ -55,13 +52,12 @@ func (t *Table) SyncFields() {
 
 func (t *Table) syncField(row, col int, f *FormFieldObject) {
 	words := f.Words()
-	if isFormula(words) { // a label such as "=x" must not turn the cell into a formula
+	if isFormula(words) {
 		words = "\\" + words
 	}
 	t.Cells[row][col] = words
 }
 
-// valueCells is Cells with the field cells replaced by what was filled in, which is what a formula reads.
 func (t *Table) valueCells() [][]string {
 	if len(t.Fields) == 0 {
 		return t.Cells
@@ -81,7 +77,6 @@ func (t *Table) valueCells() [][]string {
 	return out
 }
 
-// cloneFields copies the fields (the callbacks are not copied).
 func cloneFields(in map[CellPos]*FormFieldObject) map[CellPos]*FormFieldObject {
 	if len(in) == 0 {
 		return nil
@@ -96,7 +91,6 @@ func cloneFields(in map[CellPos]*FormFieldObject) map[CellPos]*FormFieldObject {
 	return out
 }
 
-// HasFormulaOrField says the table has something the switch changes the view of: a formula or a form field.
 func (t *Table) HasFormulaOrField() bool {
 	if len(t.Fields) > 0 {
 		return true
@@ -111,7 +105,6 @@ func (t *Table) HasFormulaOrField() bool {
 	return false
 }
 
-// switchRect is the table switch's rectangle, relative to the flow.
 func (o *TableObject) switchRect() [4]float64 {
 	hs := o.View.Style.HandleSize
 	return [4]float64{o.pad + o.tableW + o.View.Style.BarGap, 0, hs, hs}

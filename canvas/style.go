@@ -24,7 +24,7 @@ type TableStyle struct {
 	SelectColor     string  // translucent fill over a selected column/row/table
 	HandleIconColor string
 
-	FormulaColor string // the text of a formula (shown when the formulas are), red
+	FormulaColor string
 	ValueColor   string // the value a formula computed, blue
 }
 

@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// Test flow: 160px wide at x=10; 8px characters, 22px lines.
 func paraFlow(items ...Item) (*TextFlow, *Stage) {
 	f, p := selFlow(items...)
 	return f, NewStage(p, 400, 400, f)
@@ -50,7 +49,6 @@ func TestParagraphIndentsAlignmentAndSpacing(t *testing.T) {
 		t.Errorf("space before/after: gaps %g, %g", y1-y0, y2-y1)
 	}
 
-	// A narrow column ignores indents that would leave no room.
 	f, _ = paraFlow(ParaFormat{IndentLeft: 140}, Chars{Text: "abcd"})
 	if x := lineOf2(t, f, 0).X; x != 10 {
 		t.Errorf("an indent that leaves no room is ignored: x=%g", x)
@@ -89,7 +87,6 @@ func TestListMarkersAndNumbering(t *testing.T) {
 	if x := lineOf2(t, f, 2).X; x != 10+2*ListIndent {
 		t.Errorf("nested item at %g", x)
 	}
-	// Wrapped lines of an item have no marker and share its indent.
 	f, _ = paraFlow(ParaFormat{List: ListStyle{Kind: ListBullet}}, Chars{Text: "aaaa bbbb cccc dddd eeee ffff"})
 	if lineOf2(t, f, 0).Marker == nil || lineOf2(t, f, 1).Marker != nil || lineOf2(t, f, 1).X != 10+ListIndent {
 		t.Errorf("continuation line: %+v", lineOf2(t, f, 1))
@@ -117,7 +114,6 @@ func TestMarkerOnEmptyItemAndCheckToggle(t *testing.T) {
 	if got := f.Layout().Lines[0].Marker.Text; got != "☐" {
 		t.Errorf("and again unticks: %q", got)
 	}
-	// In view mode the box is just drawn.
 	f.SetMode(ModeView)
 	st.MouseDown(m.X+2, lines[0].Y+5)
 	if f.Layout().Lines[0].Marker.Text != "☐" {
@@ -152,13 +148,11 @@ func TestApplyParagraphAndEditing(t *testing.T) {
 	if items := f.ContentItems(); len(items) != 2 || items[0] != Item(ParaFormat{List: ListStyle{Kind: ListBullet}}) {
 		t.Fatalf("items = %+v", items)
 	}
-	// Typing at the start of the paragraph stays inside it.
 	f.SetCursors([]Cursor{At(0)})
 	st.InsertText("X")
 	if flowText(f) != "Xab\ncd\nef" || f.ParagraphAt(0).List.Kind != ListBullet {
 		t.Fatalf("typing at the start: %q %+v", flowText(f), f.ContentItems())
 	}
-	// Enter continues the list; Enter on the empty item ends it.
 	f.SetCursors([]Cursor{At(3)})
 	st.HandleKey("Enter", false)
 	if f.ParagraphAt(4).List.Kind != ListBullet {
@@ -168,7 +162,6 @@ func TestApplyParagraphAndEditing(t *testing.T) {
 	if f.ParagraphAt(4).List.Kind != ListNone || flowText(f) != "Xab\n\ncd\nef" {
 		t.Fatalf("Enter on an empty item ends the list: %q %+v", flowText(f), f.ContentItems())
 	}
-	// Toggling again removes the (now empty) format.
 	f.SetCursors([]Cursor{At(0)})
 	st.RunCommand(CmdBulletList)
 	for _, it := range f.ContentItems() {
@@ -180,7 +173,6 @@ func TestApplyParagraphAndEditing(t *testing.T) {
 
 func TestParagraphFormatTravelsWithItsText(t *testing.T) {
 	f, st := editFlow(t, 0, ParaFormat{Align: AlignCenter}, Chars{Text: "one\n"}, ParaFormat{List: ListStyle{Kind: ListBullet}}, Chars{Text: "two\nthree"})
-	// Deleting the paragraph deletes its format.
 	f.SetCursors([]Cursor{{Anchor: 4, Caret: 8}})
 	st.HandleKey("Delete", false)
 	if flowText(f) != "one\nthree" || f.ParagraphAt(4).List.Kind != ListNone {
@@ -189,19 +181,16 @@ func TestParagraphFormatTravelsWithItsText(t *testing.T) {
 	if f.ParagraphAt(0).Align != AlignCenter {
 		t.Error("the first paragraph keeps its format")
 	}
-	// Moving a line moves its format with it.
 	f, st = editFlow(t, 0, Chars{Text: "a\n"}, ParaFormat{List: ListStyle{Kind: ListCheck}}, Chars{Text: "b"})
 	f.SetCursors([]Cursor{At(3)})
 	st.HandleChord("Alt+ArrowUp")
 	if flowText(f) != "b\na" || f.ParagraphAt(0).List.Kind != ListCheck || f.ParagraphAt(2).List.Kind != ListNone {
 		t.Fatalf("move line: %q %+v", flowText(f), f.ContentItems())
 	}
-	// A copy of a line carries it too.
 	st.HandleChord("Alt+Shift+ArrowDown")
 	if flowText(f) != "b\nb\na" || f.ParagraphAt(0).List.Kind != ListCheck || f.ParagraphAt(2).List.Kind != ListCheck {
 		t.Fatalf("copy line: %q %+v", flowText(f), f.ContentItems())
 	}
-	// Slice includes formats, so copies and line commands keep them.
 	var n int
 	for _, it := range f.Slice(0, 3) {
 		if _, ok := it.(ParaFormat); ok {
@@ -211,7 +200,6 @@ func TestParagraphFormatTravelsWithItsText(t *testing.T) {
 	if n != 2 {
 		t.Errorf("Slice carries paragraph formats: %d", n)
 	}
-	// Delete does not eat a format sitting at the caret (it is not a break).
 	f, st = editFlow(t, 0, ParaFormat{Align: AlignRight}, Chars{Text: "xy"})
 	st.HandleKey("Delete", false)
 	if flowText(f) != "y" {
@@ -241,7 +229,6 @@ func TestParagraphCommands(t *testing.T) {
 	if f.ParagraphAt(6) != (ParaFormat{}) {
 		t.Error("the other paragraph is untouched")
 	}
-	// Indent and outdent on a list item change its level; Tab and Shift+Tab too.
 	st.HandleChord("Mod+]")
 	if f.ParagraphAt(0).List.Level != 1 {
 		t.Errorf("indent nests a list item: %+v", f.ParagraphAt(0))
@@ -262,7 +249,6 @@ func TestParagraphCommands(t *testing.T) {
 		t.Error("Tab outside a list is not ours")
 	}
 
-	// Toggles and cycles.
 	f.SetCursors([]Cursor{At(1)})
 	f.ApplyParagraph(func(p *ParaFormat) { *p = ParaFormat{} })
 	for _, tc := range []struct {
@@ -308,7 +294,6 @@ func TestParagraphCommands(t *testing.T) {
 		t.Errorf("then 1): %+v", f.ParagraphAt(0).List)
 	}
 
-	// A floating text has no paragraphs.
 	fst, _ := stageWith(t, "text")
 	if fst.HandleChord("Mod+E") || fst.HandleChord("Mod+Shift+8") {
 		t.Error("a FloatingText declines paragraph commands")
@@ -327,7 +312,6 @@ func TestParagraphsAcrossSelectionAndMulti(t *testing.T) {
 	if f.ParagraphAt(0).List.Kind != ListBullet || f.ParagraphAt(9).List.Kind != ListBullet || f.ParagraphAt(3).List.Kind != ListNone {
 		t.Errorf("each cursor's paragraph: %+v", f.ContentItems())
 	}
-	// A selection ending at the start of a paragraph leaves it out.
 	f.SetCursors([]Cursor{{Anchor: 3, Caret: 6}})
 	st.HandleChord("Mod+R")
 	if f.ParagraphAt(3).Align != AlignRight || f.ParagraphAt(6).Align == AlignRight {
@@ -362,24 +346,20 @@ func TestDropCap(t *testing.T) {
 	}(), "\n"), `fillText "H"`) {
 		t.Error("the cap is drawn")
 	}
-	// Caret placement: before the cap and after it both work.
 	if x, _, _, ok := f.CaretRect(0); !ok || x != first.X {
 		t.Errorf("caret before the cap sits at the text start: %g", x)
 	}
 
-	// A short paragraph leaves room for the whole cap.
 	f, _ = paraFlow(ParaFormat{DropCap: 3}, Chars{Text: "Hi\n"}, ParaFormat{}, Chars{Text: "next"})
 	lines = f.Layout().Lines
 	if lines[1].Y < lines[0].Y+3*22 {
 		t.Errorf("the next paragraph clears the cap: %g vs %g", lines[1].Y, lines[0].Y+3*22)
 	}
-	// One-letter paragraphs and a leading space get no cap.
 	f, _ = paraFlow(ParaFormat{DropCap: 2}, Chars{Text: "X\n"}, ParaFormat{DropCap: 2}, Chars{Text: " y"})
 	lines = f.Layout().Lines
 	if lines[0].DropCap == nil || lines[0].Text != "" || lines[1].DropCap != nil {
 		t.Errorf("edge cases: %+v / %+v", lines[0], lines[len(lines)-1])
 	}
-	// Editing keeps working around the cap.
 	f, st = editFlow(t, 0, ParaFormat{DropCap: 3}, Chars{Text: "Hello"})
 	f.SetCursors([]Cursor{At(0)})
 	st.InsertText(">")

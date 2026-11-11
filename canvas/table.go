@@ -8,10 +8,8 @@ import (
 	"strings"
 )
 
-// Table is the data behind a TableView: a grid of cell strings.
 type Table struct {
-	Cells [][]string
-	// Merges are blocks of cells shown as one, keyed by owner cell.
+	Cells  [][]string
 	Merges []Merge
 	Styles map[CellPos]CellStyle
 	// Fields are the cells that are form fields (see table_fields.go).
@@ -20,7 +18,6 @@ type Table struct {
 	ColWidths, RowHeights []float64
 }
 
-// NewTable returns a rows x cols table of empty cells (minimum 1x1).
 func NewTable(rows, cols int) *Table {
 	rows, cols = max(rows, 1), max(cols, 1)
 	t := &Table{Cells: make([][]string, rows)}
@@ -54,7 +51,6 @@ func (t *Table) Cols() int {
 	return len(t.Cells[0])
 }
 
-// Cell returns the text at (row, col), or "" if out of range.
 func (t *Table) Cell(row, col int) string {
 	if !t.InRange(row, col) {
 		return ""
@@ -62,7 +58,6 @@ func (t *Table) Cell(row, col int) string {
 	return t.Cells[row][col]
 }
 
-// SetCell sets the text at (row, col); out-of-range is a no-op.
 func (t *Table) SetCell(row, col int, text string) {
 	if t.InRange(row, col) {
 		if f := t.Fields[CellPos{row, col}]; f != nil && text != t.Cells[row][col] { // written over: an ordinary cell again
@@ -83,7 +78,6 @@ func (t *Table) AddRow() { t.InsertRow(t.Rows()) }
 // AddColumn appends an empty column.
 func (t *Table) AddColumn() { t.InsertColumn(t.Cols()) }
 
-// InsertRow inserts an empty row at index, clamped to range.
 func (t *Table) insertRow(at int) {
 	at = min(max(at, 0), t.Rows())
 	t.Cells = append(t.Cells, nil)
@@ -93,7 +87,6 @@ func (t *Table) insertRow(at int) {
 	t.shift(at, 0, 1, 0)
 }
 
-// InsertColumn inserts an empty column at index, clamped to range.
 func (t *Table) insertColumn(at int) {
 	at = min(max(at, 0), t.Cols())
 	for r, row := range t.Cells {
@@ -106,7 +99,6 @@ func (t *Table) insertColumn(at int) {
 	t.shift(0, at, 0, 1)
 }
 
-// DeleteRow removes row index; the last row is never removed.
 func (t *Table) deleteRow(at int) {
 	if at < 0 || at >= t.Rows() {
 		return
@@ -122,7 +114,6 @@ func (t *Table) deleteRow(at int) {
 	t.shift(at, 0, -1, 0)
 }
 
-// DeleteColumn removes column index; the last column is never removed.
 func (t *Table) deleteColumn(at int) {
 	if at < 0 || at >= t.Cols() {
 		return
@@ -142,7 +133,6 @@ func (t *Table) deleteColumn(at int) {
 	t.shift(0, at, 0, -1)
 }
 
-// MoveRow moves row from to index to; both must be in range.
 func (t *Table) moveRow(from, to int) {
 	if from < 0 || from >= t.Rows() || to < 0 || to >= t.Rows() || from == to {
 		return
@@ -157,7 +147,6 @@ func (t *Table) moveRow(from, to int) {
 	t.Cells[to] = row
 }
 
-// MoveColumn moves column from to index to; both must be in range.
 func (t *Table) moveColumn(from, to int) {
 	if from < 0 || from >= t.Cols() || to < 0 || to >= t.Cols() || from == to {
 		return
@@ -175,7 +164,6 @@ func (t *Table) moveColumn(from, to int) {
 	}
 }
 
-// DuplicateRow inserts a copy of row at directly below it.
 func (t *Table) duplicateRow(at int) {
 	if at < 0 || at >= t.Rows() {
 		return
@@ -197,14 +185,13 @@ func (t *Table) duplicateRow(at int) {
 	}
 }
 
-// SortByColumn stably sorts body rows by column.
 func (t *Table) sortByColumn(col int, desc bool) {
 	if col < 0 || col >= t.Cols() {
 		return
 	}
 	t.Merges = nil // sorting rows would tear a merged block apart
 	n := t.Rows() - 1
-	order := make([]int, n) // order[i] is the old body row that becomes body row i
+	order := make([]int, n)
 	for i := range order {
 		order[i] = i
 	}
@@ -259,7 +246,6 @@ func (t *Table) Clear() {
 	t.SyncFields()
 }
 
-// moved is where index i ends up when the element at from is moved to to.
 func moved(i, from, to int) int {
 	switch {
 	case i == from:

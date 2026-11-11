@@ -22,7 +22,6 @@ const (
 	FormSelect   FormKind = "select" // one of Options
 )
 
-// FormKinds lists the kinds in the order a bar of them shows.
 var FormKinds = []FormKind{FormText, FormTextArea, FormEmail, FormNumber, FormPhone, FormURL, FormDate, FormCheckbox, FormSelect}
 
 // Valid reports whether k is a kind this package knows.
@@ -35,9 +34,8 @@ func (k FormKind) Valid() bool {
 	return false
 }
 
-// What a form field's Problem reports; a host turns them into words.
 const (
-	FormProblemRequired = "required" // a required field is empty (or a required checkbox is not ticked)
+	FormProblemRequired = "required"
 	FormProblemEmail    = "email"
 	FormProblemNumber   = "number"
 	FormProblemPhone    = "phone"
@@ -47,10 +45,8 @@ const (
 	FormProblemPattern  = "pattern" // the value does not match Pattern
 )
 
-// FormFieldObject is a fillable field in the text, holding the person's entry.
 type FormFieldObject struct {
-	Kind FormKind
-	// Name identifies the field in returned data; Label is shown to the person.
+	Kind        FormKind
 	Name, Label string
 	// Placeholder is shown, dimmed, while the field is empty.
 	Placeholder string
@@ -62,16 +58,14 @@ type FormFieldObject struct {
 	// Value is what the person wrote, as text.
 	Value string
 	// Locked fixes the properties; the host refuses changes.
-	Locked bool
-	// LockKey and LockSig are the seal of the lock (package formseal).
+	Locked           bool
 	LockKey, LockSig string
 
-	// OnFill and OnEdit run when the eye or pen is pressed.
 	OnFill func(*FormFieldObject)
 	OnEdit func(*FormFieldObject)
 
 	w, h         float64
-	eye, pen, cb [4]float64 // the icons and the box of a checkbox, relative to the field's top-left (zero width: none)
+	eye, pen, cb [4]float64
 }
 
 const (
@@ -173,7 +167,6 @@ func (f *FormFieldObject) Empty() bool {
 // Clear empties the field.
 func (f *FormFieldObject) Clear() { f.Value = "" }
 
-// Words are what exports write for the field: label and value.
 func (f *FormFieldObject) Words() string {
 	label := strings.TrimSpace(f.Label)
 	if f.Kind == FormCheckbox {
@@ -219,7 +212,6 @@ func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	p.FillRect(x, y+1, f.w, f.h-2)
 	p.SetFillStyle(bg)
 	p.FillRect(x+1, y+2, f.w-2, f.h-4)
-	// the icons, at the right of the top line
 	f.eye, f.pen, f.cb = [4]float64{}, [4]float64{}, [4]float64{}
 	right := f.w - 4
 	if !f.Locked {
@@ -278,7 +270,6 @@ func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	f.icons(p, x, y)
 }
 
-// icons draws the eye, pen and lock icons.
 func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	p.SetStrokeStyle("#5f6b7a")
 	p.SetFillStyle("#5f6b7a")
@@ -318,7 +309,6 @@ func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	}
 }
 
-// clipText cuts s to at most w wide, with an ellipsis.
 func clipText(p Painter, s string, w float64) string {
 	if w <= 0 || p.MeasureTextWidth(s) <= w {
 		return s
@@ -335,7 +325,6 @@ type ClickObject interface {
 	ClickAt(x, y float64) (used, changed bool)
 }
 
-// ClickAt: the eye fills the field in; the pen changes it.
 func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	in := func(r [4]float64) bool { return r[2] > 0 && x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] }
 	switch {
@@ -387,7 +376,6 @@ func (f *TextFlow) FormFields() []*FormFieldObject {
 	return out
 }
 
-// Tables lists the tables in the flow's content, in reading order.
 func (f *TextFlow) Tables() []*TableObject {
 	var out []*TableObject
 	for _, it := range f.Items {
@@ -418,7 +406,6 @@ func (f *TextFlow) ClearFormFields() int {
 	return n
 }
 
-// objectDragStart gives a press to a draggable object under (x, y).
 func (f *TextFlow) objectDragStart(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {
@@ -434,7 +421,6 @@ func (f *TextFlow) objectDragStart(x, y float64) bool {
 	return false
 }
 
-// objectClickAt gives a press to the object under (x, y).
 func (f *TextFlow) objectClickAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {

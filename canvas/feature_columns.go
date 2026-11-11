@@ -17,7 +17,6 @@ const (
 	CmdColumnsReset Command = "columns.reset-widths"
 )
 
-// ColumnsHost is what the column commands need of their target: TextFlow.
 type ColumnsHost interface {
 	SetColumnsAt(offset int, cfg ColumnConfig)
 	ColumnsAt(offset int) ColumnConfig
@@ -28,7 +27,6 @@ const DefaultColumnGap = 24
 
 func (Columns) Name() string { return "columns" }
 
-// proportion is a column width ratio; widths scale to fit the page.
 const proportion = 1000
 
 func (Columns) Install(r *Registry) {
@@ -94,7 +92,6 @@ func (Columns) Install(r *Registry) {
 	r.AddCommand(CmdGapWide, "Column spacing: wide", "", set(gap(48)))
 }
 
-// paragraphStart is the offset of the start of the primary cursor's paragraph.
 func paragraphStart(t EditTarget) int {
 	rs := textRunes(t)
 	i := min(t.Cursors()[0].Caret, len(rs))

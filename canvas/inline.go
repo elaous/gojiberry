@@ -10,13 +10,11 @@ type InlineObject interface {
 	DrawAt(p Painter, x, y float64)
 }
 
-// DescentObject is an InlineObject with its own baseline inside its box.
 type DescentObject interface {
 	InlineObject
 	Descent() float64
 }
 
-// Inline is a TextFlow item placing an InlineObject in the text.
 type Inline struct {
 	Object InlineObject
 	Block  bool
@@ -24,7 +22,6 @@ type Inline struct {
 
 func (Inline) flowItem() {}
 
-// objectRune stands for an Inline object in the text stream.
 const objectRune = '￼'
 
 // PlacedObject is an inline object laid out on a Line.
@@ -37,7 +34,6 @@ type PlacedObject struct {
 	Descent float64
 }
 
-// Rule is a horizontal rule: a block object spanning the column.
 type Rule struct {
 	Color     string
 	Thickness float64 // default 1
@@ -61,17 +57,14 @@ func (r *Rule) DrawAt(p Painter, x, y float64) {
 	p.FillRect(x, y+7-th/2, r.w, th)
 }
 
-// TableObject draws a Table read-only in the text, as a block object.
 type TableObject struct {
-	View *TableView
-	w, h float64
-	// pad is the room around a table with formulas or form fields.
+	View        *TableView
+	w, h        float64
 	pad, tableW float64
 	resize      *tableResize
-	// Allow, if set, is asked before a column or row is resized.
-	Allow    func() bool
-	lastEdge *tableResize // the edge pressed last, and when, to tell a double press
-	lastAt   time.Time
+	Allow       func() bool
+	lastEdge    *tableResize
+	lastAt      time.Time
 }
 
 // NewTableObject wraps t for placing in a flow.
@@ -105,13 +98,12 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	o.View.X, o.View.Y = x+o.pad, y+o.pad
 	o.View.Draw()
 	o.View.penSwitch = true
-	o.View.showSwitch = o.View.Table.HasFormulaOrField() // the eye/pen only where there is something to see or edit
+	o.View.showSwitch = o.View.Table.HasFormulaOrField()
 	g := o.View.layout()
 	o.View.drawSelection(g)
 	o.View.drawHandles(g)
 }
 
-// DragStart: a press on a column or row grip starts a resize.
 func (o *TableObject) DragStart(x, y float64) bool {
 	v := o.View
 	if v == nil || v.Table == nil || v.Painter == nil {
@@ -141,9 +133,9 @@ func (o *TableObject) DragStart(x, y float64) bool {
 	}
 	if o.resize != nil && o.Allow != nil && !o.Allow() {
 		o.resize, o.lastEdge = nil, nil
-		return true // the press is taken (nothing else happens with it), and nothing is resized
+		return true
 	}
-	if d := o.resize; d != nil { // pressing the same edge twice in a row gives the size back to the table
+	if d := o.resize; d != nil {
 		now := time.Now()
 		if o.lastEdge != nil && o.lastEdge.col == d.col && o.lastEdge.index == d.index && now.Sub(o.lastAt) < 500*time.Millisecond {
 			if d.col {
@@ -170,7 +162,6 @@ func (o *TableObject) Select(sel Selection) {
 // Selected returns what is selected in the table.
 func (o *TableObject) Selected() Selection { return o.View.sel }
 
-// gripAt returns which grip the point is on, relative to the object.
 func (o *TableObject) gripAt(x, y float64) Selection {
 	v := o.View
 	hs, gap := v.Style.HandleSize, v.Style.BarGap
@@ -210,7 +201,6 @@ func (o *TableObject) DragMove(x, y float64) bool {
 
 func (o *TableObject) DragEnd() { o.resize = nil }
 
-// tableResize records a column or row being resized.
 type tableResize struct {
 	col         bool
 	index       int

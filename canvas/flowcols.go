@@ -1,6 +1,5 @@
 package canvas
 
-// SetColumnsAt sets the column layout from an offset until the next config.
 func (f *TextFlow) SetColumnsAt(offset int, cfg ColumnConfig) {
 	f.materialize()
 	off := 0

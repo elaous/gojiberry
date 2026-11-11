@@ -2,8 +2,6 @@ package canvas
 
 import "sort"
 
-// Bookmarks are named places: Format.Bookmark marks a stretch of text.
-
 // Bookmark is a named stretch of text.
 type Bookmark struct {
 	Name string
@@ -11,7 +9,6 @@ type Bookmark struct {
 	Start, End int
 }
 
-// charBookmarks lists the bookmark name of every character of items.
 func charBookmarks(items []Item) []string {
 	var out []string
 	for _, it := range items {
@@ -46,7 +43,6 @@ func (f *TextFlow) Bookmarks() []Bookmark {
 	return out
 }
 
-// GotoBookmark moves the caret to the named bookmark and reports success.
 func (f *TextFlow) GotoBookmark(name string) bool {
 	for _, b := range f.Bookmarks() {
 		if b.Name == name {
@@ -79,7 +75,6 @@ func (f *TextFlow) RemoveBookmark(name string) bool {
 // BookmarkMarkColor is the colour of the bookmark mark.
 const BookmarkMarkColor = "#b8860b"
 
-// drawBookmarks marks where each bookmark starts.
 func (f *TextFlow) drawBookmarks() {
 	if f.mode != ModeEdit || f.Painter == nil {
 		return

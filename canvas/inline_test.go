@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// fakeObj is an InlineObject that shrinks, keeping its aspect ratio.
 type fakeObj struct {
 	w, h         float64
 	gotMaxW      float64
@@ -86,7 +85,6 @@ func TestInlineObjectSitsInTheLine(t *testing.T) {
 	if ln.Text != "ab ￼ cd" || len(ln.Objects) != 1 || len(ln.Runs) != 2 {
 		t.Fatalf("line = %+v", ln)
 	}
-	// A line taller than its leading grows to fit the object.
 	if ln.H != 60+0.25*16 {
 		t.Fatalf("line height = %g", ln.H)
 	}
@@ -94,7 +92,6 @@ func TestInlineObjectSitsInTheLine(t *testing.T) {
 	if o.X != 10+24 || o.W != 40 || o.H != 60 || o.Offset != 3 {
 		t.Fatalf("object = %+v", o)
 	}
-	// The object's bottom is on the text baseline.
 	if o.Y+o.H != ln.Baseline {
 		t.Fatalf("object bottom %g vs baseline %g", o.Y+o.H, ln.Baseline)
 	}
@@ -124,7 +121,6 @@ func TestInlineObjectIsFittedToTheColumnAndPage(t *testing.T) {
 	if o.W != 100 || o.H != 50 { // 400x200 scaled by min(100/400, 80/200)
 		t.Fatalf("object = %gx%g", o.W, o.H)
 	}
-	// In a narrower column it is offered less.
 	f.Columns = []float64{60, 30}
 	f.Gap = 10
 	f.Layout()
@@ -198,7 +194,6 @@ func TestRuleObject(t *testing.T) {
 func TestTableObjectMeasureAndClip(t *testing.T) {
 	tbl := NewTableObject(NewTableFrom([][]string{{"a", "b"}, {"c", "d"}}))
 	p := &fakePainter{}
-	// Two 80px columns, two 32px rows, plus padding and grip room.
 	if w, h := tbl.Measure(p, 500, 500); w != 200 || h != 90 {
 		t.Fatalf("natural size = %gx%g", w, h)
 	}
@@ -209,7 +204,7 @@ func TestTableObjectMeasureAndClip(t *testing.T) {
 	if !p.has("clipRect 20 30 100 50") || !p.has("save") || !p.has("restore") {
 		t.Fatalf("table must draw clipped: %v", p.calls)
 	}
-	if !p.has(`fillText "a" 50 `) { // 20 for the origin, 20 for the grips, 10 of padding
+	if !p.has(`fillText "a" 50 `) {
 		t.Fatalf("cells drawn at the given origin: %v", p.calls)
 	}
 	if p.has(`fillText "+"`) {

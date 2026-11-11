@@ -2,7 +2,6 @@ package canvas
 
 import "math"
 
-// Watermark is text or a picture drawn faintly across a sheet.
 type Watermark struct {
 	// Text is the words drawn in Style, such as DRAFT.
 	Text  string
@@ -68,7 +67,6 @@ func (ps *PageSet) ResolvedBackground(i int) *Background {
 	return nil
 }
 
-// drawBackdrop paints sheet i's background picture and watermark.
 func (ps *PageSet) drawBackdrop(i int) {
 	ip, ok := ps.Painter.(ImagePainter)
 	if !ok {
@@ -143,7 +141,6 @@ func orF(v, def float64) float64 {
 type RemoveScope int
 
 const (
-	// RemoveThisPage removes it from one page; the pages after keep it.
 	RemoveThisPage RemoveScope = iota
 	// RemoveForward removes it from this page and every later one.
 	RemoveForward
@@ -247,7 +244,6 @@ func (ps *PageSet) RemoveBackground(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// removeInherited keeps inheritance right after a removal.
 func removeInherited[T any](ps *PageSet, page int, scope RemoveScope, field func(*Page) **T, none func() *T, keep func() *T) {
 	switch scope {
 	case RemoveAll:

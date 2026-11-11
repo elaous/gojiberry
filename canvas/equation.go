@@ -2,20 +2,17 @@ package canvas
 
 import "strings"
 
-// EquationObject is a formula in the text, in package export's linear notation.
 type EquationObject struct {
 	Formula string
 	Alt     string
 	// Inline makes the formula part of its line of text.
 	Inline bool
-	// Size is the formula font size in pixels; zero uses a default.
-	Size float64
+	Size   float64
 
 	w, h    float64
 	descent float64
 }
 
-// equationPad is the space around the formula in its box.
 const equationPad = 8.0
 
 func (e *EquationObject) size() float64 {
@@ -53,10 +50,8 @@ func (e *EquationObject) Measure(p Painter, maxW, _ float64) (float64, float64) 
 	return e.w, e.h
 }
 
-// Descent places an inline formula on its baseline above the box bottom.
 func (e *EquationObject) Descent() float64 { return e.descent }
 
-// label is the text drawn when there is no formula.
 func (e *EquationObject) label() string {
 	if f := strings.TrimSpace(e.Formula); f != "" {
 		return f
@@ -86,6 +81,5 @@ func (e *EquationObject) DrawAt(p Painter, x, y float64) {
 		b.draw(p, x+2, y+e.h-e.descent)
 		return
 	}
-	// A block formula is centred in its box.
 	b.draw(p, x+(e.w-b.w)/2, y+(e.h-(b.asc+b.desc))/2+b.asc)
 }

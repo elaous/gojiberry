@@ -2,8 +2,6 @@ package canvas
 
 import "testing"
 
-// newFloatTable returns a 2x2 table view at (10, 10) in edit mode (cells
-// 80x32, so the table is x 10..170, y 10..74).
 func newFloatTable() (*TableView, *fakePainter) {
 	v, p := newView()
 	return v, p
@@ -72,13 +70,11 @@ func TestTableAnchoredToAPage(t *testing.T) {
 	if _, y, _, _ := v.Rect(); y != 218 {
 		t.Fatalf("the table follows its page: y=%g", y)
 	}
-	// Without any page set an anchor is ignored.
 	loose := NewTableView(NewTable(1, 1), p)
 	loose.Anchor = &Anchor{Page: 3}
 	if x, _, _, _ := loose.Rect(); x != 36 {
 		t.Fatalf("x = %g", x)
 	}
-	// The flow's pages are used too.
 	f := pagedFlow(Chars{Text: "x"})
 	v2 := NewTableView(NewTable(1, 1), p)
 	v2.SetFlow(f)
@@ -129,11 +125,9 @@ func TestDraggingTheTableIconMovesTheTable(t *testing.T) {
 	if moves != 1 {
 		t.Fatalf("OnMove fired %d times", moves)
 	}
-	// Hit testing follows the table.
 	if v.HitTest(60, 40).Kind != HitCell {
 		t.Fatal("cells moved with the table")
 	}
-	// Snap can be turned off.
 	v.Snap = 0
 	v.MouseDown(55-7, 30-7) // the icon is now at X-20, Y-20
 	v.MouseMove(55-7+3, 30-7+7)
@@ -150,9 +144,8 @@ func TestDraggingAnAnchoredTableReanchorsAcrossPages(t *testing.T) {
 	v.Pages = ps
 	v.Anchor = &Anchor{Page: 0, X: 30, Y: 40}
 	v.SetMode(ModeEdit)
-	// The icon is at X-20, Y-20 = (34, 44).
 	v.MouseDown(40, 50)
-	v.MouseMove(40, 50+112) // the table's top goes from y=64 to y=176 -> page 1, y=28
+	v.MouseMove(40, 50+112)
 	if v.Anchor.Page != 1 || v.Anchor.Y != 30 || v.Anchor.X != 30 {
 		t.Fatalf("anchor = %+v: re-anchored to page 1 and snapped relative to it", *v.Anchor)
 	}

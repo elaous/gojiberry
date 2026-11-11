@@ -145,7 +145,6 @@ func TestMenuOpenWithinKeepsInsideBounds(t *testing.T) {
 	m := NewMenu(p)
 	items := []MenuItem{{Label: "Only"}, {Label: "Two"}}
 	h := 2 * 28.0
-	// Bounds are a rectangle that doesn't start at the origin.
 	m.OpenWithin(items, 500, 500, [4]float64{100, 200, 300, 150})
 	if m.x != 400-m.w || m.y != 350-h {
 		t.Fatalf("x,y = %g,%g", m.x, m.y)
