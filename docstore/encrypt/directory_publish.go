@@ -67,6 +67,7 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	}
 
 	defer d.lockAddress(user.Email)()
+	// a crash may leave a log enrollment without its record
 	if err := d.reconcileLocked(ctx, email, now); err != nil {
 		return PublishedKey{}, err
 	}

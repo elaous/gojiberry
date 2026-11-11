@@ -183,6 +183,7 @@ func Run(cfg Config) error {
 				if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 					continue
 				}
+				// a new directory needs its own watch
 				if ev.Op&fsnotify.Create != 0 {
 					if info, statErr := os.Stat(ev.Name); statErr == nil && info.IsDir() {
 						_ = addRecursive(watcher, ev.Name) // a failure here just means that one subdirectory goes unwatched

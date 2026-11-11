@@ -541,6 +541,7 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 			ref = endAnchor
 		}
 		for _, dn := range reverse(result[i].ownedNodes()) {
+			// a node in place is left alone: re-inserting drops its focus
 			if inPlace(parent, dn, ref) {
 				ref = dn
 				continue

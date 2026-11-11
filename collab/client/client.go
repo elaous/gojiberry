@@ -180,6 +180,7 @@ func (c *Conn) emit(e Event) {
 	}
 }
 
+// unbounded queue: dropping an event would lose operations
 func (c *Conn) pump() {
 	for {
 		c.mu.Lock()

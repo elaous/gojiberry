@@ -87,6 +87,7 @@ func (rw *renderWriter) renderElement(n Node) {
 	rw.writeString(">")
 }
 
+// emitted unescaped: callers must ensure the content is safe
 func Raw(html string) Node {
 	return Node{Kind: KindRaw, Text: html}
 }

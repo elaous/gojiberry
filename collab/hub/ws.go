@@ -183,6 +183,7 @@ func tokenFromQuery(next http.Handler) http.Handler {
 	})
 }
 
+// cross-origin cookie sockets are refused unless in CookieOrigins
 func (h *Hub) cookieSocketAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" || r.Header.Get("Cookie") == "" {

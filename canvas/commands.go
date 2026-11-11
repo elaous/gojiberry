@@ -97,6 +97,7 @@ func CommonFormat(fs ...Format) Format {
 		return Format{}
 	}
 	c := fs[0]
+	// places mark text, not formatting: copying would duplicate them
 	c.Comment, c.Bookmark, c.Index, c.Proposal = "", "", "", ""
 	for _, f := range fs[1:] {
 		if f.FontFamily != c.FontFamily {

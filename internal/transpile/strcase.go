@@ -19,6 +19,7 @@ func CapWords(s string) string {
 		b.WriteString(p[n:])
 	}
 	out := b.String()
+	// a Go identifier cannot start with a digit or be empty
 	if r, _ := utf8.DecodeRuneInString(out); out == "" || (!unicode.IsLetter(r) && r != '_') {
 		out = "X" + out
 	}

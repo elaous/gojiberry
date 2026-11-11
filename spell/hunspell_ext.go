@@ -11,6 +11,7 @@ import (
 // HunspellOptions say how much of the format LoadHunspell uses.
 type HunspellOptions struct {
 	NoCrossProducts bool
+	// a hostile dictionary cannot use all the memory
 	MaxWords        int
 }
 

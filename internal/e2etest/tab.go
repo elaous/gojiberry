@@ -136,6 +136,7 @@ func (s *Site) launch(t testing.TB, o Options) *Tab {
 		tab = &Tab{t: t, ctx: ctx, site: s, chooser: make(chan struct{}, 8), dlName: make(chan string, 64)}
 		tab.closeFns = append(tab.closeFns, cancel, cancelAlloc)
 		chromedp.ListenTarget(ctx, tab.onEvent(o))
+		// long-lived context: a timeout context would tie the browser to it
 		if err = chromedp.Run(ctx); err == nil {
 			break
 		}

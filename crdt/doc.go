@@ -194,6 +194,7 @@ func (d *Doc) applyCharCRDT(op Op) {
 	case !ok || op.TS.after(cur.ts):
 		d.blocks[op.Block.ID] = stamped{block: merged, ts: op.TS}
 	case len(op.CharOps) > 0:
+		// an older op can carry real edits: merge despite its metadata
 		cur.block.Content = merged.Content
 		d.blocks[op.Block.ID] = cur
 	}

@@ -75,6 +75,7 @@ func ParseEnv(getenv func(string) string) (Config, error) {
 		return c, fmt.Errorf("observe: %s must be \"on\" or \"off\"", envSwitch)
 	}
 	if !c.Enabled {
+		// kill switch: nothing else is read, so a bad value cannot stop it
 		for _, v := range []string{envSinks, envUsageSinks, envTraceSample, envState, "GOJIBERRY_OBS_POSTHOG_KEY", "GOJIBERRY_OBS_POSTHOG_KEY_FILE", "GOJIBERRY_OBS_POSTHOG_HOST"} {
 			if get(v) != "" {
 				c.Notes = append(c.Notes, v+" is ignored: "+envSwitch+" is not on")

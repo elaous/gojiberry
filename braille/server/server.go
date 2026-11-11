@@ -98,6 +98,7 @@ func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {
 	}
 	table := s.cfg.Table
 	if req.Table != "" {
+		// only plain table names pass: a leading "-" would be an option
 		if !tableNameRe.MatchString(req.Table) {
 			http.Error(w, "invalid table name", http.StatusBadRequest)
 			return

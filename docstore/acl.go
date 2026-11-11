@@ -111,6 +111,7 @@ func (s *Server) checkPermission(r *http.Request, id, method string) (allowed bo
 		return true, 0
 	}
 	if strings.HasPrefix(strings.ToLower(id), "catalog:") {
+		// a backend that folds case would alias them
 		return s.checkCatalog(r, id)
 	}
 	acl, err := s.loadACL(r.Context(), id)
@@ -176,6 +177,7 @@ func (s *Server) handleACL(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	me, signedIn := s.auth.CurrentUser(r)
 	if signedIn && ownerKey(me) == "" {
+		// no verified e-mail or ID: "" would match any such account
 		http.Error(w, "your account has no identity to share a document by", http.StatusForbidden)
 		return
 	}

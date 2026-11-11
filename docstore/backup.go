@@ -76,6 +76,7 @@ func writeEntry(tw *tar.Writer, name string, data []byte, mod time.Time) error {
 // ErrBadBackup is returned by Restore for an invalid archive.
 var ErrBadBackup = errors.New("docstore: the backup is damaged or incomplete")
 
+// bounded entry read: a hostile archive must not exhaust memory
 const maxBackupEntry = 1 << 30
 
 // Restore writes the documents of a backup into a store.

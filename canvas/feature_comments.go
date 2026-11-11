@@ -74,6 +74,7 @@ func (Comments) Install(r *Registry) {
 		}
 		cm := h.CommentSet().Add(Comment{Author: h.CommentAuthor(), Text: text, Created: time.Now()})
 		tagComment(c.Target, from, to, cm.ID)
+		// if nothing took the tag, the comment would anchor to nothing
 		if !slices.ContainsFunc(charComments(c.Target.Slice(0, len([]rune(c.Target.EditText())))), func(v string) bool { return commentHas(v, cm.ID) }) {
 			h.CommentSet().Delete(cm.ID)
 			return false

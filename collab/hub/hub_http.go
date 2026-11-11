@@ -234,6 +234,7 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 		return errors.New("you do not have access to this document")
 	}
 	const viewOnly = "you can only view and comment on this document"
+	// a far-ahead Lamport counter would win every later conflict
 	limit := doc.Clock() + maxClockJump
 	if limit < doc.Clock() { // wrapped: the clock is already at the top
 		limit = ^uint64(0)
@@ -259,6 +260,7 @@ func authorize(doc *crdt.Doc, role Role, ops []crdt.Op) error {
 			if c.ID.Counter > limit {
 				return errors.New(viewOnly)
 			}
+			// an empty comment value would erase the comments on the text
 			if c.Kind != crdt.CharMark || c.Mark == nil || c.Mark.Key != "comment" || c.Mark.Value == "" || c.Mark.ID.Counter > limit || len(c.Mark.Value) > 256 {
 				return errors.New(viewOnly)
 			}
@@ -394,6 +396,7 @@ func (h *Hub) leave(rm *room, s *sub) {
 		delete(rm.subs, s)
 	}
 	if s.replica != "" {
+		// always say so: a pruned idle cursor must not linger
 		rm.dropPresence(s.replica)
 		rm.broadcast(s.replica, jsonEvent("presence", Presence{Replica: s.replica, Gone: true}))
 	}

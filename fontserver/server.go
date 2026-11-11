@@ -152,6 +152,7 @@ func (s *Server) handleLocalFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// Path is already decoded: unescaping again would double-decode '%'
 	rel := strings.TrimPrefix(r.URL.Path, "/local/files/")
 	data, ok := s.repo.Open(rel)
 	if !ok {

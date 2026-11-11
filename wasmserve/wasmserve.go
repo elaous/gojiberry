@@ -46,6 +46,7 @@ func Handler(fsys fs.FS, opt Options) http.Handler {
 }
 
 func init() {
+	// the platform table may lack it: unknown type breaks streaming
 	_ = mime.AddExtensionType(".wasm", "application/wasm")
 }
 

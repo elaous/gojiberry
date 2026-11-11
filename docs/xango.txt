@@ -115,6 +115,7 @@ func Frag(children ...Node) Node
 func Host(tag string, props any, children ...Node) Node
 
 func Raw(html string) Node
+    emitted unescaped: callers must ensure the content is safe
 
 func Style(css string) Node
     Style injects css verbatim; "</style" inside is escaped as "<\/style".

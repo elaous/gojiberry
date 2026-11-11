@@ -319,6 +319,7 @@ func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op
 		return nil, ErrBadOwnerSig
 	}
 	if op == OpPublish {
+		// signed over the label too (v2): a v1 signature allows any label
 		if o.V != 2 || !verifyOwnerPublishV2(pub, email, fingerprint, labelHash, o.Time, o.Prev, o.Sig) {
 			return nil, fmt.Errorf("%w: a publication is signed with version 2 of the message, which covers the label", ErrBadOwnerSig)
 		}

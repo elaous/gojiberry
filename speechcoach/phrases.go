@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 )
 
+// limits stop an imported list growing without bound
 const (
 	MaxPhrases   = 1000
 	MaxPhraseLen = 240 // runes

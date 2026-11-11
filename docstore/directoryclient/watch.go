@@ -423,6 +423,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	for _, a := range addrs {
 		mine[a] = true
 	}
+	// a pending entry read again must be the very entry remembered
 	pendingHash := map[int64]string{}
 	for _, e := range st.Pending {
 		pendingHash[e.Seq] = e.Hash

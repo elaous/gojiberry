@@ -25,6 +25,7 @@ var standard = map[string]bool{
 	"Annot": true, "Figure": true, "Formula": true, "Form": true, "Ruby": true, "Warichu": true,
 }
 
+// bounds the walk: a hostile file must not run for ever
 const maxNodes = 200000
 
 func Check(data []byte) ([]Finding, error) {

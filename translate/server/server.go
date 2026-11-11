@@ -78,6 +78,7 @@ type translateResponse struct {
 	DetectedSourceLanguage string `json:"detectedSourceLanguage"`
 }
 
+// capped at DeepL's own 128KiB limit
 const maxTranslateBody = 200 * 1024
 
 func (s *Server) handleTranslate(w http.ResponseWriter, r *http.Request) {

@@ -68,6 +68,7 @@ func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name 
 	if !ValidName(name) {
 		return Folder{}, ErrName
 	}
+	// checked before the Rekey hook, which acts on the document's keys
 	if err := s.view(ctx, target, func(_ Target, cat *catalog) error {
 		if _, ok := cat.Docs[id]; ok {
 			return ErrFolderID

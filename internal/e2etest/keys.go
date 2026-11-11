@@ -73,6 +73,7 @@ func keyOf(name string) keyDef {
 	case unicode.IsDigit(c) && c < 128:
 		k.code, k.vk = "Digit"+name, int64(c)
 	default:
+		// US layout: a character's own value would collide with key codes
 		if p, ok := punct[c]; ok {
 			k.vk, k.code = p.vk, p.code
 		}

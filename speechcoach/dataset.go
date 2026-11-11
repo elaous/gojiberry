@@ -298,6 +298,7 @@ func (d *Dataset) Import(zipBytes []byte) (ImportResult, error) {
 			prob("unexpected fields")
 			continue
 		}
+		// the ID is made again: a file cannot choose where it lands
 		e := NewEntry(cleanLine(l.Lang), cleanLine(l.Prompt), cleanLine(l.Text), l.Source, pcm, cleanHints(l.Hints), l.Created)
 		if d.Get(e.ID) != nil {
 			res.Duplicate++

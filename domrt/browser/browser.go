@@ -257,6 +257,7 @@ func (s *Socket) replace(slot *js.Func, prop string, fn func(args []js.Value)) {
 // Close closes the connection and releases its handlers.
 func (s *Socket) Close() {
 	s.v.Call("close")
+	// close() is asynchronous: remove handlers before releasing them
 	for _, ev := range []string{"onmessage", "onclose", "onerror"} {
 		s.v.Set(ev, js.Null())
 	}

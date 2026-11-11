@@ -185,6 +185,7 @@ func (m *Manager) CurrentUser(r *http.Request) (User, bool) {
 	}
 	u, ok, err := m.store.GetSession(r.Context(), token)
 	if err != nil {
+		// fail closed: a store that cannot answer signs nobody in
 		log.Printf("auth: reading a session: %v", err)
 		return User{}, false
 	}
