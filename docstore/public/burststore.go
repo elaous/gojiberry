@@ -14,7 +14,6 @@ import (
 // BurstKeyPrefix is where the shared burst watch keeps records.
 const BurstKeyPrefix = docstore.PublicPrefix + "burst/"
 
-// burstStore is the burst watch of the priority abuse reports.
 type burstStore struct {
 	store docstore.ConditionalAdapter
 }
@@ -29,7 +28,6 @@ func burstDoc(doc string) string {
 	return hex.EncodeToString(h[:6])
 }
 
-// note records a priority report from the network.
 func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Time, limit int) (over, first bool, err error) {
 	if limit <= 0 {
 		return false, false, nil
@@ -86,7 +84,6 @@ func (b *burstStore) note(ctx context.Context, netHash, doc string, now time.Tim
 	return false, false, docstore.ErrConflict
 }
 
-// bursts is how many networks are over limit.
 func (b *burstStore) bursts(ctx context.Context, now time.Time, limit int) (int, error) {
 	if limit <= 0 {
 		return 0, nil
@@ -118,7 +115,6 @@ func (b *burstStore) bursts(ctx context.Context, now time.Time, limit int) (int,
 	return n, nil
 }
 
-// sweep deletes the records that have nothing left to count.
 func (b *burstStore) sweep(ctx context.Context, now time.Time) (int, error) {
 	metas, err := docstore.ListPrefix(ctx, b.store, BurstKeyPrefix)
 	if err != nil {

@@ -17,7 +17,6 @@ func (e *env) report(id, reason string, ip string) resp {
 	return e.do("POST", "/public/report", "", []byte(fmt.Sprintf(`{"id":%q,"reason":%q}`, id, reason)), xff(ip)...)
 }
 
-// reportCat is report with a category.
 func (e *env) reportCat(id, category, reason string, ip string) resp {
 	e.t.Helper()
 	return e.do("POST", "/public/report", "", []byte(fmt.Sprintf(`{"id":%q,"reason":%q,"category":%q}`, id, reason, category)), xff(ip)...)
@@ -155,7 +154,6 @@ func TestPriorityReportsTakeTheSlotOfAnOrdinaryOne(t *testing.T) {
 	if prio != maxPriorityOfDoc {
 		t.Fatalf("%d priority reports in a document, want the half cap %d", prio, maxPriorityOfDoc)
 	}
-	// the priority list is configurable
 	e2 := newEnv(t, func(o *Options) { behindProxy(o); o.Config.ReportPriorityCategories = []string{"Spam"} })
 	if !e2.svc.isPriority(" spam") || e2.svc.isPriority("csam") {
 		t.Fatal("configured priority categories")
@@ -200,7 +198,6 @@ func TestGlobalEvictionKeepsPriorityReportsLongest(t *testing.T) {
 	if !contains(keys, "report/"+prio["reportId"]) {
 		t.Fatal("the oldest report was evicted although it is a priority one and ordinary ones remained")
 	}
-	// the sweep orders the same way
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}

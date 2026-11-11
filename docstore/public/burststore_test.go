@@ -48,7 +48,6 @@ func TestBurstWatchIsSharedByReplicasThroughTheStore(t *testing.T) {
 	if a.Health().PriorityBursts != 1 || b.Health().PriorityBursts != 1 {
 		t.Errorf("bursts: %d and %d", a.Health().PriorityBursts, b.Health().PriorityBursts)
 	}
-	// The records name no address.
 	for _, k := range e.keys(BurstKeyPrefix) {
 		if strings.Contains(k, "203.0.113") {
 			t.Errorf("a burst record names the network: %s", k)

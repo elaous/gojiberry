@@ -16,7 +16,6 @@ func (s *Service) AdminHandler() http.Handler {
 	return s.headers(mux)
 }
 
-// adminAllowed is the admin guard in front of the admin routes.
 func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
 	if s.admin != nil && s.admin.Allow(r) {
 		return true
@@ -49,10 +48,8 @@ func (s *Service) adminAllowed(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// adminBurst is how many failed admin authentications are allowed.
 const adminBurst = 10
 
-// adminFailed counts a failed admin authentication.
 func (s *Service) adminFailed(now time.Time) {
 	s.adminMu.Lock()
 	defer s.adminMu.Unlock()
@@ -65,7 +62,6 @@ func (s *Service) adminFailed(now time.Time) {
 	}
 }
 
-// handleTakedown serves DELETE /admin/takedown/<id>.
 func (s *Service) handleTakedown(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		methodNotAllowed(w, "DELETE")

@@ -18,7 +18,6 @@ type QuotaRefunder interface {
 	Refund(ctx context.Context, key string, n int64)
 }
 
-// WindowQuota is an optional capability of a Quota that takes a window.
 type WindowQuota interface {
 	TakeIn(ctx context.Context, key string, n int64) (ok bool, window int64, retryAfter time.Duration, err error)
 	RefundIn(ctx context.Context, key string, n int64, window int64)

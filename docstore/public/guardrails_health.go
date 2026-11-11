@@ -35,7 +35,6 @@ const (
 // DefaultSweepInterval is how often Run sweeps.
 const DefaultSweepInterval = 5 * time.Minute
 
-// expiryDisabled asks the store's policy whether expiry is off.
 func (s *Service) expiryDisabled() bool {
 	ea, ok := s.store.(*docstore.ExpiringAdapter)
 	if !ok || ea.Policy == nil {
@@ -79,7 +78,6 @@ func (s *Service) Health() Health {
 	return h
 }
 
-// handleHealth serves GET /public/health.
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -92,7 +90,6 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]bool{"ok": false})
 }
 
-// handleAdminHealth serves GET /admin/health.
 func (s *Service) handleAdminHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -116,7 +113,6 @@ func (s *Service) alarmNoDeadline() {
 	log.Print("public docstore: ALARM: a public document was stored without a deadline and was removed: the store's expiry policy does not cover " + fmt.Sprintf("%q", docKeyPrefix) + " keys, so the 24 hour promise is not kept; see /public/health")
 }
 
-// priorityBursts is how many networks are over the burst limit.
 func (s *Service) priorityBursts(now time.Time) int {
 	if s.burst != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

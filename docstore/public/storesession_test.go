@@ -36,7 +36,6 @@ func TestStoreSessionsLifecycle(t *testing.T) {
 	if err := a.Create(ctx, key, s, t0, SessionCaps{}); err != ErrSessionExists {
 		t.Errorf("the same key again: %v", err)
 	}
-	// the other replica sees it
 	got, ok, err := b.Get(ctx, key, t0)
 	if err != nil || !ok || got != s {
 		t.Fatalf("Get on the other replica: %+v %v %v", got, ok, err)
@@ -164,7 +163,7 @@ func TestStoreSessionsCaps(t *testing.T) {
 func TestStoreSessionsReserveKeepsRoomForNewNetworks(t *testing.T) {
 	ctx := context.Background()
 	st := newStoreSessions(t, docstore.NewMemoryAdapter(), 10)
-	caps := SessionCaps{ReservePercent: 20} // the last 2 of 10 are for networks with no session yet
+	caps := SessionCaps{ReservePercent: 20}
 	for i := range 8 {
 		s := Session{ID: "x", Wide: "W1", Created: t0, Expires: t0.Add(time.Hour)}
 		if err := st.Create(ctx, TokenKey(fmt.Sprint(i)), s, t0, caps); err != nil {
@@ -213,7 +212,6 @@ func TestStoreSessionsNeedConditionalWrites(t *testing.T) {
 	}
 }
 
-// plainAdapter hides the conditional methods of the adapter it wraps.
 type plainAdapter struct{ docstore.Adapter }
 
 func TestTwoServicesShareAnonymousSessionsThroughTheStore(t *testing.T) {

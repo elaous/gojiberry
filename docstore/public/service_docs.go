@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// docResponse is the body of POST /public/doc.
 type docResponse struct {
 	// ID is the document's ID, for the owner.
 	ID string `json:"id"`
@@ -22,10 +21,8 @@ type docResponse struct {
 	Versions int       `json:"versions"`
 }
 
-// errTooSlow is what the minimum-rate reader fails with.
 var errTooSlow = errors.New("public: the request body arrives slower than the minimum rate")
 
-// rateReader reads a request body and enforces the minimum rate.
 type rateReader struct {
 	r     io.Reader
 	rc    *http.ResponseController
@@ -50,7 +47,6 @@ func (m *rateReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// readBody reads the document body, refusing more than the limit.
 func (s *Service) readBody(w http.ResponseWriter, r *http.Request, tk *ticket) ([]byte, bool) {
 	if r.ContentLength > s.cfg.MaxDocBytes {
 		http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
@@ -86,7 +82,6 @@ func (s *Service) readBody(w http.ResponseWriter, r *http.Request, tk *ticket) (
 	return data, true
 }
 
-// screen runs the content checks every write goes through.
 func (s *Service) screen(w http.ResponseWriter, r *http.Request, data []byte, tk *ticket) bool {
 	bad, err := s.blocklist.Blocked(r.Context(), data)
 	if err != nil {
@@ -102,7 +97,6 @@ func (s *Service) screen(w http.ResponseWriter, r *http.Request, data []byte, tk
 	return true
 }
 
-// handleDoc serves the session's own document.
 func (s *Service) handleDoc(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -242,7 +236,6 @@ func (s *Service) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, docResponse{ID: docID, ViewID: view, Expires: exp, Versions: 1})
 }
 
-// ownDoc finds the session's document and its record.
 func (s *Service) ownDoc(w http.ResponseWriter, r *http.Request, sess Session) (docID string, ok bool) {
 	ctx := r.Context()
 	if sess.DocID == "" {
@@ -272,7 +265,6 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 	if !s.writeAllowed(w, r, sess) {
 		return
 	}
-	// The save limit is checked on the record as it is stored.
 	var early docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &early); err != nil {
 		s.fail(w, err)
@@ -377,7 +369,6 @@ func (s *Service) downloadDoc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="document"`)
 	s.setExpires(ctx, w, docID)
-	// Whoever holds the edit link may be a different browser.
 	var meta docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &meta); err == nil && found && meta.ViewID != "" {
 		w.Header().Set("X-Gojiberry-View-Id", meta.ViewID)
@@ -413,7 +404,6 @@ func (s *Service) discardDoc(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleView serves GET /public/view/<viewId>.
 func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		methodNotAllowed(w, "GET, HEAD")
@@ -459,7 +449,6 @@ func (s *Service) handleView(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(doc.Data)
 }
 
-// resolve finds the document an ID names.
 func (s *Service) resolve(ctx context.Context, id string) (docID, view string, ok bool, err error) {
 	if !validID(id) {
 		return "", "", false, nil

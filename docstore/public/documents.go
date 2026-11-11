@@ -26,7 +26,6 @@ func (DocumentsOnly) Blocked(_ context.Context, body []byte) (bool, error) {
 	return !cleanValue(reflect.ValueOf(d)), nil
 }
 
-// ChainBlocklist asks each list in turn; the first that blocks wins.
 func ChainBlocklist(lists ...Blocklist) Blocklist { return chainBlocklist(lists) }
 
 var inlineTypes = []string{"data:image/png", "data:image/jpeg", "data:image/gif", "data:image/webp", "data:audio/", "data:video/", "data:font/", "data:text/vtt", "data:application/font"}
@@ -54,7 +53,6 @@ func linkOK(u string) bool {
 	return false
 }
 
-// cleanValue walks a document by reflection, cleaning its strings.
 func cleanValue(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Pointer, reflect.Interface:

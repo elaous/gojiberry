@@ -52,7 +52,7 @@ type hookStore struct {
 	beforePub func(ctx context.Context, id string, data []byte) error // called before saving "pubdoc/..."
 	listHook  func(ctx context.Context) error                         // called by every ListPrefix before it lists (set before use)
 	saltFail  atomic.Bool                                             // loading or saving the reporter salt fails
-	saltRace  func()                                                  // called before the conditional save of the salt (set before use)
+	saltRace  func()
 }
 
 func (h *hookStore) Load(ctx context.Context, id string) (docstore.Document, error) {
@@ -101,7 +101,6 @@ func (h *hookStore) ListPrefix(ctx context.Context, p string) ([]docstore.Meta, 
 	return h.ExpiringAdapter.ListPrefix(ctx, p)
 }
 
-// envWith builds an env over a hookStore.
 func envWith(t *testing.T, mod func(*Options)) (*env, *hookStore) {
 	t.Helper()
 	var hs *hookStore
@@ -322,7 +321,6 @@ func TestGlobalStorageBudget(t *testing.T) {
 	if seen.n.Load() != before {
 		t.Fatal("a full store read and screened the body first")
 	}
-	// a discard gives the bytes back
 	e.want(e.do("DELETE", "/public/doc", a, nil), 204)
 	e.want(e.do("POST", "/public/doc", c, bytes.Repeat([]byte("c"), 10)), 201)
 }

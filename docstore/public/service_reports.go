@@ -16,7 +16,6 @@ import (
 	"time"
 )
 
-// reportRef is the part of a stored report its document keeps.
 type reportRef struct {
 	ID       string    `json:"id"`
 	Reporter string    `json:"by"`  // the reporter's hash (reporterHash)
@@ -41,14 +40,12 @@ type Report struct {
 }
 
 const (
-	maxReportBody   = 8 << 10
-	maxReasonBytes  = 2000
-	maxReportsOfDoc = 20
-	// maxPriorityOfDoc is how many of a document's slots are priority.
+	maxReportBody    = 8 << 10
+	maxReasonBytes   = 2000
+	maxReportsOfDoc  = 20
 	maxPriorityOfDoc = maxReportsOfDoc / 2
 )
 
-// handleReport serves POST /public/report.
 func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, "POST")
@@ -148,16 +145,13 @@ func (s *Service) handleReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"reportId": reportID})
 }
 
-// reportKey is the dedupe key of a report.
 func reportKey(reporter, category string) string {
 	h := sha256.Sum256([]byte(reporter + "\x00" + categoryOf(category)))
 	return base64.RawURLEncoding.EncodeToString(h[:9])
 }
 
-// saltRetryMax caps the backoff between attempts to save the salt.
 const saltRetryMax = 30 * time.Second
 
-// reporterSalt returns the stored salt of the reporter hashes.
 func (s *Service) reporterSalt(ctx context.Context) ([]byte, error) {
 	s.saltMu.Lock()
 	defer s.saltMu.Unlock()
@@ -227,7 +221,6 @@ func (s *Service) loadOrCreateSalt(ctx context.Context) ([]byte, error) {
 	return nil, errors.New("the reporter salt kept changing while it was being created")
 }
 
-// saveSaltUnconditionally is the fallback for a failed salt save.
 func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]byte, error) {
 	if err := s.store.Save(ctx, saltKey, raw); err != nil {
 		return nil, err
@@ -245,7 +238,6 @@ func (s *Service) saveSaltUnconditionally(ctx context.Context, raw []byte) ([]by
 	return rec.Salt, nil
 }
 
-// reporterHash names a reporting client without revealing it.
 func (s *Service) reporterHash(ctx context.Context, client string) (string, error) {
 	salt, err := s.reporterSalt(ctx)
 	if err != nil {
@@ -259,7 +251,6 @@ func (s *Service) reporterHash(ctx context.Context, client string) (string, erro
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:12]), nil
 }
 
-// refLive reports whether the report a reference names is live.
 func (s *Service) refLive(ctx context.Context, ref reportRef) (bool, error) {
 	_, err := s.store.Load(ctx, docstore.ReportPrefix+ref.ID)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -268,7 +259,6 @@ func (s *Service) refLive(ctx context.Context, ref reportRef) (bool, error) {
 	return err == nil, err
 }
 
-// pruneRefs drops the references whose reports are gone.
 func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 	kept := meta.ReportRefs[:0:0]
 	for _, ref := range meta.ReportRefs {
@@ -288,7 +278,6 @@ func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 	return true, nil
 }
 
-// storeReport decides whether rep is kept for the document.
 func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (id string, stored, over bool, err error) {
 	pruned := false
 	defer func() {
@@ -375,7 +364,6 @@ func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (i
 	return rep.ID, true, over, nil
 }
 
-// evictOrdinaryRef deletes the oldest non-priority reference.
 func (s *Service) evictOrdinaryRef(ctx context.Context, meta *docMeta) bool {
 	oldest := -1
 	for i, ref := range meta.ReportRefs {
@@ -397,7 +385,6 @@ func (s *Service) evictOrdinaryRef(ctx context.Context, meta *docMeta) bool {
 	return true
 }
 
-// allowPriority spends one of the reporter's priority reports.
 func (s *Service) allowPriority(ctx context.Context, reporter string) bool {
 	limit := s.cfg.MaxPriorityReportsPerReporter
 	if limit < 0 {

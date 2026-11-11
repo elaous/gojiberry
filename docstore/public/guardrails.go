@@ -12,15 +12,12 @@ import (
 	"time"
 )
 
-// versionsKeyPrefix is the keyspace of version snapshots.
 const versionsKeyPrefix = "versions/" + docKeyPrefix
 
-// budgetEntry is what the counter holds for one document.
 type budgetEntry struct{ doc, extra int64 }
 
 func (e budgetEntry) bytes() int64 { return e.doc + e.extra }
 
-// budgetTouch is what writes did to a document during a reconcile.
 type budgetTouch struct {
 	removed bool
 	hasDoc  bool
@@ -28,7 +25,6 @@ type budgetTouch struct {
 	extra   int64
 }
 
-// budget is the global counter of live public bytes.
 type budget struct {
 	mu         sync.Mutex
 	ledger     map[string]budgetEntry
@@ -40,14 +36,12 @@ type budget struct {
 	windows    map[uint64]map[string]budgetTouch
 }
 
-// full reports whether nothing more fits.
 func (b *budget) full(limit int64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.total+b.pending >= limit
 }
 
-// reservation is a write's claim on the budget.
 type reservation struct {
 	b     *budget
 	doc   string
@@ -56,7 +50,6 @@ type reservation struct {
 	ended bool
 }
 
-// reserve claims growth of delta bytes.
 func (b *budget) reserve(doc string, size, delta, limit int64) (*reservation, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -79,7 +72,6 @@ func (b *budget) unholdLocked(n int64) {
 	}
 }
 
-// commit turns the reservation into the document's counted size.
 func (r *reservation) commit() {
 	if r == nil {
 		return
@@ -96,7 +88,6 @@ func (r *reservation) commit() {
 	b.setLocked(r.doc, budgetEntry{doc: max(0, r.size), extra: e.extra}, e)
 }
 
-// cancel gives the reservation back when a write fails.
 func (r *reservation) cancel() {
 	if r == nil {
 		return
@@ -111,7 +102,6 @@ func (r *reservation) cancel() {
 	b.unholdLocked(r.held)
 }
 
-// setLocked records doc's entry.
 func (b *budget) setLocked(doc string, e, old budgetEntry) {
 	if b.ledger == nil {
 		b.ledger = map[string]budgetEntry{}
@@ -125,7 +115,6 @@ func (b *budget) setLocked(doc string, e, old budgetEntry) {
 	}
 }
 
-// addExtra counts n bytes of a version snapshot.
 func (b *budget) addExtra(doc string, n int64) {
 	if n <= 0 {
 		return
@@ -148,7 +137,6 @@ func (b *budget) addExtra(doc string, n int64) {
 	}
 }
 
-// holdExtra claims n bytes of a version snapshot.
 func (b *budget) holdExtra(n, limit int64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -165,7 +153,6 @@ func (b *budget) releaseExtra(n int64) {
 	b.unholdLocked(n)
 }
 
-// subExtra takes n bytes of a deleted version snapshot.
 func (b *budget) subExtra(doc string, n int64) {
 	if n <= 0 {
 		return
@@ -191,7 +178,6 @@ func (b *budget) subExtra(doc string, n int64) {
 	}
 }
 
-// release removes document doc from the count.
 func (b *budget) release(doc string) int64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -211,7 +197,6 @@ func (b *budget) release(doc string) int64 {
 	return e.bytes()
 }
 
-// begin opens a reconcile window.
 func (b *budget) begin() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -223,14 +208,12 @@ func (b *budget) begin() uint64 {
 	return b.nextWin
 }
 
-// abort closes a window whose listing failed.
 func (b *budget) abort(win uint64) {
 	b.mu.Lock()
 	delete(b.windows, win)
 	b.mu.Unlock()
 }
 
-// set replaces the ledger with the listing.
 func (b *budget) set(win uint64, listed map[string]budgetEntry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -261,21 +244,18 @@ func (b *budget) set(win uint64, listed map[string]budgetEntry) {
 	b.reconciled = true
 }
 
-// get is the bytes counted, reserved ones included.
 func (b *budget) get() (used int64, reconciled bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.total + b.pending, b.reconciled
 }
 
-// generation is the number of completed reconciles.
 func (b *budget) generation() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.gen
 }
 
-// reportInfo is what the counters need about a report.
 type reportInfo struct {
 	reporter string
 	doc      string
@@ -283,14 +263,12 @@ type reportInfo struct {
 	at       time.Time
 }
 
-// reportWindow is what was added while a reconcile ran.
 type reportWindow struct {
 	n     int
 	bytes int64
 	rep   map[string]int
 }
 
-// reportStats counts the stored reports and their bytes.
 type reportStats struct {
 	mu        sync.Mutex
 	n         int
@@ -300,7 +278,6 @@ type reportStats struct {
 	windows   map[uint64]*reportWindow
 }
 
-// add changes the counts; a negative n is an eviction.
 func (r *reportStats) add(n int, bytes int64, reporter string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -346,7 +323,6 @@ func (r *reportStats) abort(win uint64) {
 	r.mu.Unlock()
 }
 
-// set replaces the counts with a listing.
 func (r *reportStats) set(win uint64, n int, bytes int64, reporters map[string]int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -372,20 +348,16 @@ func (r *reportStats) over(maxN int, maxBytes int64) bool {
 	return r.n > maxN || r.bytes > maxBytes
 }
 
-// held is how many reports are stored in all.
 func (r *reportStats) held(reporter string) (all, mine int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.n, r.reporters[reporter]
 }
 
-// reconcileBackoff is how long writes wait after a failed reconcile.
 const reconcileBackoff = 15 * time.Second
 
-// reconcileTimeout bounds the first reconcile.
 const reconcileTimeout = 2 * time.Minute
 
-// ensureCounters reconciles the counters with the store once.
 func (s *Service) ensureCounters(ctx context.Context) bool {
 	if _, done := s.bytes.get(); done {
 		return true
@@ -419,7 +391,6 @@ func (s *Service) ensureCounters(ctx context.Context) bool {
 	return true
 }
 
-// listBudget lists the public documents and their versions.
 func (s *Service) listBudget(ctx context.Context) (map[string]budgetEntry, error) {
 	metas, err := docstore.ListPrefix(ctx, s.store, docKeyPrefix)
 	if err != nil {
@@ -445,7 +416,6 @@ func (s *Service) listBudget(ctx context.Context) (map[string]budgetEntry, error
 	return out, nil
 }
 
-// reconcile recomputes the byte and report counters from the store.
 func (s *Service) reconcile(ctx context.Context) error {
 	win := s.bytes.begin()
 	listed, err := s.listBudget(ctx)
@@ -457,7 +427,6 @@ func (s *Service) reconcile(ctx context.Context) error {
 	return s.recountReports(ctx)
 }
 
-// listReports lists the stored reports and reads each.
 func (s *Service) listReports(ctx context.Context) ([]docstore.Meta, map[string]reportInfo, error) {
 	metas, err := docstore.ListPrefix(ctx, s.store, docstore.ReportPrefix)
 	if err != nil {
@@ -475,12 +444,10 @@ func (s *Service) listReports(ctx context.Context) ([]docstore.Meta, map[string]
 	return metas, info, nil
 }
 
-// recountReports sets the report counters from a fresh listing.
 func (s *Service) recountReports(ctx context.Context) error {
 	return s.recountReportsIn(ctx, s.reports.begin())
 }
 
-// recountReportsIn is recountReports for a window.
 func (s *Service) recountReportsIn(ctx context.Context, win uint64) error {
 	start := s.now()
 	metas, info, err := s.listReports(ctx)
@@ -505,7 +472,6 @@ func (s *Service) setReportCounts(win uint64, metas []docstore.Meta, info map[st
 	s.reports.set(win, len(metas), b, reporters)
 }
 
-// isPriority reports whether a report category is priority.
 func (s *Service) isPriority(category string) bool {
 	n := categoryOf(category)
 	for _, p := range s.cfg.ReportPriorityCategories {
@@ -516,7 +482,6 @@ func (s *Service) isPriority(category string) bool {
 	return false
 }
 
-// evictReports deletes reports among metas until there is room.
 func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info map[string]reportInfo) int {
 	maxN, maxB := s.cfg.MaxReports, s.cfg.MaxReportBytes
 	targetN, targetB := maxN-max(1, maxN/20), maxB-max(1, maxB/20)
@@ -556,7 +521,6 @@ func (s *Service) evictReports(ctx context.Context, metas []docstore.Meta, info 
 	return evicted
 }
 
-// dropRef removes the reference to report reportID from a document.
 func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
 	if !validID(docID) || reportID == "" {
 		return
@@ -578,7 +542,6 @@ func (s *Service) dropRef(ctx context.Context, docID, reportID string) {
 	}
 }
 
-// removeRef deletes the reference with the given report ID.
 func removeRef(meta *docMeta, reportID string) bool {
 	for i, ref := range meta.ReportRefs {
 		if ref.ID == reportID {
@@ -590,10 +553,8 @@ func removeRef(meta *docMeta, reportID string) bool {
 	return false
 }
 
-// keyPattern matches the store keys of this package.
 var keyPattern = regexp.MustCompile(`(?i)(pubdoc|public|report|versions/pubdoc|expiry:pubdoc)/[A-Za-z0-9_/.\-]*`)
 
-// redact is err's text with store keys removed.
 func redact(err error) string {
 	if err == nil {
 		return ""
@@ -601,7 +562,6 @@ func redact(err error) string {
 	return keyPattern.ReplaceAllString(err.Error(), "$1/<id>")
 }
 
-// canListPrefix reports whether a listing by prefix is supported.
 func canListPrefix(a docstore.Adapter) bool {
 	if e, ok := a.(*docstore.ExpiringAdapter); ok {
 		return canListPrefix(e.Inner)

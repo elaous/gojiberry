@@ -64,7 +64,6 @@ func TestInflightSharesAreBoundedByTheirDefaultsAndValidated(t *testing.T) {
 	if c.MaxInflightPerClient != DefaultMaxInflightBytes/8 || c.MaxInflightPerNet != DefaultMaxInflightBytes/4 {
 		t.Fatalf("defaults %d %d", c.MaxInflightPerClient, c.MaxInflightPerNet)
 	}
-	// never below one document
 	c = Config{MaxDocBytes: 100, MaxInflightBytes: 400}.withDefaults()
 	if c.MaxInflightPerClient != 100 || c.MaxInflightPerNet != 100 {
 		t.Fatalf("%d %d", c.MaxInflightPerClient, c.MaxInflightPerNet)
@@ -243,7 +242,6 @@ func TestAdminFailuresAreAlsoCountedPerNetwork(t *testing.T) {
 		t.Fatalf("the /48 got %v, want 60 failures and the rest limited", got)
 	}
 	e.want(e.do("DELETE", "/admin/takedown/"+strings.Repeat("D", 22), "", nil, append(xff("2001:db8:aaaa:ffff::1"), AdminHeader, adminToken)...), 202)
-	// another network has its own budget
 	if st := adminGuess(e, "2001:db8:bbbb::1", "nope"); st != 403 {
 		t.Fatalf("another network: %d", st)
 	}
@@ -458,7 +456,6 @@ func TestSlash32FloodCannotFillTheGlobalCap(t *testing.T) {
 	if got[201] != 20 || got[429] != 80 {
 		t.Fatalf("the /32 got %v, want 20 sessions and the rest 429", got)
 	}
-	// IPv4: one /16
 	got = map[int]int{}
 	for i := 0; i < 40; i++ {
 		got[sessionStatus(e, fmt.Sprintf("198.51.%d.1", i))]++
@@ -466,7 +463,6 @@ func TestSlash32FloodCannotFillTheGlobalCap(t *testing.T) {
 	if got[201] != 20 || got[429] != 20 {
 		t.Fatalf("the /16 got %v", got)
 	}
-	// other wide networks are unaffected
 	for _, ip := range []string{"2001:db9::1", "192.0.2.1", "203.0.113.9"} {
 		if st := sessionStatus(e, ip); st != 201 {
 			t.Fatalf("%s: %d", ip, st)
@@ -497,7 +493,7 @@ func TestTheReserveIsJudgedAtTheCoarsestLevel(t *testing.T) {
 		o.Config.MaxSessions = 50
 		o.Config.MaxSessionsPerAddress = 2
 		o.Config.MaxSessionsPerNet = 6
-		o.Config.MaxSessionsPerWide = 50 // no third-level cap in the way: the reserve alone is under test
+		o.Config.MaxSessionsPerWide = 50
 	})
 	for p := 0; p < 7; p++ {
 		for i := 0; i < 6 && sessions.Len() < 40; i++ {
@@ -683,7 +679,6 @@ func TestVersionSnapshotIsRefusedOverTheBudgetAndSubtractedWhenDeleted(t *testin
 	if got := e.svc.Health().StorageBytes; got != 60 {
 		t.Fatalf("StorageBytes = %d right after the delete, want 60", got)
 	}
-	// the room is usable again
 	if err := e.store.Save(ctx, key("again"), bytes.Repeat([]byte("v"), 40)); err != nil {
 		t.Fatalf("after the delete: %v", err)
 	}

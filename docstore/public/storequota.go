@@ -16,14 +16,12 @@ import (
 // QuotaPrefix is where a StoreQuota keeps its counters.
 const QuotaPrefix = docstore.PublicPrefix + "quota/"
 
-// storeQuotaRetries bounds the compare-and-set loop of a counter.
 const storeQuotaRetries = 8
 
 // StoreQuota is a Quota kept in the store.
 type StoreQuota struct {
-	Store docstore.Adapter
-	Limit int64
-	// Window is the length of a window; a day if zero.
+	Store  docstore.Adapter
+	Limit  int64
 	Window time.Duration
 	// Now is the clock (time.Now if nil), for tests.
 	Now func() time.Time
@@ -68,7 +66,6 @@ type quotaRecord struct {
 	Used int64 `json:"used"`
 }
 
-// charge adds delta; a negative delta is a refund, never below zero.
 func (q *StoreQuota) charge(ctx context.Context, key string, delta, win int64) (bool, error) {
 	cas, ok := q.Store.(docstore.ConditionalAdapter)
 	if !ok {

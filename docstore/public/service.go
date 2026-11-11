@@ -62,12 +62,12 @@ type Service struct {
 	sessions  SessionStore
 	lim       Limiters
 	quota     Quota
-	prioQuota Quota       // shared allowance of priority reports, or nil: the per-process count (prio)
+	prioQuota Quota
 	burst     *burstStore // the shared burst watch, or nil: the per-process one (prio)
 	admin     AdminGuard
 	blocklist Blocklist
 	notify    func(Report)
-	taken     *HashBlocklist // contents of the documents taken down (public/blocked/): they are refused when sent again
+	taken     *HashBlocklist
 	challenge Challenger
 	clientIP  func(*http.Request) string
 	now       func() time.Time
@@ -78,10 +78,10 @@ type Service struct {
 	reports  reportStats   // stored abuse reports
 	flight   inflight      // bytes of request bodies being read (Config.MaxInflightBytes)
 	recSem   chan struct{} // one holder at a time runs the first reconcile (ensureCounters)
-	recRetry time.Time     // no new first reconcile before this (writes are refused until then)
+	recRetry time.Time
 
 	saltMu    sync.Mutex
-	salt      []byte    // stored salt of the reporter hashes (see reporterHash); nil until it is known
+	salt      []byte
 	saltRetry time.Time // no new attempt to get it before this
 	saltFails int
 	reportKey []byte // keys the reporter hashes; never stored
@@ -109,7 +109,6 @@ var ErrAdminNeedsProxyConfig = errors.New("public: the admin route is enabled bu
 // ErrExpiryRequired is returned by New for a store without expiry.
 var ErrExpiryRequired = errors.New("public: the store must expire documents (the 24 hour promise): wrap it in docstore.ExpiringAdapter and set GOJIBERRY_DOCSTORE_EXPIRY_TTL")
 
-// docKeyPrefix is where public documents live in the store.
 const docKeyPrefix = "pubdoc/"
 
 // HiddenPrefixes are the ids the generic routes must hide.
@@ -176,7 +175,6 @@ func New(o Options) (*Service, error) {
 	if s.sessions == nil {
 		s.sessions = NewMemorySessionStore(cfg.MaxSessions)
 	}
-	// rl makes a token bucket of a burst size and refill rate.
 	rl := func(l Limiter, name string, figure float64, per time.Duration) Limiter {
 		if l != nil {
 			return l
@@ -297,7 +295,6 @@ func (s *Service) Handler() http.Handler {
 	return s.headers(mux)
 }
 
-// headers adds what every public response carries.
 func (s *Service) headers(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if d := s.cfg.RequestTimeout; d > 0 {
@@ -323,16 +320,13 @@ func (s *Service) headers(next http.Handler) http.Handler {
 // ExposedHeaders is Access-Control-Expose-Headers of the public routes.
 const ExposedHeaders = docstore.ExposedHeaders
 
-// docKey is the store key of document docID.
 func docKey(docID string) string { return docKeyPrefix + docID }
 
-// viewIDOf derives the view-only ID of a document.
 func viewIDOf(docID string) string {
 	h := sha256.Sum256([]byte("gojiberry/public/view/v1\x00" + docID))
 	return base64.RawURLEncoding.EncodeToString(h[:16])
 }
 
-// validID reports whether id has the shape of a service ID.
 func validID(id string) bool {
 	if len(id) != 22 {
 		return false
@@ -347,7 +341,6 @@ func validID(id string) bool {
 	return true
 }
 
-// docMeta is the record of one public document.
 type docMeta struct {
 	Owner    string    `json:"owner"`
 	ViewID   string    `json:"view"`
@@ -376,7 +369,6 @@ func (s *Service) putJSON(ctx context.Context, key string, v any) error {
 	return s.store.Save(ctx, key, b)
 }
 
-// getJSON loads key into v; found is false when missing.
 func (s *Service) getJSON(ctx context.Context, key string, v any) (found bool, err error) {
 	d, err := s.store.Load(ctx, key)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -403,13 +395,11 @@ func (s *Service) lock(docID string) func() {
 	return m.Unlock
 }
 
-// removed reports whether the document's view ID has a tombstone.
 func (s *Service) removed(ctx context.Context, docID string) (bool, error) {
 	var t tombstone
 	return s.getJSON(ctx, tombPrefix+viewIDOf(docID), &t)
 }
 
-// live reports whether the document is stored and not expired.
 func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	key := docKey(docID)
 	if x, ok := s.store.(docstore.Expirer); ok {
@@ -428,7 +418,6 @@ func (s *Service) live(ctx context.Context, docID string) (bool, error) {
 	return err == nil, err
 }
 
-// dropRecords deletes the document's own records.
 func (s *Service) dropRecords(ctx context.Context, docID string) error {
 	if err := s.deleteKey(ctx, viewRecordPrefix+viewIDOf(docID)); err != nil {
 		return err
@@ -442,7 +431,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v) // a write failure means the client went away
 }
 
-// fail answers 500 without the error's text, and logs it.
 func (s *Service) fail(w http.ResponseWriter, err error) {
 	log.Printf("public docstore: %s", redact(err))
 	http.Error(w, "storage error", http.StatusInternalServerError)
@@ -459,10 +447,8 @@ func methodNotAllowed(w http.ResponseWriter, allow string) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
-// clientKey is the ClientKey of the request's address.
 func (s *Service) clientKey(r *http.Request) string { return ClientKey(s.clientIP(r)) }
 
-// allow asks the limiter for group's budget of the client.
 func (s *Service) allow(w http.ResponseWriter, r *http.Request, l Limiter, group, who string) bool {
 	if who == "" {
 		who = s.clientKey(r)
@@ -474,7 +460,6 @@ func (s *Service) allow(w http.ResponseWriter, r *http.Request, l Limiter, group
 	return ok
 }
 
-// setExpires adds X-Gojiberry-Expires for the document.
 func (s *Service) setExpires(ctx context.Context, w http.ResponseWriter, docID string) {
 	if x, ok := s.store.(docstore.Expirer); ok {
 		if t, has, err := x.Expiry(ctx, docKey(docID)); err == nil && has {
@@ -483,7 +468,6 @@ func (s *Service) setExpires(ctx context.Context, w http.ResponseWriter, docID s
 	}
 }
 
-// expiresOf is the document's deadline.
 func (s *Service) expiresOf(ctx context.Context, docID string) (t time.Time, has bool, err error) {
 	x, ok := s.store.(docstore.Expirer)
 	if !ok {
@@ -493,12 +477,10 @@ func (s *Service) expiresOf(ctx context.Context, docID string) (t time.Time, has
 	return t.UTC(), has, err
 }
 
-// writeAllowed charges a write to the session's budget.
 func (s *Service) writeAllowed(w http.ResponseWriter, r *http.Request, sess Session) bool {
 	return s.allow(w, r, s.lim.Write, "write", sess.ID) && s.allow(w, r, s.lim.WriteAddr, "writeaddr", "")
 }
 
-// sessionResponse is the body of POST /public/session.
 type sessionResponse struct {
 	// Token is the session's bearer token.
 	Token   string    `json:"token"`
@@ -512,7 +494,6 @@ type limits struct {
 	MaxVersions int   `json:"maxVersions"`
 }
 
-// handleSession serves POST /public/session: a new anonymous session.
 func (s *Service) handleSession(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, "POST")
@@ -588,7 +569,6 @@ func (s *Service) lookup(r *http.Request) (key string, sess Session, ok bool) {
 	return key, sess, true
 }
 
-// session answers 401 unless the request carries a live session.
 func (s *Service) session(w http.ResponseWriter, r *http.Request) (string, Session, bool) {
 	key, sess, ok := s.lookup(r)
 	if !ok {
@@ -598,7 +578,6 @@ func (s *Service) session(w http.ResponseWriter, r *http.Request) (string, Sessi
 	return key, sess, ok
 }
 
-// renewSession extends the session after a write.
 func (s *Service) renewSession(ctx context.Context, key string, sess Session) {
 	now := s.now()
 	exp := now.Add(s.cfg.SessionTTL)

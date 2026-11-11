@@ -20,7 +20,6 @@ func behindProxy(o *Options) { o.Config.TrustedProxies = []string{"127.0.0.1"} }
 
 func xff(ip string) []string { return []string{"X-Forwarded-For", ip} }
 
-// chunked sends body with no Content-Length (Transfer-Encoding: chunked).
 func (e *env) chunked(method, path, token, body string) resp {
 	e.t.Helper()
 	req, err := http.NewRequest(method, e.srv.URL+path, io.NopCloser(strings.NewReader(body)))
@@ -231,7 +230,7 @@ func TestSweepBetweenReserveAndSaveKeepsTheReservation(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	letGo := func() { once.Do(func() { close(release) }) }
-	t.Cleanup(letGo) // a failing test must not leave the create waiting (the server's Close would hang)
+	t.Cleanup(letGo)
 	hs.beforePub = func(context.Context, string, []byte) error {
 		close(entered)
 		<-release
@@ -239,7 +238,7 @@ func TestSweepBetweenReserveAndSaveKeepsTheReservation(t *testing.T) {
 	}
 	done := make(chan resp, 1)
 	go func() { done <- e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 40)) }()
-	<-entered // the bytes are reserved and the document is not stored yet
+	<-entered
 	if _, err := e.svc.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +281,6 @@ func TestTakedownAndDiscardSubtractOnlyWhatTheCurrentGenerationCounts(t *testing
 	if got := e.svc.Health().StorageBytes; got != 200 {
 		t.Fatalf("a takedown of an uncounted document left %d, want 200", got)
 	}
-	// the same for a discard
 	c, _ := e.session()
 	dc := e.create(c, strings.Repeat("c", 50))
 	if err := e.store.Delete(context.Background(), docKey(dc.ID)); err != nil {
@@ -333,7 +331,7 @@ func TestOverlappingReconcilesDoNotLoseAWrite(t *testing.T) {
 	var b budget
 	w1, w2 := b.begin(), b.begin() // two reconciles listing at the same time
 	r, _ := b.reserve("doc", 30, 30, 1000)
-	r.commit() // a write lands while both are listing: neither listing saw it
+	r.commit()
 	b.set(w1, map[string]budgetEntry{"old": {doc: 5}})
 	if used, _ := b.get(); used != 35 {
 		t.Fatalf("after the first: %d, want 35", used)
@@ -466,7 +464,6 @@ func TestPublicHealthIsMinimalAndAdminHealthIsGuarded(t *testing.T) {
 			t.Fatalf("the public health leaks %q: %s", leak, r.body)
 		}
 	}
-	// the detail needs the admin token
 	e.want(e.do("GET", "/admin/health", "", nil), 403)
 	e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, "wrong"), 403)
 	r = e.want(e.do("GET", "/admin/health", "", nil, AdminHeader, adminToken), 503)
@@ -515,7 +512,6 @@ func TestAdminRouteNeedsTrustedProxiesToBeSet(t *testing.T) {
 	if err := mk(func(o *Options) { o.Config.AdminToken = ""; o.Admin = allowAll{} }); err != ErrAdminNeedsProxyConfig {
 		t.Fatalf("a custom guard counts too: %v", err)
 	}
-	// the message names the variable
 	if !strings.Contains(ErrAdminNeedsProxyConfig.Error(), "GOJIBERRY_DOCSTORE_PUBLIC_TRUSTED_PROXIES") || !strings.Contains(ErrAdminNeedsProxyConfig.Error(), "none") {
 		t.Fatal(ErrAdminNeedsProxyConfig)
 	}
@@ -581,7 +577,7 @@ func TestInflightBytesAreCappedGlobally(t *testing.T) {
 	e := newEnv(t, func(o *Options) {
 		o.Config.MaxDocBytes = 600
 		o.Config.MaxInflightBytes = 1000
-		o.Config.MaxInflightPerClient = 1000 // every request here is one client: only the global cap is under test
+		o.Config.MaxInflightPerClient = 1000
 	})
 	a, _ := e.session()
 	b, _ := e.session()
@@ -666,7 +662,7 @@ func TestTicketRefundsIntoTheWindowItWasChargedIn(t *testing.T) {
 	e.clk.Add(25 * time.Hour)
 	fresh := admit(50)
 	fresh.keep()
-	slow.release() // it fails after the window rolled over: its 80 were charged to the old window
+	slow.release()
 	req := httptest.NewRequest("POST", "/public/doc", nil)
 	req.ContentLength = 51
 	req.RemoteAddr = "192.0.2.1:1234"

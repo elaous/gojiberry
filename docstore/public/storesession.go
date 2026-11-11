@@ -97,7 +97,6 @@ func recordOf(s Session) sessionRecord {
 	return sessionRecord(s)
 }
 
-// sessionID is the record name of a session key.
 func sessionID(key string) string {
 	if len(key) == 64 {
 		if _, err := hex.DecodeString(key); err == nil && key == lower(key) {
@@ -139,7 +138,6 @@ func (m *StoreSessions) every() time.Duration {
 	return DefaultSessionRefresh
 }
 
-// load reads a session record and the digest to write against.
 func (m *StoreSessions) load(ctx context.Context, id string) (sessionRecord, string, bool, error) {
 	doc, err := m.Store.Load(ctx, id)
 	switch {
@@ -155,7 +153,6 @@ func (m *StoreSessions) load(ctx context.Context, id string) (sessionRecord, str
 	return rec, docstore.Digest(doc.Data), true, nil
 }
 
-// recount rebuilds the counts from the store.
 func (m *StoreSessions) recount(ctx context.Context, now time.Time, reap bool) (int, error) {
 	m.mu.Lock()
 	if m.refreshing {
@@ -277,7 +274,6 @@ func (m *StoreSessions) Create(ctx context.Context, key string, s Session, now t
 	return nil
 }
 
-// note applies a change to the counts, and remembers it.
 func (m *StoreSessions) note(s Session, sign int) {
 	m.counts.add(s, sign)
 	if m.refreshing {
@@ -294,7 +290,6 @@ func (m *StoreSessions) Get(ctx context.Context, key string, now time.Time) (Ses
 	return rec.session(), true, nil
 }
 
-// update reads the live session, applies change to it, and writes it.
 func (m *StoreSessions) update(ctx context.Context, key string, now time.Time, change func(*sessionRecord) bool) (bool, error) {
 	cas, err := m.cas()
 	if err != nil {

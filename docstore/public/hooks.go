@@ -80,7 +80,6 @@ func (b *HashBlocklist) Blocked(_ context.Context, content []byte) (bool, error)
 	return bad, nil
 }
 
-// Challenger is the hook for a captcha or proof of work.
 type Challenger interface {
 	Verify(r *http.Request) error
 }

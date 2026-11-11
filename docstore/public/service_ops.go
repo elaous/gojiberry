@@ -19,7 +19,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// blockedPrefix is where the SHA-256 of a taken-down document is kept.
 const blockedPrefix = docstore.PublicPrefix + "blocked/"
 
 type blockedRecord struct {
@@ -27,7 +26,6 @@ type blockedRecord struct {
 	Reason string    `json:"reason,omitempty"`
 }
 
-// chainBlocklist asks each list in turn; the first that blocks wins.
 type chainBlocklist []Blocklist
 
 // Blocked implements Blocklist.
@@ -40,7 +38,6 @@ func (c chainBlocklist) Blocked(ctx context.Context, content []byte) (bool, erro
 	return false, nil
 }
 
-// loadTaken reads the digests of the documents taken down.
 func (s *Service) loadTaken(ctx context.Context) error {
 	metas, err := docstore.ListPrefix(ctx, s.store, blockedPrefix)
 	if err != nil {
@@ -52,7 +49,6 @@ func (s *Service) loadTaken(ctx context.Context) error {
 	return nil
 }
 
-// learnHash remembers the content of a document that was taken down.
 func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	d, err := s.store.Load(ctx, docKey(docID))
 	if err != nil {
@@ -66,7 +62,6 @@ func (s *Service) learnHash(ctx context.Context, docID, reason string) {
 	}
 }
 
-// tell hands a kept report to Options.Notify.
 func (s *Service) tell(rep Report) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -79,7 +74,6 @@ func (s *Service) tell(rep Report) {
 // ReportListMax is the most reports one GET /admin/reports returns.
 const ReportListMax = 200
 
-// handleAdminReports serves GET /admin/reports.
 func (s *Service) handleAdminReports(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, "GET")

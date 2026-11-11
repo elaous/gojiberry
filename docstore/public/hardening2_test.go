@@ -47,7 +47,6 @@ func TestTombstoneTTLMustOutliveTheSession(t *testing.T) {
 	store := func() docstore.Adapter {
 		return docstore.NewExpiringAdapter(docstore.NewMemoryAdapter(), docstore.FixedTTL(hour))
 	}
-	// defaults: 72h max age + 24h
 	if _, err := New(Options{Store: store(), Config: Config{TombstoneTTL: 95 * hour}}); err == nil || !strings.Contains(err.Error(), "TombstoneTTL") {
 		t.Fatalf("err = %v", err)
 	}
@@ -176,7 +175,6 @@ func TestChargeIsRefundedWhenTheWriteIsNotStored(t *testing.T) {
 		o.Blocklist = blocklistContains("bad")
 	})
 	tok, _ := e.session()
-	// a store failure (rollback)
 	fail := true
 	hs.beforePub = func(context.Context, string, []byte) error {
 		if fail {
@@ -213,7 +211,6 @@ func TestLiveDoesNotListTheStore(t *testing.T) {
 	}
 }
 
-// noPrefix is a store that cannot list by prefix.
 type noPrefix struct {
 	docstore.Adapter
 	docstore.Expirer

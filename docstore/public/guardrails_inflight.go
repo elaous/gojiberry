@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// inflight bounds the bytes of request bodies being read.
 type inflight struct {
 	mu        sync.Mutex
 	used      int64
@@ -20,7 +19,6 @@ type inflight struct {
 	byNet     map[string]int64
 }
 
-// flightResult says why acquire refused.
 type flightResult int
 
 const (
@@ -76,14 +74,12 @@ func (f *inflight) held() int64 {
 	return f.used
 }
 
-// heldBy is what the client holds.
 func (f *inflight) heldBy(client string) int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.byClient[client]
 }
 
-// ticket is what a write holds while it is in flight.
 type ticket struct {
 	s      *Service
 	key    string
@@ -95,7 +91,6 @@ type ticket struct {
 	flight int64
 }
 
-// admit runs the checks that need no body.
 func (s *Service) admit(w http.ResponseWriter, r *http.Request) (*ticket, bool) {
 	if r.ContentLength > s.cfg.MaxDocBytes {
 		http.Error(w, "document too large", http.StatusRequestEntityTooLarge)
@@ -166,7 +161,6 @@ func (t *ticket) refund(n int64) {
 	}
 }
 
-// settle trims the charge and the in-flight bytes to the body read.
 func (t *ticket) settle(actual int64) {
 	if t.held > actual {
 		t.refund(t.held - actual)
@@ -178,7 +172,6 @@ func (t *ticket) settle(actual int64) {
 	}
 }
 
-// release gives back what is still held.
 func (t *ticket) release() {
 	if t == nil {
 		return
@@ -189,7 +182,6 @@ func (t *ticket) release() {
 	t.flight = 0
 }
 
-// keep makes the quota charge final.
 func (t *ticket) keep() { t.held = 0 }
 
 func storeFull(w http.ResponseWriter) {

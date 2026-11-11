@@ -60,9 +60,8 @@ type Config struct {
 	// MaxInflightPerClient and MaxInflightPerNet cap in-flight uploads.
 	MaxInflightPerClient int64
 	MaxInflightPerNet    int64
-	// MinUploadRate is the slowest allowed upload rate, in bytes per second.
-	MinUploadRate int64
-	UploadGrace   time.Duration
+	MinUploadRate        int64
+	UploadGrace          time.Duration
 
 	// ReportReservedPerDoc is how many of a document's reports are reserved.
 	ReportReservedPerDoc          int
@@ -144,7 +143,6 @@ const (
 	MinRateBodyBytes = 64 << 10
 )
 
-// withDefaults returns c with every zero field set.
 func (c Config) withDefaults() Config {
 	if c.MaxDocBytes <= 0 {
 		c.MaxDocBytes = DefaultMaxDocBytes
@@ -408,7 +406,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	i64("_MAX_INFLIGHT_PER_CLIENT", &c.MaxInflightPerClient)
 	i64("_MAX_INFLIGHT_PER_NET", &c.MaxInflightPerNet)
 	i64("_MIN_UPLOAD_RATE", &c.MinUploadRate)
-	// share reads a percentage, 0 meaning none.
 	share := func(name string, dst *int, top int) {
 		if v := get(name); v != "" {
 			n, err := strconv.Atoi(v)
@@ -496,7 +493,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			c.ReportKey = deriveReportKey([]byte(v))
 		}
 	} else if v := strings.TrimSpace(getenv("GOJIBERRY_DOCSTORE_DIRECTORY_KEY")); v != "" {
-		// The directory's signing seed is read from hex.
 		if seed, err := hex.DecodeString(v); err == nil && len(seed) >= 16 {
 			c.ReportKey = deriveReportKey(seed)
 		}
@@ -519,7 +515,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	return c, nil
 }
 
-// burst is the bucket size for a budget.
 func burst(figure float64) int {
 	return max(1, int(math.Ceil(figure)))
 }
@@ -588,7 +583,6 @@ func validCategory(c string) bool {
 	return false
 }
 
-// categoryOf is the category a report names.
 func categoryOf(c string) string {
 	if c = normalizeCategory(c); validCategory(c) {
 		return c
@@ -596,7 +590,6 @@ func categoryOf(c string) string {
 	return CategoryOther
 }
 
-// deriveReportKey turns key material into the report key.
 func deriveReportKey(material []byte) []byte {
 	m := hmac.New(sha256.New, material)
 	_, _ = m.Write([]byte("gojiberry/public/report-key/v1"))

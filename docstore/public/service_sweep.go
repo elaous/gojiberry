@@ -16,7 +16,6 @@ type ExpiringHolder interface {
 	Expiring() *docstore.ExpiringAdapter
 }
 
-// expiringOf finds the ExpiringAdapter behind a store.
 func expiringOf(store docstore.Adapter) *docstore.ExpiringAdapter {
 	switch v := store.(type) {
 	case *docstore.ExpiringAdapter:
@@ -37,7 +36,6 @@ func (s *Service) NoteVersionWrite(key string, size int64) {
 	}
 }
 
-// versionDoc is the public document a version snapshot belongs to.
 func versionDoc(key string) (string, bool) {
 	rest, ok := strings.CutPrefix(key, versionsKeyPrefix)
 	if !ok {
@@ -47,7 +45,6 @@ func versionDoc(key string) (string, bool) {
 	return id, validID(id)
 }
 
-// recordGrace is how long a document record may exist past its deadline.
 const recordGrace = time.Minute
 
 // Sweep removes what the ExpiringAdapter does not.
@@ -210,13 +207,11 @@ func (s *Service) Sweep(ctx context.Context) (removed int, err error) {
 	return removed, first
 }
 
-// swept is what sweepOld leaves.
 type swept struct {
 	metas []docstore.Meta
 	info  map[string]reportInfo
 }
 
-// sweepOld deletes the records under prefix whose deadline passed.
 func (s *Service) sweepOld(ctx context.Context, prefix string, ttl time.Duration, at func([]byte) (time.Time, reportInfo, bool), del func(string) bool, note func(error), onDeleted func(key string, info reportInfo)) *swept {
 	metas, err := docstore.ListPrefix(ctx, s.store, prefix)
 	if err != nil {

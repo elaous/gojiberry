@@ -98,7 +98,6 @@ func TestStoreQuotaNeedsConditionalWrites(t *testing.T) {
 	}
 }
 
-// plainOnly hides everything but the Adapter methods.
 type plainOnly struct{ a docstore.Adapter }
 
 func (p plainOnly) Save(ctx context.Context, id string, d []byte) error { return p.a.Save(ctx, id, d) }

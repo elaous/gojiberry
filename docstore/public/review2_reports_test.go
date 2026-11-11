@@ -69,7 +69,6 @@ func TestOnlyTheCategoryMakesAReportAPriorityOne(t *testing.T) {
 	if a != b || a == c {
 		t.Fatalf("dedupe over category: %s %s %s", a, b, c)
 	}
-	// the configuration accepts only known categories
 	if _, err := FromEnv(func(k string) string {
 		if k == "GOJIBERRY_DOCSTORE_PUBLIC_REPORT_PRIORITY_CATEGORIES" {
 			return "csam,telepathy"
@@ -100,7 +99,6 @@ func TestOneReporterHasADailyCapOnPriorityReports(t *testing.T) {
 	if n := len(e.reportsOf(docs[3].ID)); n != 1 {
 		t.Fatalf("%d reports", n)
 	}
-	// another reporter has its own allowance
 	if !prio(docs[4], "198.51.100.9") {
 		t.Fatal("another reporter's priority report was not priority")
 	}
@@ -299,7 +297,6 @@ func TestReportsPastTheirTTLLeaveTheDocumentsRecord(t *testing.T) {
 	}
 }
 
-// reporterOf is the construction documented in reporterHash.
 func reporterOf(key, salt []byte, client string) string {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte("gojiberry/public/reporter/v1\x00"))

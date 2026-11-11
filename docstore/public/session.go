@@ -32,7 +32,6 @@ type Session struct {
 	Expires time.Time
 }
 
-// User is the session as the rest of the program sees it.
 func (s Session) User() auth.User { return auth.AnonymousUser(s.ID) }
 
 // Errors of a SessionStore.
@@ -42,8 +41,7 @@ var (
 	// ErrClientSessionsFull is returned by Create when a client is full.
 	ErrClientSessionsFull = errors.New("public: too many live anonymous sessions for this address")
 	// ErrNetSessionsFull is returned by Create when a network is full.
-	ErrNetSessionsFull = errors.New("public: too many live anonymous sessions for this network")
-	// ErrWideSessionsFull is returned by Create when a wide network is full.
+	ErrNetSessionsFull  = errors.New("public: too many live anonymous sessions for this network")
 	ErrWideSessionsFull = errors.New("public: too many live anonymous sessions for this wide network")
 	// ErrNoSession is returned by methods that need a session.
 	ErrNoSession = errors.New("public: no such session")
@@ -51,16 +49,14 @@ var (
 
 // SessionCaps are the figures a SessionStore applies in Create.
 type SessionCaps struct {
-	PerClient int // live sessions per Client (<= 0: no cap)
-	PerNet    int // live sessions per Net (<= 0: no cap)
-	PerWide   int // live sessions per Wide (<= 0: no cap)
-	// ReservePercent is the share of the global cap kept in reserve.
+	PerClient      int // live sessions per Client (<= 0: no cap)
+	PerNet         int // live sessions per Net (<= 0: no cap)
+	PerWide        int // live sessions per Wide (<= 0: no cap)
 	ReservePercent int
 }
 
 // SessionStore keeps the live anonymous sessions.
 type SessionStore interface {
-	// Create stores a new session, or returns an error when full.
 	Create(ctx context.Context, key string, s Session, now time.Time, caps SessionCaps) error
 	// Get returns the live session.
 	Get(ctx context.Context, key string, now time.Time) (Session, bool, error)
@@ -77,13 +73,11 @@ type SessionReaper interface {
 	Reap(ctx context.Context, now time.Time) (int, error)
 }
 
-// TokenKey is the store key of a bearer token: its SHA-256.
 func TokenKey(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
 }
 
-// randomString returns n random bytes, base64url without padding.
 func randomString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -94,7 +88,6 @@ func randomString(n int) (string, error) {
 
 // MemorySessionStore is the single-process SessionStore.
 type MemorySessionStore struct {
-	// Max is the cap on live sessions; 0 means the default.
 	Max int
 
 	mu       sync.Mutex
@@ -106,14 +99,12 @@ type MemorySessionStore struct {
 	popped   int            // sessions the heap has given up for expiry (for tests)
 }
 
-// memSession is a session with its place in the expiry heap.
 type memSession struct {
 	Session
 	key string
 	idx int
 }
 
-// expiryHeap is a heap of sessions ordered by expiry.
 type expiryHeap []*memSession
 
 func (h expiryHeap) Len() int           { return len(h) }
@@ -167,7 +158,6 @@ func (m *MemorySessionStore) initLocked() {
 	}
 }
 
-// reapLocked drops expired sessions from the heap's head.
 func (m *MemorySessionStore) reapLocked(now time.Time) int {
 	n := 0
 	for len(m.expiry) > 0 && !now.Before(m.expiry[0].Expires) {
@@ -187,7 +177,6 @@ func decr(counts map[string]int, k string) {
 	}
 }
 
-// dropLocked removes one session and its counts.
 func (m *MemorySessionStore) dropLocked(key string) {
 	s, ok := m.sessions[key]
 	if !ok {
@@ -238,7 +227,7 @@ func (m *MemorySessionStore) Create(_ context.Context, key string, s Session, no
 		return ErrSessionsFull
 	}
 	ms := &memSession{Session: s, key: key}
-	if old, ok := m.sessions[key]; ok { // the same key again (a custom caller): replace, do not double count
+	if old, ok := m.sessions[key]; ok {
 		m.dropLocked(old.key)
 	}
 	m.sessions[key] = ms

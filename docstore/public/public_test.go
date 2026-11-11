@@ -183,13 +183,10 @@ func TestFlow(t *testing.T) {
 	if d.ViewID == "" || d.ViewID == d.ID || strings.Contains(d.ViewID, d.ID) {
 		t.Fatalf("view id %q vs doc id %q", d.ViewID, d.ID)
 	}
-	// One document per session.
 	e.want(e.do("POST", "/public/doc", token, []byte("another")), 409)
-	// No token: no document routes.
 	e.want(e.do("POST", "/public/doc", "", []byte("x")), 401)
 	e.want(e.do("PUT", "/public/doc", "wrong", []byte("x")), 401)
 
-	// edit renews
 	e.clk.Add(10 * hour)
 	r = e.want(e.do("PUT", "/public/doc", token, []byte("v2 content")), 204)
 	if got := expires(t, r); !got.Equal(e.clk.Now().Add(24 * hour)) {
@@ -238,7 +235,6 @@ func TestFlow(t *testing.T) {
 		t.Fatalf("/docs lists public records: %s", r.body)
 	}
 
-	// report by view id
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"spam"}`)), 202)
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`"}`)), 400)
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+strings.Repeat("A", 22)+`","reason":"x"}`)), 404)
@@ -302,7 +298,6 @@ func TestTakedown(t *testing.T) {
 	d := e.create(tok, "bad content")
 	e.want(e.do("POST", "/public/report", "", []byte(`{"id":"`+d.ViewID+`","reason":"abuse"}`)), 202)
 
-	// the admin route needs the token
 	path := "/admin/takedown/" + d.ViewID
 	e.want(e.do("DELETE", path, "", nil), 403)
 	e.want(e.do("DELETE", path, tok, nil), 403) // a session token is not an admin
@@ -325,7 +320,6 @@ func TestTakedown(t *testing.T) {
 	if k := e.keys("public/view/"); len(k) != 0 {
 		t.Fatalf("view record left: %v", k)
 	}
-	// idempotent
 	e.want(e.do("DELETE", path, "", nil, AdminHeader, adminToken), 204)
 
 	e.clk.Add(48 * hour)
@@ -384,7 +378,6 @@ func TestSizeCap413(t *testing.T) {
 	e := newEnv(t, func(o *Options) { o.Config.MaxDocBytes = 100 })
 	tok, _ := e.session()
 	e.want(e.do("POST", "/public/doc", tok, bytes.Repeat([]byte("a"), 101)), 413)
-	// chunked (unknown length) too
 	req, _ := http.NewRequest("POST", e.srv.URL+"/public/doc", io.NopCloser(strings.NewReader(strings.Repeat("a", 5000))))
 	req.Header.Set("Authorization", "Bearer "+tok)
 	r, err := http.DefaultClient.Do(req)
@@ -428,10 +421,8 @@ func TestWriteRate429(t *testing.T) {
 	if r.Header.Get("Retry-After") == "" {
 		t.Fatal("no Retry-After")
 	}
-	// another session has its own budget
 	tok2, _ := e.session()
 	e.create(tok2, "other")
-	// the budget refills
 	e.clk.Add(time.Minute)
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v5")), 204)
 }
@@ -449,7 +440,6 @@ func TestIPDailyByteBudget429(t *testing.T) {
 		t.Fatal("no Retry-After")
 	}
 	e.want(e.do("POST", "/public/doc", b, bytes.Repeat([]byte("b"), 40), "X-Forwarded-For", "203.0.113.5"), 201)
-	// another address has its own budget
 	c, _ := e.session()
 	e.want(e.do("POST", "/public/doc", c, bytes.Repeat([]byte("c"), 60), "X-Forwarded-For", "198.51.100.9"), 201)
 	e.clk.Add(24 * hour)
@@ -489,7 +479,6 @@ func TestGlobalSessionCap(t *testing.T) {
 	if r.Header.Get("Retry-After") == "" {
 		t.Fatal("no Retry-After")
 	}
-	// expired sessions stop counting
 	e.clk.Add(49 * hour)
 	e.session()
 }
@@ -504,7 +493,6 @@ func TestSessionLifetimeIsBounded(t *testing.T) {
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v3")), 204)
 	e.clk.Add(2 * hour) // 16 h after issue: past the max age however busy
 	e.want(e.do("PUT", "/public/doc", tok, []byte("v4")), 401)
-	// reading does not extend either
 	tok2, _ := e.session()
 	e.create(tok2, "x")
 	e.clk.Add(9 * hour)

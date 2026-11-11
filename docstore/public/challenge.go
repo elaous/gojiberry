@@ -36,7 +36,6 @@ func (s *Service) refuseChallenge(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusForbidden)
 }
 
-// ProofOfWork is a Challenger that asks a client for proof of work.
 type ProofOfWork struct {
 	Secret     []byte        // keys the challenges; at least 16 bytes
 	Difficulty int           // leading zero bits, 1 to 32
@@ -82,7 +81,6 @@ func (p *ProofOfWork) Challenge(*http.Request) (string, int) {
 	return strconv.FormatInt(slot, 10) + "." + p.mac(slot), min(p.Difficulty, 32)
 }
 
-// ErrChallengeNeeded is what Verify returns for a request needing a challenge.
 var ErrChallengeNeeded = errors.New("this server is busy: solve the challenge and try again")
 
 // Verify implements Challenger.
@@ -128,7 +126,6 @@ func (p *ProofOfWork) Verify(r *http.Request) error {
 	return nil
 }
 
-// BusyThreshold is the share of the byte budget past which the offer is busy.
 const BusyThreshold = 0.7
 
 // Busy reports whether the offer is filling up.
