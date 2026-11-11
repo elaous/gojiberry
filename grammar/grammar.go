@@ -1,11 +1,3 @@
-// Package grammar checks grammar with a language model running behind an
-// Ollama-compatible server (a local one needs no API key). It finds the mistakes
-// a fixed spelling list cannot: agreement, tense, wrong word forms.
-//
-// The model's own arithmetic on character positions is unreliable, so every issue
-// is checked against the text: one whose range does not exist is dropped, and
-// one whose range holds something other than what the model said is moved to
-// where the text really is, or dropped.
 package grammar
 
 import (
@@ -20,27 +12,21 @@ import (
 	"time"
 )
 
-// Issue is a grammar problem: the range [From, To) (rune offsets) of the text,
-// what is wrong and what to write instead.
 type Issue struct {
 	From, To   int
 	Message    string
 	Suggestion string
 }
 
-// Checker finds grammar issues in a text. The Client (an Ollama-compatible server) is one; the page has another over the
-// llm add-on, which runs a model on the device.
+// Checker finds grammar issues in a text.
 type Checker interface {
 	Check(ctx context.Context, text string) ([]Issue, error)
 }
 
 var _ Checker = Client{}
 
-// Prompt is what a model is asked to check text for; the answer is read with ParseIssues. Text longer than MaxText is cut
-// by the caller (see Cut).
 func Prompt(text string) string { return fmt.Sprintf(prompt, text) }
 
-// Cut limits text to MaxText runes, the most one call checks.
 func Cut(text string) string {
 	if rs := []rune(text); len(rs) > MaxText {
 		return string(rs[:MaxText])
@@ -54,9 +40,7 @@ type Client struct {
 	BaseURL string
 	// Model is the model to ask ("llama3.1").
 	Model string
-	// HTTP is the client to use; nil means one with a 90 second timeout (a model
-	// can take a while).
-	HTTP *http.Client
+	HTTP  *http.Client
 }
 
 const prompt = `You are a grammar checker. Find grammar mistakes in the text below -- subject-verb agreement, pronoun agreement, tense consistency, and similar context-dependent errors a fixed pattern rule can't catch. Do not flag spelling or punctuation.
@@ -66,7 +50,6 @@ Respond with ONLY a JSON array, no other text, in this exact shape: [{"offset": 
 Text:
 %s`
 
-// MaxText is the longest text one call checks, in runes (longer text is cut).
 const MaxText = 8000
 
 // Check asks the model for the grammar issues in text.
@@ -113,13 +96,9 @@ type rawIssue struct {
 	Length     int    `json:"length"`
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion"`
-	// Text is what the model says is at that place, if it says (some models do).
-	Text string `json:"text"`
+	Text       string `json:"text"`
 }
 
-// ParseIssues finds the JSON array in a model's answer (which may come wrapped
-// in commentary or a code fence) and turns it into issues for text. An entry
-// whose range is outside the text is dropped.
 func ParseIssues(answer, text string) ([]Issue, error) {
 	start, end := strings.IndexByte(answer, '['), strings.LastIndexByte(answer, ']')
 	if start < 0 || end < start {
@@ -136,7 +115,6 @@ func ParseIssues(answer, text string) ([]Issue, error) {
 		if from < 0 || to <= from || to > len(rs) {
 			continue
 		}
-		// If the model quoted the words, trust the words over the numbers.
 		if r.Text != "" && string(rs[from:to]) != r.Text {
 			if i := strings.Index(text, r.Text); i >= 0 {
 				from = len([]rune(text[:i]))

@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// TestOllamaLive asks a real Ollama server one grammar question. It runs only when GOJIBERRY_OLLAMA_URL names a
-// server (make ollama-check starts it from the Makefile settings); a model's answer is not fixed, so it asks only
-// that the answer is parsed, every issue it returns lies inside the text, and the obvious mistake is found.
 func TestOllamaLive(t *testing.T) {
 	url := os.Getenv("GOJIBERRY_OLLAMA_URL")
 	if url == "" {
