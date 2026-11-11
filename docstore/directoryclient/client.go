@@ -1,4 +1,3 @@
-// Package directoryclient is the client of a docstore key directory.
 package directoryclient
 
 import (
@@ -63,7 +62,6 @@ type Error struct {
 	Body   string
 }
 
-// maxErrorBody bounds how much of a refusal's body is read.
 const maxErrorBody = 4 << 10
 
 func (e *Error) Error() string { return fmt.Sprintf("directory: server said %d: %s", e.Status, e.Body) }
@@ -103,7 +101,6 @@ func (e *Error) Is(target error) bool {
 // ErrInsecureBaseURL is returned for a non-HTTPS BaseURL.
 var ErrInsecureBaseURL = errors.New("directoryclient: BaseURL must be https (http is accepted for localhost only)")
 
-// checkBaseURL refuses a BaseURL that would send secrets in clear.
 func checkBaseURL(base string) error {
 	if base == "" || strings.HasPrefix(base, "/") {
 		return nil
@@ -175,7 +172,6 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	return nil
 }
 
-// Head fetches the signed head of the log and checks it.
 func (c *Client) Head(ctx context.Context) (docstore.DirectoryHead, error) {
 	var h docstore.DirectoryHead
 	if err := c.do(ctx, http.MethodGet, "/directory/log/head", nil, &h); err != nil {
@@ -189,7 +185,6 @@ func (c *Client) Head(ctx context.Context) (docstore.DirectoryHead, error) {
 	return h, nil
 }
 
-// position is the log position an owner signature names.
 func (c *Client) position(ctx context.Context) (string, error) {
 	h, err := c.Head(ctx)
 	if err != nil {
@@ -198,7 +193,6 @@ func (c *Client) position(ctx context.Context) (string, error) {
 	return encrypt.FormatLogPosition(h.Seq, h.Hash), nil
 }
 
-// note records an operation of this client.
 func (c *Client) note(seq int64, op, fingerprint, ownerSig string) {
 	if c.State != nil && seq > 0 {
 		c.State.NoteMade(MadeEntry{Seq: seq, Op: op, Fingerprint: fingerprint, OwnerSig: ownerSig})
@@ -211,7 +205,6 @@ type OwnerKey = ed25519.PrivateKey
 // OwnerSigner is what signs for an owner key.
 type OwnerSigner = crypto.Signer
 
-// ownerSet says an OwnerSigner was given.
 func ownerSet(s OwnerSigner) bool {
 	if s == nil {
 		return false
@@ -222,7 +215,6 @@ func ownerSet(s OwnerSigner) bool {
 	return true
 }
 
-// publicOf is the public half of s.
 func publicOf(s OwnerSigner) (ed25519.PublicKey, error) {
 	pub, ok := s.Public().(ed25519.PublicKey)
 	if !ok || len(pub) != ed25519.PublicKeySize {
@@ -259,8 +251,7 @@ type PublishRequest struct {
 	Identity age.Identity
 	// SSHPrivateKey is an unencrypted ssh-ed25519 private key.
 	SSHPrivateKey []byte
-	// Owner signs the operation for an address with an owner key.
-	Owner OwnerSigner
+	Owner         OwnerSigner
 }
 
 // Publish publishes a key for the signed-in account.
@@ -440,7 +431,6 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 		}
 		merged := seen
 		merged.Enrolled = merged.Enrolled || anyEvidence
-		// Trust on first use: the first owner key seen is pinned.
 		if merged.FirstOwner == "" {
 			merged.FirstOwner = ref
 		}
@@ -473,7 +463,6 @@ func (c *Client) Lookup(ctx context.Context, email string) ([]Key, error) {
 // ErrUnenrolled is returned by Lookup for an unenrolled address.
 var ErrUnenrolled = errors.New("directoryclient: the address has no owner key, so nothing but the server's word ties these keys to it")
 
-// auditedOwnerKeys is the set of owner keys of the audited state.
 func (c *Client) auditedOwnerKeys(email string) map[string]bool {
 	if c.State == nil || c.State.Email == "" || c.State.Email != email {
 		return nil
@@ -492,7 +481,6 @@ func (c *Client) Enrollment(ctx context.Context, email string) (docstore.Directo
 	return e, err
 }
 
-// enrollRequest builds the request and returns it.
 func (c *Client) enrollRequest(ctx context.Context, email, mode string, owner, authorizer OwnerSigner) (docstore.DirectoryEnroll, error) {
 	var ch docstore.DirectoryEnrollChallenge
 	if err := c.do(ctx, http.MethodPost, "/directory/enroll/challenge", struct{}{}, &ch); err != nil {

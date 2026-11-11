@@ -19,16 +19,14 @@ import (
 
 // WatchState is what a watcher remembers between runs.
 type WatchState struct {
-	// Seq and Hash are the last log entry the watcher read.
 	Seq    int64  `json:"seq"`
 	Hash   string `json:"hash"`
 	Cursor int64  `json:"cursor,omitempty"`
 	// Filtered says the last run read only one address.
 	Filtered bool `json:"filtered,omitempty"`
 	// Email is the address watched.
-	Email string `json:"email,omitempty"`
-	// Made are the operations this client made since the last run.
-	Made []MadeEntry `json:"made,omitempty"`
+	Email string      `json:"email,omitempty"`
+	Made  []MadeEntry `json:"made,omitempty"`
 	// Addresses are the log pseudonyms of the watched address.
 	Addresses []string `json:"addresses,omitempty"`
 	// Enrolled, OwnerKeys and ResetSince are the audited owner state.
@@ -74,7 +72,6 @@ type SeenAddress struct {
 	Seqs map[string]int64 `json:"seqs,omitempty"`
 }
 
-// MadeEntry is an operation this client made, with what the log says.
 type MadeEntry struct {
 	// Seq is the log number the server gave the entry.
 	Seq int64 `json:"seq"`
@@ -89,7 +86,6 @@ type MadeEntry struct {
 // NoteMade records an operation of this client.
 func (s *WatchState) NoteMade(m MadeEntry) { s.Made = append(s.Made, m) }
 
-// madeMismatch says how a log entry differs from what was made.
 func madeMismatch(m MadeEntry, e docstore.DirectoryLogEntry) string {
 	switch {
 	case m.Op != "" && e.Op != m.Op:
@@ -109,7 +105,6 @@ func madeMismatch(m MadeEntry, e docstore.DirectoryLogEntry) string {
 	return ""
 }
 
-// Foreign is a log entry about the address this client did not make.
 type Foreign struct {
 	Entry docstore.DirectoryLogEntry
 	// Message says it in words.
@@ -150,8 +145,7 @@ type WatchReport struct {
 // WatchOptions are the choices of WatchLog.
 type WatchOptions struct {
 	// Owner is the watcher's owner key, if any.
-	Owner OwnerSigner
-	// ResetWait is the shortest wait the audit allows for a reset.
+	Owner     OwnerSigner
 	ResetWait time.Duration
 }
 
@@ -161,19 +155,15 @@ var ErrLogCut = encrypt.ErrLogTruncated
 // ErrAddressMismatch is returned by WatchLog when the address differs.
 var ErrAddressMismatch = errors.New("directoryclient: an entry this client made is not under the address pseudonym the server reported")
 
-// ErrFilteredEnrolled is returned by WatchLog when a filtered read shows enrollment.
 var ErrFilteredEnrolled = errors.New("directoryclient: the address is enrolled but the server shows a filtered log")
 
-// zeroPrev is the Prev of the first entry of a log.
 var zeroPrev = strings.Repeat("0", 64)
 
 // ErrOwnEntryMissing is returned when the owner's own entry is missing.
 var ErrOwnEntryMissing = errors.New("directoryclient: an entry this client made is not in the log")
 
-// pageSize is how many entries the route returns per page.
 const pageSize = 200
 
-// logRead is what reading the log returned.
 type logRead struct {
 	entries  []docstore.DirectoryLogEntry
 	keys     map[string]ed25519.PublicKey
@@ -181,7 +171,6 @@ type logRead struct {
 	next     int64
 }
 
-// readLog reads the log after since, page by page.
 func (c *Client) readLog(ctx context.Context, since int64, keys map[string]ed25519.PublicKey) (logRead, error) {
 	var out logRead
 	out.keys = keys
@@ -216,7 +205,6 @@ func (c *Client) readLog(ctx context.Context, since int64, keys map[string]ed255
 	}
 }
 
-// entryAt fetches and checks one entry of the log.
 func (c *Client) entryAt(ctx context.Context, seq int64, keys map[string]ed25519.PublicKey) (docstore.DirectoryLogEntry, bool, error) {
 	var page docstore.DirectoryLog
 	if err := c.do(ctx, http.MethodGet, "/directory/log?since="+strconv.FormatInt(seq-1, 10), nil, &page); err != nil {
@@ -425,7 +413,6 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	rep.AddressUnconfirmed = len(pinned) == 0
 
-	// Audit the address from the settled state remembered.
 	var start *encrypt.AddressAudit
 	if st.Enrolled || st.ResetSince != 0 || len(st.OwnerKeys) > 0 {
 		start = &encrypt.AddressAudit{Enrolled: st.Enrolled, OwnerKeys: st.OwnerKeys, ResetSince: st.ResetSince}
@@ -531,7 +518,6 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 		settleAudit = *start
 	}
 
-	// Everything verified: remember it.
 	if filtered {
 		st.Seq, st.Hash = head.Seq, head.Hash
 		st.Cursor = min(max(read.next, cursor), head.Seq)
@@ -556,7 +542,6 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	return rep, nil
 }
 
-// auditEntriesFor is the part of entries that the audit checks.
 func auditEntriesFor(entries, settled []docstore.DirectoryLogEntry) []docstore.DirectoryLogEntry {
 	if len(settled) == 0 {
 		return nil
@@ -588,7 +573,6 @@ func serverKeys(l docstore.DirectoryLog) map[string]ed25519.PublicKey {
 	return out
 }
 
-// signedByOwner says the entry carries an owner signature.
 func signedByOwner(email string, e docstore.DirectoryLogEntry, ownerPub string) bool {
 	pub, err := encrypt.ParseOwnerPub(ownerPub)
 	if err != nil {

@@ -153,7 +153,6 @@ func TestPublishWithProofAttestationAndLookup(t *testing.T) {
 	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: pub3, Identity: wrong}); err == nil {
 		t.Error("a challenge opened with another key")
 	}
-	// Revoke.
 	if _, err := c.Revoke(ctx, "ana@x.io", k.Fingerprint, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +187,6 @@ func TestOwnerEnrollmentFlowThroughTheClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// An export round-trips.
 	back, err := ImportOwnerKey(ExportOwnerKey(owner))
 	if err != nil || !owner.Equal(back) {
 		t.Fatalf("export/import: %v", err)
@@ -271,7 +269,6 @@ func TestOwnerEnrollmentFlowThroughTheClient(t *testing.T) {
 	if changed != 1 {
 		t.Errorf("the viewer's pin is the first key seen: the row signed by the new key is flagged: %d", changed)
 	}
-	// Revoke with the owner key.
 	if _, err := c.Revoke(ctx, "ana@x.io", k.Fingerprint, nil); !errors.Is(err, docstore.ErrDirectoryOwnerRequired) {
 		t.Errorf("%v", err)
 	}
@@ -444,7 +441,7 @@ func TestWatchLogDetectsACutOrRewrittenLog(t *testing.T) {
 	if _, err := c2.WatchLog(ctx, "ana@x.io", c2.State, WatchOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	other := newEnv(t) // a different server, a different history, the same URL as far as the client knows
+	other := newEnv(t)
 	oc := other.client(ana)
 	for range 3 {
 		p, _, id := ageKey(t)

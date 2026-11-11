@@ -390,7 +390,6 @@ func TestWatchLogShowsAVoidThatCameAfterTheReport(t *testing.T) {
 	}
 }
 
-// rewriteBody replaces the body of an answer.
 func rewriteBody(res *http.Response, f func([]byte) []byte) *http.Response {
 	body, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
@@ -739,7 +738,7 @@ func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 	})
 	t.Run("another entry at the head", func(t *testing.T) {
 		st, err := run(t, honest, func(e *env, since string, m map[string]any) {
-			if since != "2" { // the fetch of the entry at the head, not the read from it
+			if since != "2" {
 				return
 			}
 			es, _ := m["entries"].([]any)
@@ -772,11 +771,9 @@ func TestWatchLogGrowthPastTheHeadAtTheCursor(t *testing.T) {
 }
 
 func TestParseWatchState(t *testing.T) {
-	// First run: nothing saved.
 	if st, err := ParseWatchState(""); err != nil || st.Seq != 0 || len(st.Pending) != 0 {
 		t.Fatalf("empty: %+v %v", st, err)
 	}
-	// A state this version wrote round-trips.
 	want := WatchState{Seq: 7, Hash: "abc", Cursor: 5, Reported: 6}
 	b, _ := json.Marshal(want)
 	got, err := ParseWatchState(string(b))
@@ -811,7 +808,6 @@ func TestAcceptOwnerClearsTheChangedWarningForThatKey(t *testing.T) {
 	if _, err := c.Publish(ctx, PublishRequest{Email: "ana@x.io", Key: p1, Identity: id1, Owner: owner}); err != nil {
 		t.Fatal(err)
 	}
-	// Bo sees the first owner key.
 	b := e.client(bo)
 	if _, err := b.Lookup(ctx, "ana@x.io"); err != nil {
 		t.Fatal(err)

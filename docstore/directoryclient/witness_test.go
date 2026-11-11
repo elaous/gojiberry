@@ -100,7 +100,6 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	if _, err := c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrNotWitnessed) {
 		t.Fatalf("one of two: %v", err)
 	}
-	// Two are.
 	if err := w.cosign("w2", st2); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +125,6 @@ func TestAClientRequiresAQuorumOfWitnessesToHaveCosignedTheLog(t *testing.T) {
 	if _, err := w.watcher(3).WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrNotWitnessed) {
 		t.Fatalf("two of three: %v", err)
 	}
-	// Without witnesses asked for, nothing changes.
 	if rep, err := w.client(ana).WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); err != nil || rep.Witnessed != nil {
 		t.Fatalf("%+v %v", rep, err)
 	}
@@ -160,7 +158,6 @@ func TestAWitnessedLogShownAsAnotherLogIsASplitView(t *testing.T) {
 	if _, err := c.WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); !errors.Is(err, ErrSplitView) {
 		t.Fatalf("a log with another entry 3: %v", err)
 	}
-	// The honest server passes.
 	if _, err := a.watcher(2).WatchLog(ctx, "ana@x.io", &WatchState{}, WatchOptions{}); err != nil {
 		t.Fatalf("%v", err)
 	}

@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// pathClient rewrites the body of the answers for one path.
 func pathClient(path string, f func([]byte) []byte) *http.Client {
 	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		res, err := http.DefaultTransport.RoundTrip(r)

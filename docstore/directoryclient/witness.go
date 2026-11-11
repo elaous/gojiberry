@@ -45,7 +45,6 @@ func (c *Client) Witnessed(ctx context.Context) (docstore.DirectoryCosigned, err
 	return docstore.DirectoryCosigned{}, last
 }
 
-// checkWitnessed compares the log with the newest witnessed head.
 func (c *Client) checkWitnessed(ctx context.Context, head docstore.DirectoryHead, entries []docstore.DirectoryLogEntry, keys map[string]ed25519.PublicKey) (w docstore.DirectoryCosigned, checked bool, err error) {
 	w, err = c.Witnessed(ctx)
 	if err != nil {
