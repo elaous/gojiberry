@@ -12,26 +12,11 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Aliases keep the entries of the log matchable to their address after a directory key is removed.
-//
-// A log entry names its address by a pseudonym keyed by the directory key that made it, so the
-// pseudonym of an address changes when the key rotates. While the old key is listed
-// (GOJIBERRY_DOCSTORE_DIRECTORY_KEY_PREV) the directory can compute the old pseudonym of every
-// address it knows; once the key is removed it cannot, and the old entries could no longer be tied
-// to the address (their records would have to be republished, and an owner could not read them).
-// So that nothing depends on remembering to wait: at every start-up, while the retired keys are
-// still listed, the directory records for each address it knows an alias record, signed by the
-// current key, from the address's current pseudonym to the older ones. After the key is removed,
-// LogAddressesFor still returns them. An address the store holds no record or key for cannot be
-// aliased (nothing names it), and stays *unmapped* as before.
-//
-// The record holds pseudonyms only, never an e-mail address.
-
 const aliasPrefix = docstore.DirectoryLogPrefix + "alias/"
 
 const aliasDomain = "gojiberry-directory-alias|"
 
-// aliasRecord is the stored form: the current pseudonym, the older ones, and the key that signed it.
+// aliasRecord is the stored form of an alias list.
 type aliasRecord struct {
 	Current  string   `json:"current"`
 	Previous []string `json:"previous"`
@@ -43,8 +28,7 @@ func aliasMessage(current string, previous []string) []byte {
 	return []byte(aliasDomain + current + "|" + strings.Join(previous, ","))
 }
 
-// loadAliases reads the alias records of the store. A record that does not verify (a key this
-// directory does not have, or one somebody with store access wrote) is ignored and logged.
+// loadAliases reads the alias records of the store.
 func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 	if d.Signer == nil {
 		return nil
@@ -76,8 +60,6 @@ func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 		loaded[rec.Current] = rec.Previous
 	}
 	if ignored > 0 {
-		// Expected after a rotation: the record of an earlier current key, whose signing key is gone
-		// (its aliases were carried into the next record while it was listed).
 		log.Printf("encrypt: %d directory alias records were ignored: signed by a key that is no longer listed, or altered", ignored)
 	}
 	d.aliasMu.Lock()
@@ -86,8 +68,7 @@ func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 	return nil
 }
 
-// recordAliases records, for every address the store knows, its pseudonyms under the retired keys
-// still listed, merged with what is recorded (an alias is never dropped).
+// recordAliases records, for every address, its log pseudonyms.
 func (d *AdapterDirectory) recordAliases(ctx context.Context) error {
 	if d.Signer == nil {
 		return nil
@@ -106,8 +87,6 @@ func (d *AdapterDirectory) recordAliases(ctx context.Context) error {
 		have := slices.Clone(d.aliases[cur])
 		d.aliasMu.RUnlock()
 		merged := slices.Clone(have)
-		// The retired keys still listed, and what was recorded for them while they were current:
-		// the pseudonyms under keys removed since, carried into the record of the new current key.
 		d.aliasMu.RLock()
 		var carried []string
 		for _, p := range all[1:] {

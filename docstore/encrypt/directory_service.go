@@ -10,15 +10,12 @@ import (
 
 var _ KeyDirectory = (*AdapterDirectory)(nil)
 
-// DirectoryService is the docstore.DirectoryService over d, for docstore.Server.WithDirectory:
-// the routes call it after checking the session. It maps the directory's refusals to the
-// errors the server answers with.
+// DirectoryService is the docstore.DirectoryService for the server.
 func DirectoryService(d *AdapterDirectory) docstore.DirectoryService { return dirService{d} }
 
 type dirService struct{ d *AdapterDirectory }
 
-// refusal wraps the directory's own refusals as docstore.ErrDirectoryRefused (403); the
-// docstore errors pass through.
+// refusal wraps the directory's own refusals.
 func refusal(err error) error {
 	switch {
 	case errors.Is(err, docstore.ErrDirectoryBadAddress):
@@ -86,17 +83,14 @@ func (s dirService) Log(ctx context.Context, since int64, limit int) (docstore.D
 	return s.d.ReadLog(ctx, since, limit)
 }
 
-// LogFor implements docstore.DirectoryLogFilterer.
 func (s dirService) LogFor(ctx context.Context, addresses []string, since int64, scan, limit int) (docstore.DirectoryLog, error) {
 	return s.d.LogFor(ctx, addresses, since, scan, limit)
 }
 
-// OperatorResetEnrollment implements docstore.DirectoryOperator.
 func (s dirService) OperatorResetEnrollment(ctx context.Context, pseudonym string) (docstore.DirectoryEnrollment, error) {
 	return s.d.OperatorResetEnrollment(ctx, pseudonym)
 }
 
-// UnmappedAddresses implements docstore.DirectoryUnmappedLister.
 func (s dirService) UnmappedAddresses(ctx context.Context) (docstore.DirectoryUnmapped, error) {
 	return s.d.UnmappedAddresses(ctx)
 }
@@ -139,20 +133,15 @@ func (s dirService) CancelReset(ctx context.Context, user auth.User, owner *docs
 	return e, refusal(err)
 }
 
-// DirectoryHealth implements docstore.DirectoryHealther: the census of the last Startup.
 func (s dirService) DirectoryHealth() docstore.DirectoryHealth { return s.d.Health() }
 
-// ParsePublicKey reads a public key as the directory takes it: "age1..." (an age, recovery or
-// passkey key) or an "ssh-ed25519 ..."/"ssh-rsa ..." line. It is how a client gets the type and
-// the fingerprint a publish names.
+// ParsePublicKey reads a public key as the directory does.
 func ParsePublicKey(text string) (Recipient, error) { return parsePublic(text) }
 
-// AddCosignature implements docstore.DirectoryWitnessing.
 func (s dirService) AddCosignature(ctx context.Context, c docstore.DirectoryCosignature) error {
 	return refusal(s.d.AddCosignature(ctx, c))
 }
 
-// Cosigned implements docstore.DirectoryWitnessing.
 func (s dirService) Cosigned(ctx context.Context) ([]docstore.DirectoryCosigned, error) {
 	c, err := s.d.Cosigned(ctx)
 	return c, refusal(err)

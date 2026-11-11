@@ -12,17 +12,10 @@ import (
 	"time"
 )
 
-// ErrTooManyKeys is returned by Publish when the address already has as many published keys as
-// the directory keeps.
+// ErrTooManyKeys is returned by Publish when an address has too many keys.
 var ErrTooManyKeys = errors.New("encrypt: this address already has the most keys the directory keeps")
 
-// publishedKey is the lookup row of a stored record, with its flags computed. Verified needs the
-// server's signature, and, for a record that a retired key signed or that belongs to an address
-// with an owner key, a log entry that backs it (backedEntry): a retired key that was compromised
-// cannot make a record Verified by signing one, and a server that holds the directory key cannot
-// put an unlogged record under an owner's address. On an owner-enrolled address a record newer
-// than the enrollment must also carry the owner's signature (OwnerSigned) to be Verified. Attested
-// is from that and the key's own signature.
+// publishedKey is the lookup row of a stored record.
 func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want string, includeRevoked bool, enr *enrollRecord) (PublishedKey, error) {
 	rec := st.rec
 	k := PublishedKey{Label: rec.Label, Text: st.text, Type: st.typ, Fingerprint: st.fp, Kid: rec.Kid, Seq: rec.Seq}
@@ -44,13 +37,10 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 	if enr != nil {
 		k.OwnerEnrolled, k.OwnerResetPending = true, enr.ResetSince > 0
 		if verified {
-			// An owner signature binds the address itself (it names it), so the entry only has to
-			// be the publication's; without one, the record must predate the enrollment and be
-			// backed by an entry of this address.
 			if ev, ok := ownerEvidence(enr, st, entry, haveEntry); ok {
 				k.OwnerSigned, k.Owner = true, &ev
 			} else if rec.Revoked == 0 && (len(enr.Keys) == 0 || rec.Seq > enr.Keys[0].Seq || !addrOK) {
-				verified = false // after the enrollment without the owner's signature, or with nothing behind it
+				verified = false
 			}
 		}
 	}
@@ -70,8 +60,7 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 	return k, nil
 }
 
-// ownerEvidence says the record carries the signature of an owner key that was the address's
-// owner key at the time of its log entry, the same one the entry carries, and returns it.
+// ownerEvidence says the record carries the owner signature.
 func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool) (docstore.DirectoryOwnerEvidence, bool) {
 	rec := st.rec
 	if !haveEntry || rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev || entry.OwnerV != rec.OwnerV {
@@ -95,25 +84,16 @@ func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool)
 
 // LookupOptions are the choices of LookupWith.
 type LookupOptions struct {
-	// IncludeRevoked also returns the keys revoked within RevokeWindow, flagged Revoked.
+	// IncludeRevoked also returns revoked keys.
 	IncludeRevoked bool
 }
 
-// Lookup returns the keys published for email. A record counts as Verified only when its
-// signature is a server key's (current or retired), for this record and this address, from a
-// provider user, backed by a log entry where that matters (see publishedKey); a record that
-// fails any of that is returned unverified (the owner then confirms the fingerprint), one whose
-// key does not match its ID, or that cannot be read, is skipped. Revoked keys are not returned.
-// With no Signer it returns nothing; a malformed address (not exactly one "@") is
-// docstore.ErrDirectoryBadAddress.
+// Lookup returns the keys published for an address.
 func (d *AdapterDirectory) Lookup(ctx context.Context, email string) ([]PublishedKey, error) {
 	return d.LookupWith(ctx, email, LookupOptions{})
 }
 
-// LookupWith is Lookup with options. A revoked key (a tombstone with a valid signature) is left
-// out, or with IncludeRevoked returned flagged; a tombstone whose signature does not verify is
-// ignored (it could only have been written by someone with write access to the store, who could
-// as well delete the record).
+// LookupWith is Lookup with options.
 func (d *AdapterDirectory) LookupWith(ctx context.Context, email string, opt LookupOptions) ([]PublishedKey, error) {
 	want := normalizeEmail(email)
 	if want == "" || d.Signer == nil {
@@ -147,16 +127,7 @@ func (d *AdapterDirectory) LookupWith(ctx context.Context, email string, opt Loo
 	return out, nil
 }
 
-// Revoke removes the key with this fingerprint ("SHA256:..." or the form fingerprintSegment
-// makes of it) from user's own address: the record is replaced at once by a signed tombstone, so
-// Lookup stops returning the key, and the revocation is logged. The tombstone carries the number
-// of the revoke entry, and is kept for RevokeWindow, during which the key cannot be published
-// again (ErrRevoked) and a lookup can ask for it. Only the address of the signed-in user is
-// reachable: ErrKeyNotFound if it has no such published key (or it was revoked already),
-// ErrNotPublishable for a user who could not have published. On an address with an owner key,
-// owner is required (the owner's signature over the revoke operation). Like Publish, the
-// tombstone is written conditionally on the record that was read, and a record that cannot be
-// written leaves a void log entry.
+// Revoke removes the key with this fingerprint.
 func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerprint string, owner *docstore.DirectoryOwnerSig) (PublishedKey, error) {
 	if d.Signer == nil {
 		return PublishedKey{}, ErrDirectoryOff
@@ -231,9 +202,7 @@ func (d *AdapterDirectory) Revoke(ctx context.Context, user auth.User, fingerpri
 	return PublishedKey{}, docstore.ErrDirectoryBusy
 }
 
-// Sweep deletes what has expired: used challenges (kept until the challenge itself could no
-// longer be answered, which is what makes a replay refused) and revoked-key tombstones past
-// RevokeWindow. It returns how many it deleted. Run it now and then (RunSweep).
+// Sweep deletes what has expired.
 func (d *AdapterDirectory) Sweep(ctx context.Context) (int, error) {
 	done := observe.Default().Sweep("directory")
 	n, err := d.sweepRecords(ctx)
@@ -276,15 +245,10 @@ func (d *AdapterDirectory) sweepRecords(ctx context.Context) (int, error) {
 		if !expired {
 			continue
 		}
-		// Delete only what was read: a republish since replaced the tombstone with a live record,
-		// and an unconditional delete would remove the key somebody just published. It is made
-		// under the address's lock, so in this process it cannot interleave with a publish, and
-		// across replicas the store's conditional delete decides.
 		err = func() error {
 			if docstore.ValidAddress(email) {
 				defer d.lockAddress(email)()
 				if tombstone {
-					// What the revoked key left under a retired name goes with the tombstone.
 					return d.pruneTombstone(ctx, email, rec, m.ID, docstore.Digest(doc.Data))
 				}
 			}
@@ -294,7 +258,6 @@ func (d *AdapterDirectory) sweepRecords(ctx context.Context) (int, error) {
 		case err == nil:
 			n++
 		case errors.Is(err, docstore.ErrConflict), errors.Is(err, docstore.ErrNotFound):
-			// changed or gone since it was read: not ours to delete
 		default:
 			return n, err
 		}
@@ -302,11 +265,7 @@ func (d *AdapterDirectory) sweepRecords(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// RunSweep calls Sweep and then ReconcileEnrollments every interval (an hour when not positive)
-// until ctx ends; errors are logged. The reconciliation also runs once the reconcile grace is
-// over after the start, and again after any pass that found an entry too young to judge: a
-// restart (whose start-up reconcile cannot complete an entry younger than the grace) does not
-// leave a record behind the log until the next interval.
+// RunSweep calls Sweep and then reconciles enrollments.
 func (d *AdapterDirectory) RunSweep(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Hour
