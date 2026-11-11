@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A table is dressed in a style from the Styles tab; the style follows the rows when one is added; a style the person
-// defines is offered and is kept with the document.
 func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()
@@ -27,11 +25,9 @@ func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 	d.WaitSelector("#tstyle-panel")
 	d.OK(!d.Has("#tstyle-hint"), "the caret is below the table, so the table is the one in hand")
 
-	// a built-in style
 	d.Click(`#tstyle-panel button[data-style="Blue header"]`)
 	d.WaitFor("it is marked", `document.querySelector('#tstyle-panel button[data-style="Blue header"]').getAttribute('aria-pressed') === 'true'`)
 
-	// a style of the person's own: needs a name and real colours, then it is offered
 	d.Fill("#tstyle-name", "Sunrise")
 	d.Fill("#tstyle-header", "orange")
 	d.Click("#tstyle-save")
@@ -44,7 +40,6 @@ func TestTableStylesPickerDefineAndFollowRows(t *testing.T) {
 	d.Click(`#tstyle-panel button[data-style="Sunrise"]`)
 	d.WaitFor("it is marked", `document.querySelector('#tstyle-panel button[data-style="Sunrise"]').getAttribute('aria-pressed') === 'true'`)
 
-	// it goes into the saved document
 	d.Click(`button[data-tab="transfer"]`)
 	_, js := d.Download(func() { d.Click(`.gj-transfer-button[data-kind="export"][data-format="json"]`) })
 	d.OK(strings.Contains(string(js), "table.schemes") && strings.Contains(string(js), "Sunrise"), "the style is kept with the document")

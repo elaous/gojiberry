@@ -17,7 +17,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// imageFind is the state of the "find a picture online" part of the Pictures tab.
 type imageFind struct {
 	query   string
 	results []imagerepo.Result
@@ -29,8 +28,6 @@ type imageFind struct {
 
 var imageLib *imagerepo.Library
 
-// images is the register of image repositories. Nothing is on until the person turns a repository on, and nothing
-// is asked of it until they search. ?imagerepo=<address> points both at a mirror (or, in tests, a stand-in).
 func images() *imagerepo.Library {
 	if imageLib != nil {
 		return imageLib
@@ -47,8 +44,6 @@ func images() *imagerepo.Library {
 	return imageLib
 }
 
-// loadOperatorRepos adds the operator's own list of repositories (a JSON array, see imagerepo.ParseConfig) from
-// image-repos.json next to the page, or from the address in ?imagerepos=. No list is fine; a bad one is ignored and said so.
 func loadOperatorRepos(lib *imagerepo.Library, q js.Value) {
 	addr := "image-repos.json"
 	explicit := false
@@ -88,11 +83,9 @@ func loadOperatorRepos(lib *imagerepo.Library, q js.Value) {
 
 var (
 	imageListError string
-	imageRender    func() // set by the panel, so a list that arrives late is drawn
+	imageRender    func()
 )
 
-// imageSearchSection is the "Find a picture" part of the Pictures tab: pick the repositories to use, search, read the
-// author and licence of each result, and insert one with its credit as the legend.
 func imageSearchSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	lib := images()
 	imageRender = renderUI
@@ -148,7 +141,6 @@ func firstEnabled(lib *imagerepo.Library) string {
 	return ""
 }
 
-// searchImages asks every repository that is on and lists what they found; page 1 starts over, later pages add to the list.
 func (u *ui) searchImages(lib *imagerepo.Library, page int, renderUI func()) {
 	f := &u.imgFind
 	f.busy, f.msg = true, T("imgfind.searching", "Searching…")
@@ -187,8 +179,6 @@ func (u *ui) searchImages(lib *imagerepo.Library, page int, renderUI func()) {
 	}()
 }
 
-// insertFound fetches the chosen picture and puts it at the caret with its credit as the legend; the author,
-// licence and page are also kept with the picture in the saved file.
 func (u *ui) insertFound(flow func() *canvas.TextFlow, r imagerepo.Result, redraw, renderUI func()) {
 	f := &u.imgFind
 	fl := flow()

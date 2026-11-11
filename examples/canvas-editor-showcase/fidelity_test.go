@@ -17,7 +17,6 @@ func TestFidelityStateChoosesAFormatOnOfferAndReportsIt(t *testing.T) {
 	}}
 	done := make(chan struct{}, 8)
 	s := fidelityState{call: serve.Handle, render: func() { done <- struct{}{} }}
-	// ask draws the panel, and when the worker's answer is pending waits for it and draws again.
 	ask := func() components.FidelityPanelProps {
 		p := s.props(doc, exports, nil)
 		if p.Export.Pending {
@@ -57,8 +56,6 @@ func TestFidelityStateChoosesAFormatOnOfferAndReportsIt(t *testing.T) {
 	}
 }
 
-// What an import left out is saved with the document and shown again when it is opened; a document that was
-// not imported shows none.
 func TestImportReportIsKeptWithTheDocument(t *testing.T) {
 	done := make(chan struct{}, 2)
 	s := fidelityState{call: serve.Handle, render: func() { done <- struct{}{} }}

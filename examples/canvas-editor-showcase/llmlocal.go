@@ -12,14 +12,8 @@ import (
 	"github.com/elaous/gojiberry/grammar"
 )
 
-// localLLM is the page's way to ask the llm add-on (window.addons.llm), a language model that runs on this device:
-//
-//	generate({prompt, format: "json" | "", maxTokens, model}) -> Promise<{text}>
-//
-// What is asked goes nowhere else. Its models (models, install, remove) are listed in the Add-ons tab.
 func llmAddon() bool { return hasAddon("llm", "generate") }
 
-// generate asks the add-on and waits for the answer (call it from a goroutine of its own).
 func generate(ctx context.Context, prompt, format string, maxTokens int) (string, error) {
 	if !llmAddon() {
 		return "", errors.New("the page has no llm add-on")
@@ -48,13 +42,10 @@ func generate(ctx context.Context, prompt, format string, maxTokens int) (string
 	}
 }
 
-// llmGrammar is grammar.Checker over the add-on.
 type llmGrammar struct{}
 
 var _ grammar.Checker = llmGrammar{}
 
-// Check implements grammar.Checker: the model is asked for the issues and its answer is read, and checked against the
-// text, as for a model server.
 func (llmGrammar) Check(ctx context.Context, text string) ([]grammar.Issue, error) {
 	text = grammar.Cut(text)
 	if strings.TrimSpace(text) == "" {
@@ -67,8 +58,6 @@ func (llmGrammar) Check(ctx context.Context, text string) ([]grammar.Issue, erro
 	return grammar.ParseIssues(answer, text)
 }
 
-// grammarChecker is what the Language tab checks grammar with: the model server named in the page's address, else the
-// add-on, else nothing.
 func (u *ui) grammarChecker() grammar.Checker {
 	if u.lang.grammar != nil {
 		return u.lang.grammar

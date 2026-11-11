@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/examples/canvas-editor-showcase/encstore"
 )
 
-// printRecoverySheet opens the printable page of a recovery key in a new window. The page is built
-// here, from the secret, and is a blob in this browser: nothing is sent anywhere.
 func printRecoverySheet(label, secret string) {
 	fp, err := encstore.RecoveryFingerprint(secret)
 	if err != nil {
@@ -32,6 +30,5 @@ func printRecoverySheet(label, secret string) {
 	blob := js.Global().Get("Blob").New([]any{arr}, map[string]any{"type": "text/html"})
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
 	js.Global().Call("open", url, "_blank")
-	// the new window needs the URL until it has loaded
 	time.AfterFunc(time.Minute, func() { js.Global().Get("URL").Call("revokeObjectURL", url) })
 }

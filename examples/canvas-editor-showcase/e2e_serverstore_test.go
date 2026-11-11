@@ -12,9 +12,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A docstore server the person confirmed (in the People tab, where the key directory is set, with encryption
-// on or off) is also a place to save documents to: "Save to" offers it, a document saved there is in
-// the server's own store, and forgetting the server takes the choice away.
 func TestTheConfirmedServerIsASaveTarget(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -36,7 +33,6 @@ func TestTheConfirmedServerIsASaveTarget(t *testing.T) {
 	d.OK(strings.Contains(d.Text(option), "the server can read"), "the label says the server can read the documents: "+d.Text(option))
 
 	d.Select(`.gj-saver-select[data-field="Save to"]`, "server")
-	// Choosing the server reads its catalog first; the name is typed once that has settled.
 	d.WaitFor("the server to be the target", `document.querySelector('.gj-saver-select[data-field="Save to"]').value === 'server'`)
 	d.Sleep(800)
 	d.Fill(".gj-saver-name", "on the server")
@@ -47,7 +43,6 @@ func TestTheConfirmedServerIsASaveTarget(t *testing.T) {
 		t.Fatalf("the server holds %v (%v), want the catalog and the document", metas, err)
 	}
 
-	// Forgetting the server removes the target.
 	d.Click(`button[data-tab="people"]`)
 	d.Click("#dir-clear")
 	d.Click(`button[data-tab="save"]`)

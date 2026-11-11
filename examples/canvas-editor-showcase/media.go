@@ -14,13 +14,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Audio and video in the Pictures tab (roadmap 68): insert a clip by its address, which is refused until it has the
-// text a reader needs (captions for a video, words for audio); edit each clip's title, address, transcript and
-// caption track (components.CaptionEditor); and see what is still missing, in words. The editor has no player: a
-// clip is a card in the text, and the HTML export writes the player.
-
-// mediaForm is the clip being typed in the tab, the caption drafts of the clips already in the document, and the
-// messages.
 type mediaForm struct {
 	kind, url, title, captionsURL, transcript string
 	msg                                       string
@@ -28,13 +21,11 @@ type mediaForm struct {
 	capMsg                                    map[int]string
 }
 
-// mediaRef is a clip in the text: where it is (a caret position) and the object to edit.
 type mediaRef struct {
 	offset int
 	obj    *canvas.MediaObject
 }
 
-// documentMedia lists the clips of the flow in order.
 func documentMedia(fl *canvas.TextFlow) []mediaRef {
 	if fl == nil {
 		return nil
@@ -55,12 +46,10 @@ func documentMedia(fl *canvas.TextFlow) []mediaRef {
 	return out
 }
 
-// mediaItem is a clip object as the model has it, for the checker.
 func mediaItem(m *canvas.MediaObject) docfile.MediaItem {
 	return docfile.MediaItem{URL: m.URL, Kind: m.Kind, Title: m.Title, Captions: m.Captions, CaptionsURL: m.CaptionsURL, Transcript: m.Transcript, Width: m.Width, Height: m.Height}
 }
 
-// mediaErrors counts the errors of the clip's findings.
 func mediaErrors(m docfile.MediaItem) int {
 	n := 0
 	for _, f := range a11ycheck.MediaFindings(m, 0, 0) {
@@ -71,7 +60,6 @@ func mediaErrors(m docfile.MediaItem) int {
 	return n
 }
 
-// syncMediaMarks sets the "needs text" mark of every clip card from the checker, and says whether any changed.
 func syncMediaMarks(fl *canvas.TextFlow) bool {
 	changed := false
 	for _, r := range documentMedia(fl) {
@@ -82,8 +70,6 @@ func syncMediaMarks(fl *canvas.TextFlow) bool {
 	return changed
 }
 
-// safeMediaURL says an address is one a clip may be fetched from: http, https, a relative path or a data address of
-// audio or video (never a script).
 func safeMediaURL(u string) bool {
 	u = strings.TrimSpace(strings.ToLower(u))
 	switch {
@@ -95,7 +81,6 @@ func safeMediaURL(u string) bool {
 	return !strings.Contains(strings.SplitN(u, "/", 2)[0], ":") // no scheme: a relative path
 }
 
-// insertMedia puts the typed clip at the caret, once it has the text it needs.
 func (u *ui) insertMedia(fl *canvas.TextFlow, redraw, renderUI func()) {
 	f := &u.media
 	kind := f.kind
@@ -128,8 +113,6 @@ func (u *ui) insertMedia(fl *canvas.TextFlow, redraw, renderUI func()) {
 	renderUI()
 }
 
-// insertMediaWithoutText puts the typed clip in with no text yet, for a person who will write it in the clip's own
-// editor: the card carries the mark and the Check tab lists what is missing.
 func (u *ui) insertMediaWithoutText(fl *canvas.TextFlow, redraw, renderUI func()) {
 	f := &u.media
 	if !safeMediaURL(f.url) {
@@ -152,7 +135,6 @@ func (u *ui) insertMediaWithoutText(fl *canvas.TextFlow, redraw, renderUI func()
 	renderUI()
 }
 
-// mediaSections is the audio and video part of the Pictures tab.
 func mediaSections(u *ui, state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) []xango.Node {
 	fl := flow()
 	canEdit := state.Role.CanEdit() && state.Mode == canvas.ModeEdit
@@ -233,7 +215,6 @@ func mediaSections(u *ui, state *State, flow func() *canvas.TextFlow, scroller f
 				Message: f.capMsg[i],
 			}),
 		}
-		// what the clip still needs, in words (the same rules as the Check tab)
 		for j, fi := range a11ycheck.MediaFindings(mediaItem(m), r.offset, i) {
 			kids = append(kids, para(fmt.Sprintf("media-missing-%d-%d", i, j), fi.Severity.String()+": "+fi.Message+" "+fi.Fix, true))
 		}

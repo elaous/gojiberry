@@ -11,8 +11,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Display preferences kept in the browser are applied at start: text size, spacing, contrast and motion
-// change the page's computed styles, and none set leaves the defaults.
 func TestDisplayPreferencesAreApplied(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -40,8 +38,6 @@ func TestDisplayPreferencesAreApplied(t *testing.T) {
 	d.NoErrors()
 }
 
-// The View menu's display preferences change the page at once, are kept for the next visit, and
-// reset to the defaults.
 func TestDisplayPreferencesMenu(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -51,7 +47,6 @@ func TestDisplayPreferencesMenu(t *testing.T) {
 		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
 		entry := `.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`
 		d.WaitSelector(entry)
-		// The submenu is long and scrolls when the window is short: bring the entry into view, as a person would.
 		d.Eval(`(() => { const e = Array.from(document.querySelectorAll('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub)')).find((x) => x.textContent.includes(`+"`"+item+"`"+`)); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
 		d.Click(entry)
 	}
@@ -81,8 +76,6 @@ func TestDisplayPreferencesMenu(t *testing.T) {
 	d.NoErrors()
 }
 
-// Large targets make what can be pressed at least 44 pixels each way, and the distraction-free mode hides
-// the toolbar, the side panel and the status bar; the menus stay, and turning either off brings it back.
 func TestLargeTargetsAndDistractionFreeMode(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -106,7 +99,6 @@ func TestLargeTargetsAndDistractionFreeMode(t *testing.T) {
 		d.OK(d.Str(`getComputedStyle(document.querySelector('`+sel+`')).display`) == "none", sel+" is hidden")
 	}
 	d.OK(d.Has(`button.gj-menubar-button:has-text("View")`), "the menus stay")
-	// and the menu brings it back
 	d.Click(`button.gj-menubar-button:has-text("View")`)
 	d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
 	d.OK(d.Has(`.gj-menubar-panel li.gj-menu-item[aria-checked="true"]:has-text("Distraction-free mode")`), "the menu shows it is on")
@@ -115,9 +107,6 @@ func TestLargeTargetsAndDistractionFreeMode(t *testing.T) {
 	d.NoErrors()
 }
 
-// Reading aloud: the document is handed to the browser's speech engine a sentence at a time, the
-// sentence being spoken is shown with its controls, next/pause/stop work, and the speed is a kept
-// preference. The speech engine is replaced by a recorder (a headless browser has no voice).
 func TestReadAloud(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -159,8 +148,6 @@ func TestReadAloud(t *testing.T) {
 	d.NoErrors()
 }
 
-// Low-memory mode keeps fewer undo steps: asked for in the View menu, kept for the next visit, and it
-// can be turned off again; with no choice the page stays at the default on this machine.
 func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -174,7 +161,6 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 		d.Hover(`.gj-menubar-panel li.gj-menu-item-sub:has-text("Display preferences")`)
 		entry := `.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub):has-text("` + item + `")`
 		d.WaitSelector(entry)
-		// The submenu is long and scrolls when the window is short: bring the entry into view, as a person would.
 		d.Eval(`(() => { const e = Array.from(document.querySelectorAll('.gj-menubar-panel li.gj-menu-item:not(.gj-menu-item-sub)')).find((x) => x.textContent.includes(`+"`"+item+"`"+`)); if (e) e.scrollIntoView({ block: 'nearest' }); return true; })()`, nil)
 		d.Click(entry)
 	}
@@ -189,7 +175,6 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	d.Reload()
 	d.WaitSelector("canvas")
 	d.OK(limit() == 200, "turned off, the default again")
-	// A long history can be asked for too.
 	choose("Keep many undo steps")
 	d.WaitFor("the choice is kept", `JSON.parse(localStorage.getItem('showcase:a11y')).memory === 'high'`)
 	d.Reload()
@@ -198,8 +183,6 @@ func TestLowMemoryModeKeepsFewerUndoSteps(t *testing.T) {
 	d.NoErrors()
 }
 
-// The display preferences go out to a file and come back from one, and a file brings in only the values the
-// page knows.
 func TestPreferencesExportAndImport(t *testing.T) {
 	site := e2etest.NewSite(t)
 	d := site.OpenURL(t, "/index.html")
@@ -238,10 +221,6 @@ func TestPreferencesExportAndImport(t *testing.T) {
 	d.NoErrors()
 }
 
-// The saving of the low-memory mode, measured: the same long document, the same two hundred steps of editing,
-// once with the default history and once with "Save memory". The Go heap in use (after a collection) is read
-// from the page. It is a measure in this browser, not on a small phone; the test only asks that the mode
-// saves a real part of what the history costs.
 func TestLowMemoryModeSavesMemoryOnALongDocument(t *testing.T) {
 	var md strings.Builder
 	for i := 0; i < 150; i++ {
@@ -259,7 +238,7 @@ func TestLowMemoryModeSavesMemoryOnALongDocument(t *testing.T) {
 		d.CanvasClick(240, 164)
 		d.Focus("#input")
 		d.Press("Control+Home")
-		for i := 0; i < 250; i++ { // each Enter is a step of its own, with the whole text behind it
+		for i := 0; i < 250; i++ {
 			d.Press("Enter")
 		}
 		d.Sleep(500)
@@ -278,10 +257,6 @@ func TestLowMemoryModeSavesMemoryOnALongDocument(t *testing.T) {
 	}
 }
 
-// Typing in a long document stays quick. The whole layout used to be worked out again for every paragraph of the
-// reading copy on every key (the copy asks where each paragraph is), and the style of every letter was looked up
-// by hashing its whole format: 150 paragraphs took 11 seconds a key. They take a third of a second now; the bound
-// here is loose (a slow machine is not a failure) but far under what the quadratic cost gave.
 func TestTypingStaysQuickInALongDocument(t *testing.T) {
 	var md strings.Builder
 	for i := 0; i < 150; i++ {

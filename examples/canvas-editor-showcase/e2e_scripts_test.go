@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// Scripts: a script runs in a sandbox and reaches the editor only by the commands of the registry; the text of the
-// document is for a script the person allowed to read it; the page's own network and storage are not there.
 func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -27,12 +25,10 @@ func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 		d.WaitFor("the script finished", `document.getElementById('scripts-message') && document.getElementById('scripts-message').textContent.length > 0`)
 	}
 
-	// the sample: lists the registry and runs a command
 	d.Click("#scripts-run")
 	d.WaitFor("it finished", `(document.getElementById('scripts-message')||{}).textContent === 'The script finished.'`)
 	d.OK(strings.Contains(log(), "commands, for example") && !strings.Contains(log(), "Error"), "it saw the registry and ran bold: "+log())
 
-	// the text of the document is refused until allowed
 	run(`try { await editor.text(); editor.log("read"); } catch (e) { editor.log("refused: " + e.message); }`)
 	d.OK(strings.Contains(log(), "refused: not allowed"), "reading is refused: "+log())
 	d.Click("#scripts-allow-read input")
@@ -40,7 +36,6 @@ func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 	run(`const t = await editor.text(); editor.log("length " + (t.length > 0));`)
 	d.OK(log() == "length true", "and given when allowed: "+log())
 
-	// writing is refused until allowed too, then goes in at the caret (edit mode, caret in the text)
 	run(`try { await editor.insert("X"); } catch (e) { editor.log("refused: " + e.message); }`)
 	d.OK(strings.Contains(log(), "refused: not allowed"), "writing is refused: "+log())
 	d.Click("#scripts-allow-write input")
@@ -51,14 +46,12 @@ func TestScriptsRunInASandboxAndAskForWhatTheyMayHave(t *testing.T) {
 	run(`editor.log(String((await editor.text()).includes("ZZ")));`)
 	d.OK(log() == "true", "and is in the document: "+log())
 
-	// a command outside the registry is refused, and the page's own world is not there
 	run(`try { await editor.run("not-a-command"); } catch (e) { editor.log(e.message); }
 editor.log(typeof fetch, typeof localStorage);
 try { await fetch("/"); } catch (e) { editor.log("no network"); }`)
 	d.OK(strings.HasPrefix(log(), "no such command|undefined undefined") && strings.HasSuffix(log(), "no network"), "the sandbox: "+log())
 	d.OK(d.Str(`typeof window.__done`) == "undefined", "the sandbox is not the page")
 
-	// a script that never ends is stopped by the person
 	d.Fill("#scripts-source", `await new Promise(() => {});`)
 	d.Click("#scripts-run")
 	d.WaitFor("it runs", `!document.getElementById('scripts-stop').disabled`)
@@ -68,8 +61,6 @@ try { await fetch("/"); } catch (e) { editor.log("no network"); }`)
 	d.NoErrors()
 }
 
-// The get/set requests: reading needs the read permission, changing needs its own; a script reads and changes the title,
-// the language, a selection's format and the paragraph style, and sets a document from Markdown, and what it sets is checked.
 func TestScriptsGetAndSetTheDocument(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html?lang=en")
@@ -86,7 +77,6 @@ func TestScriptsGetAndSetTheDocument(t *testing.T) {
 		d.Click("#scripts-run")
 		d.WaitFor("the script finished", `(document.getElementById('scripts-message')||{}).textContent === 'The script finished.'`)
 	}
-	// nothing without the permissions
 	run(`for (const f of [() => editor.meta(), () => editor.setMeta({title: "x"})]) { try { await f(); editor.log("done"); } catch (e) { editor.log("refused"); } }`)
 	d.OK(log() == "refused|refused", "refused until allowed: "+log())
 	d.Click("#scripts-allow-read input")
@@ -100,7 +90,6 @@ editor.log((await editor.styles()).includes("Heading 1"));`)
 	d.OK(strings.Contains(log(), "Scripted fr") && strings.Count(log(), "refused:") == 2 && strings.HasSuffix(log(), "true"), "meta and checks: "+log())
 	d.WaitFor("the title is set", `JSON.parse(document.getElementById("state").textContent).title === "Scripted"`)
 
-	// Markdown in and out, then formatting and style of a selection
 	run(`await editor.setMarkdown("# Heading\n\nSome **bold** words here.\n");
 const md = await editor.markdown();
 editor.log(md.includes("Heading") && md.includes("bold"));

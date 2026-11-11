@@ -9,15 +9,6 @@ import (
 	"github.com/elaous/gojiberry/saver"
 )
 
-// Replace across documents, written through the saver.
-//
-// docsearch.Plan.Apply writes the new bytes straight to the store, which is right for a bare store but
-// leaves a saver's catalog out: its checksum of the document no longer matches, so opening the document
-// would find it "damaged" and fall back to the previous copy. Here each document is written with
-// saver.Save (the catalog, the checksum and the previous copy stay in order) and, before that, the text
-// as it was is kept as a version, so the history keeps the old text and Undo is a restore of it.
-
-// replacedDoc is one document that was replaced, with what Undo needs.
 type replacedDoc struct {
 	id    string
 	codec docfile.Codec
@@ -25,10 +16,6 @@ type replacedDoc struct {
 	wrote int64            // the Updated stamp the replacement was saved with
 }
 
-// applyReplace writes the planned replacement to the documents of only (store keys, as in the plan),
-// each one only if it is still as the plan read it. keyToID maps the store keys to the documents' IDs.
-// title is the label of the version kept (translated by the caller). A document saved since the plan was
-// made is left alone and returned in conflicts.
 func applyReplace(ctx context.Context, s *saver.Saver, target, author, title string, plan *docsearch.Plan, keyToID map[string]string, only []string) (done []replacedDoc, conflicts []string, err error) {
 	for _, key := range only {
 		if err := ctx.Err(); err != nil {
@@ -81,8 +68,6 @@ func applyReplace(ctx context.Context, s *saver.Saver, target, author, title str
 	return done, conflicts, nil
 }
 
-// undoReplace puts back the text each replaced document had, unless it was saved again since (it is then
-// returned in kept, so a later edit is never thrown away).
 func undoReplace(ctx context.Context, s *saver.Saver, target string, done []replacedDoc) (restored, kept int, err error) {
 	for _, d := range done {
 		if err := ctx.Err(); err != nil {

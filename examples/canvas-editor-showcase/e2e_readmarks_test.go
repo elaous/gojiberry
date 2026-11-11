@@ -18,8 +18,6 @@ const speechStub = `(() => {
 		getVoices() { return window.__voices; } } });
 })()`
 
-// The sentence being read aloud is published (and marked on the canvas) with its place in the text, and the word
-// the engine reports is marked inside it.
 func TestReadingAloudMarksTheSentenceAndTheWord(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html")
@@ -28,17 +26,13 @@ func TestReadingAloudMarksTheSentenceAndTheWord(t *testing.T) {
 	d.Click(`button.gj-menubar-button:has-text("Read aloud")`)
 	d.Click(`.gj-menubar-panel li.gj-menu-item:has-text("Read the document aloud")`)
 	d.WaitFor("the first sentence", `window.__utts.length === 1`)
-	// the first sentence is the heading, "Gojiberry editor", at the start of the text
 	d.WaitFor("the sentence is marked", `document.documentElement.getAttribute('data-gj-read-sentence') === '0-16'`)
 	d.OK(!d.Bool(`document.documentElement.hasAttribute('data-gj-read-word')`), "no word until the engine says one")
-	// the engine reaches "editor": characters 10 to 16 of what it was given
 	d.Eval(`window.__utts[0].onboundary({name: 'word', charIndex: 10, charLength: 6})`, nil)
 	d.WaitFor("the word is marked", `document.documentElement.getAttribute('data-gj-read-word') === '10-16'`)
-	// a boundary that is not a word is ignored; without a length the word runs to the next space
 	d.Eval(`window.__utts[0].onboundary({name: 'sentence', charIndex: 0})`, nil)
 	d.Eval(`window.__utts[0].onboundary({name: 'word', charIndex: 0})`, nil)
 	d.WaitFor("the first word", `document.documentElement.getAttribute('data-gj-read-word') === '0-9'`)
-	// the next sentence moves the marks
 	d.Eval(`window.__utts[0].onend()`, nil)
 	d.WaitFor("the next sentence", `window.__utts.length === 2 && document.documentElement.getAttribute('data-gj-read-sentence') !== '0-16'`)
 	d.OK(!d.Bool(`document.documentElement.hasAttribute('data-gj-read-word')`), "the word of the last sentence is gone")
@@ -47,8 +41,6 @@ func TestReadingAloudMarksTheSentenceAndTheWord(t *testing.T) {
 	d.NoErrors()
 }
 
-// A voice that uses the internet is chosen only when the person allowed it, a voice on the device is preferred to
-// it, and the bar says which kind is speaking.
 func TestNetworkVoicesAreChosenOnlyOnPurpose(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html")
@@ -91,8 +83,6 @@ func TestNetworkVoicesAreChosenOnlyOnPurpose(t *testing.T) {
 	d.NoErrors()
 }
 
-// The reader's voice is chosen from the voices offered for the document's language, described by accent and gender;
-// the chosen one is the one that speaks, and the choice is kept.
 func TestTheReaderVoiceIsChosenByAccentAndGender(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).OpenURL(t, "/index.html")

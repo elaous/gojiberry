@@ -15,18 +15,11 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// The screen-reader copy of the document (components.AccessibleText) and the canvas are two views of
-// one text. This file keeps their positions together: the block with the editor's caret is marked in the
-// copy (and, when the keyboard is not in the editor, the copy's own selection follows the caret), and a
-// selection made in the copy by a screen reader's cursor moves the editor's caret and selection.
-
-// mirrorBlocks is the document's blocks for the copy, with the caret's block marked.
 func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components.A11yBlock {
 	blocks := u.a11yBlocks(flow, u.title)
 	if flow != nil {
 		blocks = components.MarkCaret(blocks, flow.Cursors()[0].Caret)
 	}
-	// where the text blocks are, to put the floating objects among them in the order they are met on the sheets
 	ys := make([]float64, len(blocks))
 	var starts []int
 	var which []int
@@ -37,7 +30,6 @@ func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components
 		}
 	}
 	if len(starts) > 0 {
-		// one layout for all the blocks: asking each in turn works the whole layout out again every time
 		for k, p := range flow.CaretRects(starts) {
 			if p.OK {
 				ys[which[k]] = p.Y
@@ -47,7 +39,6 @@ func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components
 	return orderByPosition(blocks, ys, a11yObjects(root))
 }
 
-// mirrorComments are the document's comments as the copy lists them.
 func mirrorComments(flow *canvas.TextFlow) []components.A11yComment {
 	if flow == nil || flow.Comments == nil {
 		return nil
@@ -67,8 +58,6 @@ func mirrorComments(flow *canvas.TextFlow) []components.A11yComment {
 	return out
 }
 
-// mirrorSignature changes when the caret moves to another block of the copy, or the selection or the
-// comments change, which is when the copy has to be drawn again.
 func (u *ui) mirrorSignature(flow *canvas.TextFlow) string {
 	if flow == nil {
 		return ""
@@ -84,8 +73,6 @@ func (u *ui) mirrorSignature(flow *canvas.TextFlow) string {
 	return sig
 }
 
-// goToHeading is what activating an entry of the outline does: the heading takes the keyboard focus
-// (so a screen reader reads it) and the editor's caret goes to it.
 func goToHeading(flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw func()) func(string, int, bool) {
 	return func(id string, start int, mapped bool) {
 		if el := js.Global().Get("document").Call("getElementById", id); !el.IsNull() {
@@ -101,8 +88,6 @@ func goToHeading(flow func() *canvas.TextFlow, scroller func() *canvas.ScrollVie
 
 func mirrorRoot() js.Value { return js.Global().Get("document").Call("getElementById", "a11y-text") }
 
-// mirrorPosition turns a position in the copy (a DOM node and the offset in it) into an offset of the
-// editor's text stream; ok is false if the position is not in a mapped block.
 func mirrorPosition(node js.Value, offset int) (int, bool) {
 	root := mirrorRoot()
 	if root.IsNull() || node.IsNull() || node.IsUndefined() || !root.Call("contains", node).Bool() {
@@ -136,10 +121,6 @@ func mirrorPosition(node js.Value, offset int) (int, bool) {
 	return b.StreamOffsetRunes(before), true
 }
 
-// streamRunes is how many runes of the editor's stream the text of an element or a fragment takes: its text
-// as it is in the document (not the words only for a reader), except that a piece marked data-gj-stream (the
-// mark of a footnote) counts as that many however long its text is. (The fragment is changed: the words for
-// a reader are taken out.)
 func streamRunes(n js.Value) int {
 	hints := n.Call("querySelectorAll", ".gj-sr-only")
 	for i := hints.Length() - 1; i >= 0; i-- {
@@ -158,13 +139,9 @@ func streamRunes(n js.Value) int {
 	return utf8.RuneCountInString(n.Get("textContent").String()) + width
 }
 
-// watchMirrorSelection makes a selection made in the copy (the way a screen reader's cursor moves through
-// it) the editor's caret and selection.
 func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, redraw, renderUI func()) {
 	js.Global().Get("document").Call("addEventListener", "selectionchange", js.FuncOf(func(js.Value, []js.Value) any {
 		fl := flow()
-		// selectionchange is queued: it arrives after followCaret has returned, so the flag alone does not
-		// catch the change the page made itself. Ignore what comes right after the page wrote the selection.
 		if fl == nil || u.mirrorWriting || time.Since(u.mirrorWroteAt) < 150*time.Millisecond {
 			return nil
 		}
@@ -174,7 +151,7 @@ func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() 
 		}
 		anchor, ok := mirrorPosition(sel.Get("anchorNode"), sel.Get("anchorOffset").Int())
 		if !ok {
-			return nil // the selection is somewhere else (in the editor's own field, say)
+			return nil
 		}
 		caret, ok := mirrorPosition(sel.Get("focusNode"), sel.Get("focusOffset").Int())
 		if !ok {
@@ -184,15 +161,11 @@ func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() 
 		if cs.Anchor == anchor && cs.Caret == caret {
 			return nil
 		}
-		// The copy is drawn again when the caret moves to another block, and a selection in the nodes that were
-		// replaced collapses to where they were: that arrives a moment after the page wrote it, as if the
-		// reader's cursor had moved to the start. A collapse onto an end of the selection the page wrote a
-		// moment ago is that, not a move: the selection is put back.
 		if cs.Anchor != cs.Caret && anchor == caret && (anchor == cs.Anchor || anchor == cs.Caret) && time.Since(u.mirrorWroteAt) < 3*time.Second {
 			u.followCaret(fl, u.a11yCache)
 			return nil
 		}
-		u.mirrorAt = fmt.Sprint(anchor, caret) // the copy already has this selection: do not put it there again
+		u.mirrorAt = fmt.Sprint(anchor, caret)
 		fl.GotoOffset(caret)
 		if anchor != caret {
 			fl.SetSelection(anchor, caret)
@@ -204,9 +177,6 @@ func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() 
 	}))
 }
 
-// followCaret puts the copy's own selection where the editor's caret is, so a screen reader's cursor in
-// the copy goes with it. It does nothing while the keyboard is in a field (the editor's own, which a
-// screen reader follows by itself, or any other): moving the selection then would take it from the field.
 func (u *ui) followCaret(fl *canvas.TextFlow, blocks []components.A11yBlock) {
 	doc := js.Global().Get("document")
 	if ae := doc.Get("activeElement"); !ae.IsNull() && !ae.IsUndefined() {
@@ -235,7 +205,6 @@ func (u *ui) followCaret(fl *canvas.TextFlow, blocks []components.A11yBlock) {
 	js.Global().Call("getSelection").Call("setBaseAndExtent", anode, aoff, node, off)
 }
 
-// streamToDOM is the position in the copy (a text node and the offset in it) of a stream offset.
 func streamToDOM(blocks []components.A11yBlock, offset int) (js.Value, int, bool) {
 	at := components.A11yBlockAt(blocks, offset)
 	if at < 0 {
@@ -253,8 +222,6 @@ func streamToDOM(blocks []components.A11yBlock, offset int) (js.Value, int, bool
 	return node, off, true
 }
 
-// domPosition finds the text node of el, and the offset in it, that is n runes into el's text (without
-// the words that are only for a reader). A block with no text gives the element itself.
 func domPosition(el js.Value, n int) (js.Value, int) {
 	doc := js.Global().Get("document")
 	walker := doc.Call("createTreeWalker", el, 4) // NodeFilter.SHOW_TEXT
@@ -270,7 +237,6 @@ func domPosition(el js.Value, n int) (js.Value, int) {
 		}
 		rs := []rune(t.Get("nodeValue").String())
 		if mark := t.Get("parentElement").Call("closest", "[data-gj-stream]"); !mark.IsNull() && el.Call("contains", mark).Bool() {
-			// a piece that takes a fixed number of runes of the stream: the position is before it or after it
 			w, _ := strconv.Atoi(mark.Call("getAttribute", "data-gj-stream").String())
 			if n < w {
 				return t, 0

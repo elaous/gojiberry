@@ -16,16 +16,14 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// langState is the Language tab: which backends are set up (from the page's
-// ?translate=… and ?grammar=…&model=… parameters) and what they last said.
 type langState struct {
 	translator translate.Translator // the server at ?translate=…, else the translate add-on, else nil
-	grammar    grammar.Checker      // the model server at ?grammar=…, else the llm add-on, else nil
+	grammar    grammar.Checker
 	target     string
 	translated string
 	selFrom    int // the selection that was translated
 	selTo      int
-	transText  string // the whole text when it was translated: the offsets mean something only in it
+	transText  string
 	issues     []grammar.Issue
 	text       string // the text the issues were found in
 	checked    bool
@@ -38,13 +36,10 @@ var translateTargets = []components.LanguageTarget{
 	{Code: "IT", Name: "Italian"}, {Code: "PT-PT", Name: "Portuguese"}, {Code: "NL", Name: "Dutch"}, {Code: "EN-US", Name: "English"},
 }
 
-// setupLanguage reads the backends from the page's query parameters.
 func (u *ui) setupLanguage(param func(string) string) {
 	if url := pageEndpoint(param("translate")); url != "" {
 		u.lang.translator = &translate.Client{BaseURL: url}
 	}
-	// without a server, the translate add-on (window.addons.translate) is the translator when the page has one: it is asked
-	// each time, because the script may arrive after the page
 	if url := pageEndpoint(param("grammar")); url != "" {
 		model := param("model")
 		if model == "" {
@@ -55,7 +50,6 @@ func (u *ui) setupLanguage(param func(string) string) {
 	u.lang.target = "DE"
 }
 
-// langPanel is the Language tab.
 func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(), redraw, renderUI func()) xango.Node {
 	l := &u.lang
 	fl := flow()
@@ -121,7 +115,7 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 		if fl == nil || l.translated == "" || props.ReadOnly {
 			return
 		}
-		if fl.EditText() != l.transText { // edited since (by this person or a collaborator): the range is not the text that was translated
+		if fl.EditText() != l.transText {
 			l.translated, l.err = "", "The text changed since it was translated: translate the selection again."
 			renderUI()
 			return
@@ -159,13 +153,12 @@ func langPanel(u *ui, state *State, flow func() *canvas.TextFlow, scroll func(),
 	}
 	props.OnApplyIssue = func(i int) {
 		if fl == nil || i >= len(l.issues) || fl.EditText() != l.text {
-			return // the text changed since the check: its offsets no longer mean anything
+			return
 		}
 		is := l.issues[i]
 		fl.ReplaceRange(is.From, is.To, is.Suggestion)
 		l.issues = append(l.issues[:i:i], l.issues[i+1:]...)
 		l.text = fl.EditText()
-		// Later issues moved by the change in length.
 		delta := len([]rune(is.Suggestion)) - (is.To - is.From)
 		for j := i; j < len(l.issues); j++ {
 			if l.issues[j].From >= is.To {
@@ -195,7 +188,6 @@ func (u *ui) issueText(is grammar.Issue) string {
 	return strings.TrimSpace(string(rs[is.From:is.To]))
 }
 
-// markGrammar underlines the grammar issues on the canvas.
 func (u *ui) markGrammar(fl *canvas.TextFlow) {
 	var spans []canvas.Match
 	for _, is := range u.lang.issues {

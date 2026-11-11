@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The symbol picker is one tab stop: the arrow keys move among the symbols by what is seen, Home and End go to
-// the first and the last, and Tab leaves the grid.
 func TestSymbolPickerArrowKeys(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")

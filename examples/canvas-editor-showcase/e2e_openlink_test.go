@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// headerLog is a handler that remembers the share token each request carried.
 type headerLog struct {
 	next http.Handler
 	mu   sync.Mutex
@@ -41,10 +40,6 @@ func (h *headerLog) count(token string) int {
 
 func (h *headerLog) reset() { h.mu.Lock(); h.seen = nil; h.mu.Unlock() }
 
-// A share link in the address (#share=) is offered in the People tab and used only when the person says so:
-// the address is cleaned at once, nothing goes to the server with it before the choice, "Ignore" drops it,
-// without a confirmed server it says so, and with one the server target sends the token (HTTPAdapter.UseShareLink)
-// until "Stop using it".
 func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -53,7 +48,6 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	const token = "tok-0123456789abcdefghijklmnopqrstuvwxyz-ABCDEFG"
 	base := "/index.html?docstore=" + url.QueryEscape(site.URL)
 
-	// 1. A link with no server confirmed: offered, address cleaned, using it says why it cannot.
 	d := site.OpenURL(t, base+"#share="+token)
 	d.WaitSelector("#incoming")
 	d.OK(d.Attr(`button[data-tab="people"]`, "aria-selected") == "true", "the People tab opens on a link")
@@ -65,7 +59,6 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#incoming-note"), "no server"), "without a server it says so: "+d.Text("#incoming-note"))
 	d.OK(!d.Has("#incoming-use"), "the offer is spent")
 
-	// 2. Confirm the server, load again with the link, and ignore it.
 	d.Click("#dir-offer-review")
 	confirmDialog(d)
 	d.Eval(`location.assign(location.pathname + location.search + '&again=1#share=`+token+`')`, nil)
@@ -74,7 +67,6 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	d.WaitFor("the offer to go", `!document.getElementById('incoming')`)
 	d.OK(log.count(token) == 0, "an ignored link is never sent")
 
-	// 3. Load once more and use it: the server sees the token on its requests; stopping takes it away.
 	d.Eval(`location.assign(location.pathname + location.search + '&again=2#share=`+token+`')`, nil)
 	d.WaitSelector("#incoming-use")
 	log.reset()
@@ -86,7 +78,7 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	d.OK(log.count(token) > 0, "the server target sends the link once it is used")
 	d.Click("#incoming-stop")
 	d.WaitFor("the notice to go", `!document.getElementById('incoming-stop')`)
-	d.Sleep(700) // a request already on its way when the link was stopped has finished
+	d.Sleep(700)
 	log.reset()
 	d.Click(`button[data-tab="save"]`)
 	d.Sleep(500)
@@ -99,8 +91,6 @@ func TestOpenAShareLinkFromTheAddress(t *testing.T) {
 	d.NoErrors()
 }
 
-// A person added by name can be given access that ends: the choice is made before adding, the list says when
-// it ends, and once it has the person is gone from both lists.
 func TestAPersonsAccessEndsInThePeopleTab(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OnNewDocument(skewClock)
@@ -116,7 +106,6 @@ func TestAPersonsAccessEndsInThePeopleTab(t *testing.T) {
 	d.OK(strings.Contains(text, "ana@example.com: Can edit, until"), "the end is written: "+text)
 	d.OK(d.Bool(`(() => { const ms = Date.parse(document.querySelector('#who-list li[data-kind="person"]').dataset.expires) - Date.now(); return ms > 23.9 * 3600e3 && ms <= 24 * 3600e3; })()`), "access ends in a day")
 
-	// Someone added with no end has none.
 	d.Select("#person-life", "never")
 	d.Fill(".gj-people-invite-id", "bo@example.com")
 	d.WaitFor("the invite button", `!document.querySelector('.gj-people-invite').disabled`)

@@ -9,17 +9,13 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// goWords are pieces of Go text a person must not be shown as the message of an error.
 var goWords = []string{"ErrForgedFrame", "ErrUnsignedAfterFlip", "ErrUnreadable", "ErrDowngrade", "ErrNoKey", "ErrStaleConfig", "ErrLocked",
 	"Repair(", "AcceptUnsigned", "Sharing.", "encrypt:", "docstore:", "encstore"}
 
-// visible is the text of the element as it is drawn: what is inside a closed Details is not.
 func visible(d *e2etest.Tab, selector string) string {
 	return d.Str(`(document.querySelector(` + e2etest.J(selector) + `) || {innerText: ''}).innerText`)
 }
 
-// checkErrorBox asserts the error UX: the message is an alert in words, no Go text is visible, and the
-// technical text is behind a closed native Details that holds it (and a Copy button).
 func checkErrorBox(t *testing.T, d *e2etest.Tab, box, message, detail string) {
 	t.Helper()
 	shown := visible(d, box)
@@ -34,8 +30,6 @@ func checkErrorBox(t *testing.T, d *e2etest.Tab, box, message, detail string) {
 	d.OK(strings.Contains(d.Text(box+" details pre"), detail), "the technical text is kept for support: "+d.Text(box+" details pre"))
 }
 
-// A confidential document opened while the store is locked: the store's reply is a no-key error, said in
-// words, in the page's language.
 func TestALockedStoreErrorIsInWordsWithDetailsBehindADisclosure(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -67,7 +61,6 @@ func TestAnErrorIsTranslated(t *testing.T) {
 	d.OK(strings.Contains(d.Text(".gj-doc-error-box summary"), "Details"), "the disclosure is labelled")
 }
 
-// A stored file damaged outside the app, which no group knows: a generic message, the text behind Details.
 func TestAnUnknownErrorIsGenericWithDetails(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -93,7 +86,6 @@ func TestAnUnknownErrorIsGenericWithDetails(t *testing.T) {
 	checkErrorBox(t, d, ".gj-doc-error-box", "Something went wrong", "failed to decrypt")
 }
 
-// A tab whose keys were changed in another tab says so in words; the sentinel's own text is behind Details.
 func TestTheStaleTabErrorHidesTheGoText(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()

@@ -11,16 +11,8 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 )
 
-// Objects and shared editing: when one person is changing a picture, an equation or a form field, the others see it busy
-// and wait; the text itself merges. The hold goes to the others with the cursor (wire.Presence.Holding) and is renewed
-// while the person works, so it ends by itself a few seconds after they stop (or leave). It is advice to the page, not a
-// lock the server keeps: the document merges whatever it says, and nothing here is a way to keep somebody out. Each person
-// has one colour (the `color` of the cursor): the object they hold has an outline in it, and a busy object a badge in it.
-
-// holdFor is how long a hold lasts without another sign of work.
 const holdFor = 8 * time.Second
 
-// lockKeys: the keys of the objects (what Presence.Holding says): "image:2", "equation:0", "field:name".
 func imageKey(i int) string    { return "image:" + strconv.Itoa(i) }
 func equationKey(i int) string { return "equation:" + strconv.Itoa(i) }
 func tableKey(i int) string    { return "table:" + strconv.Itoa(i) }
@@ -29,8 +21,6 @@ func fieldKey(name string) string {
 	return "field:" + name
 }
 
-// objectKeys maps every keyed object of the document to the object that shows it: a picture, an equation, a form field
-// in the text, or, for a field in a table cell, the table.
 func objectKeys(fl *canvas.TextFlow) map[string]canvas.InlineObject {
 	out := map[string]canvas.InlineObject{}
 	if fl == nil {
@@ -62,8 +52,6 @@ func objectKeys(fl *canvas.TextFlow) map[string]canvas.InlineObject {
 	return out
 }
 
-// claim says this person is working on the object (or still is). It is false, and the person is told, when somebody else
-// has it.
 func (u *ui) claim(key, what string, renderUI func()) bool {
 	if name, _, busy := u.busyBy(key); busy {
 		u.announce(T("lock.busy", "Busy: %s is changing this %s.", name, what))
@@ -78,7 +66,6 @@ func (u *ui) claim(key, what string, renderUI func()) bool {
 	return true
 }
 
-// holding is the object this person holds, "" when they hold none or the hold ran out.
 func (u *ui) holding() string {
 	if u.hold.key != "" && time.Now().After(u.hold.until) {
 		u.hold.key = ""
@@ -87,8 +74,6 @@ func (u *ui) holding() string {
 	return u.hold.key
 }
 
-// busyBy says whether somebody else holds the object, and who. Two people who claim one object at the same moment both see
-// the other's claim: the one whose replica id sorts first keeps it, the other lets go (see contend).
 func (u *ui) busyBy(key string) (name, color string, busy bool) {
 	if u.live == nil || key == "" {
 		return "", "", false
@@ -103,7 +88,7 @@ func (u *ui) busyBy(key string) (name, color string, busy bool) {
 				n = T("lock.someone", "someone")
 			}
 			if u.hold.key == key && strings.Compare(u.live.Replica, p.Replica) < 0 {
-				continue // both claimed it: this replica's id sorts first, so this one keeps it
+				continue
 			}
 			return n, p.Color, true
 		}
@@ -111,7 +96,6 @@ func (u *ui) busyBy(key string) (name, color string, busy bool) {
 	return "", "", false
 }
 
-// contend lets go of an object another person holds with the better claim.
 func (u *ui) contend() {
 	if u.hold.key == "" {
 		return
@@ -122,7 +106,6 @@ func (u *ui) contend() {
 	}
 }
 
-// refreshBusy puts the marks of who holds what on the objects of the document (canvas.TextFlow.ObjectBusy).
 func (u *ui) refreshBusy() {
 	if u.flowNow == nil {
 		return
@@ -159,8 +142,6 @@ func (u *ui) refreshBusy() {
 	}
 }
 
-// tableKeyOf is the key of the table in the text that shows tv ("" for a table that is not in the text, which has no
-// hold: nobody else is shown it).
 func (u *ui) tableKeyOf(fl *canvas.TextFlow, tv *canvas.TableView) string {
 	if fl == nil {
 		return ""

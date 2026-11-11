@@ -1,15 +1,5 @@
 //go:build js && wasm
 
-// Command canvas-editor-showcase is a small word processor with every
-// piece we have built registered in one place: the canvas tree (app.xg)
-// -- scrolling pages, an editable text flow with headers, footers and page
-// numbers, a picture, a floating note and a floating table -- the
-// registered editing features (multi-cursor, line operations, paragraphs,
-// lists, links, case, breaks, Markdown copy/paste), and DOM components
-// around it in a DocumentView: a menu bar built from the registered
-// commands, the style editor with the font selector, a symbol picker, a
-// link preview and the key bindings editor. Both trees render from one
-// state. #state mirrors it as JSON (the e2e test reads it).
 package main
 
 import (
@@ -42,7 +32,6 @@ import (
 	"time"
 )
 
-// ui is the DOM side's state.
 type ui struct {
 	folder                       folderState // the folder on this computer, a save target
 	title                        string
@@ -60,43 +49,42 @@ type ui struct {
 	themeLib                     themeLibState
 	cfgx                         configExtra
 	collabConflicts              int
-	collabMerged, collabRejected int                        // the session's counts already announced (merged after offline, refused)
-	typing                       components.TypingAnnouncer // what is said of typing and of the caret (preferences), see typing.go
+	collabMerged, collabRejected int // the session's counts already announced (merged after offline, refused)
+	typing                       components.TypingAnnouncer
 	typingMsg                    string
 	typingN                      int
 	typingTimer                  bool
-	docLang                      string             // the document's language (a BCP 47 tag), "" for none
-	layout                       docfile.PageLayout // the header, footer and table of contents of the print layout
-	// the Images tab: the last message, and whether the first undescribed picture takes the focus
-	imageMsg   string
-	tableStyle tableStyleForm // the table style being defined (Styles tab)
-	refs       refsState      // the sources the document cites (References tab)
-	imgFind    imageFind      // the "find a picture online" form of the Pictures tab
-	mapHolder                 // the map form of the Pictures tab (map.go; nothing in a build without exp_map)
-	hold       struct {
+	docLang                      string // the document's language (a BCP 47 tag), "" for none
+	layout                       docfile.PageLayout
+	imageMsg                     string
+	tableStyle                   tableStyleForm // the table style being defined (Styles tab)
+	refs                         refsState      // the sources the document cites (References tab)
+	imgFind                      imageFind      // the "find a picture online" form of the Pictures tab
+	mapHolder
+	hold struct {
 		key   string
 		until time.Time
-	} // the object this person is changing, shown to the others as busy (locks.go)
-	flowNow         func() *canvas.TextFlow
-	redrawCanvas    func()
-	media           mediaForm    // the clip being typed in the Pictures tab and the caption drafts
-	formsHolder                  // the Forms tab's state (forms.go; nothing in a build without exp_forms)
-	elements        elementsForm // the equation being typed and the last message of the equation and code parts of the tab
+	}
+	flowNow      func() *canvas.TextFlow
+	redrawCanvas func()
+	media        mediaForm
+	formsHolder
+	elements        elementsForm
 	sugg            suggestState
 	ghost           ghostUI
-	stateRef        *State                 // the document state, for what the announcer needs of it
-	commentSig      string                 // how many comments, replies and resolved threads there were when last looked at
-	mentionsRead    map[string]bool        // mentions of the local person marked as read (canvas.MentionNotice.Key), kept in the browser (mentionread.go)
-	mentionsReadFor string                 // the title of the document mentionsRead was loaded for
-	mentionsTold    map[string]bool        // mentions already announced
-	commentsSeen    map[string]commentSeen // the comments already known (their replies and whether resolved), to find what others do
+	stateRef        *State // the document state, for what the announcer needs of it
+	commentSig      string
+	mentionsRead    map[string]bool
+	mentionsReadFor string          // the title of the document mentionsRead was loaded for
+	mentionsTold    map[string]bool // mentions already announced
+	commentsSeen    map[string]commentSeen
 	imageFocus      bool
 	imageFocusAt    time.Time
-	floating        func() []a11ycheck.Object // the floating pictures and tables of the page, for the Check tab
-	imageDraftBy    map[int]string            // who made a draft: "describe" for the add-on, absent for the colours and shape
-	imageDraft      map[int]string            // the draft descriptions made on this device, by picture (imagehint)
+	floating        func() []a11ycheck.Object
+	imageDraftBy    map[int]string
+	imageDraft      map[int]string // the draft descriptions made on this device, by picture (imagehint)
 	format          canvas.Format
-	caretFmt        canvas.Format // the format at the caret, for the toolbar buttons that are on or off
+	caretFmt        canvas.Format
 	catalog         []fonts.Font
 	open            bool
 	query           string
@@ -133,27 +121,26 @@ type ui struct {
 	find                findState
 	a11ySig             string
 	a11yCache           []components.A11yBlock
-	mirrorWriting       bool      // the copy is being given a selection by the page (not by a reader)
-	mirrorWroteAt       time.Time // when the page last wrote the copy's selection (its selectionchange comes later)
-	mirrorSig, mirrorAt string    // where the caret was in the copy when last drawn, and the key of the caret last followed
+	mirrorWriting       bool
+	mirrorWroteAt       time.Time
+	mirrorSig, mirrorAt string
 	announcement        string
-	mentionSaid         string // the mention announced in the current pass of noteCollab, kept so a message after it joins it
+	mentionSaid         string
 	spell               spellState
 	lang                langState
 	statsSig            string // the counts the status bar and Stats tab last showed
 	shareLink           string // the link the Share tab shows
 	people              *peopleState
-	shareToken          string     // a share link the person chose to use (#share=); sent with every request to the server
-	speech              *speechUI  // the Speech tab: phrases to record, and dictation through a recogniser the person names
-	usage               *privacyUI // the Privacy tab: anonymous usage counts, off unless the person opts in
+	shareToken          string
+	speech              *speechUI
+	usage               *privacyUI
 	sa                  searchAll
-	enc                 *encUI // the encrypted browser store: off unless the person turns it on
-	clearEditor         func() // empties the editor and what is derived from its text (Lock uses it)
+	enc                 *encUI
+	clearEditor         func()
 	message             string // the Import/Export tab's last message
 }
 
 func main() {
-	// gjHeap is the Go heap in use after a collection, in bytes: for the tests that measure what a setting saves.
 	js.Global().Set("gjHeap", js.FuncOf(func(js.Value, []js.Value) any {
 		runtime.GC()
 		var m runtime.MemStats
@@ -164,22 +151,16 @@ func main() {
 	state := State{Mode: canvas.ModeView, Pages: 3, Setup: components.DefaultPageSetup(), Source: sample, Note: "Floating note: click to edit, try (brackets and \"quotes\".", Styles: canvas.DefaultStyles(),
 		Comments: canvas.NewCommentSet(), Author: "you@example.com", Footnotes: canvas.NewFootnoteSet()}
 	u := &ui{title: "Quarterly report", menu: -1, tab: "format", drafts: map[string]string{}, replyNotes: map[string]string{}}
-	// The catalog has a font that is fetched from this site: picking it
-	// only adds it to the library; the file is downloaded (into the font
-	// store) the first time the text uses it.
 	origin := js.Global().Get("location").Get("origin").String()
 	repo := fonts.Multi(fonts.WebSafe(), fonts.Static("This site", fonts.Font{
 		Family: "Lazy Serif", Category: "serif",
 		Variants: []fonts.Variant{{Weight: 400, URL: origin + "/fonts/lazy-serif.ttf"}},
 	}))
 	u.catalog, _ = repo.Fonts(context.Background())
-	// Documents and fonts are kept in the browser (localStorage) or in
-	// memory; a docstore server in front of Postgres, SQLite or S3 is one
-	// more target (docstore.NewHTTPAdapter).
 	store := docstore.NewMemoryAdapter()
 	lib := &fonts.Library{Blobs: saver.Blobs(store)}
 	u.transfer = transfer.Default()
-	remote.Register(u.transfer, callFiles) // HTML, RTF, EPUB, PDF, OpenDocument, Word out; Word, HTML, OpenDocument and PDF in: done by the file worker
+	remote.Register(u.transfer, callFiles)
 
 	stage := canvas.NewStage(nil, 0, 0)
 	canvasEl, inputEl := doc.GetElementByID("stage"), doc.GetElementByID("input")
@@ -198,9 +179,6 @@ func main() {
 	var flow *canvas.TextFlow
 	var renderUI func()
 
-	// Lazy font download: a font picked in the selector is only Added;
-	// the stage tells us the first time the document really uses a cut,
-	// and only then is the file fetched into the store and loaded.
 	stage.OnFontUse = func(use canvas.FontUse) {
 		if !u.isStoredFont(use.Family) { // the person's own fonts are in the browser already
 			lib.UseAsync(use.Family, use.Weight, use.Italic)
@@ -266,16 +244,9 @@ func main() {
 	}
 
 	openDoc := func(d docfile.Document) {
-		// The text flow takes its items from props, and only when they differ from
-		// the last ones it was given: opening the same content again (a saved
-		// version after edits) would leave the edits in place. Render it empty
-		// first so the opened content is always applied.
 		state.Items, state.Source = nil, ""
 		renderCanvas()
 		state.Items = docfile.ToItems(d.Content)
-		// What the document says about itself replaces what the last one said: its
-		// styles (the defaults when it has none), comments and footnotes. The sets are
-		// filled in place; the page holds them for its whole life.
 		if len(d.Styles) > 0 {
 			state.Styles = docfile.ToStyles(d.Styles)
 		} else {
@@ -294,7 +265,6 @@ func main() {
 		u.loadTheme(d)
 		u.loadSources(d)
 		if f := d.SourceFormat(); f != "" {
-			// A text file opened as it is: a copy to read; the mode can be switched to change the copy.
 			state.Mode = canvas.ModeView
 			u.announce(T("textfmt.readonly", "Opened to read: this is a copy of a %s file. Switch the mode to change the copy; it is not saved back to the file.", f))
 			if p := d.SourceProblem(); p != "" {
@@ -307,8 +277,6 @@ func main() {
 		if flow != nil {
 			flow.Vertical = u.layout.Vertical
 		}
-		// The sheet the document was saved with comes back with it (a size that is none of the papers on
-		// offer, or one that was never set, leaves the sheet as it is).
 		if ps, ok := components.PageSetupOf(u.layout.Width, u.layout.Height, u.layout.Margins); ok {
 			if u.layout.Margins == ([4]float64{}) {
 				ps.Margins = state.Setup.Margins
@@ -321,13 +289,9 @@ func main() {
 		renderUI()
 	}
 	u.clearEditor = func() {
-		// Locking closes the document that is open: the editor, and everything that was worked out
-		// from its text (find results, spelling, outline and statistics caches, comments).
 		u.title = ""
 		openDoc(docfile.Document{})
 		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
-		// What was translated or found wrong in the text, and the replies typed to its comments, are
-		// the document's text too: not left on screen behind a lock.
 		u.lang.translated, u.lang.transText, u.lang.issues, u.lang.text = "", "", nil, ""
 		u.lang.selFrom, u.lang.selTo, u.lang.checked, u.lang.err = 0, 0, false, ""
 		u.drafts = map[string]string{}
@@ -345,21 +309,13 @@ func main() {
 		d.SetTableSchemes(canvas.CustomTableSchemes())
 		return d
 	}
-	// The browser target (localStorage) cannot write the catalog conditionally, so two
-	// tabs saving at the same moment can drop one catalog entry (Repair finds the
-	// orphaned file next time). The memory target, a local directory, SQLite and the HTTP
-	// store do write conditionally (docstore.ConditionalAdapter).
 	browserStore := docstore.NewBrowserAdapter("showcase:")
-	// The encrypted store lives in this browser, or, when the person chose that and confirmed the
-	// server, on the server (encscope.go); the browser's own storage is then a plain target.
 	var encRaw docstore.Adapter = browserStore
 	if _, srv, ok := chosenServerStore(); ok {
 		encRaw = srv
 	}
 	u.enc, err = newEnc(encRaw, func() { renderUI(); u.publishEncState() })
 	if err != nil {
-		// A key list that cannot be read is not guessed at: the page starts with encryption off
-		// and says why in the Save tab.
 		u.enc, _ = newEncOff(encRaw, func() { renderUI(); u.publishEncState() }, err)
 	}
 	targets := []saver.Target{
@@ -381,9 +337,6 @@ func main() {
 		renderUI()
 	}
 	u.saver = saver.NewSession(&saver.Saver{Targets: targets}, currentDoc, openDoc)
-	// Encryption is the page's own: the saver asks it before a document is made confidential and
-	// to re-key a document's files when its level changes, and it seals confidential documents
-	// into packs for the owner's keys while unlocked.
 	u.saver.Saver.ConfidentialCheck, u.saver.Saver.Rekey = u.enc.store.Check, u.enc.store.Rekey
 	u.saver.Author = state.Author // recorded as who saved each version
 	u.saver.PackKeys = u.enc.store.PackKeys
@@ -391,8 +344,8 @@ func main() {
 	u.enc.dir.ask = u.saver.Asker.AskWith
 	u.enc.dir.render = u.enc.render
 	u.enc.dir.changed = u.syncServerTarget
-	u.applyServerTarget() // a server confirmed on an earlier visit is a target from the start
-	u.enc.dir.loadOwner() // now that the page can be drawn again, the owner key kept out of reach can be loaded
+	u.applyServerTarget()
+	u.enc.dir.loadOwner()
 	u.watchEncConfig()
 	u.saver.ProtectionAvailable = func(target string) bool { return target == encTarget && u.enc.store.Enabled() }
 	u.saver.OnChange = func() {
@@ -421,7 +374,7 @@ func main() {
 	u.console = newConsole(u, func() { renderUI() })
 	u.pub = newPublic(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
-	state.Comments.Roster = u.people // comments name people by handle, never by an address that is not theirs to show
+	state.Comments.Roster = u.people
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
 	u.people.remote = func() (*docstore.HTTPAdapter, string, bool) {
 		if encTarget == "server" || u.saver.Target() != serverTarget || u.saver.ID() == "" {
@@ -434,7 +387,7 @@ func main() {
 		a, ok := t.Adapter.(*docstore.HTTPAdapter)
 		return a, u.saver.ID(), ok
 	}
-	if tok := takeFragment(); tok != "" { // a share link in the address is offered in the People tab, never applied by itself
+	if tok := takeFragment(); tok != "" {
 		u.people.links.incoming, u.tab = tok, "people"
 	}
 	u.speech = newSpeech(func() { renderUI() })
@@ -539,8 +492,6 @@ func main() {
 			formatToolbar(&state, u.caretFmt, cmds, keymap, mac, run),
 			xango.El("button", []xango.Attr{xango.A("id", "mode"), xango.A("type", "button"), xango.A("class", "gj-keybindings-button"),
 				xango.On("click", func(xango.Event) { toggleMode() })}, xango.Text("Mode: "+state.Mode.String()+" (click to switch)")),
-			// the tabs of the side panel: one row for the keyboard (Tab enters it once, the arrow keys move
-			// along it), laid out as before (display:contents)
 			xango.El("div", []xango.Attr{xango.A("role", "tablist"), xango.A("aria-label", components.Translate("tab.list", "Side panel")), xango.A("style", "display:contents")},
 				tabButton(u, "format", "Format", renderUI), tabButton(u, "styles", "Styles", renderUI), tabButton(u, "symbols", "Symbols", renderUI), tabButton(u, "keys", "Keys", renderUI),
 				tabButton(u, "comments", "Comments", renderUI), tabButton(u, "review", "Review", renderUI), tabButton(u, "outline", "Outline", renderUI), tabButton(u, "check", "Check", renderUI), tabButton(u, "images", "Pictures", renderUI), tabButton(u, "refs", "References", renderUI), formsTab(u, "Forms", renderUI), tabButton(u, "voices", "Reader voices", renderUI), tabButton(u, "addons", "Add-ons", renderUI), tabButton(u, "scripts", "Scripts", renderUI),
@@ -705,7 +656,6 @@ func main() {
 			for _, e := range u.transfer.Exporters() {
 				exports = append(exports, components.SaverChoice{Name: e.Format().Name, Label: e.Format().Label})
 			}
-			// What the chosen format loses is shown above the buttons, before anything is exported.
 			fidelity := components.FidelityPanel(u.fidelity.props(currentDoc(), exports, func(name string) {
 				u.fidelity.format = name
 				renderUI()
@@ -714,8 +664,6 @@ func main() {
 				fidelity,
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
-					// The formats are done by the file worker, which a request waits for: both run in a goroutine
-					// of their own, never in the handler JavaScript called.
 					OnExport: func(name string) {
 						u.fidelity.format = name
 						doc := currentDoc()
@@ -739,7 +687,7 @@ func main() {
 					OnImport: func(name string) {
 						accept := u.transfer.Accept()
 						if name == "anytext" || name == "htmlsource" {
-							accept = "" // chosen by name, whatever the file is called (experimental text formats)
+							accept = ""
 						}
 						transfer.PickFile(accept, func(file string, data []byte, err error) {
 							go func() {
@@ -753,7 +701,7 @@ func main() {
 									return
 								}
 								u.message = "Imported " + file
-								u.saver.Detach() // what was imported is not the saved document that was open
+								u.saver.Detach()
 								openDoc(d)
 								u.fidelity.noteImport(name, file, data) // after openDoc, which shows the report the document came with
 							}()
@@ -851,8 +799,6 @@ func main() {
 		if u.live != nil {
 			topRow = livePresence(u, func() *canvas.TextFlow { return flow }, renderUI)
 		}
-		// The side panel's own heading, so that the titles inside it (levels 3 and 4) follow the page's
-		// level 2 without a skip.
 		tabID := u.tab
 		if tabID == "" {
 			tabID = "format"
@@ -895,7 +841,6 @@ func main() {
 		labelCanvas(canvasEl.Element, inputEl.Element)
 		if domRoot == nil {
 			domRoot = domrt.Mount(doc.GetElementByID("app").Element, node)
-			// The canvas was made by the page; put it where the layout wants it.
 			doc.GetElementByID("canvas-host").Call("appendChild", canvasEl.Element)
 			doc.GetElementByID("canvas-host").Call("appendChild", inputEl.Element)
 		} else {
@@ -905,7 +850,6 @@ func main() {
 
 	stage.OnDraw = func() {
 		u.noteTyping(func() *canvas.TextFlow { return flow }, renderUI)
-		// What the canvas shows of the selection feeds the style editor.
 		if flow != nil && flow.Editing() { // the toolbar's bold, italic and the like follow the caret
 			cf := flow.CaretFormatLast()
 			if flow.HasSelection() { // over a selection, what all of it has in common
@@ -1024,7 +968,6 @@ func main() {
 			renderUI()
 		}
 		if u.live != nil && state.Comments != nil {
-			// comments others add arrive with the document, not with the session's state
 			if sig := commentSignature(state.Comments); sig != u.commentSig {
 				u.commentSig = sig
 				u.noteCollab(renderUI)
@@ -1032,7 +975,7 @@ func main() {
 			}
 		}
 		if sig := u.mirrorSignature(flow); sig != u.mirrorSig {
-			u.mirrorSig = sig // the caret is in another block, or the selection or the comments changed
+			u.mirrorSig = sig
 			renderUI()
 		}
 		if flow != nil {
@@ -1160,15 +1103,12 @@ func main() {
 	go u.pub.openLink(func() bool { return flow != nil })
 	go openSharedSelection(u, func() *canvas.TextFlow { return flow }, func() *canvas.ScrollView { return root.Find(cxango.TagScrollView, 0).(*canvas.ScrollView) }, redraw, renderUI)
 	go func() {
-		// Ask the browser to keep what is saved in it (it may delete a site's storage when
-		// the disk is short); the answer is in #state.
 		u.persisted = docstore.RequestPersistence()
 		renderUI()
 	}()
 	go func() {
 		ctx := context.Background()
 		_ = u.saver.Refresh(ctx)
-		// A page opened on /f/{folder} shows that folder.
 		if _, folder := share.SplitFolderPath(js.Global().Get("location").Get("pathname").String()); folder != "" {
 			_ = u.saver.OpenFolder(ctx, folder)
 		}

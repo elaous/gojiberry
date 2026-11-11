@@ -15,16 +15,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Diagrams (the diagram add-on, window.addons.diagram): a flowchart or a map drawn from a description in the add-on's own
-// notation:
-//
-//	render({kind: "flowchart" | "map", source, language}) -> Promise<{svg: string}>
-//
-// The page shows the drawing, asks for a description in words (a drawing without one is refused, as for an equation) and
-// puts it in the document as a picture; the source is kept as the picture's long description, so the diagram can be
-// written again from it and is also read by whoever cannot see the drawing.
-
-// maxSVG is the largest drawing taken from the add-on, in bytes.
 const maxSVG = 2 << 20
 
 var diagramState struct {
@@ -35,12 +25,10 @@ var diagramState struct {
 	busy    bool
 	msg     string
 	focus   bool
-	drawnBy string // the source and kind the preview was made from: a changed source needs drawing again
-	// editing is the picture in the document being drawn again; the new drawing then takes its place.
+	drawnBy string
 	editing *canvas.Image
 }
 
-// editDiagram loads the description of a diagram picture of the document into the form, to be changed and drawn again.
 func editDiagram(im *canvas.Image, renderUI func()) {
 	d := &diagramState
 	d.editing, d.kind, d.source, d.alt, d.svg, d.drawnBy = im, im.Diagram, im.LongDesc, im.Alt, "", ""
@@ -50,7 +38,6 @@ func editDiagram(im *canvas.Image, renderUI func()) {
 
 func diagramAddon() bool { return hasAddon("diagram", "render") }
 
-// diagramKindLabel names a kind. The ids are spelled out so that the translation check sees them.
 func diagramKindLabel(kind string) string {
 	if kind == "map" {
 		return T("diagram.kindMap", "Map")
@@ -58,7 +45,6 @@ func diagramKindLabel(kind string) string {
 	return T("diagram.kindFlow", "Flowchart")
 }
 
-// validSVG says the add-on's answer looks like a drawing.
 func validSVG(s string) bool {
 	t := strings.TrimSpace(s)
 	if len(t) == 0 || len(t) > maxSVG {
@@ -72,7 +58,6 @@ func validSVG(s string) bool {
 	return strings.HasPrefix(t, "<svg")
 }
 
-// drawDiagram asks the add-on for the drawing of the source.
 func drawDiagram(renderUI func()) {
 	d := &diagramState
 	if strings.TrimSpace(d.source) == "" {
@@ -112,7 +97,6 @@ func drawDiagram(renderUI func()) {
 	}()
 }
 
-// diagramSection is the part of the Pictures tab for diagrams, shown when the page has the add-on.
 func diagramSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, renderUI func()) []xango.Node {
 	if !diagramAddon() {
 		return nil
@@ -184,7 +168,6 @@ func diagramSection(u *ui, state *State, flow func() *canvas.TextFlow, redraw, r
 	return nodes
 }
 
-// replaceDiagram swaps the drawing of a diagram picture of the document for a new one, keeping its place, width and legend.
 func replaceDiagram(im *canvas.Image, svg []byte, alt, source, kind string, fl *canvas.TextFlow, redraw, renderUI func()) {
 	url := "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(svg)
 	convertToPNG(url, 1024, func(png string, ok bool) {
@@ -193,7 +176,7 @@ func replaceDiagram(im *canvas.Image, svg []byte, alt, source, kind string, fl *
 		}
 		canvas.LoadImage(url, func(src *canvas.HTMLImage) {
 			if w, h := src.Size(); w > 0 && h > 0 && im.W > 0 {
-				im.H = im.W * h / w // the new drawing may have another shape: the width stays, the height follows
+				im.H = im.W * h / w
 			}
 			im.Src, im.Alt, im.LongDesc, im.Diagram = src, alt, source, kind
 			fl.Touch()
@@ -206,7 +189,6 @@ func replaceDiagram(im *canvas.Image, svg []byte, alt, source, kind string, fl *
 	})
 }
 
-// diagramEditControl is the button on a diagram picture that loads its description back into the diagram form.
 func diagramEditControl(i int, im *canvas.Image, canEdit bool, renderUI func()) xango.Node {
 	if im.Diagram == "" || !diagramAddon() {
 		return xango.Frag()

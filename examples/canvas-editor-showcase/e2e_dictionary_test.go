@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/spell/dictserver"
 )
 
-// TestSpellingLoadsAnotherLanguagesDictionaryOnDemand serves a German dictionary (with a compound flag) from a
-// dictionary server, chooses it in the Spelling tab and checks a compound word that English would flag.
 func TestSpellingLoadsAnotherLanguagesDictionaryOnDemand(t *testing.T) {
 	fsys := fstest.MapFS{
 		"de_DE/de_DE.aff": {Data: []byte("SET UTF-8\nTRY enisrtalhdu\nCOMPOUNDFLAG Z\nCOMPOUNDMIN 3\n")},

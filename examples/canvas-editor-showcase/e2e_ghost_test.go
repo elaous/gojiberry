@@ -10,21 +10,17 @@ import (
 	"github.com/elaous/gojiberry/internal/screenreader"
 )
 
-// ghostText is what the faint suggestion shows, "" when it is hidden.
 func ghostText(d *e2etest.Tab) string { return d.State().Str("ghost") }
 
-// openGhost opens the editor with the given preferences in Edit mode, the caret on an empty line of its
-// own (the ghost text shows only at the end of a line), with a screen reader watching the live regions.
 func openGhost(t *testing.T, prefs string) (*e2etest.Tab, *screenreader.Reader) {
 	t.Helper()
 	d, sr := openTyping(t, prefs)
-	d.Press("Enter") // an empty line above the paragraph: the caret ends its line there
+	d.Press("Enter")
 	d.Press("ArrowUp")
 	d.Type("zebra zebra zeppelin ze")
 	return d, sr
 }
 
-// The ghost text is off unless the person chose it: nothing is drawn, and Tab does what it always did.
 func TestGhostTextIsOffByDefault(t *testing.T) {
 	d, _ := openGhost(t, "")
 	d.Sleep(300)
@@ -32,8 +28,6 @@ func TestGhostTextIsOffByDefault(t *testing.T) {
 	d.NoErrors()
 }
 
-// With the preference on, the rest of the best word is shown after the caret as a picture the
-// accessibility tree does not contain; only Tab puts it in, the other keys never do.
 func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 	d, sr := openGhost(t, `{ghost:'on'}`)
 	d.Wait("s.ghost !== ''")
@@ -47,7 +41,6 @@ func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 	before := d.State().Str("text")
 	d.OK(!strings.Contains(before, "zeppelin zebra"), "not inserted yet")
 
-	// Keys that are not Tab leave the text alone: the arrow keys and Enter (which starts a new line).
 	d.Press("ArrowLeft")
 	d.Press("ArrowRight")
 	d.OK(ghostText(d) == "" || ghostText(d) == "bra", "arrows may hide it, never insert it")
@@ -66,7 +59,6 @@ func TestGhostTextIsAcceptedByTabAlone(t *testing.T) {
 	d.NoErrors()
 }
 
-// Escape hides the suggestion until the next letter; Enter does not insert it.
 func TestGhostTextEscapeAndEnter(t *testing.T) {
 	d, _ := openGhost(t, `{ghost:'on'}`)
 	d.Wait("s.ghost !== ''")
@@ -85,7 +77,6 @@ func TestGhostTextEscapeAndEnter(t *testing.T) {
 	d.NoErrors()
 }
 
-// The suggestion is announced once, politely, a moment after typing stops, with the key that accepts it.
 func TestGhostTextIsAnnouncedPolitely(t *testing.T) {
 	d, sr := openGhost(t, `{ghost:'on'}`)
 	got := said(t, d, sr, "Suggestion: zebra. Press Tab to accept.")
@@ -100,7 +91,6 @@ func TestGhostTextIsAnnouncedPolitely(t *testing.T) {
 	d.NoErrors()
 }
 
-// In the middle of a line it is a tag under the caret, not text over the words that follow; the canvas draws it.
 func TestGhostTextInTheMiddleOfALine(t *testing.T) {
 	d, _ := openGhost(t, `{ghost:'on'}`)
 	d.Wait("s.ghost !== ''")

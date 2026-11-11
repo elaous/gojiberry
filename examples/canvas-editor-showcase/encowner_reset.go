@@ -11,15 +11,8 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Replacing the owner key. The holder of the key rotates it: the old key signs the new one in, and
-// from then on only the new one publishes. A person who lost the key asks for a reset instead: the
-// directory waits (so that the real holder, if any, can cancel) and then takes a key made here. The
-// key made for a reset is held apart from the main one until the reset is completed.
-
-// pendingID is where the key made for a reset is kept: beside the main one, under another name.
 func (d *dirUI) pendingID() string { return d.url + "#reset" }
 
-// keepPending keeps the key made for a reset until it is completed or dropped.
 func (d *dirUI) keepPending(email string, signer dirclient.OwnerSigner, plain bool, k dirclient.OwnerKey) {
 	if !plain {
 		if w, ok := signer.(*webKey); ok && webOwnerSave(d.pendingID(), email, w) != nil {
@@ -36,7 +29,6 @@ func (d *dirUI) keepPending(email string, signer dirclient.OwnerSigner, plain bo
 	d.owner.pending, d.owner.pendingText = signer, plain
 }
 
-// loadPending reads the text copy of a pending key (the browser-kept one is read in the background).
 func (d *dirUI) loadPending() {
 	d.owner.pending, d.owner.pendingText, d.owner.pendingSec = nil, false, ""
 	if raw := lsGet(ownerKeyPrefix + d.pendingID()); raw != "" {
@@ -49,7 +41,6 @@ func (d *dirUI) loadPending() {
 	}
 }
 
-// dropPending forgets the key made for a reset.
 func (d *dirUI) dropPending() {
 	if d.owner.pending == nil && d.owner.pendingSec == "" {
 		return
@@ -59,7 +50,6 @@ func (d *dirUI) dropPending() {
 	d.owner.pending, d.owner.pendingText, d.owner.pendingSec = nil, false, ""
 }
 
-// rotateOwner replaces the held owner key with a new one, signed in by the old.
 func (d *dirUI) rotateOwner(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -81,7 +71,6 @@ func (d *dirUI) rotateOwner(ctx context.Context) error {
 	return d.finish(ctx, T("dir.owner.rotated", "Owner key replaced for %s. The old key no longer publishes. Back the new one up now.", me))
 }
 
-// requestReset asks the directory to replace the owner key of the address by one made here, after its wait.
 func (d *dirUI) requestReset(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -103,7 +92,6 @@ func (d *dirUI) requestReset(ctx context.Context) error {
 	return d.finish(ctx, T("dir.owner.resetAsked", "Reset requested for %s. Back up the new key now; once the wait is over, complete the reset here.", me))
 }
 
-// completeReset makes the key made at the request the owner key, once the directory's wait is over.
 func (d *dirUI) completeReset(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -117,7 +105,6 @@ func (d *dirUI) completeReset(ctx context.Context) error {
 	signer, plain, text := d.owner.pending, d.owner.pendingText, d.owner.pendingSec
 	if w, ok := signer.(*webKey); ok && !plain {
 		if webOwnerSave(d.url, me, w) != nil {
-			// IndexedDB refused: the backup text is then the key
 			if k, err := dirclient.ImportOwnerKey(text); err == nil {
 				signer, plain = k, true
 			}
@@ -140,7 +127,6 @@ func (d *dirUI) completeReset(ctx context.Context) error {
 	return d.finish(ctx, T("dir.owner.resetDone", "Owner key reset for %s: this browser holds the new key.", me))
 }
 
-// cancelReset stops a waiting reset, with the owner key this browser holds.
 func (d *dirUI) cancelReset(ctx context.Context) error {
 	me, err := d.dir.Me(ctx)
 	if err != nil {
@@ -155,7 +141,6 @@ func (d *dirUI) cancelReset(ctx context.Context) error {
 	return d.finish(ctx, T("dir.owner.resetCancelled", "Reset cancelled for %s.", me))
 }
 
-// confirmStep asks before a step that cannot be taken back, then runs it.
 func (d *dirUI) confirmStep(e *encUI, title, text string, run func(context.Context) error) {
 	if d.ask == nil {
 		return
@@ -164,7 +149,6 @@ func (d *dirUI) confirmStep(e *encUI, title, text string, run func(context.Conte
 	e.render()
 }
 
-// replacePanel is the buttons and notes for replacing the owner key; row gets the buttons.
 func (d *dirUI) replacePanel(e *encUI, busy bool) (row, notes []xango.Node) {
 	switch {
 	case d.owner.pending != nil:
@@ -200,7 +184,6 @@ func (d *dirUI) replacePanel(e *encUI, busy bool) (row, notes []xango.Node) {
 	return row, notes
 }
 
-// finish re-reads the address's state and then says what was done, unless reading it failed.
 func (d *dirUI) finish(ctx context.Context, done string) error {
 	err := d.checkOwner(ctx)
 	if !d.owner.isErr {

@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The About tab carries the credit the licence asks for and the source link the AGPL asks a network service to offer.
 func TestAboutTabShowsTheCreditAndTheSourceLink(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button[data-tab="about"]`)

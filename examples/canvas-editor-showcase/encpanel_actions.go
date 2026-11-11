@@ -13,8 +13,6 @@ import (
 	"strings"
 )
 
-// passkeyFailed turns a failed ceremony into what the person is told. A closed prompt is a notice,
-// not silence and not an alarm; the other failures say what happened and what to do.
 func (e *encUI) passkeyFailed(err error) error {
 	switch {
 	case errors.Is(err, client.ErrTimedOut):
@@ -39,10 +37,8 @@ func (e *encUI) passkeyFailed(err error) error {
 	return tErr(err)
 }
 
-// run is pending.Run with the page's errors in the interface's language and handled stops dropped.
 func (e *encUI) run(f func(ctx context.Context) error) { e.pending.Run(e.wrapDo(f)) }
 
-// wrapDo is run for an operation a component calls itself (it runs it under e.pending).
 func (e *encUI) wrapDo(f func(ctx context.Context) error) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		err := f(ctx)
@@ -56,11 +52,6 @@ func (e *encUI) wrapDo(f func(ctx context.Context) error) func(ctx context.Conte
 	}
 }
 
-// --- the passkey ceremony ---
-
-// makePasskey makes (or, after a derivation that failed, reuses) this device's passkey and derives
-// the owner key from it. A passkey that was made and could not be used yet is remembered
-// (pendingCred) so retrying does not make another one; Forget drops it.
 func (e *encUI) makePasskey(ctx context.Context) (encstore.NewKey, error) {
 	e.notice = ""
 	if e.pendingCred == "" {
@@ -75,7 +66,7 @@ func (e *encUI) makePasskey(ctx context.Context) (encstore.NewKey, error) {
 		return encstore.NewKey{}, e.passkeyFailed(err)
 	}
 	k, err := encstore.NewPasskeyKey(secret, T("enc.passkeyLabel", "My passkey"))
-	clear(secret) // the secret is the root of the key: do not keep it around
+	clear(secret)
 	if err != nil {
 		return encstore.NewKey{}, err
 	}
@@ -92,10 +83,6 @@ func (e *encUI) forgetPasskey() {
 	e.render()
 }
 
-// --- unlock and lock ---
-
-// afterUnlock shows the real names of the confidential documents and folders now that they can
-// be read, on the target in use.
 func (u *ui) afterUnlock(ctx context.Context) error {
 	if t, _ := u.saver.Where(); t != encTarget {
 		return nil
@@ -106,7 +93,7 @@ func (u *ui) afterUnlock(ctx context.Context) error {
 	}
 	for _, en := range append(list, trashed...) {
 		if en.Protection == saver.ProtectionE2EE {
-			_ = u.saver.Reveal(ctx, en.ID) // best effort: one that no key opens stays under its placeholder
+			_ = u.saver.Reveal(ctx, en.ID)
 		}
 	}
 	for _, f := range folders {
@@ -117,9 +104,6 @@ func (u *ui) afterUnlock(ctx context.Context) error {
 	return u.saver.Refresh(ctx)
 }
 
-// lockNow forgets the keys and everything on screen that they opened: the document in the editor
-// and what the session knows of it (its name, ID, tag filter, revealed names), the lists' real names
-// and what the People tab showed.
 func (u *ui) lockNow() {
 	e := u.enc
 	e.store.Lock()
@@ -132,7 +116,6 @@ func (u *ui) lockNow() {
 	}
 }
 
-// hasUnsavedEdits says whether the document in the editor holds changes that are not stored.
 func (u *ui) hasUnsavedEdits() bool {
 	switch u.saver.SaveState() {
 	case saver.SaveUnsaved, saver.SaveSaving, saver.SaveFailed:
@@ -141,13 +124,11 @@ func (u *ui) hasUnsavedEdits() bool {
 	return false
 }
 
-// lockDiscard locks without saving: the one way to drop unsaved changes on purpose.
 func (u *ui) lockDiscard() {
 	u.lockNow()
 	u.enc.run(u.saver.Refresh)
 }
 
-// askLockDiscard asks before lockDiscard: what was changed since the last save is lost.
 func (u *ui) askLockDiscard() {
 	u.saver.Asker.AskWith(T("enc.lockDiscard", "Lock and discard unsaved changes"),
 		T("enc.lockDiscardConfirm", "Discard the changes you have not saved, close the document and lock? What you changed since the last save is lost and cannot be brought back."),
@@ -155,8 +136,6 @@ func (u *ui) askLockDiscard() {
 	u.rerender()
 }
 
-// encLock locks the store. With edits that are not saved it asks first (Save and lock): locking
-// closes the document, and would drop them.
 func (u *ui) encLock() {
 	e := u.enc
 	if u.hasUnsavedEdits() {
@@ -209,14 +188,14 @@ func (u *ui) encUnlockSSH() {
 	e := u.enc
 	transfer.PickFile("", func(_ string, data []byte, err error) {
 		e.run(func(ctx context.Context) error {
-			defer clear(data) // the private key file: dropped on every path (UnlockSSH clears it too); the run is asynchronous, so it is dropped here, not in the callback
+			defer clear(data)
 			if err != nil {
 				return err
 			}
 			if err := e.store.UnlockSSH(data); err != nil {
 				var fu *encstore.FirstUseError
 				if errors.As(err, &fu) {
-					e.firstUse = fu // nothing is unlocked: the person is asked to check the list first
+					e.firstUse = fu
 					return nil
 				}
 				return err
@@ -227,11 +206,6 @@ func (u *ui) encUnlockSSH() {
 	})
 }
 
-// --- turning encryption on ---
-
-// encEnable is the setup form's button. With a recovery key chosen it only makes the key and shows
-// its secret (nothing is committed); the person confirms they saved it, and encCommit does the
-// rest. Without one it commits at once.
 func (u *ui) encEnable() {
 	e := u.enc
 	e.notice = ""
@@ -248,8 +222,6 @@ func (u *ui) encEnable() {
 	u.encCommit()
 }
 
-// encCommit makes the passkey (if chosen), takes the SSH key, and turns encryption on with them and
-// the recovery key whose secret was confirmed.
 func (u *ui) encCommit() {
 	e := u.enc
 	want := struct {
@@ -268,7 +240,7 @@ func (u *ui) encCommit() {
 		if e.prep != nil {
 			rk := e.prep.key
 			rk.SecretSaved = e.prep.acked
-			rk.Forget = len(keys) > 0 // the passkey unlocks; the recovery key is for the day it is lost
+			rk.Forget = len(keys) > 0
 			keys = append(keys, rk)
 		}
 		if want.ssh != "" {
@@ -282,7 +254,7 @@ func (u *ui) encCommit() {
 			return encstore.ErrNoKeys
 		}
 		if err := e.store.Enable(ctx, encstore.Options{AcceptPasskeyOnly: e.passkeyAck}, keys...); err != nil {
-			return err // the passkey (if made) stays pending: retrying does not make another
+			return err
 		}
 		e.setup, e.sshPub, e.prep, e.pendingCred, e.passkeyAck, e.noPRF = false, "", nil, "", false, false
 		e.sharedFor = ""
@@ -291,9 +263,6 @@ func (u *ui) encCommit() {
 	})
 }
 
-// --- turning it off, erasing, recovering ---
-
-// encDisable turns encryption off: the store must be unlocked and have nothing confidential.
 func (u *ui) encDisable() {
 	e := u.enc
 	e.run(func(ctx context.Context) error {
@@ -326,7 +295,6 @@ func (u *ui) encDisable() {
 	})
 }
 
-// encErase deletes the encrypted store's documents and forgets its keys.
 func (u *ui) encErase() {
 	e := u.enc
 	e.run(func(ctx context.Context) error {
@@ -344,7 +312,6 @@ func (u *ui) encErase() {
 	})
 }
 
-// encRecover finishes or undoes a change that was cut short.
 func (u *ui) encRecover(finish bool) {
 	e := u.enc
 	e.run(func(ctx context.Context) error {

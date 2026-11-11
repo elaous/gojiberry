@@ -8,9 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestPeoplePanel drives the People tab: the owner is listed, someone can be
-// invited with a role, their role changed and their access removed, and a bad
-// address is refused with the error shown.
 func TestPeoplePanel(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Click(`button[data-tab="people"]`)
@@ -33,8 +30,6 @@ func TestPeoplePanel(t *testing.T) {
 	d.WaitFor("an error", "document.querySelector('.gj-doc-error')")
 	d.OK(d.Count(".gj-people-item") == 2, "the owner's access cannot be changed: "+d.Text(".gj-doc-error"))
 
-	// Addresses are trimmed and case-folded: a padded, capitalised repeat is the same
-	// person, not a second one; a blank address cannot be invited.
 	d.Fill(".gj-people-invite-id", "  Bo@Example.COM ")
 	d.WaitFor("the invite button to enable", `!document.querySelector('.gj-people-invite').disabled`)
 	d.Click(".gj-people-invite")

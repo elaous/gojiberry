@@ -9,9 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A form field is added from the bar of kinds, given a label and a pattern, filled in with the problem said as it is
-// typed, locked by the owner (its pen goes), and emptied by "Clear form fields"; the exports carry the label and the
-// value.
 func TestFormFieldsAddFillLockAndClear(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

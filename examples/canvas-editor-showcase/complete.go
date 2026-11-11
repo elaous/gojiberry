@@ -14,40 +14,27 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// Word suggestions at the caret (roadmap 79). Ctrl/Cmd+Space opens the list of words that continue
-// the one being typed; it is built from the document's own words, most used and most recent first.
-// The list never takes the focus: the input element keeps it, is marked as the combobox and names the
-// highlighted option, and while the list is open Up, Down, Home, End, Tab, Enter and Escape are for
-// the list. Typing goes on and narrows the list; leaving the word closes it. Nothing is sent
-// anywhere, and nothing opens while an input method is composing.
-
-// suggestVocabulary is offered besides the document's own words. The text flow has no completion popup
-// of its own here (its canvas-drawn one is not reachable by a screen reader): this list is the only one.
 var suggestVocabulary = []string{"Gojiberry", "canvas", "feature", "paragraph"}
 
 type suggestState struct {
-	list components.SuggestState
-	from int // where the word being completed starts
-	x, y float64
-	flow func() *canvas.TextFlow
-	// reopen opens the list at the caret (set in main); quiet says nothing when there is nothing to offer.
+	list   components.SuggestState
+	from   int // where the word being completed starts
+	x, y   float64
+	flow   func() *canvas.TextFlow
 	reopen func(quiet bool)
-	gen    int // bumped by every key: a delayed automatic open is for the key it was asked after, and only that one
+	gen    int
 }
 
 func (u *ui) suggestionsNode(renderUI func()) xango.Node {
-	// A host element that is always there keeps the page's structure the same whether or not the list
-	// is open (the canvas and its input, beside it, must never be rebuilt: that would drop the focus).
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-suggest-host")}, components.Suggestions(components.SuggestionsProps{
 		ID: "suggestions", State: u.sugg.list, X: u.sugg.x, Y: u.sugg.y,
 		OnPick: func(i int) { u.sugg.list.Active = i; u.acceptSuggestion(nil, renderUI) },
 	}))
 }
 
-// openSuggestions builds the list for the word before the caret and shows it there.
 func (u *ui) openSuggestions(flow *canvas.TextFlow, stage *canvas.Stage, canvasEl js.Value, quiet bool, renderUI func()) {
 	if flow == nil || !u.refreshSuggestions(flow) {
-		if !quiet { // asked for with the keyboard: say there is nothing; opened by itself: say nothing
+		if !quiet {
 			u.announce(T("suggest.none", "No suggestions"))
 			renderUI()
 		}
@@ -63,7 +50,6 @@ func (u *ui) openSuggestions(flow *canvas.TextFlow, stage *canvas.Stage, canvasE
 	renderUI()
 }
 
-// refreshSuggestions recomputes the list for the caret; false when there is nothing to offer.
 func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	text := []rune(flow.EditText())
 	caret := flow.Cursors()[0].Caret
@@ -77,10 +63,6 @@ func (u *ui) refreshSuggestions(flow *canvas.TextFlow) bool {
 	return u.sugg.list.Open
 }
 
-// completions are the words that continue prefix (the word before the caret in text): the document's
-// own words, then the vocabulary of the document's language (German, French and Spanish have a small
-// list of common words, package wordlist), then the spelling dictionary's and the person's own when
-// spell check is on. Nothing leaves the page.
 func (u *ui) completions(text []rune, caret int, prefix string, max int, lang string) []string {
 	_, from := complete.PrefixAt(text, caret)
 	var ix complete.Index
@@ -103,7 +85,6 @@ func (u *ui) completions(text []rune, caret int, prefix string, max int, lang st
 	return words
 }
 
-// acceptSuggestion puts the highlighted word in place of the word being typed.
 func (u *ui) acceptSuggestion(flow *canvas.TextFlow, renderUI func()) {
 	word := u.sugg.list.Selected()
 	if word == "" {
@@ -129,7 +110,6 @@ func (u *ui) closeSuggestions() {
 	syncComboboxAttrs(false, u.sugg.list)
 }
 
-// syncComboboxAttrs marks the input element as the combobox the list belongs to, or clears it.
 func syncComboboxAttrs(open bool, s components.SuggestState) {
 	in := js.Global().Get("document").Call("getElementById", "input")
 	if in.IsNull() {
@@ -150,8 +130,6 @@ func syncComboboxAttrs(open bool, s components.SuggestState) {
 	in.Call("setAttribute", "aria-activedescendant", "suggestions-opt-"+strconv.Itoa(s.Active))
 }
 
-// watchSuggestionKeys gives the open list its keys before the canvas sees them, and narrows or closes
-// it as the caret moves.
 func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redraw, renderUI func()) {
 	u.sugg.flow = flow
 	in.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -186,15 +164,11 @@ func (u *ui) watchSuggestionKeys(in js.Value, flow func() *canvas.TextFlow, redr
 		renderUI()
 		return nil
 	}), true)
-	// After the key has been applied: a longer prefix narrows the list, leaving the word closes it; with
-	// the "suggest as I type" preference the list opens by itself after a short pause in typing.
 	in.Call("addEventListener", "keyup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if !u.sugg.list.Open {
 			if k := args[0].Get("key").String(); ghostOn() && u.ghost.refresh != nil && !args[0].Get("isComposing").Truthy() && (len(k) == 1 || k == "Backspace" || k == "Delete") {
 				u.ghost.refresh()
 			}
-			// "After a pause in typing": every key restarts the wait, and a key that is not a letter (an arrow, say)
-			// cancels it, so the list never opens for a word the caret has left.
 			u.sugg.gen++
 			if gen := u.sugg.gen; curPrefs.Suggest == "auto" && u.sugg.reopen != nil && len(args[0].Get("key").String()) == 1 && !args[0].Get("isComposing").Truthy() {
 				time.AfterFunc(600*time.Millisecond, func() {

@@ -15,10 +15,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The attacks of the review of PR #81 against the page, made the way someone who can write its
-// localStorage would make them.
-
-// editConfig changes the stored key configuration with a script (c is the parsed config).
 func editConfig(d *e2etest.Tab, body string) {
 	d.Eval(`(() => {
 		const c = JSON.parse(localStorage.getItem('showcase-enc:config'));
@@ -28,8 +24,6 @@ func editConfig(d *e2etest.Tab, body string) {
 	})()`, nil)
 }
 
-// docsText is what the page stored for its documents (not the key configuration, which a forged
-// journal is written into).
 func docsText(d *e2etest.Tab) string {
 	return d.Str(`Object.keys(localStorage).filter(k => !k.startsWith('showcase-enc:')).sort().map(k => k + '\n' + localStorage.getItem(k)).join('\n')`)
 }
@@ -40,9 +34,6 @@ func reloadToSave(d *e2etest.Tab) {
 	d.WaitSelector("#enc-panel")
 }
 
-// A Version 2 configuration whose seals were stripped, or whose version was set back to 1 with an
-// owner added, is refused for the passkey and the recovery key alike: Version is written by whoever
-// writes the storage, so it decides nothing.
 func TestAConfigWithItsSealsStrippedIsRefusedAtUnlock(t *testing.T) {
 	attacker, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
@@ -76,8 +67,6 @@ func TestAConfigWithItsSealsStrippedIsRefusedAtUnlock(t *testing.T) {
 	}
 }
 
-// An older configuration that was genuine (its seals and links valid) is refused by the anchor in the
-// files' signed frames: the files were sealed under the list that replaced it.
 func TestAnOlderGenuineConfigPutBackIsRefusedInThePage(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -88,8 +77,6 @@ func TestAnOlderGenuineConfigPutBackIsRefusedInThePage(t *testing.T) {
 	d.Click(".gj-saver-save")
 	d.WaitFor("saved", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 	older := d.Str(`localStorage.getItem('showcase-enc:config')`)
-	// The owner replaces the passkey: every file is sealed under the new list, which becomes the config.
-	// (A passkey is replaced from another key: lock, unlock with the recovery key.)
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-lock")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
@@ -104,7 +91,6 @@ func TestAnOlderGenuineConfigPutBackIsRefusedInThePage(t *testing.T) {
 	d.WaitFor("replaced", `localStorage.getItem('showcase-enc:config') !== `+e2etest.J(older)+` && !JSON.parse(localStorage.getItem('showcase-enc:config')).pending`)
 	d.Sleep(500)
 	d.OK(d.Str(`localStorage.getItem('showcase-enc:config')`) != older, "the list changed")
-	// Someone puts the older, genuine configuration back.
 	d.Eval(`localStorage.setItem('showcase-enc:config', `+e2etest.J(older)+`); 1`, nil)
 	reloadToSave(d)
 	d.Fill("#enc-recovery-input", recovery)
@@ -115,8 +101,6 @@ func TestAnOlderGenuineConfigPutBackIsRefusedInThePage(t *testing.T) {
 	d.NoErrors()
 }
 
-// A deleted configuration over encrypted files is not "encryption off": the page says so, stays
-// read-only, restores from a key that opens the files, and Erase needs the exact word.
 func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -128,21 +112,18 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.WaitFor("saved", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 	files := d.Str(`Object.keys(localStorage).filter(k => k.startsWith('showcase:')).sort().join(',')`)
 
-	// 1. The configuration is deleted.
 	d.Eval(`localStorage.removeItem('showcase-enc:config')`, nil)
 	reloadToSave(d)
 	d.WaitSelector("#enc-broken")
 	d.OK(d.State().Str("encryption.broken") == "missing" && !d.State().Bool("encryption.enabled"), "the page knows the configuration is missing")
 	d.OK(strings.Contains(d.Text("#enc-broken"), "Configuration missing: encrypted files found"), "it says so: "+d.Text("#enc-broken"))
 	d.OK(!d.Has("#enc-switch-box"), "there is no 'encryption off' switch to press")
-	// Read-only: a save is refused and no plain text is written beside the ciphertext.
 	d.Fill(".gj-saver-name", "Plain attempt")
 	d.Click(".gj-saver-save")
 	d.Sleep(300)
 	d.OK(!strings.Contains(storedText(d), "Plain attempt"), "nothing was saved in the clear")
 	d.OK(d.Str(`Object.keys(localStorage).filter(k => k.startsWith('showcase:')).sort().join(',')`) == files, "the stored files are as they were")
 
-	// 2. Restore with the recovery key.
 	d.Fill("#enc-restore-recovery-input", recovery)
 	d.WaitFor("the button", `!document.querySelector('#enc-restore-recovery').disabled`)
 	d.Click("#enc-restore-recovery")
@@ -153,7 +134,6 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.Click(".gj-doclist-open")
 	d.WaitFor("it opens", `document.querySelector('.gj-saver-status').textContent.includes('opened')`)
 
-	// 3. A configuration that is not JSON is a corrupt state, not "off".
 	d.Eval(`localStorage.setItem('showcase-enc:config', '{not json')`, nil)
 	reloadToSave(d)
 	d.WaitSelector("#enc-broken")
@@ -163,7 +143,6 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.Sleep(300)
 	d.OK(!strings.Contains(storedText(d), "Plain attempt two"), "nothing was saved in the clear beside the ciphertext")
 
-	// 4. Erase needs the word exactly: "erase" is not "ERASE".
 	d.Click("#enc-erase")
 	confirmDialog(d)
 	d.WaitSelector("#enc-erase-word")
@@ -176,14 +155,11 @@ func TestADeletedOrCorruptConfigIsNotEncryptionOff(t *testing.T) {
 	d.Click("#enc-erase-go")
 	d.WaitFor("erased", `!document.querySelector('#enc-broken') && document.querySelector('#enc-switch-box')`)
 	d.OK(d.State().Str("encryption.broken") == "" && !d.State().Bool("encryption.enabled"), "the store is plain again")
-	// What the page itself writes again after the erase (the chosen target, an empty catalog) is not data.
 	d.OK(d.Str(`Object.keys(localStorage).filter(k => k.startsWith('showcase') && k !== 'showcase:last-target' && k !== 'showcase:catalog:index').join(',')`) == "", "nothing is left in storage: "+d.Str(`Object.keys(localStorage).join(',')`))
 	d.OK(!strings.Contains(storedText(d), "Kept in ciphertext") && d.Count(".gj-doclist-item") == 0, "no document is left")
 	d.NoErrors()
 }
 
-// A journal that someone wrote (owners replaced, a journal that adds the attacker next to the real
-// keys) is not finished by the real person's passkey.
 func TestAForgedJournalIsRefusedInThePage(t *testing.T) {
 	attacker, _, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
@@ -221,8 +197,6 @@ func TestAForgedJournalIsRefusedInThePage(t *testing.T) {
 	d.NoErrors()
 }
 
-// Another tab changed the keys: this one is locked by the storage event and refuses to write; a
-// write attempted without the event (the stored configuration differs) is refused the same way.
 func TestAStaleTabLocksItselfAndRefusesToWrite(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -233,7 +207,6 @@ func TestAStaleTabLocksItselfAndRefusesToWrite(t *testing.T) {
 	d.Click(".gj-saver-save")
 	d.WaitFor("saved", "document.querySelectorAll('.gj-doclist-item').length >= 1")
 
-	// The storage event, as the browser fires it in the tabs that did not write.
 	editConfig(d, `c.v = 3;`)
 	d.Eval(`(() => { window.dispatchEvent(new StorageEvent('storage', {key: 'showcase-enc:config', storageArea: localStorage})); return 1; })()`, nil)
 	d.WaitSelector("#enc-stale")
@@ -245,7 +218,6 @@ func TestAStaleTabLocksItselfAndRefusesToWrite(t *testing.T) {
 	d.OK(strings.Contains(d.Text("#enc-error"), "another tab"), "unlocking is refused: "+d.Text("#enc-error"))
 	d.NoErrors()
 
-	// Without the event: the configuration differs at the moment of the write.
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-unlock-passkey")
@@ -257,8 +229,6 @@ func TestAStaleTabLocksItselfAndRefusesToWrite(t *testing.T) {
 	d.OK(!strings.Contains(storedText(d), "After the other tab"), "the stale tab wrote nothing")
 }
 
-// Lock clears what was made from the document's text: a translation, the issues a grammar check found,
-// and the replies typed to comments.
 func TestLockClearsTranslationsIssuesAndReplyDrafts(t *testing.T) {
 	tr := httptest.NewServer(cors(func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Text, TargetLang string }
@@ -294,7 +264,6 @@ func TestLockClearsTranslationsIssuesAndReplyDrafts(t *testing.T) {
 	d.WaitFor("a translation", "document.querySelector('.gj-lang-translation')")
 	d.Click(".gj-lang-check")
 	d.WaitFor("an issue", "document.querySelector('.gj-lang-issue')")
-	// A comment on the selection and a reply typed and not sent.
 	d.AnswerDialog("Review this")
 	d.Focus("#input")
 	d.Press("Control+Alt+n")
@@ -319,8 +288,6 @@ func TestLockClearsTranslationsIssuesAndReplyDrafts(t *testing.T) {
 	d.NoErrors()
 }
 
-// A link cannot set the key directory: it is offered, the person confirms it, and what is not an
-// https address (http only on this machine) is refused. The session token belongs to one address.
 func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -332,7 +299,6 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 		d.WaitSelector("#dir-settings")
 	}
 
-	// An address that is not https (and not local) is refused outright, not even offered.
 	d.Goto(site, "/index.html?docstore="+url.QueryEscape("http://evil.example"))
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-unlock-passkey")
@@ -340,7 +306,6 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	people()
 	d.OK(d.State().Str("encryption.dir.url") == "" && d.State().Str("encryption.dir.offer") == "" && d.Has("#dir-refused"), "http://evil.example is refused: "+d.Text("#dir-status"))
 
-	// https://dir.example is only offered: nothing is saved as confirmed, nothing uses it.
 	d.Goto(site, "/index.html?docstore="+url.QueryEscape("https://dir.example"))
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-unlock-passkey")
@@ -353,7 +318,6 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	d.WaitFor("the offer to go", `!document.querySelector('#dir-offer')`)
 	d.OK(!d.Has("#dir-offer") && d.Str(`localStorage.getItem('showcase-enc:docstore') || ''`) == "", "ignored")
 
-	// An address written into storage directly (never confirmed) is only offered too.
 	d.Eval(`localStorage.setItem('showcase-enc:docstore', 'https://planted.example'); localStorage.setItem('showcase-enc:docstoken', 'stolen'); 1`, nil)
 	d.Goto(site, "/index.html")
 	d.Click(`button[data-tab="save"]`)
@@ -365,7 +329,6 @@ func TestTheKeyDirectoryFromALinkIsNeverAppliedUnasked(t *testing.T) {
 	d.Click("#dir-offer-ignore")
 	d.WaitFor("the offer to go", `!document.querySelector('#dir-offer')`)
 
-	// The token is a password field, tied to its address, and dropped when the address changes.
 	d.OK(d.Attr("#dir-token", "type") == "password", "the token field is a password field")
 	d.Fill("#dir-url", "http://localhost:1")
 	d.Click("#dir-save")

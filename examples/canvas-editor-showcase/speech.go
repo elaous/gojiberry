@@ -18,39 +18,29 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Speech tab (roadmap 56): record the phrases of a set to build a personal collection of one's own
-// speech, and dictate into the document through a recogniser the person names. The microphone is opened
-// only when the person presses Record or Dictate, and closed when they stop. The recordings stay in this
-// page (closing it discards them) until the person downloads them; nothing is sent anywhere except one
-// recording to the recogniser address the person typed, when they press Dictate.
-
 type speechUI struct {
 	session  *speechcoach.Session
 	data     speechcoach.Dataset
 	rec      *recorder
-	mode     string // "", "phrase" or "dictate": what the recording in progress is for
+	mode     string
 	message  string
 	recogniz string // the address of the recogniser ("" = dictation off)
-	local    bool   // dictate with the whisper add-on, on this device, instead of a recogniser at an address
-	confirm  bool   // "delete all" was pressed once
+	local    bool
+	confirm  bool // "delete all" was pressed once
 	render   func()
 	host     speechHost
 
-	// kept between visits (speechkeep.go): only when the person asked, and sealed
 	key    func() (key []byte, v sealedVault, why string)
 	keep   bool
 	kept   map[string]bool // the recordings the vault is known to hold
 	loaded bool            // the kept recordings were read this visit
 
-	// what was learned from the person's corrections, and the last dictation they can be learned from
 	corr *speechcoach.Corrections
 	last lastDictation
 
 	research researchState // the optional contribution (speechresearch.go)
 }
 
-// speechHost is what the Speech tab needs of the document: put text at the caret, read the selection and a
-// stretch of text, replace a stretch.
 type speechHost struct {
 	Caret    func() int
 	Insert   func(text string) bool
@@ -59,8 +49,6 @@ type speechHost struct {
 	Replace  func(from, to int, text string)
 }
 
-// lastDictation is the text the last dictation put in the document and where (a caret offset), so that earlier
-// corrections can be offered on it and the person's correction of it can be learned.
 type lastDictation struct {
 	text     string
 	from     int
@@ -74,7 +62,6 @@ func newSpeech(render func()) *speechUI {
 		keep: lsGet(speechKeepKey) == "on", kept: map[string]bool{}, corr: &speechcoach.Corrections{}}
 }
 
-// recorder captures the microphone as float samples until stop.
 type recorder struct {
 	stream, actx, src, node js.Value
 	fn                      js.Func
@@ -130,7 +117,6 @@ func startRecorder(done func(*recorder, error)) {
 	md.Call("getUserMedia", map[string]any{"audio": true}).Call("then", onOK).Call("catch", onErr)
 }
 
-// stop closes the microphone and returns the take at 16 kHz.
 func (r *recorder) stop() []int16 {
 	r.node.Set("onaudioprocess", js.Null())
 	r.src.Call("disconnect")
@@ -148,7 +134,6 @@ func (r *recorder) stop() []int16 {
 	return speechcoach.Resample(all, r.rate)
 }
 
-// toggle starts or stops the recording for a purpose.
 func (s *speechUI) toggle(mode string) {
 	if s.rec != nil { // stop
 		pcm := s.rec.stop()
@@ -191,12 +176,8 @@ func (s *speechUI) keepTake(pcm []int16) {
 	}
 }
 
-// transcriber is what dictation is sent to: the whisper add-on on this device when the person chose it and a model is
-// installed, else the recogniser at the address they typed. why says what is missing when there is none.
 func (s *speechUI) transcriber() (speechcoach.Transcriber, string, bool) {
 	if s.local && whisperAvailable() {
-		// the model the person downloaded for the language, when the Add-ons tab has listed them; otherwise the add-on
-		// picks its own and says if it has none
 		return localWhisper{model: installedModel("whisper", s.session.Set().Lang)}, T("speech.transcribing", "Turning this recording into text on this device…"), true
 	}
 	addr, err := speechcoach.CheckEndpoint(s.recogniz)

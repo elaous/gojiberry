@@ -8,8 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// "English, plain words" is fetched when chosen, says the hard messages in plain words, keeps the page in English for a
-// screen reader, and leaves the rest as it was.
 func TestPlainEnglishVariantIsFetchedAndKeepsThePageInEnglish(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en-x-plain")
 	d.WaitFor("the language is in force", `document.documentElement.getAttribute('lang') === 'en-x-plain'`)

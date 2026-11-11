@@ -14,9 +14,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A browser's push machinery stands in for the real one (no push service is reachable from a test): the page asks for
-// permission, subscribes through the service worker's push manager, and hands the subscription to the push server it
-// finds in push.json; unticking takes it back.
 func TestMentionNotificationsWhenThePageIsClosed(t *testing.T) {
 	var mu sync.Mutex
 	var calls []string
@@ -66,8 +63,6 @@ func TestMentionNotificationsWhenThePageIsClosed(t *testing.T) {
 	d.NoErrors()
 }
 
-// When the browser replaced the subscription, the page gives the server the one it has now (at once when it opens, and
-// when the worker says it changed), and says so when the notifications could not be renewed.
 func TestAReplacedPushSubscriptionIsGivenToTheServer(t *testing.T) {
 	var mu sync.Mutex
 	var calls []string

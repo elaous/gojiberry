@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// submitSteps: naming an address and saving the page as a web form that sends the answers there (exp_forms_submit).
 func submitSteps(d *e2etest.Tab) {
 	d.Fill("#forms-submit-to", "http://example.org")
 	d.Click("#forms-webform")

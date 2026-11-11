@@ -10,9 +10,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// "Search all documents" (Find tab) finds a word in every saved document, opens a hit, and replaces across the
-// other documents with a preview, a choice and an undo; the open document is left to the editor's own
-// Replace all.
 func TestSearchAndReplaceAcrossDocuments(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Click(`button[data-tab="save"]`)
@@ -39,7 +36,6 @@ func TestSearchAndReplaceAcrossDocuments(t *testing.T) {
 	d.Click("#sa-search")
 	d.WaitSelector("#sa-none")
 
-	// Replace in the other document only.
 	d.Fill("#sa-query", "canvas")
 	d.Fill("#sa-repl", "leaf")
 	d.Click("#sa-preview")
@@ -53,8 +49,6 @@ func TestSearchAndReplaceAcrossDocuments(t *testing.T) {
 	d.WaitFor("the replaced document", "document.querySelectorAll('#sa-hits .sa-hit').length === 1")
 	d.OK(d.Attr("#sa-hits .sa-hit", "data-id") != open, "only the other document changed")
 
-	// The replaced document opens with the new text (it was written through the saver, so its checksum
-	// holds), and its history keeps the old text as a named version.
 	other := d.Attr("#sa-hits .sa-hit", "data-id")
 	d.Click("#sa-open-" + other)
 	d.WaitFor("the replaced document", `JSON.parse(document.getElementById('state').textContent).text.includes('leaf')`)
@@ -67,7 +61,6 @@ func TestSearchAndReplaceAcrossDocuments(t *testing.T) {
 	d.Click(`button[data-tab="find"]`)
 	d.WaitSelector("#sa-undo")
 
-	// Undo puts the old text back.
 	d.Click("#sa-undo")
 	d.WaitFor("the undo", "!document.querySelector('#sa-undo')")
 	d.Fill("#sa-query", "leaf")
@@ -79,8 +72,6 @@ func TestSearchAndReplaceAcrossDocuments(t *testing.T) {
 	d.NoErrors()
 }
 
-// The encrypted browser store is searched on this device after it is unlocked: the hit comes from the
-// decrypted text, and nothing but the page ever sees it.
 func TestSearchAllDocumentsInTheEncryptedStore(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -97,8 +88,6 @@ func TestSearchAllDocumentsInTheEncryptedStore(t *testing.T) {
 	d.NoErrors()
 }
 
-// sealedIndex reads what "Search all documents" keeps for a place in IndexedDB (nil: nothing), and, when
-// flip is set, writes it back with one byte changed.
 func sealedIndex(d *e2etest.Tab, target string, flip bool) []int {
 	var out []int
 	d.Eval(`(async () => {
@@ -128,8 +117,6 @@ func searchFor(d *e2etest.Tab, q string, hits int) {
 	d.WaitFor("the hits", fmt.Sprintf("document.querySelectorAll('#sa-hits .sa-hit').length === %d", hits))
 }
 
-// The index built by a search is kept, sealed, in the browser, and the next visit reads only the documents
-// that changed. An index that was altered is not trusted: it is built again.
 func TestSearchAllKeepsTheSealedIndexBetweenVisits(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.Click(`button[data-tab="save"]`)
@@ -153,7 +140,6 @@ func TestSearchAllKeepsTheSealedIndexBetweenVisits(t *testing.T) {
 	}
 	d.OK(!strings.Contains(strings.ToLower(string(raw)), "canvas") && !strings.Contains(string(raw), "alpha"), "what is kept is sealed: it shows no word of a document")
 
-	// Another visit: nothing is read again.
 	d.Reload()
 	d.Click(`button[data-tab="find"]`)
 	d.WaitSelector("#search-all")
@@ -161,7 +147,6 @@ func TestSearchAllKeepsTheSealedIndexBetweenVisits(t *testing.T) {
 	n, read, kept = indexLine(d)
 	d.OK(n == 2 && read == 0 && kept, fmt.Sprintf("the second visit uses the kept index and reads nothing: %d %d %v", n, read, kept))
 
-	// A document added since: only that one is read.
 	d.Click(`button[data-tab="save"]`)
 	d.Fill(".gj-saver-name", "gamma")
 	d.Click(".gj-saver-save-new")
@@ -173,7 +158,6 @@ func TestSearchAllKeepsTheSealedIndexBetweenVisits(t *testing.T) {
 	n, read, kept = indexLine(d)
 	d.OK(n == 3 && read == 1 && kept, fmt.Sprintf("only the new document is read: %d %d %v", n, read, kept))
 
-	// An altered index is refused and built again from the documents.
 	before := sealedIndex(d, "browser", true)
 	d.OK(len(before) > 0, "there is an index to alter")
 	d.Reload()
@@ -187,9 +171,6 @@ func TestSearchAllKeepsTheSealedIndexBetweenVisits(t *testing.T) {
 	d.NoErrors()
 }
 
-// The index of the encrypted store is kept only sealed under a key made from the unlocked owner key: it
-// holds none of the words, it is not read or written while the store is locked, and after the next unlock it
-// is used, so nothing is read again.
 func TestSearchAllKeepsTheEncryptedStoresIndexSealedUnderTheOwnerKey(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -212,7 +193,6 @@ func TestSearchAllKeepsTheEncryptedStoresIndexSealedUnderTheOwnerKey(t *testing.
 		d.OK(!strings.Contains(string(raw), secret), "the kept index shows no "+secret)
 	}
 
-	// A new visit starts locked: nothing of the index is used or written.
 	d.Reload()
 	d.Click(`button[data-tab="find"]`)
 	d.WaitSelector("#search-all")
@@ -223,7 +203,6 @@ func TestSearchAllKeepsTheEncryptedStoresIndexSealedUnderTheOwnerKey(t *testing.
 	d.OK(n == 0 && !kept && !d.Has("#sa-hits .sa-hit"), fmt.Sprintf("a locked store gives no hit and uses no kept index: %d %d %v", n, read, kept))
 	d.OK(fmt.Sprint(sealedIndex(d, "browser", false)) == fmt.Sprint(sealed), "and the kept index is left as it was")
 
-	// Unlocked with the passkey: the kept index opens and nothing is read again.
 	d.Click(`button[data-tab="save"]`)
 	d.Click("#enc-unlock-passkey")
 	d.WaitFor("unlocked", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
@@ -233,7 +212,6 @@ func TestSearchAllKeepsTheEncryptedStoresIndexSealedUnderTheOwnerKey(t *testing.
 	d.OK(n == 1 && read == 0 && kept, fmt.Sprintf("after the unlock the kept index is used: %d %d %v", n, read, kept))
 	d.OK(strings.Contains(strings.ToLower(d.Text("#sa-hits .sa-hit")), "canvas"), "and the hit shows the decrypted words: "+d.Text("#sa-hits .sa-hit"))
 
-	// Altered: refused, built again from the decrypted documents.
 	sealedIndex(d, "browser", true)
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)

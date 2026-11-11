@@ -9,17 +9,12 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// TestColumnCommands drives every column command from the Edit menu: a region of
-// columns starts at the caret's paragraph, each command sets its count, ratio or
-// spacing, and Undo takes the region away.
 func TestColumnCommands(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "")
 	d.OK(d.State().Int("columns") == 0, "the text starts in the base layout")
 	d.ToggleMode()
 	text := d.State().Str("text")
 
-	// run picks a command from Edit > Columns, with the caret back in the text first
-	// (using a menu takes the caret away).
 	run := func(label string) {
 		d.CanvasClick(240, 164)
 		d.Focus("#input")
@@ -67,7 +62,6 @@ func TestColumnCommands(t *testing.T) {
 	d.Wait("s.columnConfig.gap !== 48 && s.columnConfig.gap !== 12")
 	d.OK(narrow < gap() && gap() < 48, fmt.Sprintf("spacing narrow %.0f < standard %.0f < wide 48", narrow, gap()))
 
-	// Undo takes the columns away, one command at a time.
 	d.Focus("#input")
 	for range 20 {
 		d.Press("Control+z")

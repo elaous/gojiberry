@@ -24,8 +24,6 @@ func recordPhrase(d *e2etest.Tab) {
 	d.Click("#speech-record")
 }
 
-// Recordings are kept between visits only when asked, sealed in the browser, come back after a reload, and are
-// gone when deleted or when keeping is turned off.
 func TestSpeechRecordingsAreKeptSealedAndRemoved(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
@@ -33,7 +31,6 @@ func TestSpeechRecordingsAreKeptSealedAndRemoved(t *testing.T) {
 	d.WaitSelector("#speech-keep-box input")
 	d.OK(!d.Bool(`document.querySelector('#speech-keep-box input').checked`), "keeping is off by default")
 
-	// without asking, nothing survives a reload
 	recordPhrase(d)
 	d.WaitFor("the take", `document.getElementById('speech-progress').textContent.includes('Recorded: 1')`)
 	d.ReloadPage()
@@ -41,13 +38,11 @@ func TestSpeechRecordingsAreKeptSealedAndRemoved(t *testing.T) {
 	d.WaitSelector("#speech-count")
 	d.OK(strings.HasPrefix(d.Text("#speech-count"), "0"), "nothing was kept without asking: "+d.Text("#speech-count"))
 
-	// ask: the next take is kept, and is back after a reload
 	d.Click("#speech-keep-box input")
 	d.WaitFor("keeping is on", `document.getElementById('speech-message').textContent.includes('kept on this device')`)
 	recordPhrase(d)
 	d.WaitFor("the take", `document.getElementById('speech-progress').textContent.includes('Recorded: 1')`)
 	d.Sleep(800) // sealed and written in the background
-	// the page's storage holds no readable audio or phrase
 	readable := d.Str(`(async () => {
 		const open = indexedDB.open('gojiberry-showcase-search');
 		const db = await new Promise((ok, no) => { open.onsuccess = () => ok(open.result); open.onerror = no; });
@@ -62,7 +57,6 @@ func TestSpeechRecordingsAreKeptSealedAndRemoved(t *testing.T) {
 	d.WaitFor("the kept recording is back", `document.getElementById('speech-count') && document.getElementById('speech-count').textContent.startsWith('1 recording')`)
 	d.WaitFor("it says so", `document.getElementById('speech-message').textContent.includes('opened from this device')`)
 
-	// turning it off removes what was kept
 	d.Click("#speech-keep-box input")
 	d.WaitFor("off", `document.getElementById('speech-message').textContent.includes('Nothing is kept')`)
 	d.ReloadPage()
@@ -73,8 +67,6 @@ func TestSpeechRecordingsAreKeptSealedAndRemoved(t *testing.T) {
 	d.NoErrors()
 }
 
-// A correction the person makes to dictated text is learned: the next dictation of the same words offers the same
-// fix, and the words they meant go to the recogniser as its hint.
 func TestSpeechLearnsFromACorrection(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	var mu sync.Mutex
@@ -122,7 +114,6 @@ func TestSpeechLearnsFromACorrection(t *testing.T) {
 	d.WaitSelector("#speech-last")
 	d.OK(!d.Has("#speech-fixes"), "nothing is offered before anything was corrected")
 
-	// the person corrects it in the document and selects the corrected words
 	d.Focus("#input")
 	d.Press("Control+a")
 	d.Type("meet me at the weather station")
@@ -132,7 +123,6 @@ func TestSpeechLearnsFromACorrection(t *testing.T) {
 	d.WaitFor("learned", `document.getElementById('speech-message').textContent.includes('Remembered 1 correction')`)
 	d.OK(strings.Contains(d.Text("#speech-corrections"), "1 correction remembered"), "counted: "+d.Text("#speech-corrections"))
 
-	// the same words are heard again: the fix is offered and, once used, is in the document
 	d.Focus("#input")
 	d.Press("Control+a")
 	d.Press("Delete")
@@ -149,14 +139,11 @@ func TestSpeechLearnsFromACorrection(t *testing.T) {
 		t.Errorf("the recogniser's hints = %q: only the second dictation has one (the first had nothing learned yet), and it carries the word the person meant", got)
 	}
 
-	// forgetting empties the memory
 	d.Click("#speech-forget")
 	d.WaitFor("forgotten", `document.getElementById('speech-corrections').textContent.includes('0 corrections')`)
 	d.NoErrors()
 }
 
-// Contributing to research: nothing leaves until the exact package was shown and confirmed; the request carries no
-// cookie or referrer and a random token; withdrawing asks the server to delete that token.
 func TestSpeechContributionIsShownConfirmedAndWithdrawable(t *testing.T) {
 	t.Setenv("GOJIBERRY_REQUIRE_BROWSER", "1")
 	var mu sync.Mutex

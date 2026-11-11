@@ -19,8 +19,6 @@ const (
 	secretDocText = "Everything on this canvas" // a phrase of the sample document's text
 )
 
-// storedText is everything the browser's localStorage holds for the showcase's store, decoded the
-// way a thief of the storage reads it: each record's base64 body as bytes, with the keys.
 func storedText(d *e2etest.Tab) string {
 	return d.Str(`(() => {
 		let all = '';
@@ -39,9 +37,6 @@ func confirmDialog(d *e2etest.Tab) string {
 	return text
 }
 
-// TestEncryptedStore turns on "Encrypt this store" with a passkey (PRF, virtual authenticator) and a
-// recovery key, makes a document confidential, and follows it through lock, reload, unlock, a
-// sealed pack and a re-import.
 func TestEncryptedStore(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost() // a passkey needs a domain name
@@ -49,12 +44,10 @@ func TestEncryptedStore(t *testing.T) {
 	d.VirtualAuthenticator()
 	d.Click(`button[data-tab="save"]`)
 
-	// Off by default, and the store works as it always did.
 	d.WaitSelector("#enc-panel")
 	d.OK(!d.State().Bool("encryption.enabled") && !d.Has(".gj-doclist-protect"), "encryption is off by default: no Make confidential control")
 	d.OK(strings.Contains(d.Text(`.gj-saver-select[data-field="Save to"] option[value="browser"]`), "localStorage"), "the browser target says localStorage")
 
-	// A folder for the document, so the pack of the folder holds it.
 	d.Fill(".gj-doclist-newfolder-name", "Vault")
 	d.WaitFor("the create button", `!document.querySelector('.gj-doclist-newfolder').disabled`)
 	d.Click(".gj-doclist-newfolder")
@@ -62,12 +55,10 @@ func TestEncryptedStore(t *testing.T) {
 	d.Click(".gj-doclist-folder-open")
 	d.WaitFor("inside the folder", "document.querySelector('.gj-breadcrumb-current')")
 
-	// Turn encryption on: a passkey and a recovery key.
 	d.Click("#enc-switch-box .gj-switch-track")
 	d.WaitSelector("#enc-enable")
 	d.OK(d.Checked("#enc-opt-passkey input") && d.Checked("#enc-opt-recovery input"), "the form offers a passkey and a recovery key")
 	d.Click("#enc-enable")
-	// The recovery key's secret comes first, before anything is committed.
 	d.WaitSelector("#enc-recovery-secret")
 	recovery := d.Value("#enc-recovery-secret")
 	d.OK(strings.HasPrefix(recovery, "AGE-SECRET-KEY-1"), "the recovery key is shown once: "+recovery[:20])
@@ -83,8 +74,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.OK(!strings.Contains(storedText(d), recovery), "nor in the browser's storage")
 	d.OK(d.Text("#enc-status") == "Unlocked", "unlocked after setup")
 
-	// Save a document in the folder. Not confidential yet: its name is in the catalog, its text is
-	// already encrypted at rest.
 	d.Fill(".gj-saver-name", secretDocName)
 	d.Click(".gj-saver-save")
 	d.WaitFor("the document", "document.querySelectorAll('.gj-doclist-item').length === 1")
@@ -93,7 +82,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.OK(strings.Contains(raw, secretDocName), "an ordinary document's name is in the catalog, as always")
 	d.OK(d.Has(".gj-doclist-protect") && !d.Has(".gj-doclist-item .gj-doc-confidential"), "an ordinary document offers Make confidential and has no lock")
 
-	// Make it confidential: a question that says what changes.
 	d.Click(".gj-doclist-protect")
 	question := confirmDialog(d)
 	for _, want := range []string{"name and tags move inside", "searching for its name stops working", "encrypted again"} {
@@ -108,14 +96,12 @@ func TestEncryptedStore(t *testing.T) {
 		d.OK(!strings.Contains(raw, secret), "the storage holds no "+secret)
 	}
 
-	// The People tab: the store's keys, a passkey and a recovery key.
 	d.Click(`button[data-tab="people"]`)
 	d.WaitFor("the owner keys", `document.querySelectorAll('.gj-recip-owner').length === 2`)
 	types := strings.Join(d.Texts(".gj-recip-owner .gj-recip-type"), ",")
 	d.OK(strings.Contains(types, "passkey-prf") && strings.Contains(types, "age-x25519"), "the keys are listed: "+types)
 	d.Click(`button[data-tab="save"]`)
 
-	// The sealed pack of the folder: the confidential document is in it, and nothing readable of it.
 	d.Click(".gj-breadcrumb-link")
 	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
 	name, pack := d.Download(func() { d.Click(".gj-doclist-folder-pack") })
@@ -125,7 +111,6 @@ func TestEncryptedStore(t *testing.T) {
 	}
 	d.OK(strings.Contains(d.Text(".gj-saver-status"), "pack of 1 documents") && !strings.Contains(d.Text(".gj-saver-status"), "left out"), "the status counts the sealed document: "+d.Text(".gj-saver-status"))
 
-	// Lock: the key is forgotten, the list shows the placeholder.
 	d.Click("#enc-lock")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
 	d.OK(d.Text("#enc-status") == "Locked", "the panel says locked")
@@ -140,14 +125,12 @@ func TestEncryptedStore(t *testing.T) {
 	d.Click(".gj-doclist-reveal")
 	d.WaitFor("the reveal refused", `document.querySelector('.gj-doc-error') && document.querySelector('.gj-doc-error').textContent.includes('Unlock the store')`)
 
-	// A locked export leaves the confidential document out and says how many.
 	d.Click(".gj-breadcrumb-link")
 	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
 	lockedName, lockedPack := d.Download(func() { d.Click(".gj-doclist-folder-pack") })
 	d.OK(lockedName == "Vault.opendoc" && !strings.Contains(string(lockedPack), secretDocText), "a locked pack has none of the document")
 	d.WaitFor("the left-out count", `document.querySelector('.gj-saver-status').textContent.includes('1 confidential documents left out')`)
 
-	// Reload: a fresh page is locked, with the placeholder and a clear message on open.
 	d.Reload()
 	d.Click(`button[data-tab="save"]`)
 	d.WaitFor("the panel", "document.querySelector('#enc-status')")
@@ -161,7 +144,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.Click(".gj-doclist-open")
 	d.WaitSelector(".gj-doc-error")
 	d.OK(strings.Contains(d.Text(".gj-doc-error"), "Unlock the store"), "open fails with a clear message after the reload")
-	// A wrong recovery key is refused; the right one unlocks.
 	d.Fill("#enc-recovery-input", "AGE-SECRET-KEY-1QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ")
 	d.WaitFor("the button", `!document.querySelector('#enc-unlock-recovery').disabled`)
 	d.Click("#enc-unlock-recovery")
@@ -175,15 +157,12 @@ func TestEncryptedStore(t *testing.T) {
 	d.Click("#enc-lock")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
 
-	// Unlock with the passkey (PRF) and open the document.
 	d.Click("#enc-unlock-passkey")
 	d.WaitFor("unlocked with the passkey", `(document.getElementById('enc-status') || {}).textContent === 'Unlocked'`)
 	d.WaitFor("the name revealed", `document.querySelector('.gj-doclist-item .gj-doc-name').textContent.includes('Salary plan 2026')`)
 	d.Click(".gj-doclist-open")
 	d.WaitFor("opened", `document.querySelector('.gj-saver-status').textContent.includes('Salary plan 2026 opened')`)
 
-	// Delete it (trash, then for good), then bring it back from the sealed pack: locked it needs the
-	// key and is left out; unlocked it comes in confidential again.
 	d.Click(".gj-doclist-trash")
 	d.WaitFor("trashed", "document.querySelectorAll('.gj-doclist-item').length === 0")
 	d.Click(".gj-trash-delete")
@@ -191,8 +170,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.WaitFor("the trash empty", "document.querySelectorAll('.gj-trash-item').length === 0")
 	d.Click(".gj-breadcrumb-link")
 	d.WaitFor("the top level", "!document.querySelector('.gj-breadcrumb-link')")
-	// The document that was open was deleted: what the editor holds is stored nowhere, so Lock asks
-	// first; this test means to drop it.
 	d.OK(d.Has("#enc-lock-discard"), "locking with an unsaved document offers to discard it")
 	d.Click("#enc-lock-discard")
 	d.WaitSelector(`[role="alertdialog"]`)
@@ -220,16 +197,13 @@ func TestEncryptedStore(t *testing.T) {
 	d.WaitFor("the name read with the key", `document.querySelector('.gj-doclist-item .gj-doc-name').textContent.includes('Salary plan 2026')`)
 	d.OK(!strings.Contains(storedText(d), secretDocName), "the re-imported document is as encrypted as before")
 
-	// Make it not confidential again: the name goes back to the catalog, the lock goes.
 	d.Click(".gj-doclist-protect")
 	confirmDialog(d)
 	d.WaitFor("not confidential", `document.querySelectorAll('.gj-doclist-item .gj-doc-confidential').length === 0`)
 	d.OK(strings.Contains(storedText(d), secretDocName) && !strings.Contains(storedText(d), secretDocText), "the name is in the catalog again; the text is still encrypted")
 
-	// Locked, saving is refused and nothing is written.
 	d.Click("#enc-lock")
 	d.WaitFor("locked", `(document.getElementById('enc-status') || {}).textContent === 'Locked'`)
-	// Saving while locked is refused too, not written.
 	d.Fill(".gj-saver-name", "while locked")
 	d.Click(".gj-saver-save")
 	d.WaitFor("the save refused", `(document.querySelector('.gj-doc-error') || {textContent: ''}).textContent.includes('The store is locked')`)
@@ -238,8 +212,6 @@ func TestEncryptedStore(t *testing.T) {
 	d.NoErrors()
 }
 
-// TestEncryptedStorePasskeyNeedsASecondKey: a store with only a passkey refuses to make a
-// document confidential, in the words of the rule, and the People tab offers the way out.
 func TestEncryptedStorePasskeyNeedsASecondKey(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()
@@ -285,8 +257,6 @@ func TestEncryptedStorePasskeyNeedsASecondKey(t *testing.T) {
 	d.NoErrors()
 }
 
-// TestEncryptedStoreWithAnSSHKey: the owner key is a pasted SSH public key; the store starts locked
-// and the private key file unlocks it (a stranger's file does not).
 func TestEncryptedStoreWithAnSSHKey(t *testing.T) {
 	pub, priv := sshKeyPair(t, "me@laptop")
 	_, strangerPriv := sshKeyPair(t, "stranger")

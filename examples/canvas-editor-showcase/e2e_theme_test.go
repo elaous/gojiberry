@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/userconfig"
 )
 
-// The theme editor in the Styles tab checks colours as they are typed and puts a valid theme into the
-// document's HTML export.
 func TestThemeEditorChecksAndThemesTheExport(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	importMarkdown(d, "# Title\n\nSome words here.", "Some words")
@@ -23,7 +21,6 @@ func TestThemeEditorChecksAndThemesTheExport(t *testing.T) {
 	d.WaitSelector("#gj-theme-text")
 	d.OK(d.Has(".gj-theme-ok"), "the default theme is fine")
 
-	// A light grey text on a white page cannot be read: the field says so at once.
 	d.Fill("#gj-theme-text", "#bbbbbb")
 	d.WaitSelector(".gj-theme-problems")
 	d.OK(d.Attr("#gj-theme-text", "aria-invalid") == "true", "the field with the problem says so")
@@ -34,7 +31,6 @@ func TestThemeEditorChecksAndThemesTheExport(t *testing.T) {
 	})
 	d.OK(!strings.Contains(string(bad), "--gj-color-text"), "a theme with a problem is not used in the export")
 
-	// Dark text on the page is fine and goes into the export.
 	d.Click(`button[data-tab="styles"]`)
 	d.Fill("#gj-theme-text", "#202020")
 	d.WaitSelector(".gj-theme-ok")
@@ -44,7 +40,6 @@ func TestThemeEditorChecksAndThemesTheExport(t *testing.T) {
 	})
 	d.OK(strings.Contains(string(good), "--gj-color-text:#202020"), "a valid theme is in the exported page")
 
-	// Back to the default: nothing in the export.
 	d.Click(`button[data-tab="styles"]`)
 	d.Click(".gj-theme .gj-button")
 	_, plain := d.Download(func() {
@@ -55,8 +50,6 @@ func TestThemeEditorChecksAndThemesTheExport(t *testing.T) {
 	d.NoErrors()
 }
 
-// The theme is drawn on the sheets, and a theme can be saved under a name, kept across a reload, used again and
-// deleted (the settings store of package userconfig; here on the device only: no server is confirmed).
 func TestThemeOnTheCanvasAndSavedThemes(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.Click(`button[data-tab="styles"]`)
@@ -77,12 +70,10 @@ func TestThemeOnTheCanvasAndSavedThemes(t *testing.T) {
 	d.Sleep(300)
 	d.OK(hasColour(255, 251, 230), "the sheet is drawn in the theme's page colour")
 
-	// A theme that cannot be read is not drawn.
 	d.Fill("#gj-theme-text", "#fffbe0")
 	d.Sleep(300)
 	d.OK(d.Has(".gj-theme-problems"), "the problem is listed")
 
-	// Save a good one under a name; it survives a reload.
 	d.Fill("#gj-theme-text", "#202040")
 	d.WaitSelector(".gj-theme-ok")
 	d.Fill("#gj-theme-name", "Warm paper")
@@ -94,7 +85,6 @@ func TestThemeOnTheCanvasAndSavedThemes(t *testing.T) {
 	d.WaitSelector(".gj-theme-saved-name")
 	d.OK(d.Text(".gj-theme-saved-name") == "Warm paper", "kept on this device")
 
-	// Use it again (the reload dropped the document's theme), then delete it.
 	d.OK(!hasColour(255, 251, 230), "the new page starts without the theme")
 	d.Click(".gj-theme-saved-list li:first-child .gj-button")
 	d.Sleep(300)
@@ -104,8 +94,6 @@ func TestThemeOnTheCanvasAndSavedThemes(t *testing.T) {
 	d.NoErrors()
 }
 
-// With a docstore server confirmed, a saved theme is sent to the person's settings there (and another device
-// would pull it).
 func TestSavedThemesReachTheSettingsServer(t *testing.T) {
 	site := e2etest.NewSite(t)
 	site.UseLocalhost()

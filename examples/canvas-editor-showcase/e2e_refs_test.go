@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// A source is typed once; the document cites it in the chosen style and ends with the list of references, in the
-// same style; changing the style changes how the source is written.
 func TestCiteASourceAndInsertTheListOfReferences(t *testing.T) {
 	d := e2etest.NewSite(t).Open(t, "?lang=en")
 	d.ToggleMode()

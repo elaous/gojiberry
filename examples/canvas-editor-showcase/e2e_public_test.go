@@ -17,8 +17,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// publicOffer is the real public service on a loopback port, with the CORS answers a page on another port needs
-// (the host's job in a deployment), and the store behind it so a test can look at what was stored.
 func publicOffer(t *testing.T) (*httptest.Server, *docstore.MemoryAdapter) {
 	t.Helper()
 	inner := docstore.NewMemoryAdapter()
@@ -48,9 +46,6 @@ func publicOffer(t *testing.T) (*httptest.Server, *docstore.MemoryAdapter) {
 
 func fragmentOf(link string) string { _, f, _ := strings.Cut(link, "#"); return f }
 
-// TestPublicLinkPublishesAndTheLinksOpen publishes a copy to the public offer, opens the view link in another
-// browser (read only, noindex, with a report that reaches the operator) and the edit link in a third (the same
-// session, and an edit there renews the copy).
 func TestPublicLinkPublishesAndTheLinksOpen(t *testing.T) {
 	offer, store := publicOffer(t)
 	site := e2etest.NewSite(t)
@@ -71,7 +66,6 @@ func TestPublicLinkPublishesAndTheLinksOpen(t *testing.T) {
 	d.OK(d.Attr("#public-terms", "href") == "https://example.org/terms", "the terms link the server sent")
 	d.OK(d.Has("#public-keep") && d.Has("#public-download") && d.Has("#public-discard"), "keep, download and delete are offered")
 
-	// The view link: read only, noindex, the document, and a report.
 	v := site.Open(t, api+"#"+fragmentOf(view))
 	v.WaitSelector("#public-viewer")
 	v.WaitFor("the document", `document.getElementById('state').textContent.includes('Hello public')`)
@@ -93,7 +87,6 @@ func TestPublicLinkPublishesAndTheLinksOpen(t *testing.T) {
 	v.OK(reports == 1, "the report reached the operator's store")
 	v.NoErrors()
 
-	// The edit link: the same session; an edit there renews the copy.
 	e := site.Open(t, api+"#"+fragmentOf(edit))
 	e.WaitSelector("#public-edit")
 	e.OK(e.Value("#public-edit") == edit && e.Value("#public-view") == view, "the same two links from the other browser")
@@ -128,7 +121,6 @@ func TestPublicLinkPublishesAndTheLinksOpen(t *testing.T) {
 	d.OK(strings.Contains(text, "and more"), "the edit was sent, and renewed the copy: "+text)
 	e.NoErrors()
 
-	// Delete the public copy: the view link stops working.
 	d.Click("#public-discard")
 	d.WaitSelector("#public-publish")
 	g := site.Open(t, api+"#"+fragmentOf(view))

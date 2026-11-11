@@ -9,21 +9,13 @@ import (
 	"github.com/elaous/gojiberry/components"
 )
 
-// Speech while typing. The canvas is pixels and the keys go to a hidden input, so a screen reader has
-// nothing to say about what is typed or where the caret goes. components.TypingAnnouncer works out short
-// sentences from the document after each change, and they go to the polite live region
-// (components.TypingLive). All of it is off until the person chooses it in the preferences, because a
-// screen reader may already echo what the input receives and two voices would talk over each other.
-
-// noteTyping feeds the announcer the document as it is now and says what it returns. It runs on every
-// draw and does nothing at all (not even reading the text) while no preference asks for speech.
 func (u *ui) noteTyping(flow func() *canvas.TextFlow, renderUI func()) {
 	u.typing.Level = curPrefs.Typing
 	u.typing.Formatting = curPrefs.TypeFmt == "on"
 	u.typing.Lines = curPrefs.TypeRead == "on"
 	fl := flow()
 	if fl == nil || !fl.Editing() || (u.typing.Level == components.TypingOff && !u.typing.Formatting && !u.typing.Lines) {
-		u.typing.Reset() // when editing starts again the document is only remembered, not read as a paste
+		u.typing.Reset()
 		return
 	}
 	if msg := u.typing.Update(time.Now(), typingState(fl, u.typing.Formatting)); msg != "" {
@@ -40,8 +32,6 @@ func (u *ui) noteTyping(flow func() *canvas.TextFlow, renderUI func()) {
 	}
 }
 
-// typingState is the document for the announcer: the text, the caret, the line it is on, and (when
-// formatting is to be said) the formatting at the caret.
 func typingState(fl *canvas.TextFlow, formatting bool) components.TypingState {
 	text := fl.EditText()
 	caret := fl.Cursors()[0].Caret

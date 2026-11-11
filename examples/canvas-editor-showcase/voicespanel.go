@@ -10,14 +10,8 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// The Reader voices tab: which engine reads aloud (the voices the browser offers, or voices downloaded into the page)
-// and, for the downloaded ones, the catalogue for the document's language with each voice's size and licence, and the
-// voices already on the device. Nothing is fetched from the catalogue until the person asks for it.
-
-// megabytes writes a size in bytes in megabytes.
 func megabytes(n int64) string { return fmt.Sprintf("%.1f MB", float64(n)/(1<<20)) }
 
-// voicesPanel is the tab.
 func voicesPanel(u *ui, renderUI func()) xango.Node {
 	ensurePiper(renderUI)
 	e := piperUI.engine
@@ -82,7 +76,6 @@ func downloadedVoices(u *ui, e interface {
 	read.Downloader
 }, lang string, renderUI func()) []xango.Node {
 	var nodes []xango.Node
-	// the voices on the device
 	nodes = append(nodes, xango.El("h5", nil, xango.Text(T("voices.have", "Downloaded voices on this device"))))
 	have := e.Voices()
 	if len(have) == 0 {

@@ -17,30 +17,22 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// What else the settings store (package userconfig) holds for the person besides saved themes (themelib.go):
-// the display preferences, when they ask for them to follow them to another device; themes passed from one
-// person to another as a share file; and fonts of their own, with the licence note they came with.
-
 const (
 	prefsSyncKey = "showcase:a11y.sync" // "on" when the preferences are kept on the server too
 	prefsItem    = "prefs.display"
-	// myFonts is the source name the person's own fonts carry in the font list.
-	myFonts = "My fonts"
+	myFonts      = "My fonts"
 )
 
-// shareIncoming is a shared theme that was read and is waiting for the person to say yes.
 type shareIncoming struct {
 	info userconfig.Info
 	data []byte
 }
 
-// fontDraft is the font being added: the file chosen, the name it will have and the licence note.
 type fontDraft struct {
 	file, family, licence string
 	data                  []byte
 }
 
-// configExtra is the state of the parts of the page that use the settings store besides saved themes.
 type configExtra struct {
 	synced    string // the server address the settings were last synced with
 	shareNote string
@@ -48,13 +40,12 @@ type configExtra struct {
 	font      fontDraft
 	fontMsg   string
 	prefsMsg  string
-	fontsSeen map[string]int // stored fonts already given to the browser, with the size they had
-	afterFont func()         // draws the canvas again after a font arrived
+	fontsSeen map[string]int
+	afterFont func() // draws the canvas again after a font arrived
 }
 
 func prefsSyncOn() bool { return lsGet(prefsSyncKey) == "on" }
 
-// configURL is the confirmed server the settings go to ("" none).
 func (u *ui) configURL() string {
 	if u.enc == nil {
 		return ""
@@ -62,8 +53,6 @@ func (u *ui) configURL() string {
 	return u.enc.dir.url
 }
 
-// configTick is called with every draw: when a server has been confirmed since the last time, the settings are
-// synced with it once, and the fonts the device holds are made ready.
 func (u *ui) configTick(renderUI func()) {
 	u.loadStoredFonts()
 	if want := u.configURL(); want != u.cfgx.synced {
@@ -74,8 +63,6 @@ func (u *ui) configTick(renderUI func()) {
 	}
 }
 
-// afterSync is what follows a sync that worked: the preferences are taken from the server, or put there when it
-// has none, and fonts other devices added are made ready.
 func (u *ui) afterSync(renderUI func()) {
 	if prefsSyncOn() {
 		if _, err := u.config().Get(prefsItem); err == nil {
@@ -87,7 +74,6 @@ func (u *ui) afterSync(renderUI func()) {
 	u.loadStoredFonts()
 }
 
-// pushPrefs keeps the preferences in the settings store when the person asked for that.
 func (u *ui) pushPrefs(p prefs, renderUI func()) {
 	if !prefsSyncOn() {
 		return
@@ -100,7 +86,6 @@ func (u *ui) pushPrefs(p prefs, renderUI func()) {
 	u.syncThemes(renderUI)
 }
 
-// pullPrefs puts the preferences the settings store holds in force, when they differ from the ones in force.
 func (u *ui) pullPrefs() {
 	data, err := u.config().Get(prefsItem)
 	if err != nil {
@@ -114,8 +99,6 @@ func (u *ui) pullPrefs() {
 	u.announce(T("prefs.fromServer", "Display preferences were updated from the server"))
 }
 
-// setPrefsSync turns the keeping of the preferences on the server on or off. Turning it on takes the server's
-// copy if it has one (a new device gets the person's preferences) and otherwise puts these there.
 func (u *ui) setPrefsSync(on bool, renderUI func()) {
 	if !on {
 		lsSet(prefsSyncKey, "")
@@ -133,7 +116,6 @@ func (u *ui) setPrefsSync(on bool, renderUI func()) {
 	u.syncThemes(renderUI)
 }
 
-// prefsSyncNode is the choice, in the Preferences tab, to keep the preferences on the server.
 func prefsSyncNode(u *ui, renderUI func()) xango.Node {
 	kids := []xango.Node{components.Checkbox(components.CheckboxProps{
 		Label:   T("prefs.sync", "Keep these preferences on the server too, so they follow me to another device"),
@@ -150,9 +132,6 @@ func prefsSyncNode(u *ui, renderUI func()) xango.Node {
 	return xango.El("div", []xango.Attr{xango.A("class", "gj-prefs-sync")}, kids...)
 }
 
-// ---- shared themes ----
-
-// shareTheme downloads the saved theme item as a share file.
 func (u *ui) shareTheme(item string, renderUI func()) {
 	l := &u.themeLib
 	data, err := u.config().Get(item)
@@ -170,8 +149,6 @@ func (u *ui) shareTheme(item string, renderUI func()) {
 	renderUI()
 }
 
-// importSharedTheme reads a share file the person chose and, if it holds a theme that can be used, waits for them
-// to agree to it.
 func (u *ui) importSharedTheme(data []byte, renderUI func()) {
 	l := &u.themeLib
 	info, content, err := userconfig.OpenBundle(data)
@@ -188,7 +165,6 @@ func (u *ui) importSharedTheme(data []byte, renderUI func()) {
 	renderUI()
 }
 
-// acceptSharedTheme stores the waiting theme under a free name; it never replaces one the person has.
 func (u *ui) acceptSharedTheme(renderUI func()) {
 	in, c := u.cfgx.incoming, u.config()
 	if in == nil {
@@ -209,8 +185,6 @@ func (u *ui) acceptSharedTheme(renderUI func()) {
 	renderUI()
 }
 
-// shareNodes are the share parts of the saved-themes panel: the note that goes with a theme, the import button and,
-// for a file that was read, what it holds and the choice to add it.
 func (u *ui) shareNodes(renderUI func()) []xango.Node {
 	nodes := []xango.Node{
 		lineInput("theme-share-note", T("share.note", "Note to go with a theme you share (optional)"), u.cfgx.shareNote, "", func(v string) { u.cfgx.shareNote = v }),
@@ -233,8 +207,6 @@ func (u *ui) shareNodes(renderUI func()) []xango.Node {
 	return nodes
 }
 
-// ---- fonts of the person's own ----
-
 func fontItem(family string) string {
 	slug := strings.Trim(themeSlug.ReplaceAllString(strings.ToLower(strings.TrimSpace(family)), "-"), "-.")
 	if slug == "" {
@@ -246,7 +218,6 @@ func fontItem(family string) string {
 	return "font." + slug
 }
 
-// storedFont is a font in the settings store, for listing.
 type storedFont struct {
 	item, family string
 	font         userconfig.Font
@@ -272,8 +243,6 @@ func (u *ui) storedFonts() []storedFont {
 	return out
 }
 
-// loadStoredFonts gives the browser every stored font it has not been given, and lists them under "My fonts" in
-// the font list; fonts that were deleted leave the list.
 func (u *ui) loadStoredFonts() {
 	x := &u.cfgx
 	if x.fontsSeen == nil {
@@ -314,13 +283,11 @@ func (u *ui) loadStoredFonts() {
 	}
 }
 
-// isStoredFont says whether a family is one of the person's own (it needs no download).
 func (u *ui) isStoredFont(family string) bool {
 	_, ok := u.cfgx.fontsSeen[family]
 	return ok
 }
 
-// pickFile opens the browser's file chooser and hands the chosen file's name and bytes to done.
 func pickFile(accept string, done func(name string, data []byte)) {
 	doc := js.Global().Get("document")
 	in := doc.Call("createElement", "input")
@@ -354,7 +321,6 @@ func pickFile(accept string, done func(name string, data []byte)) {
 	in.Call("click")
 }
 
-// addFont checks the font being added and stores it.
 func (u *ui) addFont(renderUI func()) {
 	x := &u.cfgx
 	d := x.font
@@ -398,8 +364,6 @@ func (u *ui) addFont(renderUI func()) {
 	renderUI()
 }
 
-// fontSections is the "My fonts" part of the Styles tab: add a font file with its licence note, and the fonts
-// already added, each with its licence and a button to delete it.
 func (u *ui) fontSections(renderUI func()) xango.Node {
 	x := &u.cfgx
 	d := &x.font

@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-// builtinCommands are the commands that are not registered by a feature.
 func builtinCommands() []canvas.CommandInfo {
 	return []canvas.CommandInfo{
 		{Name: canvas.CmdBold, Title: "Bold", Feature: "format"},
@@ -30,14 +29,12 @@ func builtinCommands() []canvas.CommandInfo {
 	}
 }
 
-// tabIcons are the icons of the sidebar tabs (Material Symbols names, as in opendocs).
 var tabIcons = map[string]string{
 	"format": "tune", "styles": "style", "symbols": "functions", "keys": "keyboard", "comments": "comment", "review": "rate_review", "outline": "toc", "check": "task_alt", "images": "image", "refs": "menu_book", "forms": "dynamic_form", "voices": "record_voice_over", "addons": "extension", "scripts": "code",
 	"find": "search", "spell": "spellcheck", "language": "language", "stats": "numbers", "share": "ios_share", "people": "account_circle",
 	"migrate": "upload_file", "console": "terminal", "public": "link", "page": "margin", "save": "description", "transfer": "input", "privacy": "lock", "speech": "mic", "prefs": "settings", "about": "info",
 }
 
-// sideTabs is the order of the side panel's tabs, which the arrow keys follow.
 var sideTabs = []string{"format", "styles", "symbols", "keys", "comments", "review", "outline", "check", "images", "refs", "forms", "voices", "addons", "scripts", "find", "spell", "language", "stats", "share", "people", "migrate", "console", "public", "page", "save", "transfer", "speech", "privacy", "prefs", "about"}
 
 func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
@@ -59,8 +56,6 @@ func tabButton(u *ui, tab, label string, rerender func()) xango.Node {
 	}, kids...)
 }
 
-// fontKeys lists "family=key" for every downloaded cut and "family" for the
-// added fonts with none yet.
 func fontKeys(lib *fonts.Library) []string {
 	out := []string{}
 	for _, f := range lib.Added() {
@@ -75,8 +70,6 @@ func fontKeys(lib *fonts.Library) []string {
 	return out
 }
 
-// commentsPanel lists the comments with their text; an owner or editor can
-// reply, resolve and delete, a viewer only reads.
 func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(canvas.Command), redraw, refocus, renderUI func()) xango.Node {
 	fl := flow()
 	excerpts := map[string]string{}
@@ -140,7 +133,6 @@ func commentsPanel(u *ui, state *State, flow func() *canvas.TextFlow, run func(c
 	})))
 }
 
-// outlinePanel shows the headings (click to go there) and the bookmarks.
 func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *canvas.ScrollView, run func(canvas.Command), redraw, refocus, renderUI func()) xango.Node {
 	fl := flow()
 	if fl == nil {
@@ -208,8 +200,6 @@ func outlinePanel(state *State, flow func() *canvas.TextFlow, scroller func() *c
 	)
 }
 
-// tocControls is the look of the table of contents in the document, when it has one: a dotted leader or none, and how
-// many heading levels it lists. Nothing shows while the document has no table of contents.
 func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	var toc *canvas.TOCObject
 	for _, it := range fl.ContentItems() {
@@ -220,7 +210,6 @@ func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 			}
 		}
 	}
-	// One element always, so the panel keeps its order as the table comes and goes.
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-toc-controls")}, children...)
 	}
@@ -243,9 +232,6 @@ func tocControls(fl *canvas.TextFlow, redraw, renderUI func()) xango.Node {
 	)
 }
 
-// outlineMover is the outline panel's move: nil for a reader (the buttons and the drag are then not offered),
-// otherwise it moves the section, tells a shared document, and forgets which headings were collapsed (the numbers
-// have changed).
 func outlineMover(state *State, fl *canvas.TextFlow, redraw, renderUI func()) func(from, before int) {
 	if !state.Role.CanEdit() {
 		return nil
@@ -260,8 +246,6 @@ func outlineMover(state *State, fl *canvas.TextFlow, redraw, renderUI func()) fu
 	}
 }
 
-// mentionsSection lists the comments and replies by others that mention the local person and are not yet marked
-// as read, each with a way to go to it and to mark it read.
 func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
 	h := u.myHandle()
 	if h == "" {
@@ -291,7 +275,6 @@ func mentionsSection(u *ui, state *State, renderUI func()) xango.Node {
 		}, false))
 }
 
-// withoutBlank drops the items that have neither a label nor a separator (the place of a feature this build leaves out).
 func withoutBlank(items []components.MenuItem) []components.MenuItem {
 	return slices.DeleteFunc(items, func(it components.MenuItem) bool { return it.Label == "" && !it.Separator })
 }

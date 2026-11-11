@@ -31,7 +31,6 @@ func TestCheckDirURL(t *testing.T) {
 	}
 }
 
-// The word that confirms erasing is exact: a lower-case "erase" is not it.
 func TestEraseWordIsExact(t *testing.T) {
 	for typed, want := range map[string]bool{"ERASE": true, " ERASE ": true, "erase": false, "Erase": false, "ERASE!": false, "": false, "ERAS": false} {
 		if got := eraseWordMatches(typed, "ERASE"); got != want {
