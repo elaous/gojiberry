@@ -1,7 +1,3 @@
-// Package hub is the project's short list of reader voices whose terms have been read: four Piper voices to begin with
-// (American and British, a woman's voice and a man's), each with the licence of its recordings shown before anything is
-// downloaded. The files stay where Piper's voices are published (rhasspy/piper-voices); the list pins each file's size and
-// checksum, so a changed file is refused.
 package hub
 
 import (
@@ -15,7 +11,6 @@ import (
 //go:embed hub.json
 var raw []byte
 
-// ID is the id of the hub as a source of voices.
 const ID = "hub"
 
 // List is the hub as the file gives it.
