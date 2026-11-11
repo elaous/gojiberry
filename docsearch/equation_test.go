@@ -7,7 +7,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// The words of an equation are searchable; its symbols are not what a person types.
+// The words of an equation are searchable.
 func TestFromDocfileIndexesTheWordsOfAnEquation(t *testing.T) {
 	d := docfile.Document{Title: "Maths", Content: []docfile.Item{
 		{Chars: &docfile.Chars{Text: "Intro\n"}},

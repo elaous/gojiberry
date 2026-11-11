@@ -27,7 +27,7 @@ func TestVarintVectors(t *testing.T) {
 		if !bytes.Equal(got, c.want) {
 			t.Errorf("AppendVarint(%d) = % x, want % x", c.v, got, c.want)
 		}
-		v, n := ConsumeVarint(append(got, 0xaa)) // trailing byte is left alone
+		v, n := ConsumeVarint(append(got, 0xaa))
 		if v != c.v || n != len(c.want) {
 			t.Errorf("ConsumeVarint(% x) = %d, %d", got, v, n)
 		}
@@ -56,7 +56,6 @@ func TestVarintErrors(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", c.name, ParseError(n), c.want)
 		}
 	}
-	// Redundant padding up to ten bytes is accepted, as protowire does.
 	if v, n := ConsumeVarint(append(bytes.Repeat([]byte{0x80}, 9), 0x00)); v != 0 || n != 10 {
 		t.Errorf("padded zero = %d, %d", v, n)
 	}
@@ -184,8 +183,7 @@ func TestParseError(t *testing.T) {
 	}
 }
 
-// FuzzConsume feeds arbitrary bytes to every Consume function: none may panic, and a
-// positive length never exceeds the input.
+// FuzzConsume feeds arbitrary bytes to the consumers.
 func FuzzConsume(f *testing.F) {
 	f.Add([]byte{0x08, 0x96, 0x01})
 	f.Add([]byte{0x12, 0x07, 't', 'e', 's', 't', 'i', 'n', 'g'})
@@ -223,7 +221,7 @@ func FuzzConsume(f *testing.F) {
 	})
 }
 
-// FuzzRoundTrip checks that what Append writes Consume reads back.
+// FuzzRoundTrip checks appended values read back equal.
 func FuzzRoundTrip(f *testing.F) {
 	f.Add(uint64(300), []byte("abc"))
 	f.Fuzz(func(t *testing.T, x uint64, p []byte) {

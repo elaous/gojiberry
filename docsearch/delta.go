@@ -8,12 +8,7 @@ import (
 	"slices"
 )
 
-// An index kept between visits does not have to be sealed whole after every change: Seal writes the base, and
-// each refresh that changed something writes a Delta, a small sealed record of the documents that were added,
-// updated or dropped. Opening the base and applying the deltas in order gives the index. A delta is bound to
-// the base it follows and to its place in the sequence, so one cannot be moved to another index or reordered.
-// Losing or refusing a delta costs only time: Refresh compares the index with the store and reads again what is
-// missing.
+// An index kept between visits is updated by deltas.
 
 var deltaMagic = []byte("GJSD1")
 
@@ -26,7 +21,7 @@ type Delta struct {
 // Empty says the delta changes nothing.
 func (d Delta) Empty() bool { return len(d.Put) == 0 && len(d.Remove) == 0 }
 
-// DeltaFor is the change the refresh that returned res made to ix.
+// DeltaFor is the change a refresh returned.
 func (ix *Index) DeltaFor(res Result) Delta {
 	d := Delta{Put: map[string]*doc{}}
 	for _, id := range res.Changed {
@@ -38,7 +33,7 @@ func (ix *Index) DeltaFor(res Result) Delta {
 	return d
 }
 
-// baseID is what ties a delta to its base: the nonce the base was sealed with.
+// baseID ties a delta to its base index.
 func baseID(base []byte) ([]byte, error) {
 	n := len(magic) + 12
 	if len(base) < n {
@@ -52,7 +47,7 @@ func deltaAAD(id []byte, seq int) []byte {
 	return binary.BigEndian.AppendUint64(aad, uint64(seq))
 }
 
-// SealDelta seals d as the seq-th change (1, 2, ...) after the sealed base.
+// SealDelta seals d as the seq-th change.
 func SealDelta(key, base []byte, seq int, d Delta) ([]byte, error) {
 	aead, err := newAEAD(key)
 	if err != nil {
@@ -74,9 +69,7 @@ func SealDelta(key, base []byte, seq int, d Delta) ([]byte, error) {
 	return aead.Seal(out, nonce, plain, deltaAAD(id, seq)), nil
 }
 
-// ApplyDelta opens the seq-th change sealed by SealDelta and applies it to ix. A delta that is damaged, sealed
-// under another key, for another base or another place in the sequence is refused with ErrCorrupt and ix is
-// left as it was.
+// ApplyDelta opens the seq-th change sealed by SealDelta.
 func (ix *Index) ApplyDelta(key, base []byte, seq int, sealed []byte) error {
 	aead, err := newAEAD(key)
 	if err != nil {

@@ -9,24 +9,19 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Extract turns a stored document's bytes (already decrypted) into the title and text to index.
+// Extract turns a stored document's bytes into searchable text.
 type Extract func(data []byte) (title, text string, err error)
 
 // Result says what Refresh did.
 type Result struct {
 	Added, Updated, Removed, Unchanged int
-	// Changed are the ids of the documents that were added or updated, Gone those dropped (removed from the
-	// store, or no longer readable): what Index.DeltaFor turns into a small sealed record of the change.
+	// Changed are the ids of documents that were re-indexed.
 	Changed, Gone []string
-	// Skipped are the ids that could not be read or understood; they are not in the index.
+	// Skipped are the ids that could not be read.
 	Skipped []string
 }
 
-// Refresh brings ix in line with the store: documents that are new or newer than what was indexed are
-// loaded and extracted, documents that are gone are dropped, the rest are left alone (so a refresh
-// after one save reads one document). Pass the adapter that decrypts (the encrypting adapter), so
-// the index is built from plain text on this device and never from what the server holds. A
-// cancelled context stops it with the work so far kept.
+// Refresh brings the index in line with the store.
 func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Extract) (Result, error) {
 	var r Result
 	metas, err := store.List(ctx)
@@ -59,7 +54,7 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 			if _, had := ix.docs[m.ID]; had {
 				r.Gone = append(r.Gone, m.ID)
 			}
-			delete(ix.docs, m.ID) // never keep stale text for a document that no longer reads
+			delete(ix.docs, m.ID)
 			r.Skipped = append(r.Skipped, m.ID)
 			continue
 		}
@@ -82,8 +77,7 @@ func Refresh(ctx context.Context, ix *Index, store docstore.Adapter, extract Ext
 	return r, nil
 }
 
-// FromDocfile is the Extract for documents saved in any of the docfile formats: the title and the
-// text of the paragraphs and table cells.
+// FromDocfile is the Extract for documents saved in docfile form.
 func FromDocfile(data []byte) (title, text string, err error) {
 	var last error
 	for _, c := range docfile.Formats() {
@@ -101,7 +95,7 @@ func FromDocfile(data []byte) (title, text string, err error) {
 				b.WriteString(" " + it.Form.Words() + " ")
 			}
 			if it.Equation != nil {
-				b.WriteString(" " + it.Equation.Alt + " ") // the words of the formula, what a person searches for
+				b.WriteString(" " + it.Equation.Alt + " ")
 			}
 			if it.Table != nil {
 				for _, row := range it.Table.Rows {
@@ -113,7 +107,7 @@ func FromDocfile(data []byte) (title, text string, err error) {
 		}
 		if d.Title == "" && b.Len() == 0 {
 			last = errors.New("docsearch: nothing in the document")
-			continue // a format that "reads" anything as an empty document is not the right one
+			continue
 		}
 		return d.Title, b.String(), nil
 	}

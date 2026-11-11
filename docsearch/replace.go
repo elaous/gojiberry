@@ -11,36 +11,31 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Replace across documents is two steps so that nothing changes before the person has seen it:
-// PlanReplace reads every document (through the decrypting adapter, on this device) and works out the
-// new bytes of each one that has a match, with a before and after view; Apply writes exactly those
-// bytes; Undo puts the old bytes back. The text is replaced in the flowing text of a document, as the
-// editor's own Replace all does, so a match inside a table cell is not touched.
+// Replace across documents is planned, then applied.
 
 // Change is what a plan would do to one document.
 type Change struct {
 	ID, Title string
 	// Count is how many matches would be replaced.
 	Count int
-	// Before and After show the first match in its surroundings, as it is and as it would be.
+	// Before and After show the first match in context.
 	Before, After string
 }
 
 // Plan is the previewed replacement.
 type Plan struct {
-	// Changes lists the documents that would change, by id.
+	// Changes lists the documents a plan would write.
 	Changes []Change
-	// Skipped are documents that could not be read or understood; they are left alone.
+	// Skipped are documents that could not be read.
 	Skipped []string
 
 	store    docstore.Adapter
 	old, new map[string][]byte
 }
 
-// PlanReplace finds o in every document of store and prepares the replacement by repl (with $1 and
-// ${name} for a regular expression), writing nothing.
+// PlanReplace finds matches in every document of the store.
 func PlanReplace(ctx context.Context, store docstore.Adapter, o canvas.FindOptions, repl string) (*Plan, error) {
-	if _, err := canvas.FindAll("", o); err != nil { // a bad pattern or an empty query, before reading anything
+	if _, err := canvas.FindAll("", o); err != nil {
 		return nil, err
 	}
 	metas, err := store.List(ctx)
@@ -96,7 +91,7 @@ func PlanReplace(ctx context.Context, store docstore.Adapter, o canvas.FindOptio
 	return p, nil
 }
 
-// Total is how many replacements the plan makes in all.
+// Total is how many replacements the plan makes.
 func (p *Plan) Total() int {
 	n := 0
 	for _, c := range p.Changes {
@@ -105,9 +100,7 @@ func (p *Plan) Total() int {
 	return n
 }
 
-// Bytes returns document id's stored bytes as the plan read them and the bytes the replacement would
-// write, for a host that writes through its own layer (a catalog with checksums and versions) instead of
-// Apply. ok is false for a document the plan does not change. The slices are copies.
+// Bytes returns document id's stored bytes.
 func (p *Plan) Bytes(id string) (old, replacement []byte, ok bool) {
 	o, found := p.old[id]
 	if !found {
@@ -116,18 +109,16 @@ func (p *Plan) Bytes(id string) (old, replacement []byte, ok bool) {
 	return bytes.Clone(o), bytes.Clone(p.new[id]), true
 }
 
-// Applied is the outcome of Apply, and what Undo needs.
+// Applied is the outcome of Apply.
 type Applied struct {
-	// Done are the documents written; Conflicts are those left alone because they changed since
-	// the plan was made (somebody saved, or this person typed): plan again to include them.
+	// Done are the documents written; Conflicts are skipped ones.
 	Done, Conflicts []string
 
 	store      docstore.Adapter
 	old, wrote map[string][]byte
 }
 
-// Apply writes the planned documents. A document that is no longer what the plan read is skipped.
-// Only the ids in only are written when it is given (the person unticked some in the preview).
+// Apply writes the planned documents.
 func (p *Plan) Apply(ctx context.Context, only ...string) (*Applied, error) {
 	a := &Applied{store: p.store, old: map[string][]byte{}, wrote: map[string][]byte{}}
 	for _, c := range p.Changes {
@@ -150,8 +141,7 @@ func (p *Plan) Apply(ctx context.Context, only ...string) (*Applied, error) {
 	return a, nil
 }
 
-// Undo puts back the text each written document had. A document that was saved again since is left
-// alone and returned in kept, so a later edit is never thrown away.
+// Undo puts back the text each written document had.
 func (a *Applied) Undo(ctx context.Context) (restored, kept []string, err error) {
 	for _, id := range a.Done {
 		if err := ctx.Err(); err != nil {
@@ -171,8 +161,7 @@ func (a *Applied) Undo(ctx context.Context) (restored, kept []string, err error)
 
 var errChanged = errors.New("docsearch: the document changed")
 
-// swap replaces from by to if the store still holds from. A store with SaveIf does it as one step;
-// otherwise the document is read again just before it is written (a small window remains).
+// swap replaces from by to if the store still holds it.
 func swap(ctx context.Context, store docstore.Adapter, id string, from, to []byte) error {
 	if c, ok := store.(docstore.ConditionalAdapter); ok {
 		if err := c.SaveIf(ctx, id, to, docstore.Digest(from)); !errors.Is(err, docstore.ErrConditionalUnsupported) {
@@ -198,7 +187,7 @@ func contains(ids []string, id string) bool {
 	return false
 }
 
-// decode reads a stored document in whichever docfile format it is in, and says which.
+// decode reads a stored document in whichever format it has.
 func decode(data []byte) (docfile.Document, docfile.Codec, error) {
 	var last error
 	for _, c := range docfile.Formats() {
@@ -216,7 +205,7 @@ func decode(data []byte) (docfile.Document, docfile.Codec, error) {
 	return docfile.Document{}, nil, last
 }
 
-// window is about 60 characters of text around [from, to), on one line.
+// window is about 60 characters of text around a match.
 func window(text string, from, to int) string {
 	rs := []rune(text)
 	lo, hi := max(0, from-25), min(len(rs), to+25)
