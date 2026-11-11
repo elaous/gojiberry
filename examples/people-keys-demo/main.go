@@ -1,22 +1,5 @@
 //go:build js && wasm
 
-// Command people-keys-demo is the host code the People tab's key controls need: the
-// components.Recipients props wired to the encryption library and the store's key directory.
-//
-//   - AddMyPasskey: client.DeriveKey (the passkey's PRF output) -> encrypt.PRFRecipient ->
-//     encrypt.Sharing.Add. No fingerprint is typed: it is the owner's own key.
-//   - CreateRecoveryKey: encrypt.GenerateRecoveryKey; the secret is shown once, and the public part
-//     becomes an owner key only when the person confirms they saved it (CommitRecoveryKey).
-//   - Directory: directoryclient.Lookup on the docstore server. A row's marks come from what the
-//     server answered, and the owner mark only if the client re-checked the owner's signature: a
-//     pasted key is "label only" however it is worded.
-//   - My directory entry: publish my passkey's key (proof of possession with the passkey's own PRF
-//     identity, and the owner signature when the address is enrolled), revoke it, enroll an owner
-//     key (made and kept in this browser, in localStorage) and watch the log for my address:
-//     "someone published a key for your address" is the report of an entry I did not make.
-//
-// The document is in memory and the owner's signing key is made for the page; a real host keeps
-// the document in its store (see docs/encryption-and-passkeys.md). Serve it with cmd/server.
 package main
 
 import (
@@ -42,14 +25,11 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// docID is the one confidential document this page shares.
 const docID = "00000000-0000-4000-8000-000000000001"
 
 type page struct {
-	render func()
-	token  string // the passkey session
-	// dirToken is a provider session (demo only, /demo/provider-session): the directory's lookup
-	// is closed to passkey sessions.
+	render   func()
+	token    string // the passkey session
 	dirToken string
 
 	store   docstore.Adapter
@@ -64,14 +44,13 @@ type page struct {
 	dirRows        []components.DirRow
 	dirSearched    bool
 	dirVerified    map[string]bool // fingerprint -> the directory said so, for the last lookup
-	dirAttested    map[string]bool // fingerprint -> the directory said the key signed the binding too
-	dirOwnerSigned map[string]bool // fingerprint -> the owner signed it, and this client checked the signature
-	dirEnrolled    map[string]bool // fingerprint -> the address of the row has an owner key
+	dirAttested    map[string]bool
+	dirOwnerSigned map[string]bool
+	dirEnrolled    map[string]bool
 	ownerAdded     map[string]bool // keys added from an owner-signed row
 	verifiedAdded  map[string]bool // keys added from a verified row
 	attestedAdded  map[string]bool // keys added from an attested row
 
-	// My own directory entry (the demo's pretend provider account, ana@example.com).
 	dc             *directoryclient.Client
 	ownerSigning   directoryclient.OwnerKey // the owner signing key, kept in localStorage; nil until enrolled
 	watch          directoryclient.WatchState
@@ -92,7 +71,6 @@ func recipientRow(r encrypt.Recipient, verified, attested bool) components.Recip
 	return components.RecipientRow{Label: r.Label, Type: r.Type, Fingerprint: r.Fingerprint, Verified: verified, Attested: verified && attested}
 }
 
-// myAddress is the address of the demo's pretend identity-provider account.
 const myAddress = "ana@example.com"
 
 func store(key, value string) {
@@ -122,8 +100,6 @@ func newPage() (*page, error) {
 		p.ownerSigning = k
 	}
 	if st, err := directoryclient.ParseWatchState(load("gj-watch-state")); err != nil {
-		// Damaged, or saved by an older version: never use half of it. Forget it and say the next look is
-		// a first look.
 		store("gj-watch-state", "")
 		p.dirAlerts = append(p.dirAlerts, "The saved record of what this device has seen of the key directory could not be read, so the next check starts from scratch.")
 	} else {
@@ -144,12 +120,11 @@ func newPage() (*page, error) {
 	p.store = docstore.NewMemoryAdapter()
 	p.ring = &encrypt.StoreKeyring{Store: p.store, OwnerSigners: []ed25519.PublicKey{signer.Public()}}
 	adapter := encrypt.New(p.store, p.ring)
-	adapter.Signer = signer // frames are signed with the owner's key: a public key alone cannot forge one
+	adapter.Signer = signer
 	p.sharing = &encrypt.Sharing{Store: p.store, Adapter: adapter, Signer: signer}
 	return p, nil
 }
 
-// refreshShared reads the document's list: the keys it is shared with, besides the owner's own.
 func (p *page) refreshShared(ctx context.Context) error {
 	list, err := p.sharing.List(ctx, docID)
 	if err != nil && !errors.Is(err, docstore.ErrNotFound) {
@@ -188,13 +163,12 @@ func (p *page) addMyPasskey(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_ = id // the credential ID would be a hint stored in clear in the list: left out, the browser asks
+	_ = id
 	r, err := encrypt.PRFRecipient(secret, "My passkey", "")
-	clear(secret) // the secret is the root of the key: do not keep it around
+	clear(secret)
 	if err != nil {
 		return err
 	}
-	// The owner is adding their own key: it is confirmed with its own fingerprint.
 	if err := p.sharing.Add(ctx, docID, r, r.Fingerprint); err != nil {
 		return err
 	}
@@ -204,9 +178,6 @@ func (p *page) addMyPasskey(ctx context.Context) error {
 	return p.refreshShared(ctx)
 }
 
-// createRecoveryKey makes a recovery key and returns its secret to be shown. The key is not an owner
-// key yet: commitRecoveryKey adds it once the person confirmed they saved the secret, so a key whose
-// secret was never seen can never count as a way back.
 func (p *page) createRecoveryKey(ctx context.Context) (string, error) {
 	pub, secret, err := encrypt.GenerateRecoveryKey()
 	if err != nil {
@@ -232,8 +203,6 @@ func (p *page) commitRecoveryKey(ctx context.Context) error {
 	return nil
 }
 
-// directory is the client of the server's key directory, signed in as the demo's provider account.
-// It pins the log keys the first time (demo only: see /demo/log-keys).
 func (p *page) directory(ctx context.Context) (*directoryclient.Client, error) {
 	if p.dc != nil {
 		return p.dc, nil
@@ -279,8 +248,6 @@ func (p *page) directory(ctx context.Context) (*directoryclient.Client, error) {
 	return p.dc, nil
 }
 
-// lookup asks the server's directory through the client, which re-checks the owner signatures and
-// attestations itself: a row's marks are what was proved, not what the server said.
 func (p *page) lookup(ctx context.Context, email string) ([]components.DirRow, error) {
 	c, err := p.directory(ctx)
 	if err != nil {
@@ -298,8 +265,6 @@ func (p *page) lookup(ctx context.Context, email string) ([]components.DirRow, e
 	return rows, nil
 }
 
-// passkeyIdentity asks for the passkey (one touch) and derives the age identity of its key; the
-// recipient it makes must be the one that was added, or this is another passkey.
 func (p *page) passkeyIdentity(ctx context.Context) (*encrypt.Recipient, age.Identity, error) {
 	for _, o := range p.owner {
 		if !o.IsPasskey() {
@@ -323,8 +288,6 @@ func (p *page) passkeyIdentity(ctx context.Context) (*encrypt.Recipient, age.Ide
 	return nil, nil, errors.New("add your passkey first")
 }
 
-// publishMine publishes the passkey's key for my address: with proof of possession by the
-// passkey's own identity and, when I have enrolled an owner key, the owner's signature.
 func (p *page) publishMine(ctx context.Context) error {
 	c, err := p.directory(ctx)
 	if err != nil {
@@ -342,7 +305,6 @@ func (p *page) publishMine(ctx context.Context) error {
 	return nil
 }
 
-// ownerKey is the owner signing key, nil before enrollment.
 func (p *page) ownerKey() directoryclient.OwnerKey { return p.ownerSigning }
 
 func (p *page) revokeMine(ctx context.Context) error {
@@ -366,7 +328,6 @@ func (p *page) revokeMine(ctx context.Context) error {
 	return nil
 }
 
-// enrollOwner makes the owner key in this browser and registers it for my address.
 func (p *page) enrollOwner(ctx context.Context) error {
 	c, err := p.directory(ctx)
 	if err != nil {
@@ -385,8 +346,6 @@ func (p *page) enrollOwner(ctx context.Context) error {
 	return nil
 }
 
-// watchMine fetches the log since the last position seen, checks it, and reports every entry for
-// my address that I did not make.
 func (p *page) watchMine(ctx context.Context) error {
 	c, err := p.directory(ctx)
 	if err != nil {
@@ -410,8 +369,6 @@ func (p *page) watchMine(ctx context.Context) error {
 	return nil
 }
 
-// parsed is the draft as a row. Its Verified is the directory's answer for that fingerprint in
-// the last lookup, never something the pasted text says.
 func (p *page) parsed() *components.RecipientRow {
 	if strings.TrimSpace(p.draft) == "" {
 		return nil
@@ -510,8 +467,6 @@ func (p *page) view() xango.Node {
 		p.asker.Dialog())
 }
 
-// myEntry is the "my directory entry" section: publish, revoke, enroll an owner key, watch my
-// address. It acts for the demo's pretend provider account.
 func (p *page) myEntry() xango.Node {
 	btn := func(id, text string, f func(context.Context) error) xango.Node {
 		return xango.El("button", []xango.Attr{xango.A("id", id), xango.A("type", "button"), xango.On("click", func(xango.Event) {
@@ -546,7 +501,6 @@ func (p *page) myEntry() xango.Node {
 		xango.El("ul", []xango.Attr{xango.A("id", "dir-alerts")}, alerts...))
 }
 
-// onDirResults keeps what the directory said: which fingerprints it vouches for.
 func (p *page) onDirResults(email string, rows []components.DirRow) {
 	p.dirRows, p.dirSearched = rows, true
 	p.dirVerified, p.dirAttested, p.dirOwnerSigned, p.dirEnrolled = map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
