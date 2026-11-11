@@ -12,7 +12,7 @@ type DataTransfer struct {
 // SetData stores data under format for the drop target.
 func (d *DataTransfer) SetData(format, data string) { d.Value.Call("setData", format, data) }
 
-// GetData retrieves the data stored under format by the drag source.
+// GetData retrieves the data stored under format.
 func (d *DataTransfer) GetData(format string) string { return d.Value.Call("getData", format).String() }
 
 // DropEffect returns the drop effect the target will use.
@@ -21,7 +21,7 @@ func (d *DataTransfer) DropEffect() string { return d.Value.Get("dropEffect").St
 // SetDropEffect sets the drop effect the target will use.
 func (d *DataTransfer) SetDropEffect(effect string) { d.Value.Set("dropEffect", effect) }
 
-// EffectAllowed returns the set of drop effects the drag source permits.
+// EffectAllowed returns the drop effects the source permits.
 func (d *DataTransfer) EffectAllowed() string { return d.Value.Get("effectAllowed").String() }
 
 // SetEffectAllowed sets the drop effects the drag source permits.

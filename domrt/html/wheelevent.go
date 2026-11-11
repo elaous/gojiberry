@@ -4,12 +4,7 @@ package html
 
 import "syscall/js"
 
-// WheelEvent wraps a wheel DOM event -- xango.Event carries no delta
-// information at all (see its doc comment), so, like MouseEvent and
-// KeyEvent, this is a typed escape hatch for anything that needs real
-// scroll input: a canvas-rendered document's own scroll offset (which
-// has no native scrollbar to drive it, unlike a normal DOM element),
-// a custom slider, a zoomable canvas.
+// WheelEvent wraps a wheel DOM event with its deltas.
 type WheelEvent struct {
 	Value          js.Value
 	DeltaX, DeltaY float64
@@ -23,9 +18,7 @@ func newWheelEvent(v js.Value) WheelEvent {
 	}
 }
 
-// PreventDefault suppresses the browser's default handling of the
-// event -- e.g. stopping the page itself from scrolling while a
-// canvas-rendered surface handles the wheel input instead.
+// PreventDefault suppresses the browser's default wheel scrolling.
 func (e WheelEvent) PreventDefault() { e.Value.Call("preventDefault") }
 
 // StopPropagation stops the event from bubbling further.

@@ -64,7 +64,7 @@ func (a *AnchorElement) SetRel(rel string) { a.Set("rel", rel) }
 // Download returns the anchor's download attribute (the suggested filename).
 func (a *AnchorElement) Download() string { return a.Get("download").String() }
 
-// SetDownload marks the anchor as a download with a file name.
+// SetDownload marks the anchor as a download.
 func (a *AnchorElement) SetDownload(name string) { a.Set("download", name) }
 
 // ButtonElement is an Element known to be a <button>.
@@ -101,7 +101,7 @@ func (e *Element) AsSelect() *SelectElement {
 	return &SelectElement{Element: *e}
 }
 
-// SelectedIndex returns the index of the currently selected option, or -1 if none.
+// SelectedIndex returns the selected option's index, or -1.
 func (s *SelectElement) SelectedIndex() int { return s.Get("selectedIndex").Int() }
 
 // SetSelectedIndex selects the option at index.
@@ -121,7 +121,7 @@ func (s *SelectElement) Options() []Element {
 // InputElement is an Element known to be an <input>.
 type InputElement struct{ Element }
 
-// AsInput casts e to an InputElement, or returns nil if e isn't an <input>.
+// AsInput casts e to an InputElement, or returns nil.
 func (e *Element) AsInput() *InputElement {
 	if e.GetTagName() != "INPUT" {
 		return nil
@@ -147,10 +147,7 @@ func (i *InputElement) Disabled() bool { return i.Get("disabled").Bool() }
 // SetDisabled enables or disables the input.
 func (i *InputElement) SetDisabled(disabled bool) { i.Set("disabled", disabled) }
 
-// Files returns the selected files for a type="file" input as raw JS
-// File objects (empty for other input types or when nothing is
-// selected). Wrap each with browser.WrapFile to read its name/size/type
-// or its contents -- see domrt/browser's File API.
+// Files returns the selected files of a file input.
 func (i *InputElement) Files() []js.Value {
 	files := i.Get("files")
 	if files.IsUndefined() || files.IsNull() {

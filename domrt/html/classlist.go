@@ -12,7 +12,7 @@ func (e *Element) ClassListRemove(class ...string) {
 	e.Element.Get("classList").Call("remove", toAnySlice(class)...)
 }
 
-// ClassListToggle adds or removes class and reports whether it is present.
+// ClassListToggle adds or removes class; reports presence.
 func (e *Element) ClassListToggle(class string) bool {
 	return e.Element.Get("classList").Call("toggle", class).Bool()
 }

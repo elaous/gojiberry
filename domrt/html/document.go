@@ -64,12 +64,12 @@ func (d *Document) QuerySelectorAll(selector string) []Element {
 	return wrapAll(d.Document.Call("querySelectorAll", selector))
 }
 
-// CreateElement creates a new, unattached element with the given tag name.
+// CreateElement creates an unattached element.
 func (d *Document) CreateElement(tag string) *Element {
 	return &Element{Element: d.Document.Call("createElement", tag)}
 }
 
-// CreateElementNS creates an element in the given namespace, such as SVG.
+// CreateElementNS creates an element in a namespace, such as SVG.
 func (d *Document) CreateElementNS(namespace, tag string) *Element {
 	return &Element{Element: d.Document.Call("createElementNS", namespace, tag)}
 }
@@ -84,17 +84,17 @@ func (d *Document) Body() *Element {
 	return &Element{Element: d.Document.Get("body")}
 }
 
-// CreateTextNode creates a new, unattached text node with the given content.
+// CreateTextNode creates an unattached text node.
 func (d *Document) CreateTextNode(text string) *Element {
 	return &Element{Element: d.Document.Call("createTextNode", text)}
 }
 
-// Get returns a named document property not covered by a getter.
+// Get returns a named document property.
 func (d *Document) Get(name string) js.Value {
 	return d.Document.Get(name)
 }
 
-// Call invokes a document method not covered by a typed wrapper above.
+// Call invokes a document method.
 func (d *Document) Call(method string, args ...any) js.Value {
 	return d.Document.Call(method, args...)
 }

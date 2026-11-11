@@ -1,11 +1,11 @@
 //go:build js && wasm
 
-// Package dom wraps browser DOM, canvas and WebGL objects as typed Go values.
+// Package dom wraps browser DOM objects as typed Go values.
 package html
 
 import "syscall/js"
 
-// DomNode is implemented by Element and the element types that embed it.
+// DomNode is implemented by element types.
 type DomNode interface {
 	JSValue() js.Value
 	Get(name string) js.Value

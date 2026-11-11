@@ -247,7 +247,7 @@ func (c *Context3D) CompileProgram(vertexSrc, fragmentSrc string) (js.Value, err
 	c.AttachShader(program, vs)
 	c.AttachShader(program, fs)
 	c.LinkProgram(program)
-	// The program keeps what it linked; the shaders are not needed.
+	// The program keeps what it linked; shaders are not needed.
 	defer c.DeleteShader(vs)
 	defer c.DeleteShader(fs)
 	if !c.GetProgramParameter(program, c.LINK_STATUS()).Bool() {
