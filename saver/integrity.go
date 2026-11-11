@@ -106,7 +106,7 @@ func (s *Saver) readEntry(ctx context.Context, t Target, e catalogEntry) (doc do
 		}
 		prevGone = errors.Is(perr, docstore.ErrNotFound)
 	}
-	// gone for good only when every copy is missing; damaged ones are kept
+	// gone only when every copy is missing; damaged ones are kept
 	if errors.Is(err, docstore.ErrNotFound) && prevGone {
 		return docfile.Document{}, nil, false, fmt.Errorf("%w: %w: %w", ErrUnreadable, ErrDamaged, err)
 	}

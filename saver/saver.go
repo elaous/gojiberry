@@ -234,7 +234,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 		prev, existed := cat.Docs[id]
 		protection := prev.Protection
 		if existed {
-			// the catalog is where tags are edited: saving does not bring them back
+			// the catalog is where tags are edited: saving restores none
 			if e2ee && !prev.confidential() {
 				// becoming confidential by this save: the same gate as SetProtection's
 				if s.ConfidentialCheck != nil && !prechecked {
@@ -263,7 +263,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			if _, ok := cat.Folders[doc.Folder()]; !ok {
 				doc.SetFolder("")
 			}
-			// a copy or import of a confidential document stays so, if the check allows
+			// a copy or import of a confidential document stays so if allowed
 			if protection = doc.Protection(); e2ee {
 				protection = ProtectionE2EE
 			}

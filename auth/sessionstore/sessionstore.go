@@ -168,7 +168,7 @@ func (k kind) newToken(bucket int64) (string, error) {
 
 func (k kind) id(token string) string {
 	i := strings.LastIndexByte(token, '.')
-	// base64url has no ".": a second dot is not a token of ours
+	// base64url has no ".": a second dot is no token of ours
 	if i <= 0 || i == len(token)-1 || len(token) > 128 || strings.IndexByte(token, '.') != i {
 		return ""
 	}

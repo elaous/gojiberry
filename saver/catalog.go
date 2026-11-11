@@ -353,7 +353,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		id := doc.ID()
 		if !docfile.ValidID(id) {
-			// a document from before IDs gets an ID and a matching file key
+			// a document from before IDs gets an ID and matching file key
 			id = stem
 			if !docfile.ValidID(id) {
 				id = docfile.NewID()
@@ -380,7 +380,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 			saved = m.UpdatedAt.UnixNano()
 		}
 		entry := catalogEntry{Key: key, Name: doc.Name(), Format: c.Name(), Size: size, Updated: saved, Tags: doc.Tags(), Trashed: doc.Trashed(), Folder: doc.Folder(), Sum: sum}
-		// confidential: real name and tags stay in it; the catalog lists the placeholder
+		// confidential: real name and tags stay in it; catalog lists the placeholder
 		if k, ok := knownEntry[m.ID]; doc.Protection() == ProtectionE2EE || ok && k.confidential() {
 			entry.conceal()
 		}
@@ -415,7 +415,7 @@ func (s *Saver) build(ctx context.Context, t Target, known *catalog) (*catalog, 
 		}
 		out.Docs[id] = entry
 	}
-	// a folder with a gone parent, or in a cycle, goes to the top level
+	// a folder with no parent, or in a cycle, goes top level
 	for id, f := range out.Folders {
 		if _, ok := out.Folders[f.Parent]; f.Parent != "" && !ok || out.depth(id) > MaxFolderDepth+1 {
 			f.Parent = ""
@@ -453,7 +453,7 @@ func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id str
 		return nil, err // wraps ErrUnreadable when no copy is good
 	}
 	if fromPrev {
-		// the current file is bad: the previous copy stands in and replaces it
+		// the current file is bad: the previous copy replaces it
 		bad := e.Key
 		e.Key, e.Sum = e.Prev, e.PrevSum
 		e.Prev, e.PrevSum = "", ""

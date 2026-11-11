@@ -162,7 +162,7 @@ func (m *Manager) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if token, ok := bearerToken(r); ok {
-		// a failed delete leaves the session valid: say so, so the client retries
+		// a failed delete leaves the session valid: client retries
 		if err := m.store.DeleteSession(r.Context(), token); err != nil {
 			log.Printf("auth: deleting a session: %v", err)
 			http.Error(w, "auth: session store unavailable", http.StatusServiceUnavailable)

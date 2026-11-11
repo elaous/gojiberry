@@ -31,7 +31,7 @@ func blurPlain(plain []byte) []byte {
 	for bucket < len(plain)+3 {
 		bucket <<= 1
 	}
-	// the field costs its tag (2 bytes), length (1 to 4 bytes) and the zeros
+	// the field costs tag (2), length (1 to 4) and zeros
 	for lenBytes := 1; lenBytes <= 4; lenBytes++ {
 		n := bucket - len(plain) - 2 - lenBytes
 		if n >= 0 && varintLen(uint64(n)) == lenBytes {

@@ -30,7 +30,7 @@ func (u *ui) mirrorBlocks(flow *canvas.TextFlow, root *cxango.Root) []components
 		}
 	}
 	if len(starts) > 0 {
-		// one layout for all blocks: asking each in turn recomputes it every time
+		// one layout for all blocks: asking each recomputes it every time
 		for k, p := range flow.CaretRects(starts) {
 			if p.OK {
 				ys[which[k]] = p.Y

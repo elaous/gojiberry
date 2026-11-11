@@ -252,7 +252,7 @@ type PublishRequest struct {
 	Identity age.Identity
 	// SSHPrivateKey is an unencrypted ssh-ed25519 private key.
 	SSHPrivateKey []byte
-	// nil: the server refuses with 428 if the address has an owner key
+	// nil: the server refuses with 428 if an owner key exists
 	Owner OwnerSigner
 }
 

@@ -398,7 +398,7 @@ func (s *Session) save(ctx context.Context) (err error) {
 	})
 	name := e.Name
 	if e.Protection == ProtectionE2EE {
-		// the catalog lists the placeholder; the list shows the real name from now on
+		// the catalog lists the placeholder; the list shows the real name
 		name = doc.Name()
 		_, tags, _ := s.Saver.Reveal(ctx, target, e.ID)
 		s.remember(e.ID, name, tags)

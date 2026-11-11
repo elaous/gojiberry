@@ -85,7 +85,7 @@ func (s *Store) finishUnlock(o Owner, u Unlocked) error {
 	}
 	s.unlock(held{Unlocked: u, owner: o.Public})
 	s.sealOnUnlock(o, u.Signer)
-	// first use of an SSH key, or the list moved on legitimately: bind it now
+	// first SSH use, or a legitimate list move: bind now
 	if o.Kind != KindSSH && s.ConfirmFirstUse {
 		s.mu.RLock()
 		d := ownersDigest(s.cfg.Owners)

@@ -669,7 +669,7 @@ func main() {
 				fidelity,
 				components.Transfer(components.TransferProps{
 					Imports: imports, Exports: exports,
-					// file worker formats run in their own goroutine, never in the JS handler
+					// formats run in their own goroutine, never in the JS handler
 					OnExport: func(name string) {
 						u.fidelity.format = name
 						doc := currentDoc()

@@ -453,7 +453,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
-			// access can change while a stream is open: end it, the client reconnects
+			// access can change mid-stream: end it, the client reconnects
 			if h.role(r, id) != role {
 				return
 			}

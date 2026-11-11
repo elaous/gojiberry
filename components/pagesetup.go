@@ -200,7 +200,7 @@ func PageSetupPanel(props PageSetupProps) xango.Node {
 func mm(pt float64) string { return strconv.Itoa(int(math.Round(pt * 25.4 / 72))) }
 
 func customSize(set PageSetup, change func(func(*PageSetup))) xango.Node {
-	// one element always, so the panel keeps its order as fields come and go
+	// one element always, so the panel keeps its order
 	box := func(children ...xango.Node) xango.Node {
 		return xango.El("div", []xango.Attr{xango.A("class", "gj-pagesetup-custom")}, children...)
 	}

@@ -100,7 +100,7 @@ func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name 
 		}
 		f := folderEntry{Name: name, Parent: parent}
 		if e2ee {
-			// real name first, in its encrypted record; the plain one holds the placeholder
+			// real name first, in its encrypted record; plain one holds the placeholder
 			if err := s.writeFolderSecret(ctx, t, cat, id, name); err != nil {
 				return err
 			}

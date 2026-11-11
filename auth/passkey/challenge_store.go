@@ -32,7 +32,7 @@ const (
 	// bounds Expires: a huge value would overflow bucket numbers
 	maxChallengeTTL  = 100 * 365 * 24 * time.Hour
 	maxChallengeUnix = 1 << 40
-	// bounds a token before it is hashed or parsed (ours are about 40 bytes)
+	// bounds a token before hashing or parsing it
 	maxTokenLen     = 128
 	oldChallengeAge = 24 * time.Hour
 )
@@ -106,7 +106,7 @@ func newToken(bucket int64) (string, error) {
 
 func challengeID(token string) string {
 	i := strings.LastIndexByte(token, '.')
-	// base64url has no ".": a second dot is not a token of ours
+	// base64url has no ".": a second dot is no token of ours
 	if i <= 0 || i == len(token)-1 || len(token) > maxTokenLen || strings.IndexByte(token, '.') != i {
 		return ""
 	}

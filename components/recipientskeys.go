@@ -179,7 +179,7 @@ func recoveryKeyShown(p RecipientsProps) []xango.Node {
 		nodes = append(nodes, docButton("gj-recip-download", tr("recipients.download", "Download"), false, func() { p.Download("recovery-key.txt", secret+"\n") }))
 	}
 	if p.CommitRecoveryKey != nil {
-		// not an owner key yet: it becomes one after the person confirms saving the secret
+		// not an owner key until the person confirms saving the secret
 		nodes = append(nodes,
 			xango.El("div", cls("gj-recip-recovery-ack"), Checkbox(CheckboxProps{Label: tr("recipients.recoveryAck", "I have saved this recovery key somewhere safe"),
 				Checked: p.RecoveryAcknowledged, OnChange: p.OnRecoveryAcknowledge})),

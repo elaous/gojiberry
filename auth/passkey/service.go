@@ -468,7 +468,7 @@ func (s *Service) handleRegisterBegin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&in)
 	accountID := ""
 	if u, ok := s.sessions.CurrentUser(r); ok {
-		// signed in: the passkey links to this identity; the body's claim does not count
+		// signed in: the passkey links to this identity, not the body's claim
 		accountID = u.ID
 		in.Email, in.Name = u.Email, u.Name
 	}
@@ -542,7 +542,7 @@ func (s *Service) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 			jsonOut(w, http.StatusTooManyRequests, map[string]string{"error": ErrRateLimited.Error()})
 			return
 		}
-		// one answer for every failed sign-in: what went wrong is not for the caller
+		// one answer for every failed sign-in: the cause is not the caller's
 		if errors.Is(err, ErrBadChallenge) {
 			fail(w, err)
 			return

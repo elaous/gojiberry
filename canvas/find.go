@@ -106,7 +106,7 @@ func (f *TextFlow) ReplaceMatches(matches []Match, o FindOptions, repl string) (
 	text := f.EditText()
 	rs := []rune(text)
 	d := f.flatten()
-	// groups are found in the whole text so lookarounds (\b, ^) keep their meaning
+	// groups found in the whole text so lookarounds keep their meaning
 	var all map[[2]int][]int // the groups of the match at bytes [from, to)
 	var byteAt []int         // rune offset -> byte offset
 	if o.Regex {

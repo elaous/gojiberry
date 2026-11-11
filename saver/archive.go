@@ -83,7 +83,7 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 			continue // no key opens it here: left out, and reported
 		}
 		if errors.Is(err, ErrUnreadable) {
-			// an archive that quietly lacks a document is worse than a loud one
+			// a quietly incomplete archive is worse than a loud one
 			return nil, name, nil, fmt.Errorf("saver: %q is damaged and has no good copy: %w", it.name, err)
 		}
 		if err != nil {

@@ -184,7 +184,7 @@ type presenceEntry struct {
 	p    Presence
 	seen time.Time
 
-	// a timer sends the latest cursor at the end of the throttle interval
+	// a timer sends the latest cursor when the throttle interval ends
 	lastSent time.Time
 	timer    *time.Timer
 }
@@ -207,7 +207,7 @@ const goneMsg = "this document has expired and been deleted; copy your content e
 
 func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
 	rm, err := h.openRoom(r, id, role)
-	// the store remembers a closed document: a live editor clears the mark once
+	// a closed document is remembered: a live editor clears the mark once
 	if errors.Is(err, errGone) && role.CanEdit() && h.storeTombstone(r.Context(), id) && h.revived(r, id) {
 		h.clearStoreTombstone(id)
 		return h.openRoom(r, id, role)

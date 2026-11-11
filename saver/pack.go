@@ -277,7 +277,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 	for _, f := range idx.Folders {
 		byID[f.ID] = f
 	}
-	// sealed folder names open first: one that fails is made under the placeholder
+	// sealed folder names open first: a failure uses the placeholder
 	realName := map[string]string{}
 	sealed := map[string]bool{} // folders whose name was sealed but could not be read
 	for _, e := range idx.Entries {

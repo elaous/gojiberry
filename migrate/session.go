@@ -249,7 +249,7 @@ func (s *Session) run(ctx context.Context, src Source, items []Item, tag string)
 		s.set(func() { s.done, s.total, s.current = done, total, name })
 	}
 	if s.Known != nil && finish == nil {
-		// only a run that saves to the store has anything to compare with
+		// only a run that saves to the store has anything to compare
 		if opt.Ledger, err = s.Known(ctx); err != nil {
 			return err
 		}

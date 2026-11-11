@@ -200,7 +200,7 @@ func (h *Hub) renewResult(rm *room, err error) {
 }
 
 func (h *Hub) closeDead(rm *room) {
-	// wait for a save in flight: the delete below is the last write
+	// wait for a save in flight: the delete is the last write
 	rm.saveMu.Lock()
 	defer rm.saveMu.Unlock()
 	rm.mu.Lock()

@@ -258,7 +258,7 @@ func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, re
 		return err
 	}
 	if prev != "" {
-		// the record may sit under a retired name: the current name is new
+		// the record may sit under a retired name: current name is new
 		if _, err := d.Store.Load(ctx, id); errors.Is(err, docstore.ErrNotFound) {
 			prev = ""
 		}

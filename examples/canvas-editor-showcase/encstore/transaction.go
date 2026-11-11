@@ -396,9 +396,9 @@ type change struct {
 	op   string
 	to   []Owner
 	keys []NewKey
-	// owner signing keys left the list: lists are signed again by a staying key
+	// owner signing keys left: lists are signed again by a staying key
 	resign bool
-	// files are already encrypted to keys the change does not know (a restore)
+	// files already encrypted to keys the change does not know (restore)
 	rekey bool
 }
 

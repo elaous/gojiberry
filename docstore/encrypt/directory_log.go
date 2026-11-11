@@ -143,7 +143,7 @@ func logBackoff(lost int) time.Duration {
 
 func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.Time) (int64, error) {
 	lost := 0
-	// rounds lost to another appender; walking to a lagging head is not one
+	// rounds lost to another appender; catching up a lagging head is not
 	for lost < maxLogRounds {
 		head, headDigest, err := d.readLogHead(ctx)
 		if err != nil {
