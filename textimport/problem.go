@@ -14,11 +14,8 @@ import (
 
 const maxProblem = 200
 
-// maxYAMLCheck is the largest YAML text that is checked.
 const maxYAMLCheck = 64 << 10
 
-// Problem says what is wrong with a text that is meant to be of the kind, or "" when it reads as one (or when the kind is
-// not checked: JSON5, TOML, settings files and logs have no parser here). The file is shown as it is either way.
 func Problem(kind, src string) string {
 	var err error
 	switch kind {
@@ -33,7 +30,7 @@ func Problem(kind, src string) string {
 		}
 	case YAML:
 		if len(src) > maxYAMLCheck {
-			return "" // the parser is slow on many keys (it looks for repeated ones one by one): a big file is not checked
+			return ""
 		}
 		dec := yaml.NewDecoder(strings.NewReader(src))
 		for {

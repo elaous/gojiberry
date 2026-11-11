@@ -70,7 +70,6 @@ func TestHighlightPaintsKeysStringsNumbersAndWords(t *testing.T) {
 	}
 }
 
-// Painting never changes the text: the pieces add up to the file, whatever it is.
 func TestHighlightKeepsEveryCharacter(t *testing.T) {
 	langs := []string{"json", "json5", "yaml", "toml", "ini", "log", "xml", "", "go"}
 	alphabet := []rune("<>/!?{}[]:,\"'#;=-+. \n\t\f\u00a0\\/*aZ09éあ_$&!~<>@")
@@ -115,7 +114,6 @@ func TestAnImportedFileIsPaintedAndStillTheSameText(t *testing.T) {
 	if text != src || coloured < 2 {
 		t.Errorf("text %q, %d coloured pieces", text, coloured)
 	}
-	// A file over the limit is shown in one colour (the text is the same).
 	big := strings.Repeat("a: 1\n", MaxPaint/5+10)
 	d, _ = Import(YAML, []byte(big))
 	pieces := 0
