@@ -1,4 +1,3 @@
-// Package wire holds the types shared by collab servers and clients.
 package wire
 
 import (
@@ -37,8 +36,7 @@ type Presence struct {
 	Caret   crdt.Timestamp `json:"caret"`
 	// Holding names the object this replica is changing.
 	Holding string `json:"holding,omitempty"`
-	// Gone is set on the event sent when a replica leaves.
-	Gone bool `json:"gone,omitempty"`
+	Gone    bool   `json:"gone,omitempty"`
 }
 
 // Frame is one WebSocket message of the collab protocol.
