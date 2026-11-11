@@ -4,12 +4,7 @@ package domrt
 
 import "github.com/elaous/gojiberry/xango"
 
-// InstallStyles adds a <style data-xango-style="..."> element to the
-// document's <head> for every stylesheet registered by a CSS import
-// (see xango.RegisterStyle) that is not there yet -- including ones the
-// server already rendered into the page, which it leaves alone. Mount
-// calls it, so a program that mounts components has their styles; call
-// it yourself if you register sheets after mounting.
+// InstallStyles adds a style element to the document head.
 func InstallStyles() {
 	sheets := xango.RegisteredStyles()
 	if len(sheets) == 0 {
