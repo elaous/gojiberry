@@ -10,7 +10,6 @@ import (
 	"github.com/elaous/gojiberry/odtimport"
 )
 
-// Vertical text written to an OpenDocument file reads back as vertical text, and horizontal text does not.
 func TestOdtVerticalTextRoundTrip(t *testing.T) {
 	snap := export.Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, MarginLeft: 96, MarginTop: 96, MarginRight: 96, MarginBottom: 96,
 		Blocks: []export.Block{{Kind: export.Paragraph, Segments: []export.Segment{{Text: "日本語"}}}}}
@@ -29,7 +28,6 @@ func TestOdtVerticalTextRoundTrip(t *testing.T) {
 	}
 }
 
-// LibreOffice opens the vertical files and reads the text.
 func TestLibreOfficeOpensVerticalText(t *testing.T) {
 	bin := soffice(t)
 	snap := export.Snapshot{Title: "T", Vertical: true, PageWidth: 794, PageHeight: 1123, MarginLeft: 96, MarginTop: 96, MarginRight: 96, MarginBottom: 96,
