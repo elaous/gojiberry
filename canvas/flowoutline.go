@@ -158,6 +158,7 @@ func (f *TextFlow) MoveSection(i, before int) bool {
 	moved := f.Slice(from, to)
 	delFrom := from
 	if to == n && (n == 0 || runes[n-1] != '\n') && from > 0 {
+		// the last section takes the paragraph end before it along
 		moved = append(moved, Chars{Text: "\n"})
 		delFrom = from - 1
 	}

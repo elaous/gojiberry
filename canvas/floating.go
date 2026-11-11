@@ -596,6 +596,7 @@ func (ft *FloatingText) MouseMove(x, y float64) bool {
 	case "move":
 		nx, ny := max(ft.snap(d.boxX+dx), 0), max(ft.snap(d.boxY+dy), 0)
 		if ps := ft.pageSet(); ft.Anchor != nil && ps != nil {
+			// snap relative to the page the box is over
 			a := ps.AnchorAt(d.boxX+dx, d.boxY+dy)
 			a.X, a.Y = ft.snap(a.X), ft.snap(a.Y)
 			nx, ny = ps.Resolve(a)

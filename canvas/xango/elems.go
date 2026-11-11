@@ -364,6 +364,7 @@ func (e *tableElem) Update(c *Context, props any, _ []xango.Node) (bool, error) 
 		changed = true
 	}
 	if first {
+		// a table made before its painter is set measures against none
 		if c.Stage.Painter != nil {
 			v.SetPainter(c.Stage.Painter)
 		}

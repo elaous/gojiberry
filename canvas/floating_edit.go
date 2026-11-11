@@ -320,6 +320,7 @@ func (ft *FloatingText) closePopups() {
 
 func (ft *FloatingText) popupsMouseDown(x, y float64) bool {
 	if ft.palOpen() {
+		// the button that opened the palette closes it again
 		if w := ft.whatAt(x, y); (w == "button:6" && ft.palKind == "text") || (w == "button:7" && ft.palKind == "highlight") {
 			ft.pal.Close()
 			return true

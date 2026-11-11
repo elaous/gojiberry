@@ -125,6 +125,7 @@ func (Styles) Install(r *Registry) {
 				}
 			}
 			h.DefineStyle(def)
+			// tag the text so editing the style later restyles it
 			if paragraph {
 				if pe, ok := c.Target.(ParagraphEditor); ok {
 					pe.ApplyParagraph(func(p *ParaFormat) { *p = ParaFormat{List: p.List, Style: name} })

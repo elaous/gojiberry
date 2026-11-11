@@ -140,6 +140,7 @@ func cursorsAtLineEnds(t EditTarget) bool {
 			out = append(out, At(lineEnd(rs, from)))
 			continue
 		}
+		// a selection ending at a line start does not include that line
 		if to > from && rs[to-1] == '\n' {
 			to--
 		}

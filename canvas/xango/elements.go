@@ -25,7 +25,8 @@ const (
 type CanvasProps struct {
 	Width, Height float64
 	// Mode is ModeView (default) or ModeEdit for every component below.
-	Mode     canvas.Mode
+	Mode canvas.Mode
+	// a viewer's canvas is held in view mode whatever Mode says
 	Role     canvas.Role
 	Features []canvas.Feature
 	Children []xango.Node

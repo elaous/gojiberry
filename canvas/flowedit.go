@@ -114,6 +114,7 @@ func (f *TextFlow) Replace(edits []Edit) {
 	f.materialize()
 	es := slices.Clone(edits)
 	slices.SortStableFunc(es, func(a, b Edit) int {
+		// last first; at one offset the side behind the breaks is later
 		if a.From == b.From && a.AfterOps != b.AfterOps {
 			if a.AfterOps {
 				return -1
@@ -707,6 +708,7 @@ func (f *TextFlow) ToggleSubscript() bool {
 // PasteFormat gives the selection format fm.
 func (f *TextFlow) PasteFormat(fm Format) bool {
 	return f.ApplyFormat(func(x *Format) {
+		// the target keeps its own comment, bookmark and index marks
 		comment, bookmark, index, proposal := x.Comment, x.Bookmark, x.Index, x.Proposal
 		*x = fm
 		x.Comment, x.Bookmark, x.Index, x.Proposal = comment, bookmark, index, proposal

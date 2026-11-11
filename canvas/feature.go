@@ -185,6 +185,7 @@ func normalize(cs []Cursor) []Cursor {
 		if n := len(merged); n > 0 {
 			pf, pt := merged[n-1].Range()
 			cf, ct := c.Range()
+			// two empty cursors at one offset stay two on different sides of a break
 			sides := cf == pt && cf == pf && c.Empty() && merged[n-1].Empty() && c.After != merged[n-1].After
 			if !sides && (cf < pt || (cf == pt && (cf == pf || c.Empty() || merged[n-1].Empty()))) {
 				merged[n-1] = Cursor{Anchor: pf, Caret: max(pt, ct)}
@@ -239,6 +240,7 @@ func holdsObjects(t EditTarget) bool {
 }
 
 func editCursors(t EditTarget, gen func(c Cursor, rs []rune) (from, to int, ins []Item)) {
+	// in suggestion mode an edit proposes the change instead of making it
 	if f, ok := t.(*TextFlow); ok && f.proposalsOn() {
 		f.proposalEdits(gen)
 		return

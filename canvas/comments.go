@@ -136,10 +136,11 @@ type Mention struct {
 }
 
 var (
-	reEmail     = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`)
-	reHandle    = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
-	reLinkMD    = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
-	reMarks     = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
+	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`)
+	reHandle = regexp.MustCompile(`(^|[^\w@.+-])(@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)`)
+	reLinkMD = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	reMarks  = regexp.MustCompile("(?m)^\\s{0,3}(?:#{1,6}\\s+|>\\s?|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)|```[^\\n]*|[~`]+")
+	// emphasis markers are syntax only at a word edge: snake_case keeps its own
 	reEmphLead  = regexp.MustCompile(`(^|[^\w*_])[*_]+`)
 	reEmphTrail = regexp.MustCompile(`[*_]+([^\w*_]|$)`)
 	reSpaces    = regexp.MustCompile(`\s+`)

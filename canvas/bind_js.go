@@ -164,6 +164,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		return v.String(), true
 	}
 	s.OpenLink = func(url string) { js.Global().Call("open", url, "_blank", "noopener") }
+	// async clipboard API: needs a secure context; without it commands do nothing
 	if cb := js.Global().Get("navigator").Get("clipboard"); cb.Truthy() {
 		s.Clipboard = Clipboard{
 			Write: func(text string) { cb.Call("writeText", text) },
@@ -211,11 +212,13 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	})
+	// mouseup on the window: a drag ending outside the canvas still ends
 	up := js.Global()
 	up.Call("addEventListener", "mouseup", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		r := canvasEl.BoundingRect()
 		ev := args[0]
 		if s.MouseUp(ev.Get("clientX").Float()-r.Left, ev.Get("clientY").Float()-r.Top) {
+			// a drag-selection only has something selected once it ends
 			if s.WantsFocus() {
 				focusInput()
 			}
@@ -259,6 +262,7 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 			redraw()
 		}
 	}
+	// the keyboard arriving in the editor starts editing: there is no click
 	input.AddEventListener("focus", js.FuncOf(func(js.Value, []js.Value) any {
 		if !focusByPointer && s.FocusIn() {
 			redraw()
@@ -308,9 +312,11 @@ func (s *Stage) Bind(canvasEl, input *html.Element) (redraw func(), err error) {
 		}
 		if e.CtrlKey || e.MetaKey || e.AltKey {
 			key := e.Key
+			// Alt changes the character on some layouts: the physical key is meant
 			if strings.HasPrefix(e.Code, "Key") && len(e.Code) == 4 {
 				key = e.Code[3:]
 			}
+			// with Shift, a digit key types a symbol (Shift+8 is "*")
 			if strings.HasPrefix(e.Code, "Digit") && len(e.Code) == 6 {
 				key = e.Code[5:]
 			}

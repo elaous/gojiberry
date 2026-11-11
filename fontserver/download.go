@@ -115,6 +115,7 @@ func (s *Server) handleLocalDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// a few downloads at a time: each fetches megabytes and rescans
 	if s.downloads != nil { // a Server built without NewServer has no limit
 		select {
 		case s.downloads <- struct{}{}:

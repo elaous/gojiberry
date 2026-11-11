@@ -60,6 +60,7 @@ func (m Markdown) Transform(src string) []Item {
 			strings.HasPrefix(l, `\`) && isDirective(l) || (strings.Contains(l, "|") && i+1 < len(lines) && reTableSep.MatchString(lines[i+1]))
 	}
 
+	// no gap before a directive or the end, where it would be wasted
 	gap := func(i int) {
 		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
 			i++

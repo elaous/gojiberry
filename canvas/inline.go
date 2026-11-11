@@ -136,6 +136,7 @@ func (o *TableObject) DragStart(x, y float64) bool {
 		return true
 	}
 	if d := o.resize; d != nil {
+		// pressing the same edge twice gives the size back to the table
 		now := time.Now()
 		if o.lastEdge != nil && o.lastEdge.col == d.col && o.lastEdge.index == d.index && now.Sub(o.lastAt) < 500*time.Millisecond {
 			if d.col {

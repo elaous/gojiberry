@@ -39,6 +39,7 @@ func (ps *PageSet) turnTab(i int) (x, y float64, left, ok bool) {
 	if r < 0 {
 		return 0, 0, false, false
 	}
+	// the left sheet of a pair (or a lone last sheet) turns back; the right forward
 	left = len(rows[r]) == 1 || rows[r][0] == i
 	if _, can := ps.TurnTarget(i, left); !can {
 		return 0, 0, false, false

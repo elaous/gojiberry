@@ -139,6 +139,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 
 			loader, ok := loaders[ext]
 			if !ok {
+				// recognized only via experimentalExtensions: its loader is not wired by default
 				if !opts.Experimental {
 					return "", "", 0, fmt.Errorf("%s: %s imports are experimental; enable with `xgc -experimental` (or transpile.Options{Experimental: true}) -- see internal/transpile/experimental", filename, ext)
 				}

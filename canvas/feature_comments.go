@@ -69,6 +69,7 @@ func (Comments) Install(r *Registry) {
 			return false
 		}
 		from, to := cur.Range()
+		// start history before adding the record: undo removes record and tag together
 		if b, ok := c.Target.(interface{ BeginEdit() }); ok {
 			b.BeginEdit()
 		}

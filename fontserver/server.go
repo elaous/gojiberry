@@ -229,6 +229,7 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 		fetchErr := s.googleErr
 		s.mu.Unlock()
 		if err != nil && cached == nil {
+			// no cache and the fetch failed: still 200 with an empty list
 			log.Printf("fontserver: %v", fetchErr)
 			writeJSON(w, http.StatusOK, map[string]any{"families": []googleFont{}, "enabled": true, "error": "google fonts is unavailable"})
 			return
@@ -249,6 +250,7 @@ func fetchGoogleFontsFrom(u string, client *http.Client) ([]googleFont, error) {
 	}
 	resp, err := client.Get(u)
 	if err != nil {
+		// *url.Error carries the URL, and the API key is in it
 		var ue *url.Error
 		if errors.As(err, &ue) {
 			err = ue.Err

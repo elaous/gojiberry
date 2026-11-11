@@ -299,6 +299,7 @@ func parseColorValue(s string, tokens Tokens) (color.NRGBA, bool) {
 	return parseColor(s, tokens, 0)
 }
 
+// a self-referring token is reported unparseable, not recursed
 const maxVarDepth = 16
 
 func parseColor(s string, tokens Tokens, depth int) (color.NRGBA, bool) {

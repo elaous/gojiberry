@@ -27,6 +27,7 @@ const DefaultColumnGap = 24
 
 func (Columns) Name() string { return "columns" }
 
+// only the ratio counts: layout scales widths down to fit
 const proportion = 1000
 
 func (Columns) Install(r *Registry) {

@@ -193,6 +193,7 @@ func (p *mparser) atom() *mnode {
 		}
 		letters := []rune(word)
 		if len(letters) > 1 {
+			// one identifier per letter; a script applies to the last one
 			p.pos--
 			row := &mnode{kind: mRow}
 			for _, l := range letters[:len(letters)-1] {

@@ -93,8 +93,9 @@ func (h *snapshotHistory[S]) forward(cur S) (S, bool) {
 }
 
 type flowSnap struct {
-	items    []Item
-	cursors  []Cursor
+	items   []Item
+	cursors []Cursor
+	// undoing a tag without its record (or the reverse) would orphan one
 	comments []Comment
 }
 

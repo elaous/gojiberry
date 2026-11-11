@@ -67,6 +67,7 @@ func (rw *renderWriter) renderElement(n Node) {
 	rw.writeString(n.Tag)
 	for _, a := range n.Attrs {
 		if a.Handler != nil {
+			// event bindings are inert in server-side HTML; domrt wires them
 			continue
 		}
 		rw.writeString(" ")

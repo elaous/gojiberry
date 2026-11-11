@@ -86,6 +86,7 @@ func bidiLevels(rs []rune, rtl bool) []uint8 {
 			prev = c
 		}
 	}
+	// W2: a European number after an Arabic letter is an Arabic number
 	last := baseClass
 	for i, c := range cls {
 		switch c {

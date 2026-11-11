@@ -46,6 +46,7 @@ func resolveInModules(baseDir, path string) (string, bool) {
 		}
 		return "", false
 	}
+	// the longest module path that prefixes path
 	var best, bestDir string
 	for _, m := range requiredModules(root) {
 		if m.Dir != "" && strings.HasPrefix(path, m.Path+"/") && len(m.Path) > len(best) {

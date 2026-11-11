@@ -131,6 +131,7 @@ func (f *TextFlow) acceptSuggestion(word string) {
 	caret := f.sel.caret
 	items := []Item{Chars{Text: word, Format: format}}
 	if f.proposalsOn() {
+		// while suggesting, completion is a proposal: typed letters struck, word follows
 		repl, at := f.proposalRewrite(d, Cursor{Anchor: caret, Caret: caret}, f.suggFrom, caret, items)
 		f.Replace([]Edit{{From: f.suggFrom, To: caret, Items: repl}})
 		f.SetCursors([]Cursor{At(f.suggFrom + at)})

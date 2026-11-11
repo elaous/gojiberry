@@ -223,6 +223,7 @@ func (f *TextFlow) proposalRewrite(d *flowData, c Cursor, from, to int, ins []It
 		case struck:
 			mark = ProposalMark{Kind: ProposalInsert, ID: id, Author: author, Time: now}.String()
 		default:
+			// text typed right after one's own proposed addition continues it
 			if prev, ok := f.markBefore(d, from); ok && prev.Kind == ProposalInsert && prev.Author == author {
 				mark = ProposalMark{Kind: ProposalInsert, ID: prev.ID, Author: author, Time: prev.Time}.String()
 			} else {
