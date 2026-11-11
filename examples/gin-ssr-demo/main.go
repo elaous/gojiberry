@@ -1,8 +1,3 @@
-// Command gin-ssr-demo serves page.xg's Page over a real Gin engine
-// (see router.go), fronted by three security middlewares: secure
-// headers, CORS, and a per-client rate limit -- see main_test.go for
-// end-to-end verification against a real running server, and this
-// example's README for the full picture.
 package main
 
 import (
