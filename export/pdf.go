@@ -27,18 +27,14 @@ const (
 	pdfFontFamily     = "go"
 	pdfMonoFontFamily = "gomono"
 
-	// Font sizes deliberately match RTF's own \fsNN convention (in
-	// half-points there -- \fs24/\fs36/\fs32/\fs28 -- so 12/18/16/14pt
-	// here) so the two formats read as the same document at a glance
-	// rather than each inventing its own type scale.
+	// Font sizes match RTF's own size convention.
 	pdfBaseFontSize   = 12.0
 	pdfHeading1Size   = 18.0
 	pdfHeading2Size   = 16.0
 	pdfHeading3Size   = 14.0
 	pdfLineHeightMult = 1.35
 
-	// pdfListIndentPerLevel/pdfQuoteIndent also mirror RTF's own
-	// numbers (360/720 twips, 20 twips per point, is 18pt/36pt).
+	// pdfListIndentPerLevel and pdfQuoteIndent mirror RTF's indents.
 	pdfListIndentPerLevel = 18.0
 	pdfQuoteIndent        = 36.0
 
@@ -46,61 +42,16 @@ const (
 	pdfStrikethroughOffset = 0.5
 	pdfLineStrokeWidth     = 0.6
 
-	// pdfTableCellPadding is the inset (points) between a table cell's
-	// own grid-line border and its wrapped text, on all four sides --
-	// renderPDFTable's own doc comment has the rest of the table
-	// layout's shape.
+	// pdfTableCellPadding is the inset between a table cell's edge and its text.
 	pdfTableCellPadding = 4.0
 )
 
-// pxToPt converts one of editor's own CSS-px geometry values
-// (Snapshot's PageWidth/Margin* etc.) to PDF points at the same 96dpi
-// CSS convention gopdf's own conversionUnitPX constant assumes (72/96
-// = 0.75) -- so Letter's 816px page width becomes exactly 612pt
-// (8.5in), matching a real Letter page, not an approximation.
+// pxToPt converts CSS pixels to points.
 func pxToPt(px float64) float64 {
 	return px * 0.75
 }
 
-// PDF renders a Snapshot to a paginated PDF document -- the first
-// format that genuinely needs a third-party library: PDF is a real
-// fixed-layout page-description format (fonts must be embedded as
-// real glyph programs, text is drawn at explicit coordinates,
-// pagination is the exporter's own job) with nothing in the standard
-// library covering it, unlike RTF and EPUB which turned out to be
-// plain-text/zip-of-small-files formats stdlib already covers. Uses
-// github.com/signintech/gopdf (confirmed to build under both native
-// and GOOS=js GOARCH=wasm), plus the Go project's own "Go" TrueType
-// family (golang.org/x/image/font/gofont/...) embedded directly as Go
-// byte slices -- gopdf always needs a real TTF registered (it has no
-// built-in standard-14 font glyphs the way some PDF libraries do), and
-// there is no font file anywhere in this repo to point it at, so this
-// sidesteps needing one entirely.
-//
-// Unlike the canvas-rendered editor view, this does its own
-// word-wrapping and pagination from scratch: the editor's own
-// line-breaking is fundamentally tied to a real DOM Context2D's own
-// MeasureText, not reusable against gopdf's own TTF-glyph metrics.
-// The wrapping/drawing pipeline here (pdfTokenize/wrapPDFTokens/
-// drawPDFWrappedBlock) is deliberately simple -- greedy space-
-// delimited wrap, no hyphenation, no justification -- proportionate to
-// every other format's own "content over presentation, not a
-// layout-engine reimplementation" scope. Multi-column blocks render
-// as plain single-column text: real multi-column PDF layout is a
-// meaningfully separate feature, not attempted here.
-//
-// Inline fidelity is intentionally narrower than Markdown/HTML/RTF's
-// own: Bold/Italic (via the four registered "go" style variants),
-// Underline/Strikethrough (drawn as a manual Line() under/through each
-// run's own measured span, since gopdf's Text/Cell draw glyphs only,
-// no built-in decoration), and Link (a real clickable
-// AddExternalLink annotation over the run's own bounding box) are all
-// supported; Superscript/Subscript render as plain same-size, same-
-// baseline text -- real superscript/subscript need accurate font-
-// metric-based baseline shifting this package doesn't attempt to
-// compute, so both are dropped rather than approximated badly, the
-// same "flag what's simplified" posture RTF's own image-placeholder
-// tradeoff already takes.
+// PDF renders a Snapshot to a paginated PDF document.
 type PDF struct{}
 
 func (PDF) Export(snap Snapshot) ([]byte, error) {
@@ -108,10 +59,7 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 	if snap.TOC {
 		outline = snap.Outline()
 	}
-	// A table of contents needs the page of each heading, which is known only once the document is laid
-	// out, and the contents themselves take pages. So the document is drawn with placeholder numbers, the
-	// pages of the headings are read off, and it is drawn again with them: every entry is one line either
-	// way, so the pages do not move (a third pass settles the rare case where they do).
+	// A table of contents needs the page of each heading.
 	var pages map[int]int
 	for pass := 0; ; pass++ {
 		out, got, err := renderPDF(snap, outline, pages)
@@ -125,9 +73,7 @@ func (PDF) Export(snap Snapshot) ([]byte, error) {
 	}
 }
 
-// renderPDF draws the document once. outline is the table of contents (none if empty) and tocPages the
-// page of each heading by block index from the pass before (placeholders when nil); the pages the
-// headings are on in this pass are returned.
+// renderPDF draws the document once.
 func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]byte, map[int]int, error) {
 	headingPages := map[int]int{}
 	w, h := snap.PageWidth, snap.PageHeight
@@ -156,19 +102,10 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 		}
 		b := snap.Blocks[i]
 		if b.Kind >= Heading1 && b.Kind <= Heading3 {
-			// The heading's page is the one its first line lands on, which may be the next page.
 			pdf.SetNewY(pdf.GetY(), pdfHeading1Size*pdfLineHeightMult)
 			headingPages[i] = pdf.GetNumberOfPages()
 		}
 		if b.Kind == TableCell {
-			// See Markdown's own TableCell case (markdown.go) for the
-			// same "read the whole table out of snap.Blocks[i:i+n] the
-			// moment this loop reaches its own first cell" shape --
-			// renderPDFTable's own doc comment has the PDF-table
-			// specifics. Handled directly here (an indexed loop, so it
-			// can skip past every cell it just consumed) rather than
-			// through renderPDFBlock's own one-block-at-a-time contract,
-			// which has no way to skip ahead.
 			if b.TableRow == 0 && b.TableCol == 0 {
 				n := b.TableRows * b.TableCols
 				if n > 0 && i+n <= len(snap.Blocks) {
@@ -189,7 +126,6 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 			}
 			continue
 		}
-		// A heading's page is recorded before it is drawn, so it is never moved by the widow rule.
 		flow.noWidow = b.Kind >= Heading1 && b.Kind <= Heading3
 		err := renderPDFBlock(&pdf, snap, b, i, contentWidth)
 		flow.noWidow = false
@@ -216,10 +152,7 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 	return out, headingPages, err
 }
 
-// drawPDFContents draws the table of contents: its title, then one line per heading with a dotted leader
-// to the page number, indented by level, on a page of its own: it starts a new page unless it is at the top of one
-// (when it is not the first thing in the document), and the text after it starts another (unless nothing follows). The entries are tagged as paragraphs
-// (their ids come after those of the blocks). An entry too long for its line is cut with an ellipsis.
+// drawPDFContents draws the table of contents.
 func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pages map[int]int, contentWidth float64, followed bool) error {
 	if pdf.GetY() > pxToPt(snap.MarginTop)+1 {
 		pdf.AddPage()
@@ -277,8 +210,6 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		if err := pdf.Cell(&gopdf.Rect{W: tw, H: lh}, text); err != nil {
 			return err
 		}
-		// The leader: dots from the end of the text to the page number, drawn from the right so they
-		// line up from one entry to the next.
 		if err := setPDFFont(pdf, "", pdfBaseFontSize); err != nil {
 			return err
 		}
@@ -299,14 +230,13 @@ func drawPDFContents(pdf *gopdf.GoPdf, snap Snapshot, outline []OutlineEntry, pa
 		pdfMarkEnd(pdf)
 		pdf.SetY(y + lh)
 	}
-	// The text after the contents starts on a page of its own.
 	if followed {
 		pdf.AddPage()
 	}
 	return nil
 }
 
-// fitPDFText cuts s with an ellipsis until it is no wider than width in the current font.
+// fitPDFText cuts s with an ellipsis to fit width.
 func fitPDFText(pdf *gopdf.GoPdf, s string, width float64) (string, error) {
 	r := []rune(s)
 	for len(r) > 0 {
@@ -326,11 +256,7 @@ func fitPDFText(pdf *gopdf.GoPdf, s string, width float64) (string, error) {
 	return "", nil
 }
 
-// drawPDFHeadersAndFooters draws the running header in the top margin and the footer in the bottom
-// margin of every page, once the page count is known. Both are artifacts (not part of the content a
-// reader announces), in 9 point type: the left, centre and right parts of the text (tab separated) sit at
-// the left edge, the middle and the right edge of the text area, and the fields {page}, {pages} and
-// {title} are filled in for each page.
+// drawPDFHeadersAndFooters draws the running header and footer.
 func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 	if snap.Header == "" && snap.Footer == "" && snap.FirstHeader == "" && snap.FirstFooter == "" && snap.EvenHeader == "" && snap.EvenFooter == "" {
 		return nil
@@ -393,15 +319,8 @@ func drawPDFHeadersAndFooters(pdf *gopdf.GoPdf, snap Snapshot) error {
 	return nil
 }
 
-// registerPDFFonts loads the Go font family's four style variants
-// (Regular/Bold/Italic/BoldItalic, all embedded as Go byte slices via
-// golang.org/x/image/font/gofont -- no font file on disk needed) under
-// one family name gopdf.SetFont switches between via its own style
-// string, plus a separate monospace family for code blocks.
+// registerPDFFonts loads the Go font family's four style variants.
 func registerPDFFonts(pdf *gopdf.GoPdf) error {
-	// Each variant is a family of its own, so each embedded font has its own name in the file: with one
-	// name for four different fonts, a checker (or a reader) that finds a font by its name cannot tell
-	// which one a piece of text is set in.
 	variants := []struct {
 		family string
 		data   []byte
@@ -419,20 +338,14 @@ func registerPDFFonts(pdf *gopdf.GoPdf) error {
 	return pdf.AddTTFFontData(pdfMonoFontFamily, gomono.TTF)
 }
 
-// pdfToken is one drawable unit of a wrapped line: either a run of
-// text sharing one Format (further split on spaces from segments'
-// own maximal-run grouping, since wrapping needs to break at word
-// boundaries, not format-run boundaries), or a forced break standing
-// in for a soft line break.
+// pdfToken is one drawable unit of a wrapped line.
 type pdfToken struct {
 	text    string
 	format  Format
 	isBreak bool
 }
 
-// pdfTokenize splits segs' own text into word/whitespace-run tokens
-// so wrapPDFTokens can break lines between them, turning each
-// SoftBreak segment into a forced pdfToken break.
+// pdfTokenize splits text into word and whitespace tokens.
 func pdfTokenize(segs []Segment) []pdfToken {
 	var tokens []pdfToken
 	for _, seg := range segs {
@@ -447,10 +360,7 @@ func pdfTokenize(segs []Segment) []pdfToken {
 	return tokens
 }
 
-// splitOnSpaceRuns splits s into alternating word/whitespace tokens
-// (e.g. "a bb  c" -> ["a", " ", "bb", "  ", "c"]), never splitting
-// within a run of the same kind -- wrapPDFTokens breaks lines only
-// between these tokens, keeping every word intact.
+// splitOnSpaceRuns splits s into alternating word and space tokens.
 func splitOnSpaceRuns(s string) []string {
 	if s == "" {
 		return nil
@@ -472,14 +382,7 @@ func splitOnSpaceRuns(s string) []string {
 	return words
 }
 
-// setPDFTokenFont selects f's own effective style -- forceBold/
-// forceItalic apply a block-level style (e.g. a heading is always
-// bold) on top of, not instead of, the run's own Bold/Italic, the same
-// way RTF's paragraph-level `\b`/`\i` prefix and its own run-level
-// wrapRTFRunFormatting compose. mono ignores all of that: a code
-// block's text is always plain monospace, no inline formatting
-// applied, matching every other format's own "code is verbatim
-// content" treatment.
+// setPDFTokenFont selects a token's font style.
 func setPDFTokenFont(pdf *gopdf.GoPdf, f Format, mono, forceBold, forceItalic bool, size float64) error {
 	if mono {
 		return pdf.SetFont(pdfMonoFontFamily, "", size)
@@ -494,7 +397,7 @@ func setPDFTokenFont(pdf *gopdf.GoPdf, f Format, mono, forceBold, forceItalic bo
 	return setPDFFont(pdf, style, size)
 }
 
-// setPDFFont selects the Go font variant for a style made of "B" and "I".
+// setPDFFont selects the Go font variant for a style.
 func setPDFFont(pdf *gopdf.GoPdf, style string, size float64) error {
 	family := pdfFontFamily
 	bold, italic := strings.Contains(style, "B"), strings.Contains(style, "I")
@@ -509,19 +412,7 @@ func setPDFFont(pdf *gopdf.GoPdf, style string, size float64) error {
 	return pdf.SetFont(family, "", size)
 }
 
-// wrapPDFTokens greedily packs tokens into lines no wider than width,
-// measuring each token with its own real font (setPDFTokenFont+
-// MeasureTextWidth) rather than a single block-wide font, so a bold or
-// italic run's own (typically wider) glyphs are measured accurately
-// instead of assuming the block's plain-text metrics -- unlike
-// gopdf's own SplitTextWithWordWrap, which only ever wraps a single
-// plain string against one already-set font. A leading whitespace
-// token on a new line is dropped (matching normal word-processor
-// wrap); a trailing one is trimmed off the line just closed. isBreak
-// tokens force a line break regardless of remaining width. An empty
-// token stream still produces one (empty) line, so an empty block
-// still consumes its own blank line -- the same "every block gets a
-// line" invariant every other format's own block loop keeps.
+// wrapPDFTokens greedily packs tokens into lines no wider than width.
 func wrapPDFTokens(pdf *gopdf.GoPdf, tokens []pdfToken, width float64, mono, forceBold, forceItalic bool, size float64) ([][]pdfToken, error) {
 	var lines [][]pdfToken
 	var cur []pdfToken
@@ -553,11 +444,7 @@ func wrapPDFTokens(pdf *gopdf.GoPdf, tokens []pdfToken, width float64, mono, for
 	return lines, nil
 }
 
-// trimTrailingSpaceToken drops a line's own trailing whitespace-only
-// token (its width would otherwise count against nothing -- there's
-// no glyph after it worth right-padding for), the same "trim, don't
-// preserve, boundary whitespace" idea softLineBreak handling already
-// takes in wrapPDFTokens.
+// trimTrailingSpaceToken drops a line's trailing whitespace token.
 func trimTrailingSpaceToken(line []pdfToken) []pdfToken {
 	if n := len(line); n > 0 && strings.TrimSpace(line[n-1].text) == "" {
 		return line[:n-1]
@@ -565,13 +452,7 @@ func trimTrailingSpaceToken(line []pdfToken) []pdfToken {
 	return line
 }
 
-// renderPDFBlock draws one block: resolving its own font size/style/
-// indent/prefix by BlockKind (mirroring RTF's own per-Kind switch),
-// tokenizing and wrapping its text, then drawing each wrapped line via
-// drawPDFWrappedBlock. Image skips text wrapping entirely in favor of
-// renderPDFImage. Never called with a TableCell block -- PDF.Export
-// intercepts every one of those itself (renderPDFTable), the only
-// Kind this function doesn't handle.
+// renderPDFBlock draws one block.
 func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWidth float64) error {
 	if b.Kind == Image {
 		return renderPDFImage(pdf, snap, b, idx, contentWidth)
@@ -590,7 +471,7 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 		fontSize, forceBold, tag.kind = pdfHeading2Size, true, tagH2
 	case Heading3:
 		fontSize, forceBold, tag.kind = pdfHeading3Size, true, tagH3
-		switch b.HeadingLevel() { // levels 4 to 6: the same bold line, with their own tag
+		switch b.HeadingLevel() {
 		case 4:
 			tag.kind = tagH4
 		case 5:
@@ -616,7 +497,6 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 
 	segs := b.Segments
 	if b.Note > 0 {
-		// A footnote is where its mark links to, and ends with a link back to the mark.
 		if v, ok := pdfFlows.Load(pdf); ok {
 			v.(*pdfFlowState).anchor = "fn" + strconv.Itoa(b.Note)
 		}
@@ -630,20 +510,12 @@ func renderPDFBlock(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 	return drawPDFWrappedBlock(pdf, pdfRunLangs(snap), wrapped, pxToPt(snap.MarginLeft)+indent, fontSize, mono, forceBold, forceItalic, prefix, hang, tag)
 }
 
-// drawPDFWrappedBlock draws tokenLines starting at x0 (the block's own
-// left edge, past any list/quote indent), page-breaking before each
-// line via SetNewY exactly like gopdf's own README documents (checked
-// once per line, not once per block, so a block taller than a full
-// page still splits across pages rather than overflowing one). Cell's
-// own "current x,y is upper-left corner" semantics (unlike Text's
-// baseline-relative ones) let each token's own y stay the line's plain
-// top coordinate, no font-ascent estimate needed.
+// drawPDFWrappedBlock draws token lines starting at x0.
 func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfToken, x0, fontSize float64, mono, forceBold, forceItalic bool, prefix string, hang float64, tag pdfTag) error {
 	lineHeight := fontSize * pdfLineHeightMult
 	breakAt := pdfWidowBreak(pdf, len(tokenLines), lineHeight)
 	for li, tokens := range tokenLines {
 		if li == breakAt {
-			// Widow and orphan control: the page ends here so that no page holds a lone first or last line.
 			pdf.SetNewY(pdf.GetY(), pdfPageHeight(pdf))
 		}
 		pdf.SetNewY(pdf.GetY(), lineHeight)
@@ -673,8 +545,6 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 		}
 		pdfMarkBegin(pdf, tag)
 
-		// What is open in the content stream: the block's own piece, a language span (it stays open
-		// over the tokens that share the language) or a link (one token); see pdfRun.
 		run := pdfRun{pdf: pdf, tag: tag, langs: langs, mono: mono}
 		x := x0
 		for _, tok := range tokens {
@@ -692,14 +562,6 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 			}
 			isLink := tok.format.Href != ""
 			if !mono && (tok.format.Underline || isLink) {
-				// A link gets the same underline treatment even when
-				// its own run isn't explicitly underlined: HTML's <a>/
-				// RTF's HYPERLINK field both read as links because the
-				// browser/Word styles that tag/field automatically --
-				// a PDF link annotation has no such reader-side
-				// convention, so without this a clickable region would
-				// otherwise be visually indistinguishable from plain
-				// text.
 				pdf.SetLineWidth(pdfLineStrokeWidth)
 				pdf.Line(x, y+fontSize*pdfUnderlineOffset, x+w, y+fontSize*pdfUnderlineOffset)
 			}
@@ -712,7 +574,6 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 				run.leave()
 			}
 			if !mono && tok.format.NoteRef > 0 {
-				// the mark of a footnote: the place its note links back to, and a link to the note
 				pdf.SetAnchor("fnref" + strconv.Itoa(tok.format.NoteRef))
 				pdf.AddInternalLink("fn"+strconv.Itoa(tok.format.NoteRef), x, y, w, lineHeight)
 				run.leave()
@@ -729,40 +590,11 @@ func drawPDFWrappedBlock(pdf *gopdf.GoPdf, langs []string, tokenLines [][]pdfTok
 	return nil
 }
 
-// renderPDFTable draws a real bordered grid for cells -- one table's
-// own full row-major TableRows*TableCols cell slice -- one row at a
-// time: columns split contentWidth evenly (Snapshot carries no
-// per-column width fractions to preserve instead, the same
-// equal-split simplification renderPlainTextTable/renderRTFTable's
-// own doc comments already take), row 0 rendered bold (mirroring
-// model.TableCellColors' own "row 0 is always the header" convention,
-// same as HTML's own <th>).
-//
-// Column merges (colspan) render for real: an owner cell with
-// tableCellOwner.colSpan > 1 draws one wide box spanning every column
-// it covers, and the cells it covers in *that same row* draw no box
-// of their own at all (the owner's own wide box already fills that
-// space) -- skipCell below is exactly "covered, and this is the
-// owner's own row". Row merges (rowspan) are NOT attempted: unlike
-// RTF's real \clvmgf/\clvmrg, safely reserving one shared height
-// across multiple rows -- while each row can still independently
-// need to page-break (SetNewY below, checked once per *row*, mirroring
-// drawPDFWrappedBlock's own once-per-*line* check) -- is real
-// complexity this function doesn't take on, so a cell covered by a
-// rowspan in a *later* row than its owner still draws its own
-// ordinary, empty box rather than visually joining the owner's above
-// it: a disclosed degradation, not a silently wrong render.
-//
-// Two passes per row, the same shape TableRowHeightsAt's own wrap
-// pre-pass (model/layoutmetrics.go) takes for the live canvas's
-// analogous problem: first wrap every cell actually drawn in this row
-// to learn the row's own shared height (the tallest cell's own
-// wrapped line count) *before* deciding whether the row fits on the
-// current page, then draw every box/text using that now-known height.
+// renderPDFTable draws a bordered grid for table cells.
 func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, contentWidth, x0 float64) error {
 	rows, cols := cells[0].TableRows, cells[0].TableCols
 	owners := tableMergeGrid(cells)
-	colWidths := tableColumnWidths(cells, contentWidth, 0.75) // a CSS pixel is 0.75 points
+	colWidths := tableColumnWidths(cells, contentWidth, 0.75)
 	colX := make([]float64, cols+1)
 	for c, w := range colWidths {
 		colX[c+1] = colX[c] + w
@@ -810,8 +642,6 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 
 	for r := 0; r < rows; r++ {
 		draws, rowHeight := allDraws[r], heights[r]
-		// Widow and orphan control for rows: the header row is never alone at the foot of a page, and the
-		// last row is never alone at the head of one (the row before it goes along).
 		if r < rows-1 && (r == 0 || r == rows-2) {
 			pdfKeepTogether(pdf, rowHeight+heights[r+1])
 		}
@@ -835,8 +665,6 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 			ctag := pdfTag{kind: kind, id: base + r*cols + c, a: base, b: r<<16 | c}
 			ty := y + pdfTableCellPadding
 			for _, line := range d.wrapped {
-				// each line is a piece of the cell; a stretch in another language is a Span with /Lang and a
-				// link a Link, as in a paragraph (pdfRun)
 				pdfMarkBegin(pdf, ctag)
 				run := pdfRun{pdf: pdf, tag: ctag, langs: langs}
 				tx := d.x + pdfTableCellPadding
@@ -870,14 +698,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 	return nil
 }
 
-// renderPDFImage draws an Image block's own decoded picture, scaled
-// down (preserving aspect ratio) to fit contentWidth when it would
-// otherwise overflow it -- gopdf's own ImageFrom takes a decoded
-// image.Image directly, so the data: URL (already just base64 bytes)
-// only needs an ordinary stdlib image.Decode, no third-party decoder.
-// An undecodable image (a format image.Decode doesn't recognize, e.g.
-// an SVG) falls back to the same "[Image]" placeholder PlainText/RTF
-// already use rather than failing the whole export over one image.
+// renderPDFImage draws an Image block's decoded picture, scaled.
 func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWidth float64) error {
 	img, err := decodeDataURLImage(b.ImageSrc)
 	if err != nil {
@@ -927,10 +748,7 @@ func renderPDFImage(pdf *gopdf.GoPdf, snap Snapshot, b Block, idx int, contentWi
 	return nil
 }
 
-// decodeDataURLImage decodes b.ImageSrc's own base64 payload (the part
-// after the data: URL's first comma) into an image.Image via the
-// standard library's own format sniffing (image.Decode, backed by the
-// blank-imported image/png, image/jpeg, and image/gif decoders).
+// decodeDataURLImage decodes an image's base64 data URL.
 func decodeDataURLImage(dataURL string) (image.Image, error) {
 	_, b64, ok := strings.Cut(dataURL, ",")
 	if !ok {
@@ -944,9 +762,7 @@ func decodeDataURLImage(dataURL string) (image.Image, error) {
 	return img, err
 }
 
-// pdfRunLangs lists the distinct run languages of the snapshot, in a fixed order: a marker names a
-// language by its position here plus one (0 means none), and tagPDF finds the tag again from the
-// same list.
+// pdfRunLangs lists the distinct run languages of the snapshot.
 func pdfRunLangs(snap Snapshot) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -962,11 +778,7 @@ func pdfRunLangs(snap Snapshot) []string {
 	return out
 }
 
-// pdfRun keeps the marked content of one line in step with the tokens drawn: tokens in the language of
-// the document stay in the block's own piece; a stretch in another language becomes a Span element
-// with /Lang, and each link token a Link element (with /Lang too when its run has one), so a reader
-// can switch voice and a link annotation has a place in the tree. A closed piece is reopened only
-// when more of the block's own text follows, so no empty piece is written at the end of a line.
+// pdfRun keeps one line's marked content in step with its tokens.
 type pdfRun struct {
 	pdf   *gopdf.GoPdf
 	tag   pdfTag
@@ -1026,15 +838,14 @@ func (r *pdfRun) finish() {
 	}
 }
 
-// pdfFlowState is what a render knows about the sheet that gopdf does not expose: its height, which the
-// widow and orphan control needs to count the lines left on a page.
+// pdfFlowState is what a render knows about the sheet.
 type pdfFlowState struct {
 	pageH   float64
 	noWidow bool
 	anchor  string // an anchor to set at the top of the next block's first line (the footnote it is)
 }
 
-// pdfFlows maps the document being drawn to its state; renderPDF adds and removes its entry.
+// pdfFlows maps the document being drawn to its state.
 var pdfFlows sync.Map
 
 func pdfPageHeight(pdf *gopdf.GoPdf) float64 {
@@ -1044,8 +855,7 @@ func pdfPageHeight(pdf *gopdf.GoPdf) float64 {
 	return 0
 }
 
-// pdfKeepTogether starts a new page when h points do not fit on the rest of this one (and this one is not
-// still empty), so that what follows is drawn together.
+// pdfKeepTogether starts a new page when points do not fit.
 func pdfKeepTogether(pdf *gopdf.GoPdf, h float64) {
 	v, ok := pdfFlows.Load(pdf)
 	if !ok {
@@ -1058,9 +868,7 @@ func pdfKeepTogether(pdf *gopdf.GoPdf, h float64) {
 	pdf.AddPage()
 }
 
-// pdfWidowBreak says before which line of a paragraph of n lines the page must end so that neither
-// page holds a single line of it, or -1 when it need not. A paragraph with fewer than four lines that
-// would split moves whole to the next page; a longer one leaves at least two lines on each page.
+// pdfWidowBreak says where a paragraph of n lines may break.
 func pdfWidowBreak(pdf *gopdf.GoPdf, n int, lineHeight float64) int {
 	v, ok := pdfFlows.Load(pdf)
 	if !ok || n < 2 {
@@ -1083,14 +891,12 @@ func pdfWidowBreak(pdf *gopdf.GoPdf, n int, lineHeight float64) int {
 		brk = 0
 	}
 	if brk == 0 && pdf.GetY() <= pdf.MarginTop()+0.5 {
-		return -1 // already at the top of a page: nothing to gain by moving
+		return -1
 	}
 	return brk
 }
 
-// pdfApplyTheme sets the document's theme in the PDF: the text colour for everything drawn, and the page
-// colour as a filled rectangle that every page (the first, the contents page, those a long text overflows
-// onto) starts with. (Links are not coloured in the PDF: it draws no colour of its own anywhere else.)
+// pdfApplyTheme sets the document's theme in the PDF.
 func pdfApplyTheme(pdf *gopdf.GoPdf, th docTheme, pageW, pageH float64) {
 	if th.background != "" {
 		r, g, b := rgb(th.background)
