@@ -192,6 +192,7 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	return nil
 }
 
+// CRLF lines, RFC 2047 subject, quoted-printable body
 func build(from string, to []string, m Message) ([]byte, error) {
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {

@@ -1,3 +1,4 @@
+// Package webpush: RFC 8030 push, RFC 8291 aes128gcm, RFC 8292 VAPID.
 package webpush
 
 import (

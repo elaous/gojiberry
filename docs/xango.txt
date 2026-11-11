@@ -74,6 +74,7 @@ const (
 	FocusPrev
 	FocusFirst
 	FocusLast
+	// no wrap: at the edge focus stays where it is
 	FocusUp
 	FocusDown
 )

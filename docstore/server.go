@@ -278,6 +278,7 @@ func (s *Server) WithExpiry(e *ExpiringAdapter) *Server {
 	return s
 }
 
+// RFC 3339, UTC
 func (s *Server) setExpires(w http.ResponseWriter, r *http.Request, id string) {
 	if x, ok := s.adapter.(Expirer); ok {
 		if t, has, err := x.Expiry(r.Context(), id); err == nil && has {

@@ -122,6 +122,7 @@ func (s *Site) OpenURL(t testing.TB, path string, opts ...Options) *Tab {
 
 func (s *Site) launch(t testing.TB, o Options) *Tab {
 	exe := chromiumPath(t)
+	// busy CI: Chrome can miss its start-up deadline; retry longer
 	var tab *Tab
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {

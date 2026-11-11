@@ -72,6 +72,7 @@ func address(s string) (string, error) {
 
 func hasLineBreak(s string) bool { return strings.ContainsAny(s, "\r\n\x00") }
 
+// shows only that a secret is set
 func redacted(secret string) string {
 	if secret == "" {
 		return "(none)"

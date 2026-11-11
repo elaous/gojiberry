@@ -560,6 +560,7 @@ func removeRef(meta *docMeta, reportID string) bool {
 
 var keyPattern = regexp.MustCompile(`(?i)(pubdoc|public|report|versions/pubdoc|expiry:pubdoc)/[A-Za-z0-9_/.\-]*`)
 
+// store keys hold document IDs: logs show only their keyspace
 func redact(err error) string {
 	if err == nil {
 		return ""

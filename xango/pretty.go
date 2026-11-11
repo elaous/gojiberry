@@ -19,6 +19,7 @@ func isBlockLevel(n Node) bool {
 	return n.Kind == KindElement && blockTags[n.Tag]
 }
 
+// a newline between two inline siblings renders as a visible space
 func canBreakBoundary(a, b Node) bool {
 	return isBlockLevel(a) || isBlockLevel(b)
 }

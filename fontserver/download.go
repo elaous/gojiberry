@@ -52,6 +52,7 @@ func fetchGoogleFontFilesAPI(family string) ([]googleFontFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	// bare UA string: elicits TrueType src URLs from the legacy endpoint
 	req.Header.Set("User-Agent", "Mozilla/4.0")
 	resp, err := client.Do(req)
 	if err != nil {
