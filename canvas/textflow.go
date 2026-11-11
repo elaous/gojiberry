@@ -214,7 +214,6 @@ type TextFlow struct {
 	sel     flowSel
 	formats *FormatClipboard
 
-	// editing state (see flowedit.go)
 	editing  bool     // the caret is in the text (edit mode, after a click)
 	caretOff bool     // blink: the caret is hidden right now
 	extra    []Cursor // further cursors; sel is the primary one

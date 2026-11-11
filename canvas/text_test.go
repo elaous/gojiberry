@@ -225,7 +225,7 @@ func TestLinkMarkdown(t *testing.T) {
 	}
 }
 
-// A theme's link colour replaces the default for links that name none; a link that names its own keeps it.
+// A theme's link colour replaces the default.
 func TestThemeLinkColour(t *testing.T) {
 	f, _, _ := linkFlow(t)
 	f.SetMode(ModeView)

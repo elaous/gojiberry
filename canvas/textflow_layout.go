@@ -6,12 +6,10 @@ import (
 	"unicode"
 )
 
-// --- layout ---------------------------------------------------------
-
 // flowData is the flattened content stream a Layout was made from.
 type flowData struct {
 	runes   []rune
-	disp    []rune // what is drawn for each rune (case changes); same length
+	disp    []rune // display text per rune, with case changes applied.
 	rs      []int  // per rune: index into styles
 	styles  []TextStyle
 	formats []Format // per style: the Format it was resolved from
@@ -30,9 +28,7 @@ type paraRec struct {
 	pf ParaFormat
 }
 
-// paraIn returns the format of the paragraph spanning [ps, pe] (pe being
-// the offset of its '\n', or of the end of the text): the first
-// ParaFormat sitting inside it.
+// paraIn returns the format of the paragraph spanning the range.
 func (d *flowData) paraIn(ps, pe int) ParaFormat {
 	for _, r := range d.paras {
 		if r.at >= ps && r.at <= pe {
@@ -53,8 +49,7 @@ type flowOp struct {
 	kind BreakKind
 }
 
-// opColumns is the flowOp kind of a ColumnConfig (the other kinds are
-// BreakKinds).
+// opColumns is the flowOp kind of a ColumnConfig.
 const opColumns BreakKind = -1
 
 func (f *TextFlow) flatten() *flowData {
@@ -101,9 +96,7 @@ func (f *TextFlow) flatten() *flowData {
 	for idx, it := range f.items() {
 		switch it := it.(type) {
 		case Chars:
-			// The style of a run is the same for all its letters (a small capital has the one other), so it is looked
-			// up once per run and per paragraph, not for every letter: hashing a Format for each of a long text's
-			// letters was most of the time of working a layout out.
+			// A run's style is the same for all its letters.
 			var ids [2]int
 			var have [2]bool
 			for _, r := range it.Text {
@@ -159,8 +152,7 @@ func (f *TextFlow) flatten() *flowData {
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' }
 
-// objDims returns the size of the inline object at offset i against the
-// current room (maxW x maxH), measuring it once per distinct room.
+// objDims returns the size of the inline object at offset.
 func (d *flowData) objDims(i int) (w, h float64) {
 	k := objKey{i, d.maxW, d.maxH}
 	if v, ok := d.dims[k]; ok {
@@ -177,8 +169,7 @@ func (d *flowData) objDims(i int) (w, h float64) {
 
 func (d *flowData) isObj(i int) bool { _, ok := d.objs[i]; return ok }
 
-// measure returns the width of runes[a:b], each rune in its style and
-// each inline object at its size.
+// measure returns the width of runes[a:b].
 func (d *flowData) measure(a, b int) float64 {
 	p := d.f.Painter
 	w := 0.0
@@ -200,8 +191,7 @@ func (d *flowData) measure(a, b int) float64 {
 	return w
 }
 
-// lineParts is runes[a:b] laid out as one line: styled runs and objects
-// positioned from x=0 (objects' Y is relative to the line's top).
+// lineParts lays runes[a:b] out as one line.
 type lineParts struct {
 	runs          []Run
 	objs          []PlacedObject
@@ -213,9 +203,7 @@ type lineParts struct {
 	block         bool    // the line is a block object alone
 }
 
-// partsOfLv is runes[a:b] laid out as one line; the text may be bidirectional: lv holds the level of each rune of the paragraph
-// (lv[i-off] is the level of rune i; nil when every rune is at level 0), base is the paragraph's level, which
-// an inline object takes. A run ends where the level changes, and the pieces are put in visual order.
+// partsOfLv is lineParts for one bidi level run.
 func (d *flowData) partsOfLv(a, b int, lv []uint8, off int, base uint8) lineParts {
 	p := d.f.Painter
 	var lp lineParts
@@ -294,8 +282,7 @@ type bandRec struct {
 	registered bool
 }
 
-// flowState is where the next line goes. It is a value so a placement
-// can be tried and discarded.
+// flowState is where the next line goes.
 type flowState struct {
 	page, col int
 	y         float64
@@ -315,8 +302,7 @@ type layouter struct {
 	nums listNumbers
 	para paraCtx
 
-	// hyph and hyphW say the line breakLine just chose ends inside a word,
-	// with a hyphen of width hyphW to draw after it.
+	// hyph and hyphW say which hyphen break was chosen.
 	hyph  bool
 	hyphW float64
 }
@@ -331,16 +317,13 @@ type paraCtx struct {
 	marker string // the list marker to put on that line, if any
 	left   float64
 
-	// A drop cap: the first letter is dropped from the paragraph's text
-	// and drawn dropLines lines tall; those lines are indented dropW.
+	// A drop cap: the first letter is drawn large, not flowed.
 	dropW     float64
 	dropLines int
 	dropLH    float64
 }
 
-// Layout flows the content and returns where every line goes. With footnotes it settles twice over: the notes a
-// page keeps room for depend on which marks land on it, and which marks land on it depends on the room left; the
-// layout is repeated until the two agree (after a few rounds the bands only grow, which ends it).
+// Layout flows the content and returns where every line falls.
 func (f *TextFlow) Layout() Layout {
 	lay := f.layoutOnce()
 	if f.Footnotes.Len() == 0 {
@@ -398,8 +381,7 @@ func (f *TextFlow) layoutOnce() Layout {
 	return l.out
 }
 
-// newBand starts a band using column config cfg on page at top (a
-// negative top means the page's top).
+// newBand starts a band with column config cfg on page.
 func (l *layouter) newBand(cfg, page int, top float64) *bandRec {
 	x, y, w, _ := l.f.pageRect(page)
 	if top < 0 {
@@ -416,10 +398,7 @@ func (l *layouter) newBand(cfg, page int, top float64) *bandRec {
 	return &bandRec{Band: Band{Page: page, Top: top, Bottom: top, Xs: xs, Widths: widths, Gap: gap, Avail: w, Cfg: cfg}}
 }
 
-// fitColumns returns widths made to fit a text area w wide: none means
-// one full-width column; widths that, with their gaps, are too wide are
-// scaled down proportionally (or collapse to one column if the gaps
-// alone don't fit).
+// fitColumns returns widths made to fit the text area.
 func fitColumns(cc ColumnConfig, w float64) []float64 {
 	widths, gap := cc.Widths, cc.Gap
 	n := len(widths)
@@ -456,14 +435,14 @@ func fitColumns(cc ColumnConfig, w float64) []float64 {
 	return scaled
 }
 
-// enter makes band the current band of the state, at its top.
+// enter makes band the current band of the state.
 func (l *layouter) enter(st *flowState, page int, top float64) {
 	st.page, st.col = page, 0
 	st.band = l.newBand(st.cfg, page, top)
 	st.y, st.maxY = st.band.Top, st.band.Top
 }
 
-// overflowAt stops layout, reporting the flow didn't fit.
+// overflowAt stops layout and reports overflow.
 func (l *layouter) overflowAt(offset int) {
 	l.out.Overflow, l.out.End, l.stop = true, offset, true
 }
@@ -472,7 +451,7 @@ func (l *layouter) mark(kind BreakKind, st flowState, offset int) {
 	l.out.Breaks = append(l.out.Breaks, BreakMark{Kind: kind, Page: st.page, Col: st.col, Offset: offset})
 }
 
-// nextPage moves to the top of the next page, or reports overflow.
+// nextPage moves to the next page's top, or reports overflow.
 func (l *layouter) nextPage(st *flowState) bool {
 	if st.page+1 >= l.f.pageCount() {
 		return false
@@ -485,7 +464,7 @@ func (l *layouter) nextPage(st *flowState) bool {
 func (l *layouter) apply(op flowOp) {
 	st := l.st
 	switch op.kind {
-	case opColumns: // ColumnConfig: a new band below the text so far
+	case opColumns: // ColumnConfig starts a band below the text so far.
 		top := st.maxY
 		st.cfg = op.cfg
 		l.enter(&st, st.page, top)
@@ -512,11 +491,7 @@ func (l *layouter) apply(op flowOp) {
 	l.st = st
 }
 
-// find locates where a line of height lh goes, from st: it moves down
-// the column, on to the next column, and on to the next page as the
-// text area fills, and skips bands an obstacle leaves too narrow to
-// use. It returns the new state, the free x-range, any natural breaks
-// made on the way, and false if the pages ran out.
+// find locates where a line of height lh goes.
 func (l *layouter) find(st flowState, lh float64, offset int) (flowState, float64, float64, []BreakMark, bool) {
 	var marks []BreakMark
 	minSeg := 2 * max(l.f.Style.FontSize, 1)
@@ -544,7 +519,7 @@ func (l *layouter) find(st flowState, lh float64, offset int) (flowState, float6
 	}
 }
 
-// place commits a line (or a blank line, with runs == nil).
+// place commits a line, or a blank line.
 func (l *layouter) place(st flowState, marks []BreakMark, line Line) {
 	l.out.Breaks = append(l.out.Breaks, marks...)
 	line.Page, line.Col, line.Y = st.page, st.col, st.y
@@ -561,11 +536,7 @@ func (l *layouter) place(st flowState, marks []BreakMark, line Line) {
 	l.st = st
 }
 
-// segment lays out the text in runes[s:e] (between two ops, or the
-// stream's ends) as paragraphs. A blank paragraph is a blank line,
-// except that a '\n' ending a segment before an op makes no extra one;
-// at the very end of the stream (last) it does, so a caret can sit on
-// the empty line after a final newline.
+// segment lays out the text between two break opportunities.
 func (l *layouter) segment(s, e int, last bool) {
 	if s >= e && !last {
 		return
@@ -600,10 +571,7 @@ func (l *layouter) segment(s, e int, last bool) {
 	}
 }
 
-// beginParagraph sets up the paragraph spanning [ps, pe]: its format,
-// its list number, and the space above it. A paragraph that continues
-// after a break (ps is mid-paragraph) keeps its format but is not
-// numbered again and gets no marker or space.
+// beginParagraph sets up the paragraph spanning [ps, pe].
 func (l *layouter) beginParagraph(ps, pe int) {
 	pf, _ := l.f.expandPara(l.d.paraIn(ps, pe))
 	start := ps == 0 || l.d.runes[ps-1] == '\n'
@@ -637,8 +605,7 @@ func (l *layouter) endParagraph() {
 	}
 }
 
-// freeSpan returns the widest stretch of [c0, c1] that no obstacle
-// covers in the band y0..y1.
+// freeSpan returns the widest free stretch of [c0, c1].
 func (f *TextFlow) freeSpan(c0, c1, y0, y1 float64) (float64, float64) {
 	type iv struct{ a, b float64 }
 	var cut []iv
