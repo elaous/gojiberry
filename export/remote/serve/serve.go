@@ -1,5 +1,3 @@
-// Package serve is the side of package export/remote that does the work: it holds the whole of package
-// export and answers one request at a time.
 package serve
 
 import (
@@ -18,7 +16,6 @@ var registry = func() *transfer.Registry {
 	return r
 }()
 
-// ErrUnknownOp is returned for an operation this package does not know.
 var ErrUnknownOp = errors.New("serve: unknown operation")
 
 // Handle answers one request of package remote.
