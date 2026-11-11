@@ -1,4 +1,3 @@
-// Package link holds the interfaces between sessions and transports.
 package link
 
 import (
