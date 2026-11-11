@@ -139,8 +139,7 @@ func orF(v, def float64) float64 {
 	return v
 }
 
-// RemoveScope is how far removing a header, footer, page number or
-// watermark reaches.
+// RemoveScope is how far a removal reaches.
 type RemoveScope int
 
 const (
@@ -152,8 +151,7 @@ const (
 	RemoveAll
 )
 
-// RemoveHeader removes the header of the given page as scope says (see
-// the "none" setting of Page.Header).
+// RemoveHeader removes a page's header, as the scope says.
 func (ps *PageSet) RemoveHeader(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -191,9 +189,7 @@ func (ps *PageSet) RemoveFooter(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemovePageNumber removes the page number of the given page as scope
-// says. Removing one page's number keeps the count: the next page shows
-// its own number, not the removed one's.
+// RemovePageNumber removes a page's number, as the scope says.
 func (ps *PageSet) RemovePageNumber(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -213,7 +209,7 @@ func (ps *PageSet) RemovePageNumber(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemoveWatermark removes the watermark of the given page as scope says.
+// RemoveWatermark removes a page's watermark, as the scope says.
 func (ps *PageSet) RemoveWatermark(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -232,8 +228,7 @@ func (ps *PageSet) RemoveWatermark(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// RemoveBackground removes the background picture of the given page as
-// scope says.
+// RemoveBackground removes a page's background, as the scope says.
 func (ps *PageSet) RemoveBackground(page int, scope RemoveScope) {
 	if page < 0 || page >= len(ps.Pages) {
 		return
@@ -252,10 +247,7 @@ func (ps *PageSet) RemoveBackground(page int, scope RemoveScope) {
 	ps.changed()
 }
 
-// removeInherited does the inheritance bookkeeping of a removal for any
-// of the per-page settings: field picks the setting out of a Page, none
-// makes the "switched off" value, and keep makes a copy of what the page
-// showed before (nil if nothing), to carry on after a single-page removal.
+// removeInherited keeps inheritance right after a removal.
 func removeInherited[T any](ps *PageSet, page int, scope RemoveScope, field func(*Page) **T, none func() *T, keep func() *T) {
 	switch scope {
 	case RemoveAll:

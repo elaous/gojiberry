@@ -1,9 +1,6 @@
 package canvas
 
-// Painter is the subset of Context2D the components here draw with.
-// *html.Context2D (domrt/html) satisfies it as-is; it is declared here
-// instead of reusing html.Canvas2D so this package's drawing code
-// builds, and can be unit-tested, natively.
+// Painter is the subset of Context2D the components draw with.
 type Painter interface {
 	SetFillStyle(style string)
 	SetStrokeStyle(style string)
@@ -25,44 +22,36 @@ type Painter interface {
 	MeasureTextWidth(text string) float64
 }
 
-// DirectionPainter is a Painter that can draw text in a given direction ("ltr" or "rtl"): the direction of a
-// string decides where its leading and trailing spaces and punctuation go. A painter without it draws right-to-left
-// runs as the browser's default direction would.
+// DirectionPainter is a Painter that draws text in a direction.
 type DirectionPainter interface {
 	SetDirection(dir string)
 }
 
-// ImageSource is a decoded bitmap a component can draw. In a browser
-// it is an HTMLImageElement (see LoadImage); tests use a fake.
+// ImageSource is a decoded bitmap a component can draw.
 type ImageSource interface {
 	// Size is the bitmap's natural size in pixels.
 	Size() (w, h float64)
 }
 
-// URLSource is an ImageSource that knows where it came from; only such
-// images can be saved with a document.
+// URLSource is an ImageSource that knows its URL.
 type URLSource interface {
 	ImageSource
 	URL() string
 }
 
-// ImagePainter is a Painter that can also draw bitmaps and change the
-// global alpha. NewPainter adapts an *html.Context2D to it.
+// ImagePainter is a Painter that also draws bitmaps.
 type ImagePainter interface {
 	Painter
 	SetGlobalAlpha(alpha float64)
 
-	// Save/Restore push and pop the painter's state (transform and
-	// clip); Translate moves the origin; ClipRect restricts all later
-	// drawing to a rectangle until the matching Restore.
+	// Save and Restore push and pop the painter state.
 	Save()
 	Restore()
 	Translate(x, y float64)
-	// Rotate turns the origin's axes by angle radians (clockwise).
+	// Rotate turns the axes by angle radians, clockwise.
 	Rotate(angle float64)
 	ClipRect(x, y, w, h float64)
 
-	// DrawImage draws the (sx, sy, sw, sh) region of src into the
-	// (dx, dy, dw, dh) rectangle.
+	// DrawImage draws a source region of src into a destination rectangle.
 	DrawImage(src ImageSource, sx, sy, sw, sh, dx, dy, dw, dh float64)
 }

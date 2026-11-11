@@ -17,49 +17,33 @@ type ListStyle struct {
 	Kind ListKind
 	// Level is the nesting depth, from 0.
 	Level int
-	// Marker is the bullet character for ListBullet (default: • ◦ ▪ by
-	// level), or the number format for ListOrdered, with "{n}" for the
-	// number (default "{n}."): "{n})", "({n})", "{n}:".
+	// Marker is the ListBullet character; the default cycles by level.
 	Marker string
 	// Number is how an ordered list counts: 1, i, I, a, A.
 	Number PageNumberStyle
-	// Start restarts an ordered list at this number (0 continues, or
-	// starts at 1).
+	// Start restarts an ordered list at this number; zero continues.
 	Start int
 	// Checked is the state of a ListCheck item.
 	Checked bool
 }
 
-// ParaFormat is the formatting of one paragraph (the text up to a '\n').
-// It is an item of the content stream like ColumnConfig, and applies to
-// the paragraph that contains the offset it sits at: put it at the start
-// of the paragraph, in front of its first character. Several in one
-// paragraph (after two were joined) -- the first wins.
+// ParaFormat is the formatting of one paragraph.
 type ParaFormat struct {
 	Align Align
-	// IndentLeft and IndentRight inset the paragraph's lines from the
-	// column; FirstLine moves the first line further in (or, negative,
-	// out: a hanging indent).
+	// IndentLeft and IndentRight inset the paragraph's lines.
 	IndentLeft, IndentRight, FirstLine float64
-	// SpaceBefore and SpaceAfter are the gaps above and below the
-	// paragraph, in px (a gap at the top of a column is kept).
+	// SpaceBefore and SpaceAfter are gaps above and below the paragraph.
 	SpaceBefore, SpaceAfter float64
 	// LineSpacing multiplies the line height; zero means 1.
 	LineSpacing float64
 	List        ListStyle
-	// QuoteBar draws a vertical bar of this color to the left of the
-	// paragraph (a block quote).
+	// QuoteBar draws a bar of this colour left of the paragraph.
 	QuoteBar string
-	// Style names a paragraph style (see StyleDef) whose paragraph and
-	// character formatting this paragraph gets, under anything set
-	// directly here.
+	// Style names a paragraph style whose formatting this paragraph gets.
 	Style string
-	// DropCap makes the first letter this many lines tall, with the
-	// text wrapping around it; zero for none.
+	// DropCap makes the first letter this many lines tall.
 	DropCap int
-	// CodeLang is the programming language of a code block (a paragraph of the "Code" style) as a short
-	// lower-case name ("go", "python"); empty when unknown. The exports use it to mark the block (class
-	// language-go in HTML, the info string of a fence in Markdown).
+	// CodeLang is the language of a code block.
 	CodeLang string
 }
 
@@ -68,8 +52,7 @@ func (ParaFormat) flowItem() {}
 // IsZero reports whether the format changes nothing.
 func (p ParaFormat) IsZero() bool { return p == ParaFormat{} }
 
-// ListIndent is how far each list level (and the first, for its marker)
-// is indented.
+// ListIndent is how far each list level indents.
 const ListIndent = 24.0
 
 // DefaultBullets are the bullet characters by nesting level.
@@ -87,8 +70,7 @@ var NumberFormats = []struct {
 	{NumLowerAlpha, "{n}."}, {NumLowerRoman, "{n}."}, {NumUpperRoman, "{n}."}, {NumUpperAlpha, "{n}."},
 }
 
-// LineMarker is the bullet, number or check box in front of a list
-// item's first line.
+// LineMarker is a list item's bullet, number or check box.
 type LineMarker struct {
 	Text string
 	// X is where it is drawn (left edge), in the line's coordinates.
@@ -139,10 +121,7 @@ func (l ListStyle) markerText(n int) string {
 // listNumbers tracks the numbers of consecutive ordered list items.
 type listNumbers struct{ counters []int }
 
-// next returns the number for an item of list l, updating the counters:
-// an ordered item continues its level's count (nested levels restart), a
-// bullet or check item leaves the outer counts alone, and a paragraph
-// that is not a list item resets everything.
+// next returns the number for an item of list l, updating the counters.
 func (n *listNumbers) next(l ListStyle) int {
 	if l.Kind == ListNone {
 		n.counters = n.counters[:0]
@@ -168,8 +147,7 @@ func (n *listNumbers) next(l ListStyle) int {
 	return n.counters[lv]
 }
 
-// ListPrefix is the marker as plain text with a trailing space: for
-// writing a list as Markdown or flattening it into a text box.
+// ListPrefix is the marker as plain text with a trailing space.
 func ListPrefix(l ListStyle, number int) string {
 	if l.Kind == ListNone {
 		return ""

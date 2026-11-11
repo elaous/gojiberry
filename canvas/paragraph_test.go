@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A 160px-wide flow at x=10: 20 eight-pixel characters per line, 22px lines.
+// Test flow: 160px wide at x=10; 8px characters, 22px lines.
 func paraFlow(items ...Item) (*TextFlow, *Stage) {
 	f, p := selFlow(items...)
 	return f, NewStage(p, 400, 400, f)
@@ -201,7 +201,7 @@ func TestParagraphFormatTravelsWithItsText(t *testing.T) {
 	if flowText(f) != "b\nb\na" || f.ParagraphAt(0).List.Kind != ListCheck || f.ParagraphAt(2).List.Kind != ListCheck {
 		t.Fatalf("copy line: %q %+v", flowText(f), f.ContentItems())
 	}
-	// Slice includes formats, so the Markdown copy and line commands see them.
+	// Slice includes formats, so copies and line commands keep them.
 	var n int
 	for _, it := range f.Slice(0, 3) {
 		if _, ok := it.(ParaFormat); ok {
