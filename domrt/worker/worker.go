@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package worker lets a WASM binary run in a dedicated worker.
 package worker
 
 import "syscall/js"

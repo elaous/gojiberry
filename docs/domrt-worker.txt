@@ -1,6 +1,5 @@
 package worker // import "github.com/elaous/gojiberry/domrt/worker"
 
-Package worker lets a WASM binary run in a dedicated worker.
 
 FUNCTIONS
 
