@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/canvas"
 )
 
-// Another person changing the paragraph being edited is a conflict.
 func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "the brown fox\nsecond line\nthird line"})
 	var got []Conflict
@@ -50,7 +49,6 @@ func TestConflictIsReportedForAParagraphEditedHere(t *testing.T) {
 	}
 }
 
-// Paragraphs with the same words are told apart.
 func TestConflictTellsEqualParagraphsApart(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "same words\nsame words\nend"})
 	var got []Conflict
@@ -73,7 +71,6 @@ func TestConflictTellsEqualParagraphsApart(t *testing.T) {
 	}
 }
 
-// The window is the bridge's to set.
 func TestConflictWindowIsConfigurable(t *testing.T) {
 	a, b := pair(t, canvas.Chars{Text: "one line"})
 	var got []Conflict
@@ -92,7 +89,6 @@ func TestConflictWindowIsConfigurable(t *testing.T) {
 	}
 }
 
-// A departed person's name stays known.
 func TestConflictNamesSomeoneWhoLeft(t *testing.T) {
 	s := &Session{names: map[string]string{"b": "Bo"}, Peers: nil}
 	s.noteConflict(Conflict{Replicas: []string{"b", "z"}})

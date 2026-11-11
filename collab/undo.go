@@ -7,9 +7,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// Per-user undo: each user undoes only their own changes.
-
-// maxUndo is how many steps are kept.
 const maxUndo = 200
 
 type deletedRun struct {
@@ -24,7 +21,6 @@ type formatChange struct {
 	old []string // the value before, per id ("" for none)
 }
 
-// entry is the inverse of one local change.
 type entry struct {
 	inserted []crdt.Timestamp
 	origin   crdt.Timestamp // what the first inserted character followed
@@ -36,7 +32,6 @@ func (e entry) empty() bool {
 	return len(e.inserted) == 0 && len(e.deleted) == 0 && len(e.formats) == 0
 }
 
-// pureInsert and pureDelete mark single runs of typing or deleting.
 func (e entry) pureInsert() bool {
 	return len(e.inserted) > 0 && len(e.deleted) == 0 && len(e.formats) == 0
 }
@@ -45,7 +40,6 @@ func (e entry) pureDelete() bool {
 	return len(e.deleted) == 1 && len(e.inserted) == 0 && len(e.formats) == 0
 }
 
-// record stores the inverse of a change just made.
 func (b *Bridge) record(e entry) {
 	if e.empty() {
 		return
@@ -82,7 +76,6 @@ func (b *Bridge) record(e entry) {
 	}
 }
 
-// CanUndo reports whether there is a step of yours to undo.
 func (b *Bridge) CanUndo() bool { return len(b.undo) > 0 }
 
 // CanRedo reports whether an undone step can be redone.
@@ -116,7 +109,6 @@ func (b *Bridge) UndoStep(redo bool) bool {
 	return false
 }
 
-// revert applies the inverse entry to the document as it stands.
 func (b *Bridge) revert(e entry) bool {
 	atoms := b.read()
 	ids := b.Doc.VisibleIDs(block)

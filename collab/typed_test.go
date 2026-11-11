@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/collab/hub"
 )
 
-// Other people's typing shows in their colour for a while.
 func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	r := newRig(t, hub.Config{})
 	a := r.connect("a", "", newFlow(canvas.Chars{Text: "hello world"}))
@@ -38,7 +37,6 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	if got := b.Bridge.Flow.TypedRanges; len(got) != 1 || got[0].From != 7 || got[0].To != 13 {
 		t.Fatalf("after b typed in front: %+v", got)
 	}
-	// Later, it goes back to normal.
 	clock = clock.Add(DefaultTypedFor + time.Second)
 	b.RefreshPeers()
 	if len(b.Bridge.Flow.TypedRanges) != 0 {
@@ -47,7 +45,6 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	if len(a.Bridge.Flow.TypedRanges) != 0 {
 		t.Fatal("a's own text")
 	}
-	// Turned off, nothing is noted.
 	b.TypedFor = -1
 	a.Bridge.Flow.InsertText("!")
 	waitFor(t, "the !", func() bool { return len(text(b.Bridge.Flow)) > 17 }, a, b)
@@ -57,7 +54,6 @@ func TestTextOthersTypedIsInTheirColourForAMoment(t *testing.T) {
 	}
 }
 
-// An object changed by someone else is marked.
 func TestAnObjectOthersChangedIsInTheirColourForAMoment(t *testing.T) {
 	r := newRig(t, hub.Config{})
 	img := canvas.NewImage(urlSource{"https://img.example/cat.png"}, 0, 0)

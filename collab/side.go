@@ -11,10 +11,8 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Side data: comments, replies, footnotes and named styles.
 const sideKind = crdt.LWWKindPrefix + ":side"
 
-// sideSync remembers each record's last agreed value.
 type sideSync struct {
 	synced map[string]string
 }
@@ -23,7 +21,6 @@ func replyKey(r docfile.Reply) string {
 	return fmt.Sprintf("%d-%s", r.Created, r.Author)
 }
 
-// desiredSide lists the records the flow should hold.
 func (b *Bridge) desiredSide() map[string]string {
 	out := map[string]string{}
 	for _, sf := range b.surfaces {
@@ -55,7 +52,6 @@ func (b *Bridge) desiredSide() map[string]string {
 	return out
 }
 
-// ownsSideRecord reports whether this flow owns record id.
 func (b *Bridge) ownsSideRecord(id string) bool {
 	for _, sf := range b.surfaces {
 		if sf.Owns(id) {
@@ -100,7 +96,6 @@ func (b *Bridge) pushRecords(want map[string]string) {
 	}
 }
 
-// pullSide rebuilds the flow's comments, notes and styles from records.
 func (b *Bridge) pullSide() {
 	if b.noText {
 		b.pullSurfaces()
@@ -162,7 +157,6 @@ func (b *Bridge) pullSide() {
 		}
 		return comments[i].ID < comments[j].ID
 	})
-	// A reply belongs to the comment whose id begins its record id.
 	replies := map[string][]docfile.Reply{}
 	for _, pr := range pendingReplies {
 		best := ""

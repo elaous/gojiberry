@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// painter measures 8px per rune and draws nothing.
 type painter struct{}
 
 func (painter) SetGlobalAlpha(float64)      {}
@@ -41,7 +40,6 @@ func (painter) Stroke()                           {}
 func (painter) FillText(string, float64, float64) {}
 func (painter) MeasureTextWidth(t string) float64 { return 8 * float64(utf8.RuneCountInString(t)) }
 
-// newFlow returns an editable flow with the caret in its text.
 func newFlow(items ...canvas.Item) *canvas.TextFlow {
 	f := canvas.NewTextFlow("", 10, 30, 160, 200)
 	f.Items = items
@@ -52,7 +50,6 @@ func newFlow(items ...canvas.Item) *canvas.TextFlow {
 	return f
 }
 
-// normalized renders a flow's content so equal documents compare equal.
 func normalized(f *canvas.TextFlow) string {
 	var items []canvas.Item
 	for _, it := range f.ContentItems() {
@@ -79,7 +76,6 @@ func exchange(a, b *Bridge) {
 	b.Apply(ao...)
 }
 
-// pair returns two bridged flows holding the same document.
 func pair(t *testing.T, items ...canvas.Item) (*Bridge, *Bridge) {
 	t.Helper()
 	a, err := New("a", newFlow(items...))
@@ -157,7 +153,6 @@ func TestTypingAndFormattingSync(t *testing.T) {
 	if !found || normalized(a.Flow) != normalized(b.Flow) {
 		t.Fatalf("formatting syncs: %s", normalized(a.Flow))
 	}
-	// And backspacing.
 	click(a.Flow, 6)
 	a.Flow.HandleKey("Backspace", false)
 	b.Apply(a.Drain()...)
@@ -320,12 +315,10 @@ func TestDiffRunes(t *testing.T) {
 	if diffRunes([]rune("same"), []rune("same")) != nil {
 		t.Fatal("no edits for equal text")
 	}
-	// Two far-apart edits stay two edits.
 	es := diffRunes([]rune("aXbbbbbbbbbbbbbbbbbbbbYc"), []rune("abbbbbbbbbbbbbbbbbbbbc"))
 	if len(es) != 2 {
 		t.Fatalf("%+v", es)
 	}
-	// Huge middles fall back to one replacement.
 	big1, big2 := []rune(strings.Repeat("a", 3000)), []rune(strings.Repeat("b", 3000))
 	if es := diffRunes(big1, big2); len(es) != 1 || es[0].del != 3000 {
 		t.Fatalf("%d edits", len(es))
@@ -347,7 +340,6 @@ func TestAtomsRoundTripFormats(t *testing.T) {
 	if growsAtEnd("link") || growsAtEnd("comment") || !growsAtEnd("fontWeight") {
 		t.Fatal("grow rules")
 	}
-	// A control atom without a payload is dropped; a plain object rune is text.
 	items := itemsFromAtoms([]atom{{r: ctlPara, attrs: map[string]string{}}, {r: objRune, attrs: map[string]string{}}, {r: 'x', attrs: map[string]string{}}})
 	if len(items) != 1 || items[0].(canvas.Chars).Text != "￼x" {
 		t.Fatalf("%#v", items)
@@ -361,7 +353,6 @@ func TestAtomsRoundTripFormats(t *testing.T) {
 	}
 }
 
-// Random two-flow edits converge after sync.
 func TestRandomEditingConverges(t *testing.T) {
 	for trial := 0; trial < 100; trial++ {
 		rng := rand.New(rand.NewSource(int64(trial)))
@@ -432,7 +423,6 @@ func TestRandomEditingConverges(t *testing.T) {
 		if normalized(a.Flow) != normalized(b.Flow) {
 			t.Fatalf("trial %d diverged:\n a %s\n b %s", trial, normalized(a.Flow), normalized(b.Flow))
 		}
-		// The replica agrees with its flow.
 		for i, br := range bridges {
 			want, _ := atomsFromItems(br.Flow.ContentItems())
 			have := br.read()
@@ -462,7 +452,6 @@ func TestSlideEditFollowsTheCaret(t *testing.T) {
 	if got := slideEdit(old, cur, e, 0); got.at != e.at {
 		t.Fatalf("a caret outside the run changes nothing: %+v", got)
 	}
-	// Typing the second of two equal letters.
 	old2, cur2 := []rune("helo"), []rune("hello")
 	e2 := diffRunes(old2, cur2)[0]
 	got := slideEdit(old2, cur2, e2, 4) // caret after the typed l (offset 4 in "hell|o")
@@ -472,14 +461,12 @@ func TestSlideEditFollowsTheCaret(t *testing.T) {
 	if got := slideEdit(old2, cur2, e2, 99); got.at != e2.at {
 		t.Fatalf("%+v", got)
 	}
-	// A replacement is left alone.
 	rep := edit{at: 1, del: 1, ins: []rune("x")}
 	if got := slideEdit(old, cur, rep, 1); got.at != 1 || string(got.ins) != "x" {
 		t.Fatalf("%+v", got)
 	}
 }
 
-// Two clients opening an empty document together agree.
 func TestSimultaneousSeedingMakesOneCopy(t *testing.T) {
 	start := func() *canvas.TextFlow {
 		return newFlow(canvas.Chars{Text: "Starting text"}, canvas.Break{}, canvas.Chars{Text: "second line"})

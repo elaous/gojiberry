@@ -10,10 +10,8 @@ import (
 // DefaultTypedFor is how long others' typed text stays marked.
 const DefaultTypedFor = 4 * time.Second
 
-// maxTyped bounds the characters remembered as just typed.
 const maxTyped = 2000
 
-// typedChar is a character another person inserted, and when.
 type typedChar struct {
 	id      crdt.Timestamp
 	replica string
@@ -27,7 +25,6 @@ func (s *Session) clock() time.Time {
 	return time.Now()
 }
 
-// seen records the newest character each replica is known to have.
 func (s *Session) seen(ops []crdt.Op, note bool) {
 	if s.maxSeen == nil {
 		s.maxSeen = map[string]uint64{}
@@ -44,7 +41,6 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 	for _, op := range ops {
 		for _, c := range op.CharOps {
-			// A typed character, or an object, with its author.
 			var stamp crdt.Timestamp
 			var at crdt.Timestamp // the character to show
 			switch {
@@ -77,10 +73,8 @@ func (s *Session) seen(ops []crdt.Op, note bool) {
 	}
 }
 
-// noteTyped remembers characters other people inserted in ops.
 func (s *Session) noteTyped(ops []crdt.Op) { s.seen(ops, true) }
 
-// typedRanges drops text typed longer ago than TypedFor.
 func (s *Session) typedRanges() []canvas.TypedRange {
 	if len(s.typed) == 0 {
 		return nil

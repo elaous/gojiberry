@@ -74,7 +74,6 @@ func TestTypingAndBackspaceRunsAreOneStep(t *testing.T) {
 	if text(a.Flow) != "!!hello world" || text(b.Flow) != "!!hello world" {
 		t.Fatalf("the deleted word is back in place: %q %q", text(a.Flow), text(b.Flow))
 	}
-	// The Delete key runs forward.
 	click(a.Flow, 2)
 	for i := 0; i < 5; i++ {
 		a.Flow.HandleKey("Delete", false)
@@ -143,7 +142,6 @@ func TestUndoParagraphFormatsAndEdgeCases(t *testing.T) {
 	if ctrlZ(a.Flow) { // no step left that still has something to undo
 		t.Fatalf("undid something that was already gone: %q", text(a.Flow))
 	}
-	// Not ready: no undo. New edits clear redo.
 	idle, _ := Join("z", newFlow(canvas.Chars{Text: "x"}))
 	if idle.Flow.Undo() {
 		t.Fatal("a bridge that is not sharing yet cannot undo")
@@ -179,7 +177,6 @@ func hasAlign(f *canvas.TextFlow, al canvas.Align) bool {
 	return false
 }
 
-// Random edits and undos by one person while another edits.
 func TestRandomUndoConverges(t *testing.T) {
 	for trial := 0; trial < 100; trial++ {
 		rng := rand.New(rand.NewSource(int64(trial)))

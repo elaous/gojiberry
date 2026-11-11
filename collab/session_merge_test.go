@@ -14,8 +14,6 @@ import (
 	"github.com/elaous/gojiberry/collab/wire"
 )
 
-// The changes made while offline are counted when the connection comes back and meets the server's copy,
-// and a refused change is counted: a host announces both ("3 changes were merged").
 func TestSessionCountsMergedAndRejectedChanges(t *testing.T) {
 	var gate atomic.Bool // true: the network is down
 	h := hub.New(hub.Config{SaveDelay: 10 * time.Millisecond, Roles: byHeader})
@@ -74,7 +72,6 @@ func TestSessionCountsMergedAndRejectedChanges(t *testing.T) {
 		t.Fatalf("an edit made online is not a merge: %d", a.Merged)
 	}
 
-	// A viewer's edit is refused and counted.
 	v := connect("v", "viewer", newFlow())
 	v.NoRepair = true
 	waitFor(t, "viewer has the text", func() bool { return text(v.Bridge.Flow) == "?>one two!" && v.Role == wire.Viewer }, a, v)
@@ -84,7 +81,6 @@ func TestSessionCountsMergedAndRejectedChanges(t *testing.T) {
 	if v.Rejected != 1 || v.Merged != 0 {
 		t.Fatalf("rejected %d merged %d", v.Rejected, v.Merged)
 	}
-	// The counters survive a repair.
 	if err := v.Repair(); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +89,6 @@ func TestSessionCountsMergedAndRejectedChanges(t *testing.T) {
 	}
 }
 
-// The counters for the events of one connection, in isolation.
 func TestSessionMergedCountsWhatWaitedAtHello(t *testing.T) {
 	b, err := Join("a", newFlow())
 	if err != nil {

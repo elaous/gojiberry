@@ -11,20 +11,17 @@ import (
 // DefaultConflictWindow is the default recent-edit window.
 const DefaultConflictWindow = 10 * time.Second
 
-// Conflict is a paragraph another person changed while it was edited here.
 type Conflict struct {
 	Paragraph string
 	// Replicas are the replicas whose changes were merged.
 	Replicas []string
 }
 
-// recentEdit is a local change, by the ids of its characters.
 type recentEdit struct {
 	ids []crdt.Timestamp
 	at  time.Time
 }
 
-// now is replaced by tests.
 var now = time.Now
 
 func (b *Bridge) conflictWindow() time.Duration {
@@ -34,7 +31,6 @@ func (b *Bridge) conflictWindow() time.Duration {
 	return DefaultConflictWindow
 }
 
-// noteRecent records characters edited here.
 func (b *Bridge) noteRecent(ids []crdt.Timestamp) {
 	if len(ids) == 0 {
 		return
@@ -48,7 +44,6 @@ func (b *Bridge) noteRecent(ids []crdt.Timestamp) {
 	}
 }
 
-// checkConflict reports paragraphs others changed while edited here.
 func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []crdt.Op) {
 	if b.OnConflict == nil || len(b.recent) == 0 || len(before) != len(beforeIDs) {
 		return
@@ -73,7 +68,6 @@ func (b *Bridge) checkConflict(before []atom, beforeIDs []crdt.Timestamp, ops []
 	for i, id := range beforeIDs {
 		index[id] = i
 	}
-	// the paragraphs (index ranges) edited here lately
 	type span struct{ start, end int }
 	var spans []span
 	for _, r := range b.recent {

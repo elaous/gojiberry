@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// A Surface is a part of the canvas other than the text.
 type Surface interface {
 	// Owns reports whether record id belongs to this surface.
 	Owns(id string) bool
@@ -44,7 +43,6 @@ func (b *Bridge) surfaceOwns(id string) bool {
 	return false
 }
 
-// surfaceRecords is every record the surfaces hold now.
 func (b *Bridge) surfaceRecords() map[string]string {
 	out := map[string]string{}
 	for _, sf := range b.surfaces {
@@ -55,7 +53,6 @@ func (b *Bridge) surfaceRecords() map[string]string {
 	return out
 }
 
-// pullSurfaces gives each surface the replica's records for it.
 func (b *Bridge) pullSurfaces() {
 	if len(b.surfaces) == 0 {
 		return

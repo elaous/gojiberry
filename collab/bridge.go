@@ -13,7 +13,6 @@ import (
 	"github.com/elaous/gojiberry/crdt"
 )
 
-// block is the crdt block holding the document's text.
 const block = "doc"
 
 // Bridge keeps a TextFlow and a crdt.Doc replica in step.
@@ -25,7 +24,6 @@ type Bridge struct {
 	// Outgoing, if set, receives each operation made locally.
 	Outgoing func([]crdt.Op)
 
-	// OnConflict, if set, runs when others changed the paragraph being edited.
 	OnConflict func(Conflict)
 	// ConflictWindow is how long a paragraph counts as recently edited.
 	ConflictWindow time.Duration
@@ -34,7 +32,7 @@ type Bridge struct {
 	recent  []recentEdit // changes made here lately, newest last
 
 	surfaces []Surface
-	noText   bool // the flow's text and side data are not shared (see Sharing)
+	noText   bool
 	seen     string
 
 	ready    bool
@@ -43,7 +41,6 @@ type Bridge struct {
 	err      error
 	side     sideSync
 
-	// Per-user undo records the inverse of each local change.
 	undo, redo []entry
 	recordTo   *[]entry
 }
@@ -52,7 +49,6 @@ func attach(replica string, f *canvas.TextFlow) (*Bridge, error) {
 	if _, err := atomsFromItems(f.ContentItems()); err != nil {
 		return nil, err
 	}
-	// Comments and notes get replica-unique IDs.
 	if f.Comments == nil {
 		f.Comments = canvas.NewCommentSet()
 	}
@@ -92,7 +88,6 @@ func (b *Bridge) Detach() {
 	b.Flow.UndoHook = nil
 }
 
-// seedReplica names the replica that holds the starting content.
 func seedReplica(atoms []atom, extra map[string]string) string {
 	h := fnv.New64a()
 	ids := make([]string, 0, len(extra))
@@ -142,7 +137,6 @@ func (b *Bridge) Seed() {
 // Ready reports whether the bridge is sharing yet.
 func (b *Bridge) Ready() bool { return b.ready }
 
-// Err returns the last error that stopped a local change from sharing.
 func (b *Bridge) Err() error { return b.err }
 
 // Drain returns the operations made locally since the last drain.
@@ -154,7 +148,6 @@ func (b *Bridge) Snapshot() []crdt.Op { return b.Doc.Snapshot() }
 // Sync shares side data such as comments, notes and styles.
 func (b *Bridge) Sync() { b.pushLocal() }
 
-// read returns the replica's document as atoms.
 func (b *Bridge) read() []atom {
 	var out []atom
 	for _, run := range b.Doc.Runs(block) {
@@ -173,16 +166,13 @@ func (b *Bridge) read() []atom {
 	return out
 }
 
-// edit is one change to the text, in the old text's indexes.
 type edit struct {
 	at, del int
 	ins     []rune
 }
 
-// maxLCS bounds the work of finding differences between texts.
 const maxLCS = 4_000_000
 
-// diffRunes returns the edits turning old into new, ascending.
 func diffRunes(old, cur []rune) []edit {
 	pre := 0
 	for pre < len(old) && pre < len(cur) && old[pre] == cur[pre] {
@@ -249,7 +239,6 @@ func diffRunes(old, cur []rune) []edit {
 	return out
 }
 
-// slideEdit moves a single insertion or deletion within equal text.
 func slideEdit(old, cur []rune, e edit, caret int) edit {
 	switch {
 	case e.del > 0 && len(e.ins) == 0:
@@ -279,7 +268,6 @@ func slideEdit(old, cur []rune, e edit, caret int) edit {
 	return e
 }
 
-// pushLocal shares local changes since the last push.
 func (b *Bridge) pushLocal() {
 	if b.applying || !b.ready || b.detached {
 		return
@@ -345,7 +333,6 @@ func (b *Bridge) pushLocal() {
 	b.flush()
 }
 
-// flush sends the operations made since the last send.
 func (b *Bridge) flush() {
 	if b.Outgoing != nil {
 		if ops := b.Doc.Drain(); len(ops) > 0 {
@@ -354,7 +341,6 @@ func (b *Bridge) flush() {
 	}
 }
 
-// pushFormats shares format differences between the replica and the flow.
 func (b *Bridge) pushFormats(have, want []atom, rec *entry) {
 	if len(have) != len(want) {
 		b.err = errors.New("collab: internal error: the replica and the flow disagree about the text")
@@ -403,7 +389,6 @@ func (b *Bridge) pushFormats(have, want []atom, rec *entry) {
 	}
 }
 
-// cursorAnchor returns the id of the character at a caret.
 type cursorAnchor struct {
 	id    crdt.Timestamp
 	start bool

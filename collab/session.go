@@ -105,7 +105,6 @@ func (s *Session) Repair() error {
 	return nil
 }
 
-// noteConflict counts a paragraph changed by others while edited.
 func (s *Session) noteConflict(c Conflict) {
 	s.Conflicts++
 	s.ConflictWith = s.ConflictWith[:0:0]
@@ -149,10 +148,6 @@ func (s *Session) Poll() bool {
 	}
 }
 
-// RefreshPeers puts the other people's cursors into the flow
-// (TextFlow.RemoteCursors) at the places their characters are now. Poll
-// does it when something arrived; call it again after local edits if you
-// want the cursors to stay on their text as you type.
 func (s *Session) RefreshPeers() {
 	var rc []canvas.RemoteCursor
 	for _, pc := range s.PeerCursors() {
@@ -166,7 +161,6 @@ func (s *Session) RefreshPeers() {
 	s.Bridge.Flow.TypedRanges = s.typedRanges()
 }
 
-// Pending is how many of your changes have not reached the server yet.
 func (s *Session) Pending() int { return s.Conn.Pending() }
 
 func (s *Session) handle(e client.Event) bool {
@@ -192,10 +186,6 @@ func (s *Session) handle(e client.Event) bool {
 		if s.Role.CanEdit() {
 			s.Bridge.PushSurfaces() // what this side has and the document lacks
 		}
-		// A hub that restarted (or lost its last saves) answers with less than
-		// we hold: the edits it acknowledged earlier are gone from it, and
-		// nothing else would send them again. Operations are idempotent, so
-		// sending the whole document is safe.
 		if s.Bridge.Ready() && s.Role.CanEdit() {
 			if all := s.Bridge.Snapshot(); opWeight(all) > opWeight(e.Ops) {
 				s.Conn.Send(all)
@@ -266,8 +256,6 @@ func (s *Session) PeerCursors() []PeerCursor {
 	return out
 }
 
-// opWeight counts operations including their character operations: how much a
-// set of operations says.
 func opWeight(ops []crdt.Op) int {
 	n := 0
 	for _, op := range ops {
