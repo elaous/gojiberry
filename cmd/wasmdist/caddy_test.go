@@ -14,7 +14,6 @@ import (
 	"time"
 )
 
-// caddyBlock is the Caddy recipe that the test runs.
 const caddyBlock = `{
 	admin off
 	auto_https off
@@ -84,7 +83,6 @@ func startCaddy(t *testing.T, dir string) string {
 	return ""
 }
 
-// Runs the Caddy recipe against a real server.
 func TestShowcaseCaddyRecipe(t *testing.T) {
 	dir, wasm := site(t)
 	brotli := "off"
@@ -144,7 +142,6 @@ func TestShowcaseCaddyRecipe(t *testing.T) {
 	}
 }
 
-// This test runs the block shown in docs/deploy.md.
 func TestDeployDocShowsTheTestedCaddyBlock(t *testing.T) {
 	page, err := os.ReadFile(filepath.Join("..", "..", "docs", "deploy.md"))
 	if err != nil {

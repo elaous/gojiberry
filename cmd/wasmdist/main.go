@@ -1,4 +1,3 @@
-// Command wasmdist prepares a built wasm app for deployment.
 package main
 
 import (
@@ -20,7 +19,6 @@ func main() {
 	}
 }
 
-// handlerFor serves dir as a deployment should.
 func handlerFor(dir string) http.Handler {
 	return wasmserve.Handler(os.DirFS(dir), wasmserve.Options{Fallback: "index.html", ServiceWorker: true})
 }

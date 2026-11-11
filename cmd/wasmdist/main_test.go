@@ -76,7 +76,6 @@ func TestRunNeedsOneDirectory(t *testing.T) {
 	}
 }
 
-// A deployment serves what wasmdist wrote.
 func TestServedDirectoryAfterCompressing(t *testing.T) {
 	dir, _ := site(t)
 	if err := run([]string{"-brotli", "off", dir}, io.Discard); err != nil {
