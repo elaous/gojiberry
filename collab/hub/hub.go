@@ -172,13 +172,13 @@ type room struct {
 	dirty  bool
 	timer  *time.Timer
 
-	lastRenew   time.Time // when a renewal of the document's expiry was last started
-	renewed     bool      // lastRenew is set
-	renewedOnce bool      // a renewal of this document has succeeded: the store has it
-	dead        bool      // the document expired and was deleted: no more ops, no more saves
-	authWarned  bool      // the renewal was refused (401/403) and that has been logged
-	notFoundLog bool      // "not in the store" has been logged and counted for this room
-	failLogged  bool      // the first failure of another kind has been logged for this room
+	lastRenew   time.Time
+	renewed     bool // lastRenew is set
+	renewedOnce bool
+	dead        bool
+	authWarned  bool
+	notFoundLog bool
+	failLogged  bool
 
 	saveMu  sync.Mutex    // one save at a time, in order
 	loaded  chan struct{} // closed when the stored document has been read
@@ -212,16 +212,10 @@ var errGone = errors.New("hub: the document has expired")
 // goneMsg is what clients hear about a gone document.
 const goneMsg = "this document has expired and been deleted; copy your content elsewhere"
 
-// room finds or loads a document. The store is read outside the hub's lock,
-// so a slow load of one document does not hold up the others.
-//
-// A document whose room was closed as expired is refused (errGone) for goneMemory, unless the
-// store says it is live again (a deleted and re-created document, a late renewal): an editor's
-// request asks the Renewer, and a success clears the tombstone (see revived).
+// room finds or loads a document.
 func (h *Hub) room(r *http.Request, id string, role Role) (*room, error) {
 	rm, err := h.openRoom(r, id, role)
-	// The store remembers a closed document across restarts and replicas (see goneKey): an editor
-	// of a document that is live again clears that mark, once, and tries again.
+	// The store remembers a closed document across restarts.
 	if errors.Is(err, errGone) && role.CanEdit() && h.storeTombstone(r.Context(), id) && h.revived(r, id) {
 		h.clearStoreTombstone(id)
 		return h.openRoom(r, id, role)
@@ -258,8 +252,6 @@ func (h *Hub) openRoom(r *http.Request, id string, role Role) (*room, error) {
 	}
 	h.mu.Unlock()
 	if !ok {
-		// Not the first requester's context: its client leaving must not fail
-		// the load for everyone waiting on it.
 		lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		rm.loadErr = h.load(lctx, rm)
 		cancel()
@@ -311,10 +303,7 @@ func (h *Hub) role(r *http.Request, id string) Role {
 	return h.cfg.Roles(r, id)
 }
 
-// save writes the document to the store. Saves of one document run one
-// after another, each taking its snapshot when its turn comes, so an older
-// snapshot never overwrites a newer one. A failed save leaves the document
-// dirty and is tried again.
+// save writes the document to the store; saves of one document run in order.
 func (h *Hub) save(rm *room) error {
 	if h.cfg.Store == nil {
 		return nil
@@ -322,7 +311,7 @@ func (h *Hub) save(rm *room) error {
 	rm.saveMu.Lock()
 	defer rm.saveMu.Unlock()
 	rm.mu.Lock()
-	if rm.dead { // the document expired: its state must not be written back
+	if rm.dead { // An expired document is not written back.
 		rm.dirty = false
 		rm.mu.Unlock()
 		return nil
@@ -358,11 +347,11 @@ func (h *Hub) markDirty(rm *room) {
 type Health struct {
 	OK            bool  `json:"ok"`
 	Rooms         int   `json:"rooms"`
-	RenewFailures int64 `json:"renewFailures"` // renewals that failed (a document that is simply not in the store does not count)
-	RenewDenied   int64 `json:"renewDenied"`   // of those, refused with 401 or 403: see Config.Renewer
-	ExpiredRooms  int64 `json:"expiredRooms"`  // rooms closed because their document expired
-	HubOnlyRooms  int64 `json:"hubOnlyRooms"`  // rooms whose document is not in the store, counted once each (nothing to renew)
-	RevivedRooms  int64 `json:"revivedRooms"`  // closed rooms reopened because the document is live again
+	RenewFailures int64 `json:"renewFailures"`
+	RenewDenied   int64 `json:"renewDenied"`  // of those, refused with 401 or 403: see Config.Renewer
+	ExpiredRooms  int64 `json:"expiredRooms"` // rooms closed because their document expired
+	HubOnlyRooms  int64 `json:"hubOnlyRooms"` // rooms whose document is not in the store, counted once each (nothing to renew)
+	RevivedRooms  int64 `json:"revivedRooms"` // closed rooms reopened because the document is live again
 }
 
 // Health returns the hub's counters.
@@ -373,8 +362,7 @@ func (h *Hub) Health() Health {
 	return Health{OK: !h.closing.Load(), Rooms: n, RenewFailures: h.renewFailures.Load(), RenewDenied: h.renewDenied.Load(), ExpiredRooms: h.deadRooms.Load(), HubOnlyRooms: h.hubOnlyRooms.Load(), RevivedRooms: h.revivedRooms.Load()}
 }
 
-// Flush saves every document with unsaved changes now, and waits for the expiry renewals in
-// flight.
+// Flush saves every document with unsaved changes now.
 func (h *Hub) Flush() error {
 	defer h.waitRenewals()
 	h.mu.Lock()
@@ -385,8 +373,6 @@ func (h *Hub) Flush() error {
 	h.mu.Unlock()
 	var errs []error
 	for _, rm := range rooms {
-		// A save already running clears the dirty flag before it has
-		// written; wait for it, or its edits would count as saved.
 		rm.saveMu.Lock()
 		rm.saveMu.Unlock() //nolint:staticcheck // waiting for the holder is the point
 		rm.mu.Lock()
@@ -402,9 +388,7 @@ func (h *Hub) Flush() error {
 	return errors.Join(errs...)
 }
 
-// Stop refuses further writes and new event streams and ends the open ones
-// (a graceful shutdown calls it first, so http.Server.Shutdown does not wait
-// on them and nothing is acknowledged after the final Close).
+// Stop refuses further writes and new event streams.
 func (h *Hub) Stop() {
 	h.closing.Store(true)
 	h.stopOnce.Do(func() { close(h.stop) })
