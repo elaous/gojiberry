@@ -74,7 +74,6 @@ func TestHandlerNilReloaderIs404(t *testing.T) {
 	}
 }
 
-// End-to-end: a different version reloads the page.
 func TestEndToEndDifferentVersionsTriggerReload(t *testing.T) {
 	oldProcess := New()
 	newProcess := New()

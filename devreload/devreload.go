@@ -1,4 +1,3 @@
-// Package devreload lets an xango SSR server reload open pages.
 package devreload
 
 import (
@@ -20,7 +19,6 @@ func New() *Reloader {
 	return &Reloader{version: strconv.FormatInt(time.Now().UnixNano(), 10)}
 }
 
-// versionPath is the fixed endpoint Wrap's injected script polls.
 const versionPath = "/__dev/version"
 
 // Wrap injects a small polling script into HTML pages.

@@ -1,6 +1,5 @@
 package devreload // import "github.com/elaous/gojiberry/devreload"
 
-Package devreload lets an xango SSR server reload open pages.
 
 FUNCTIONS
 
