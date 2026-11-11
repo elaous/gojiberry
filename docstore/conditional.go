@@ -9,41 +9,29 @@ import (
 	"time"
 )
 
-// ErrConflict is returned by SaveIf when the document is no longer what the
-// caller read: somebody else saved it in between.
+// ErrConflict is returned by SaveIf when the document changed.
 var ErrConflict = errors.New("docstore: the document changed since it was read")
 
-// ErrConditionalUnsupported is returned by an adapter that has the SaveIf method
-// but whose store cannot do it (an HTTP client of a server on a store that can't).
+// ErrConditionalUnsupported is returned by stores without conditional writes.
 var ErrConditionalUnsupported = errors.New("docstore: conditional save is not supported by this store")
 
-// Digest is the revision of a document's content that SaveIf compares: the hex
-// SHA-256 of it.
+// Digest is the revision of a document's content.
 func Digest(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
-// ConditionalAdapter is an optional capability of an Adapter: a save that only
-// happens if the document is still the one the caller read. It is what lets two
-// processes share a store without one overwriting the other's change to a record
-// both edit (a catalog): read, change, SaveIf with the Digest of what was read,
-// and on ErrConflict read again and redo the change.
+// ConditionalAdapter is an optional capability for compare-and-swap saves.
 type ConditionalAdapter interface {
 	Adapter
-	// SaveIf stores data if the document's content has digest prev (see Digest),
-	// or, when prev is "", if there is no such document. Otherwise it stores
-	// nothing and returns ErrConflict. The check and the write are one step.
+	// SaveIf stores data if the document's revision is prev.
 	SaveIf(ctx context.Context, id string, data []byte, prev string) error
 }
 
-// ConditionalDeleter is an optional capability of an Adapter: a delete that only happens if the
-// document is still the one the caller read. It is what lets a sweeper remove a record without
-// removing a change somebody made between its read and its delete (SweepRateLimits).
+// ConditionalDeleter is an optional capability for compare-and-swap deletes.
 type ConditionalDeleter interface {
 	Adapter
-	// DeleteIf removes the document if its content has digest prev (see Digest). A document
-	// that is no longer there is ErrNotFound; one that changed is ErrConflict.
+	// DeleteIf removes the document if its revision is prev.
 	DeleteIf(ctx context.Context, id string, prev string) error
 }
 
@@ -76,21 +64,12 @@ func (m *MemoryAdapter) SaveIf(_ context.Context, id string, data []byte, prev s
 	return nil
 }
 
-// Locker is an optional capability of an Adapter: exclusive access to the store for
-// everything else that shares it (other tabs of the same browser, other processes), for
-// as long as the caller holds it. It is for a store that cannot write conditionally
-// (ConditionalAdapter): the saver takes the lock around a read-change-write of the
-// catalog, so two of them cannot interleave. Lock waits for its turn; the function it
-// returns gives the lock back and must be called exactly once.
+// Locker is an optional capability for locking a document name.
 type Locker interface {
 	Lock(ctx context.Context) (unlock func(), err error)
 }
 
-// SupportsConditional probes whether store really writes conditionally: it has the SaveIf method
-// and the store behind it honours it (a wrapper, an HTTP client of a server on a store that
-// cannot, answers ErrConditionalUnsupported). The probe creates a record under
-// "directory-log/probe/" twice (the second create must conflict) and deletes it; a store that
-// fails to do any of that counts as not supporting it.
+// SupportsConditional probes whether a store supports conditional writes.
 func SupportsConditional(ctx context.Context, store Adapter) bool {
 	c, ok := store.(ConditionalAdapter)
 	if !ok {

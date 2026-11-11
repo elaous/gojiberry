@@ -10,10 +10,7 @@ import (
 	"testing"
 )
 
-// CheckAdapter runs the same behavioral contract against
-// any Adapter implementation, so every backend (Memory, LocalFS,
-// Postgres, MongoDB, S3) is held to identical semantics without
-// duplicating the assertions per-file.
+// CheckAdapter runs the same behavioral contract against an adapter.
 func CheckAdapter(t *testing.T, newAdapter func() Adapter) {
 	t.Helper()
 	ctx := context.Background()
@@ -130,10 +127,7 @@ func CheckAdapter(t *testing.T, newAdapter func() Adapter) {
 	})
 }
 
-// CheckConditional runs the contract of ConditionalAdapter.SaveIf against an adapter that
-// starts empty: a new document needs prev "", a changed one the digest of what was read, a
-// stale or missing one is ErrConflict, and with several writers racing on one digest exactly
-// one wins.
+// CheckConditional runs the contract of ConditionalAdapter.
 func CheckConditional(t *testing.T, newAdapter func() ConditionalAdapter) {
 	t.Helper()
 	ctx := context.Background()
@@ -186,10 +180,7 @@ func CheckConditional(t *testing.T, newAdapter func() ConditionalAdapter) {
 	})
 }
 
-// CheckPrefixLister runs the contract of PrefixLister against an adapter that has it: only the
-// documents whose ID starts with the prefix come back (ids that merely resemble it, including
-// ones a SQL LIKE or a regular expression would match if the prefix were not escaped, do not),
-// with their sizes, and a prefix nobody has lists nothing. The adapter must be fresh.
+// CheckPrefixLister runs the contract of PrefixLister.
 func CheckPrefixLister(t *testing.T, newAdapter func() Adapter) {
 	t.Helper()
 	ctx := context.Background()
@@ -234,10 +225,7 @@ func CheckPrefixLister(t *testing.T, newAdapter func() Adapter) {
 	}
 }
 
-// CheckHeadReader runs the contract of HeadReader against an adapter that has it: the first n
-// bytes of a document come back (all of it when it is shorter, an empty document gives nothing,
-// bytes are not interpreted), a missing document is ErrNotFound, and the LoadHead helper agrees
-// with Load on whether the bytes are the whole document. The adapter must be fresh.
+// CheckHeadReader runs the contract of HeadReader.
 func CheckHeadReader(t *testing.T, newAdapter func() Adapter) {
 	t.Helper()
 	ctx := context.Background()
@@ -281,7 +269,6 @@ func CheckHeadReader(t *testing.T, newAdapter func() Adapter) {
 			t.Errorf("helper LoadHead(%q, %d) = %d bytes, whole %v, %v", c.id, c.n, len(head), whole, err)
 		}
 	}
-	// A non-HeadReader goes through Load and is whole.
 	head, whole, err := LoadHead(ctx, struct{ Adapter }{a}, "big", 10)
 	if err != nil || len(head) != len(big) || !whole {
 		t.Errorf("helper without HeadReader = %d bytes, whole %v, %v", len(head), whole, err)

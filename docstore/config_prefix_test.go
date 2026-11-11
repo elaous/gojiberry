@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// The per-user configuration keyspace (package userconfig) is not reachable through the document API,
-// whatever the case, and does not show in the listing.
+// The per-user configuration keyspace is reserved.
 func TestConfigKeyspaceIsRefusedByTheDocumentAPI(t *testing.T) {
 	srv := newTestServer()
 	h := srv.Handler()
