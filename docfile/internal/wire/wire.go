@@ -1,4 +1,3 @@
-// Package wire implements the protobuf wire format subset docfile uses.
 package wire
 
 import (
