@@ -58,8 +58,7 @@ func TestWordsAreBrokenAtHyphenationPointsWhenTheyDoNotFit(t *testing.T) {
 }
 
 func TestAHyphenFillsTheLineAndFits(t *testing.T) {
-	// "short internationalization": plain wrapping puts the long word on its
-	// own line; hyphenation puts its start next to "short".
+	// Plain wrapping puts the long word on its own line.
 	hyph := layoutLines(t, everyOther{}, "short internationalization", 160)
 	if len(hyph) < 2 || !hyph[0].Hyphen || !strings.HasPrefix(hyph[0].Text, "short ") {
 		t.Fatalf("lines %+v", hyph)

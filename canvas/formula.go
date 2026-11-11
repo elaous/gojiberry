@@ -7,17 +7,9 @@ import (
 	"unicode"
 )
 
-// Table formulas. A cell whose text starts with "=" is a formula over the other cells of the same table:
-//
-//	=A1+B1*2        =SUM(B2:B9)        =ROUND(AVERAGE(C1:C4), 1)        =IF(D2>=10, "ok", "low")
-//
-// Cell names are a column letter (A, B, ... Z, AA, ...) and a row number from 1, as in a spreadsheet. The text stays
-// in the cell, so it is saved and edited as it is; what a reader sees (the canvas, the exports, the reading copy) is
-// the value, computed by Values. A formula that cannot be computed shows an error code in its place (#REF!, #DIV/0!,
-// #VALUE!, #NAME?, #CYCLE!, #ERR!) instead of stopping anything. Functions: SUM, AVERAGE, MIN, MAX, COUNT, ROUND,
-// ABS, IF. Operators: + - * / ^ and comparisons = <> < > <= >=.
+// Table formulas: a cell starting with "=" is a formula over other cells.
 
-// Values returns the cells of a grid as a reader sees them: formulas computed, everything else as written.
+// Values returns the cells as readers see them, formulas computed.
 func Values(cells [][]string) [][]string {
 	out := make([][]string, len(cells))
 	ev := &formulaEval{cells: cells, done: map[[2]int]fval{}, busy: map[[2]int]bool{}}
@@ -34,7 +26,7 @@ func Values(cells [][]string) [][]string {
 	return out
 }
 
-// Values is the table's cells as a reader sees them (see Values).
+// Values returns the table's displayed cells.
 func (t *Table) Values() [][]string {
 	if len(t.Fields) == 0 {
 		return Values(t.Cells)
@@ -48,7 +40,7 @@ func (t *Table) Values() [][]string {
 	return out
 }
 
-// Display is one cell as a reader sees it: the value of a formula, else the text.
+// Display returns one cell as readers see it.
 func (t *Table) Display(row, col int) string {
 	text := t.Cell(row, col)
 	if f := t.FieldAt(row, col); f != nil {
@@ -63,8 +55,7 @@ func (t *Table) Display(row, col int) string {
 
 func isFormula(s string) bool { return strings.HasPrefix(strings.TrimSpace(s), "=") }
 
-// plainText is a cell that is not a formula as a reader sees it: a leading \= is the way to write a cell that starts with
-// = without making it a formula, and the backslash is not shown.
+// plainText returns a non-formula cell as readers see it.
 func plainText(s string) string {
 	t := strings.TrimLeftFunc(s, unicode.IsSpace)
 	if strings.HasPrefix(t, "\\=") {
@@ -73,7 +64,7 @@ func plainText(s string) string {
 	return s
 }
 
-// ColumnName is the letter a formula uses for a column: A, B, ... Z, AA, ... (0-based index).
+// ColumnName is the column letter for a 0-based index: A, AA, etc.
 func ColumnName(col int) string {
 	name := ""
 	for n := col + 1; n > 0; n = (n - 1) / 26 {
@@ -123,7 +114,7 @@ type formulaEval struct {
 	busy  map[[2]int]bool
 }
 
-// cell is the value of one cell: a formula is computed (once), anything else is a number when it reads as one.
+// cell returns one cell's value; formulas are computed once.
 func (e *formulaEval) cell(r, c int) fval {
 	if r < 0 || r >= len(e.cells) || c < 0 || c >= len(e.cells[r]) {
 		return ferr("#REF!")
@@ -146,8 +137,6 @@ func (e *formulaEval) cell(r, c int) fval {
 	e.done[key] = v
 	return v
 }
-
-// --- tokens ---------------------------------------------------------
 
 type ftok struct {
 	kind byte // n number, s string, i identifier, o operator or punctuation, x bad
@@ -203,8 +192,6 @@ func tokenize(s string) []ftok {
 	}
 	return out
 }
-
-// --- parser and evaluator (recursive descent, evaluating as it goes) -----
 
 type formulaParser struct {
 	e    *formulaEval

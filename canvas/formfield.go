@@ -47,33 +47,26 @@ const (
 	FormProblemPattern  = "pattern" // the value does not match Pattern
 )
 
-// FormFieldObject is a field of a form in the text: it keeps what the person writes in it (Value) and shows, next to its
-// label, a small eye (fill the field in) and, unless the field is locked, a small pen (change what the field is: its
-// label, kind, placeholder, pattern, options). A locked field cannot have its properties changed, only its value.
-//
-// The canvas draws the field and tells the host which icon was pressed (OnFill, OnEdit); the host asks for the value and
-// the properties, as a panel or a dialog, because the canvas has no text boxes of its own. A checkbox is ticked by
-// pressing it.
+// FormFieldObject is a fillable field in the text, holding the person's entry.
 type FormFieldObject struct {
 	Kind FormKind
-	// Name identifies the field in the data a form gives back; Label is what the person sees.
+	// Name identifies the field in returned data; Label is shown to the person.
 	Name, Label string
 	// Placeholder is shown, dimmed, while the field is empty.
 	Placeholder string
-	// Pattern is a regular expression (Go syntax) the whole value has to match; "" for none.
+	// Pattern: a Go regular expression the whole value must match.
 	Pattern  string
 	Required bool
 	// Options are the choices of a FormSelect.
 	Options []string
-	// Value is what the person wrote: the text, the number as text, the date as 2006-01-02, "true" for a ticked box.
+	// Value is what the person wrote, as text.
 	Value string
-	// Locked keeps the properties as they are: no pen, and the host refuses to change them.
+	// Locked fixes the properties; the host refuses changes.
 	Locked bool
-	// LockKey and LockSig are the seal of the lock (package formseal): the public key that locked it and its signature
-	// over the properties, both base64. The canvas only keeps them; the host makes and checks them.
+	// LockKey and LockSig are the seal of the lock (package formseal).
 	LockKey, LockSig string
 
-	// OnFill and OnEdit are called when the eye or the pen is pressed.
+	// OnFill and OnEdit run when the eye or pen is pressed.
 	OnFill func(*FormFieldObject)
 	OnEdit func(*FormFieldObject)
 
@@ -102,7 +95,7 @@ var (
 	phonePattern = regexp.MustCompile(`^\+?[0-9][0-9 ().\-]{3,}$`)
 )
 
-// PatternError is why Pattern is not a regular expression, "" when it is (or is empty).
+// PatternError explains why Pattern is not a regular expression.
 func (f *FormFieldObject) PatternError() string {
 	if f.Pattern == "" {
 		return ""
@@ -113,8 +106,7 @@ func (f *FormFieldObject) PatternError() string {
 	return ""
 }
 
-// Problem says what is wrong with the value: one of the FormProblem codes, or "" when it is fine. An empty value is fine
-// unless the field is Required.
+// Problem returns the FormProblem code for the value, or "".
 func (f *FormFieldObject) Problem() string {
 	v := strings.TrimSpace(f.Value)
 	if f.Kind == FormCheckbox {
@@ -181,7 +173,7 @@ func (f *FormFieldObject) Empty() bool {
 // Clear empties the field.
 func (f *FormFieldObject) Clear() { f.Value = "" }
 
-// Words is what the exports write for the field: its label and what is in it.
+// Words are what exports write for the field: label and value.
 func (f *FormFieldObject) Words() string {
 	label := strings.TrimSpace(f.Label)
 	if f.Kind == FormCheckbox {
@@ -197,7 +189,6 @@ func (f *FormFieldObject) Words() string {
 	return label + ": " + f.Value
 }
 
-// Measure implements InlineObject.
 func (f *FormFieldObject) Measure(p Painter, maxW, _ float64) (float64, float64) {
 	switch f.Kind {
 	case FormCheckbox:
@@ -214,7 +205,6 @@ func (f *FormFieldObject) Measure(p Painter, maxW, _ float64) (float64, float64)
 	return f.w, f.h
 }
 
-// DrawAt implements InlineObject.
 func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	problem := f.Problem()
 	border := "#8a94a6"
@@ -288,7 +278,7 @@ func (f *FormFieldObject) DrawAt(p Painter, x, y float64) {
 	f.icons(p, x, y)
 }
 
-// icons draws the eye, the pen (when there is one) and the lock.
+// icons draws the eye, pen and lock icons.
 func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	p.SetStrokeStyle("#5f6b7a")
 	p.SetFillStyle("#5f6b7a")
@@ -328,7 +318,7 @@ func (f *FormFieldObject) icons(p Painter, x, y float64) {
 	}
 }
 
-// clipText cuts s with an ellipsis so that it is at most w wide.
+// clipText cuts s to at most w wide, with an ellipsis.
 func clipText(p Painter, s string, w float64) string {
 	if w <= 0 || p.MeasureTextWidth(s) <= w {
 		return s
@@ -340,14 +330,12 @@ func clipText(p Painter, s string, w float64) string {
 	return string(rs) + "…"
 }
 
-// ClickObject is an InlineObject that takes presses: (x, y) are relative to its top-left corner. It reports whether it
-// used the press, and whether that changed the content (so that the document is saved).
+// ClickObject takes presses; (x, y) are relative to its top-left.
 type ClickObject interface {
 	ClickAt(x, y float64) (used, changed bool)
 }
 
-// ClickAt implements ClickObject: the eye asks the host to fill the field in, the pen to change it, and the box of a
-// checkbox ticks or unticks it.
+// ClickAt: the eye fills the field in; the pen changes it.
 func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	in := func(r [4]float64) bool { return r[2] > 0 && x >= r[0] && x < r[0]+r[2] && y >= r[1] && y < r[1]+r[3] }
 	switch {
@@ -372,8 +360,7 @@ func (f *FormFieldObject) ClickAt(x, y float64) (used, changed bool) {
 	return false, false
 }
 
-// DragObject is an InlineObject that can be dragged (a table's column or row grip resizes it): (x, y) are relative to
-// the object's top-left corner. DragStart says whether the press began a drag; DragMove reports whether the content changed.
+// DragObject is an inline object that can be dragged.
 type DragObject interface {
 	DragStart(x, y float64) bool
 	DragMove(x, y float64) (changed bool)
@@ -382,7 +369,7 @@ type DragObject interface {
 
 var _ ClickObject = (*FormFieldObject)(nil)
 
-// FormFields lists the form fields in the flow's content, in reading order, those in table cells included.
+// FormFields lists the form fields in reading order.
 func (f *TextFlow) FormFields() []*FormFieldObject {
 	var out []*FormFieldObject
 	for _, it := range f.Items {
@@ -413,7 +400,7 @@ func (f *TextFlow) Tables() []*TableObject {
 	return out
 }
 
-// ClearFormFields empties every form field and reports how many had something in them.
+// ClearFormFields empties every form field; reports how many were filled.
 func (f *TextFlow) ClearFormFields() int {
 	n := 0
 	for _, ff := range f.FormFields() {
@@ -431,7 +418,7 @@ func (f *TextFlow) ClearFormFields() int {
 	return n
 }
 
-// objectDragStart gives a press to the inline object under (x, y) that can be dragged, and remembers it.
+// objectDragStart gives a press to a draggable object under (x, y).
 func (f *TextFlow) objectDragStart(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {
@@ -447,7 +434,7 @@ func (f *TextFlow) objectDragStart(x, y float64) bool {
 	return false
 }
 
-// objectClickAt gives a press to the inline object under (x, y) that takes presses.
+// objectClickAt gives a press to the object under (x, y).
 func (f *TextFlow) objectClickAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		for _, o := range ln.Objects {

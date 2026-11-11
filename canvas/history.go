@@ -6,15 +6,9 @@ import (
 	"sync/atomic"
 )
 
-// Undo and redo for editable text. Every change a TextFlow or a
-// FloatingText makes -- typing, deleting, pasting, formatting, line
-// operations, list and paragraph commands -- can be undone with
-// Ctrl/Cmd+Z and redone with Ctrl/Cmd+Shift+Z (or Ctrl+Y). A run of typed
-// characters, or of Backspace/Delete presses, is one step; moving the
-// caret or clicking ends the run. Each undo step restores the text, its
-// formatting, and the cursors.
+// Undo and redo for editable text: each change is recorded as a step.
 
-// DefaultHistoryLimit is how many undo steps are kept unless SetHistoryLimit says otherwise.
+// DefaultHistoryLimit is the default number of undo steps.
 const DefaultHistoryLimit = 200
 
 // MinHistoryLimit is the fewest undo steps SetHistoryLimit allows.
@@ -24,9 +18,7 @@ var historyLimit atomic.Int64
 
 func init() { historyLimit.Store(DefaultHistoryLimit) }
 
-// SetHistoryLimit sets how many undo steps each text keeps (at least MinHistoryLimit). Every step is a
-// snapshot of the whole text and its formatting, so on a large document or a device with little memory a lower
-// number saves a good deal; an undo stack already longer is cut at its next change.
+// SetHistoryLimit sets undo steps kept per text; at least MinHistoryLimit.
 func SetHistoryLimit(n int) { historyLimit.Store(int64(max(n, MinHistoryLimit))) }
 
 // HistoryLimit is the number of undo steps kept.
@@ -45,9 +37,7 @@ var (
 	_ Historian = (*FloatingText)(nil)
 )
 
-// snapshotHistory keeps whole-state snapshots, which is simple and cheap
-// enough for documents of this size. S must be comparable with
-// reflect.DeepEqual.
+// snapshotHistory keeps whole-state snapshots, simple and cheap enough.
 type snapshotHistory[S any] struct {
 	undo, redo []S
 	last       S // the state after the latest change (or the start)
@@ -62,9 +52,7 @@ func (h *snapshotHistory[S]) start(s S) {
 	}
 }
 
-// commit records that the state is now cur after a change of the given
-// kind: "" (never merged) or a run kind such as "type". A change of the
-// same kind as the one before extends its step instead of starting one.
+// commit records the state after a change of the given kind.
 func (h *snapshotHistory[S]) commit(cur S, kind string) {
 	if !h.hasLast {
 		return
@@ -114,14 +102,10 @@ func (h *snapshotHistory[S]) forward(cur S) (S, bool) {
 	return next, true
 }
 
-// --- TextFlow ---------------------------------------------------------
-
 type flowSnap struct {
 	items   []Item
 	cursors []Cursor
-	// comments are the comment records the items' comment marks refer to:
-	// undoing a tag without its record (or the reverse) would leave one
-	// without the other.
+	// comments holds the comment records that item marks refer to.
 	comments []Comment
 }
 
@@ -143,7 +127,6 @@ func (f *TextFlow) histRestore(s flowSnap) {
 	f.notify()
 }
 
-// Undo implements Historian.
 func (f *TextFlow) Undo() bool {
 	if f.UndoHook != nil {
 		return f.UndoHook(false)
@@ -155,7 +138,6 @@ func (f *TextFlow) Undo() bool {
 	return ok
 }
 
-// Redo implements Historian.
 func (f *TextFlow) Redo() bool {
 	if f.UndoHook != nil {
 		return f.UndoHook(true)
@@ -166,8 +148,6 @@ func (f *TextFlow) Redo() bool {
 	}
 	return ok
 }
-
-// --- FloatingText -----------------------------------------------------
 
 type boxSnap struct {
 	runes   []fRune
@@ -186,7 +166,6 @@ func (ft *FloatingText) histRestore(s boxSnap) {
 	}
 }
 
-// Undo implements Historian.
 func (ft *FloatingText) Undo() bool {
 	s, ok := ft.hist.back(ft.histSnap())
 	if ok {
@@ -195,7 +174,6 @@ func (ft *FloatingText) Undo() bool {
 	return ok
 }
 
-// Redo implements Historian.
 func (ft *FloatingText) Redo() bool {
 	s, ok := ft.hist.forward(ft.histSnap())
 	if ok {
@@ -204,22 +182,16 @@ func (ft *FloatingText) Redo() bool {
 	return ok
 }
 
-// --- the feature --------------------------------------------------------
-
-// History is the undo and redo commands: Ctrl/Cmd+Z, and Ctrl/Cmd+Shift+Z
-// or Ctrl+Y.
+// History is the undo and redo feature: Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z.
 type History struct{}
 
-// Command names.
 const (
 	CmdUndo Command = "edit.undo"
 	CmdRedo Command = "edit.redo"
 )
 
-// Name implements Feature.
 func (History) Name() string { return "history" }
 
-// Install implements Feature.
 func (History) Install(r *Registry) {
 	r.AddCommand(CmdUndo, "Undo", "Mod+Z", func(c *CommandContext) bool {
 		h, ok := c.Target.(Historian)
@@ -232,9 +204,7 @@ func (History) Install(r *Registry) {
 	r.Bind("Mod+Y", CmdRedo)
 }
 
-// endsRun reports whether pressing key ends a run of typing or deleting
-// (the keys that move the caret or break the line; a letter key does not,
-// it is about to be typed).
+// endsRun reports whether a key ends a run of typing or deleting.
 func endsRun(key string) bool {
 	switch key {
 	case "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter", "Tab", "Escape":

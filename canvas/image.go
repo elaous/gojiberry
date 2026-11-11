@@ -19,13 +19,9 @@ const (
 type ImagePlacement int
 
 const (
-	// PlaceFloating positions the image by its own X, Y (or its Anchor)
-	// over the text, which can wrap around it.
+	// PlaceFloating positions the image by X, Y or Anchor over the text.
 	PlaceFloating ImagePlacement = iota
-	// PlaceInline makes the image part of the text: put it in a
-	// TextFlow's items as Inline{Object: img}. The flow sizes it to fit
-	// the column and the page's text area (keeping its aspect ratio)
-	// and places it on the baseline like a character.
+	// PlaceInline makes the image part of the text, as an inline item.
 	PlaceInline
 )
 
@@ -68,31 +64,13 @@ func DefaultImageStyle() ImageStyle {
 	}
 }
 
-// Image draws a bitmap with a crop (clip), an opacity (alpha channel)
-// and, optionally, a text-wrap-around mode.
-//
-// (X, Y) is the top-left of the image's frame, W x H its displayed
-// size (the bitmap is scaled to it). Clip crops the frame from each
-// side; only the remaining "visible" rectangle is drawn. In edit mode
-// a toolbar above the image picks the active tool:
-//
-//   - Move: drag horizontally; the position snaps to multiples of Snap.
-//   - Clip: drag an edge handle; the crop snaps to multiples of Snap.
-//   - Alpha: drag a slider below the image; opacity snaps to 5%.
-//
-// and a Wrap button toggles text wrapping. When Wrap is on and a Flow
-// is set (SetFlow), the TextFlow lays text out around the visible
-// rectangle -- the image registers itself with the flow as an Obstacle,
-// so dragging, cropping or toggling it re-wraps the text live.
+// Image draws a bitmap with crop and opacity, edit-mode chrome included.
 type Image struct {
 	Src        ImageSource
 	X, Y, W, H float64
-	// Placement chooses floating (the default) or inline; see
-	// ImagePlacement. Inline images ignore X, Y, Wrap and the Move tool.
+	// Placement selects floating (default) or inline placement.
 	Placement ImagePlacement
-	// Anchor, if set, pins a floating image to a page: X, Y are then
-	// derived from it (relative to that page's sheet) using Pages or,
-	// failing that, the Flow's pages. Dragging updates it.
+	// Anchor, if set, pins a floating image to a page.
 	Anchor *Anchor
 	// Pages is the PageSet Anchor refers to; if nil the flow's is used.
 	Pages *PageSet

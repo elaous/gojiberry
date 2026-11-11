@@ -1,14 +1,12 @@
 package canvas
 
-// LangAt is the language the text at offset o is written in: the language tag of the character before it (the
-// one typing there would continue), or "" for the document's own.
+// LangAt returns the language tag of the character before offset o.
 func (f *TextFlow) LangAt(o int) string { return f.typeFormat(f.flatten(), o).Lang }
 
 // ghostAlpha is how faint the suggestion is drawn.
 const ghostAlpha = 0.5
 
-// drawGhost draws Ghost at the caret: after it, in the font of the run it continues, when the line ends there;
-// otherwise as a tag just under the caret with a Tab hint, which covers the line below for as long as it is shown.
+// drawGhost draws Ghost text after the caret, faintly.
 func (f *TextFlow) drawGhost(lay Layout) {
 	if f.Ghost == "" || !f.Editing() || f.Painter == nil || len(f.Cursors()) != 1 {
 		return
