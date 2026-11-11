@@ -19,32 +19,24 @@ import (
 
 // TLS modes for SMTP.
 const (
-	// StartTLS connects in the clear and upgrades before anything secret is sent (usually port 587).
-	// If the server does not offer STARTTLS the send fails: there is no silent downgrade.
 	StartTLS = "starttls"
 	// ImplicitTLS is TLS from the first byte (usually port 465).
 	ImplicitTLS = "tls"
-	// NoTLS is for a local relay only (a mail catcher in development, a relay on the same host):
-	// it is refused for any host that is not a loopback address.
-	NoTLS = "none"
+	NoTLS       = "none"
 )
 
 // SMTP sends through an SMTP server.
 type SMTP struct {
-	Host string
-	Port int // 0: 587 for StartTLS, 465 for ImplicitTLS, 25 for NoTLS
-	// Username and Password sign in with AUTH PLAIN, which is only ever done over TLS (or to loopback).
+	Host               string
+	Port               int // 0: 587 for StartTLS, 465 for ImplicitTLS, 25 for NoTLS
 	Username, Password string
 	// From is the envelope and header sender address.
 	From string
 	// TLS is StartTLS (the default when empty), ImplicitTLS or NoTLS.
-	TLS string
-	// Timeout bounds the whole conversation (default 30 s); the context's deadline also applies.
-	Timeout time.Duration
-	// TLSConfig overrides the TLS settings (tests); ServerName is set from Host when empty.
+	TLS       string
+	Timeout   time.Duration
 	TLSConfig *tls.Config
-	// Hostname is what the client calls itself in EHLO (default "localhost").
-	Hostname string
+	Hostname  string
 }
 
 // String never shows the password.
@@ -80,7 +72,6 @@ func isLoopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// Validate reports a configuration that could never work or would send secrets unsafely.
 func (s SMTP) Validate() error {
 	if strings.TrimSpace(s.Host) == "" || strings.ContainsAny(s.Host, " /\r\n") {
 		return errors.New("mail: the SMTP host is not set or not a host name")
@@ -200,8 +191,6 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 	return nil
 }
 
-// build writes the message in the form SMTP carries it: CRLF lines, an RFC 2047 subject, and the text
-// (with the HTML as the other alternative when there is one) in quoted-printable.
 func build(from string, to []string, m Message) ([]byte, error) {
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {

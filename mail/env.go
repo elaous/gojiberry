@@ -7,24 +7,9 @@ import (
 	"strings"
 )
 
-// Environment variables (all start with GOJIBERRY_MAIL_). A secret has two forms, NAME with the
-// value itself and NAME_FILE with the path of a file that holds it (a Docker or Kubernetes secret
-// mounted as a file); giving both is an error. Prefer the file form: a value in the environment shows
-// in process listings and crash dumps, a file readable only by the service does not.
-//
-//	GOJIBERRY_MAIL_PROVIDER            smtp | resend; empty: no e-mail (ErrNotConfigured)
-//	GOJIBERRY_MAIL_FROM                the sender address (a plain user@host)
-//	GOJIBERRY_MAIL_SMTP_HOST           SMTP server host
-//	GOJIBERRY_MAIL_SMTP_PORT           default 587 (starttls), 465 (tls), 25 (none)
-//	GOJIBERRY_MAIL_SMTP_TLS            starttls (default) | tls | none (loopback hosts only)
-//	GOJIBERRY_MAIL_SMTP_USERNAME       sign-in name (with the password; neither for an open relay)
-//	GOJIBERRY_MAIL_SMTP_PASSWORD[_FILE]
-//	GOJIBERRY_MAIL_RESEND_API_KEY[_FILE]   the re_... key
 const envPrefix = "GOJIBERRY_MAIL_"
 
-// FromEnv builds the sender the environment describes. getenv is os.Getenv in production. It checks
-// the whole configuration at once, so a deployment fails at start, not on the first e-mail. Errors name
-// the variable at fault and never repeat a secret.
+// FromEnv builds the sender the environment describes.
 func FromEnv(getenv func(string) string) (Sender, error) {
 	return fromEnv(getenv, os.ReadFile)
 }
