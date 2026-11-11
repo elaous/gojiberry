@@ -8,11 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// Corrections is the memory of what a recogniser got wrong for this person: when they fix a recognised
-// word, the pair (heard, meant) is kept, counted, and offered next time that word is recognised. It is
-// not a model: it changes nothing in the recogniser, it only remembers and suggests, and the person
-// decides each time. It also lists the words the person meant, for the autocomplete list (roadmap 79,
-// complete.Index.AddVocabulary).
 type Corrections struct {
 	pairs []pair
 	seq   int
@@ -30,7 +25,6 @@ const (
 	maxPairLen = 3 // words on a side
 )
 
-// words splits text into words (letters, digits, and apostrophes or hyphens inside a word).
 func words(text string) []string {
 	return strings.FieldsFunc(text, func(r rune) bool {
 		return !isWordRune(r)
@@ -45,15 +39,9 @@ func lowerAll(ws []string) []string {
 	return out
 }
 
-// Learn compares what was recognised with what the person made of it and remembers each difference. It
-// aligns the two word lists (longest common run), and for each stretch that differs it keeps the pair:
-// word for word when the stretches have the same length, else the whole stretch (up to three words a
-// side). It returns the number of pairs noted. Identical texts, and stretches that are only added or
-// removed words, note nothing: that is an edit, not a correction of a heard word.
 func (c *Corrections) Learn(recognised, corrected string) int {
 	a, b := words(recognised), words(corrected)
 	la, lb := lowerAll(a), lowerAll(b)
-	// longest common subsequence table
 	t := make([][]int, len(a)+1)
 	for i := range t {
 		t[i] = make([]int, len(b)+1)
@@ -102,7 +90,6 @@ func (c *Corrections) Learn(recognised, corrected string) int {
 	return noted
 }
 
-// note counts one pair.
 func (c *Corrections) note(heard, meant string) {
 	heard = strings.ToLower(strings.TrimSpace(heard))
 	meant = strings.TrimSpace(meant)
@@ -132,7 +119,6 @@ func (c *Corrections) note(heard, meant string) {
 // Len is the number of pairs remembered.
 func (c *Corrections) Len() int { return len(c.pairs) }
 
-// Suggestion is an offer to change a stretch of recognised text.
 type Suggestion struct {
 	Heard string // the words as recognised
 	Meant string // what they were corrected to before
@@ -141,9 +127,6 @@ type Suggestion struct {
 	End   int
 }
 
-// Suggest returns the earlier corrections that apply to text, in the order of the text. Where several
-// meanings are remembered for the same stretch, the most often chosen (then the latest) comes first. The
-// text is never changed: the person accepts or ignores each offer.
 func (c *Corrections) Suggest(text string) []Suggestion {
 	if len(c.pairs) == 0 {
 		return nil
@@ -169,7 +152,6 @@ func (c *Corrections) Suggest(text string) []Suggestion {
 			if k+n > len(toks) {
 				continue
 			}
-			// the words must be next to each other, separated by spaces only
 			ok := true
 			for q := k; q < k+n-1; q++ {
 				if strings.TrimSpace(string(rs[toks[q].e:toks[q+1].s])) != "" {
@@ -209,8 +191,6 @@ func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '\'' || r == '’' || r == '-'
 }
 
-// Words lists the words the person meant, most chosen first, without duplicates: a vocabulary for the
-// autocomplete list and for the recogniser's prompt.
 func (c *Corrections) Words() []string {
 	ps := append([]pair(nil), c.pairs...)
 	sort.Slice(ps, func(i, j int) bool {
@@ -232,7 +212,6 @@ func (c *Corrections) Words() []string {
 	return out
 }
 
-// Forget removes the pair (heard, meant); it reports whether there was one.
 func (c *Corrections) Forget(heard, meant string) bool {
 	heard = strings.ToLower(strings.TrimSpace(heard))
 	for k, p := range c.pairs {
@@ -258,8 +237,6 @@ func (c *Corrections) Marshal() ([]byte, error) {
 	return json.Marshal(correctionsJSON{Version: 1, Seq: c.seq, Pairs: c.pairs})
 }
 
-// UnmarshalCorrections reads what Marshal wrote, dropping pairs that do not fit the rules (a damaged or
-// edited file cannot add anything Learn would not).
 func UnmarshalCorrections(b []byte) (*Corrections, error) {
 	var j correctionsJSON
 	if err := json.Unmarshal(b, &j); err != nil {

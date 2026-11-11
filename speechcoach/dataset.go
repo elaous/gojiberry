@@ -15,13 +15,12 @@ import (
 	"time"
 )
 
-// Entry is one recording with its transcript, in the person's own dataset.
 type Entry struct {
-	ID         string    `json:"id"`         // first 24 hex digits of the SHA-256 of the WAV and the prompt
-	Lang       string    `json:"lang"`       // language spoken
-	Prompt     string    `json:"prompt"`     // the phrase that was asked for ("" for free dictation)
-	Transcript string    `json:"transcript"` // what the person says it says (the prompt, or their correction)
-	Source     string    `json:"source"`     // "prompted" or "dictation"
+	ID         string    `json:"id"`
+	Lang       string    `json:"lang"`   // language spoken
+	Prompt     string    `json:"prompt"` // the phrase that was asked for ("" for free dictation)
+	Transcript string    `json:"transcript"`
+	Source     string    `json:"source"` // "prompted" or "dictation"
 	Seconds    float64   `json:"seconds"`
 	Hints      []string  `json:"hints,omitempty"`
 	Created    time.Time `json:"created"`
@@ -35,8 +34,7 @@ const (
 	Dictation = "dictation"
 )
 
-// NewEntry builds an entry from a take. The ID follows from the audio and the prompt, so the same take
-// added twice is one entry.
+// NewEntry builds an entry from a take.
 func NewEntry(lang, prompt, transcript, source string, pcm []int16, hints []string, at time.Time) Entry {
 	wav := EncodeWAV(pcm)
 	sum := sha256.Sum256(wav)
@@ -45,8 +43,7 @@ func NewEntry(lang, prompt, transcript, source string, pcm []int16, hints []stri
 		Seconds: float64(len(pcm)) / SampleRate, Hints: hints, Created: at.UTC().Truncate(time.Second), SHA256: hex.EncodeToString(sum[:]), WAV: wav}
 }
 
-// Dataset is the person's recordings. It lives where the caller keeps it (in the browser, sealed with
-// the key of the encrypted store when that is unlocked); this type only holds and exports it.
+// Dataset is the person's recordings.
 type Dataset struct {
 	entries map[string]*Entry
 }
@@ -54,8 +51,7 @@ type Dataset struct {
 // Len is the number of entries.
 func (d *Dataset) Len() int { return len(d.entries) }
 
-// Add keeps e, replacing an entry with the same ID. A prompted entry replaces an earlier one with the
-// same prompt and language (a retake does not pile up copies).
+// Add keeps e, replacing an entry with the same ID.
 func (d *Dataset) Add(e Entry) {
 	if d.entries == nil {
 		d.entries = map[string]*Entry{}
@@ -93,7 +89,6 @@ func (d *Dataset) ByPrompt(prompt string) *Entry {
 	return nil
 }
 
-// List returns the entries oldest first (ties by ID), so exports are the same each time.
 func (d *Dataset) List() []Entry {
 	out := make([]Entry, 0, len(d.entries))
 	for _, e := range d.entries {
@@ -116,7 +111,7 @@ const (
 	linesName     = "data.jsonl"
 )
 
-// Manifest describes an export. Nothing in it names the person or the device.
+// Manifest describes an export.
 type Manifest struct {
 	Format     string    `json:"format"`
 	Version    int       `json:"version"`
@@ -130,8 +125,6 @@ type Manifest struct {
 	Lines      string    `json:"lines"` // the name of the JSON-lines file
 }
 
-// Line is one line of data.jsonl: the shape other speech tools read (an audio path and its text), plus
-// the fields of the entry.
 type Line struct {
 	Audio   string    `json:"audio"` // "audio/<id>.wav"
 	Text    string    `json:"text"`  // the transcript
@@ -147,8 +140,6 @@ type Line struct {
 
 var audioPath = regexp.MustCompile(`^audio/[0-9a-f]{24}\.wav$`)
 
-// Export writes the dataset as a zip: manifest.json, data.jsonl and audio/<id>.wav (16 kHz mono 16-bit
-// PCM). Only the entries chosen by keep are written (nil keeps all). It returns the manifest.
 func (d *Dataset) Export(w io.Writer, keep func(Entry) bool) (Manifest, error) {
 	zw := zip.NewWriter(w)
 	m := Manifest{Format: FormatName, Version: FormatVersion, SampleRate: SampleRate, Channels: 1, Encoding: "pcm_s16le", Lines: linesName}
@@ -201,7 +192,6 @@ func (d *Dataset) Export(w io.Writer, keep func(Entry) bool) (Manifest, error) {
 	return m, zw.Close()
 }
 
-// Limits when reading an import, so a hostile zip cannot exhaust memory.
 const (
 	maxImportBytes   = 512 << 20 // all uncompressed content
 	maxImportEntries = 5000
@@ -215,9 +205,7 @@ type ImportResult struct {
 	Problems  []string `json:"problems,omitempty"`
 }
 
-// Import reads a zip written by Export. Each recording is checked (path form, SHA-256, WAV format) and
-// one that fails is reported and left out, without stopping the others. A zip that is not an export, is
-// of a newer version, or is larger than the limits is refused whole.
+// Import reads a zip written by Export.
 func (d *Dataset) Import(zipBytes []byte) (ImportResult, error) {
 	var res ImportResult
 	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
@@ -310,7 +298,6 @@ func (d *Dataset) Import(zipBytes []byte) (ImportResult, error) {
 			prob("unexpected fields")
 			continue
 		}
-		// the ID is made again here: a file cannot choose where it lands
 		e := NewEntry(cleanLine(l.Lang), cleanLine(l.Prompt), cleanLine(l.Text), l.Source, pcm, cleanHints(l.Hints), l.Created)
 		if d.Get(e.ID) != nil {
 			res.Duplicate++
@@ -333,7 +320,6 @@ func cleanHints(h []string) []string {
 	return out
 }
 
-// EncodeEntry is one entry as bytes (a JSON header and the WAV), for keeping each recording on its own.
 func EncodeEntry(e Entry) []byte {
 	h, _ := json.Marshal(e)
 	var b bytes.Buffer
@@ -343,7 +329,6 @@ func EncodeEntry(e Entry) []byte {
 	return b.Bytes()
 }
 
-// DecodeEntry reads what EncodeEntry wrote and checks the audio against the checksum.
 func DecodeEntry(b []byte) (Entry, error) {
 	var e Entry
 	rest, ok := strings.CutPrefix(string(b), "GJSE1\n")

@@ -15,10 +15,7 @@ const (
 	Skipped  Status = "skipped"
 )
 
-// Session is one sitting through a phrase set. It is forgiving by design: every phrase can be recorded
-// again as often as the person likes, skipped, left and come back to, in any order; nothing has a time
-// limit, nothing is judged, and a quality hint never stops a take from being kept. It holds no clock
-// (callers pass the time) and does no input or output.
+// Session is one sitting through a phrase set.
 type Session struct {
 	set   Set
 	cur   int
@@ -60,7 +57,6 @@ func (s *Session) Phrase() string {
 	return ""
 }
 
-// Status is the status of phrase i (Pending when out of range).
 func (s *Session) Status(i int) Status {
 	if i < 0 || i >= len(s.items) {
 		return Pending
@@ -79,7 +75,6 @@ type Take struct {
 	At       time.Time
 }
 
-// Current is the take of the current phrase (ok is false while it has none).
 func (s *Session) Current() (t Take, ok bool) { return s.Take(s.cur) }
 
 // Take is the take of phrase i.
@@ -91,15 +86,11 @@ func (s *Session) Take(i int) (Take, bool) {
 	return Take{Phrase: i, Text: s.set.Phrases[i], PCM: it.pcm, Quality: it.quality, Hints: it.hints, Attempts: it.attempts, At: it.at}, true
 }
 
-// ErrNoPhrase is returned when there is no current phrase to act on.
 var ErrNoPhrase = errors.New("speechcoach: no phrase")
 
 // ErrEmptyTake is returned for a recording with no samples.
 var ErrEmptyTake = errors.New("speechcoach: nothing was recorded")
 
-// Record keeps pcm as the take of the current phrase, replacing an earlier one (a retake), and returns
-// the take with its quality hints. The session does not move on: the person listens, retakes if they
-// like, and goes on with Next when ready. A take over MaxSamples is cut there.
 func (s *Session) Record(pcm []int16, at time.Time) (Take, error) {
 	if s.cur >= len(s.items) {
 		return Take{}, ErrNoPhrase
@@ -118,7 +109,6 @@ func (s *Session) Record(pcm []int16, at time.Time) (Take, error) {
 	return t, nil
 }
 
-// Discard forgets the take of the current phrase, which becomes pending again.
 func (s *Session) Discard() {
 	if s.cur < len(s.items) {
 		s.items[s.cur].status, s.items[s.cur].pcm, s.items[s.cur].hints = Pending, nil, nil
@@ -126,8 +116,6 @@ func (s *Session) Discard() {
 	}
 }
 
-// Skip marks the current phrase skipped (a recorded take is kept as it is) and goes to the next phrase
-// that is still pending, or stays when there is none.
 func (s *Session) Skip() {
 	if s.cur >= len(s.items) {
 		return
@@ -138,9 +126,6 @@ func (s *Session) Skip() {
 	s.Next()
 }
 
-// Next goes to the next phrase still pending (looking on from here, then from the start), else to a
-// skipped one (so a skipped phrase is offered again after the pending ones), else to the following
-// phrase, else stays on the last. It reports whether the position changed.
 func (s *Session) Next() bool {
 	n := len(s.items)
 	for _, want := range []Status{Pending, Skipped} {
@@ -167,7 +152,6 @@ func (s *Session) Prev() bool {
 	return false
 }
 
-// Goto moves to phrase i; it reports whether i was in range.
 func (s *Session) Goto(i int) bool {
 	if i < 0 || i >= len(s.items) {
 		return false
@@ -202,7 +186,6 @@ func (s *Session) Progress() Progress {
 	return p
 }
 
-// Finished says no phrase is pending (some may be skipped, and that is fine).
 func (s *Session) Finished() bool { return s.Progress().Remaining == 0 }
 
 // Takes lists the kept takes in phrase order.
@@ -216,8 +199,6 @@ func (s *Session) Takes() []Take {
 	return out
 }
 
-// ProgressRecord is the saved shape of the progress of a session: where each phrase stands, without audio
-// (that is in the dataset). It lets a person come back another day and pick up where they stopped.
 type ProgressRecord struct {
 	SetID    string   `json:"set"`
 	Cur      int      `json:"cur"`
@@ -235,8 +216,6 @@ func (s *Session) Marshal() ([]byte, error) {
 	return json.Marshal(r)
 }
 
-// Resume rebuilds a session from a saved progress and the takes in the dataset (matched by phrase text,
-// so editing a set does not mix them up). A record that does not fit the set starts fresh.
 func Resume(set Set, saved []byte, d *Dataset) *Session {
 	s := NewSession(set)
 	var r ProgressRecord

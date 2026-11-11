@@ -5,23 +5,20 @@ import (
 	"sort"
 )
 
-// Hint codes: what the signal checks can say about a take. They are advice to the speaker, never a
-// refusal: any take can be kept. The interface turns a code into a short, kind sentence.
 const (
-	HintSilent    = "silent"     // nothing but silence or a very low hum was heard
-	HintTooShort  = "too_short"  // very little sound; a phrase usually takes a second or more
-	HintTooQuiet  = "too_quiet"  // the voice is faint; move closer or speak up if that is comfortable
-	HintClipping  = "clipping"   // the loudest parts were cut off (too close or too loud)
-	HintNoisy     = "noisy"      // the background is loud against the voice
-	HintLongPause = "long_pause" // a long quiet stretch in the middle; fine if it was needed
+	HintSilent    = "silent" // nothing but silence or a very low hum was heard
+	HintTooShort  = "too_short"
+	HintTooQuiet  = "too_quiet"
+	HintClipping  = "clipping"
+	HintNoisy     = "noisy" // the background is loud against the voice
+	HintLongPause = "long_pause"
 )
 
-// Quality is what simple signal analysis found in a take. The levels are in dB relative to full scale
-// (so 0 is the loudest possible and typical speech is around -30 to -15).
+// Quality is what simple signal analysis found in a take.
 type Quality struct {
 	Seconds        float64 `json:"seconds"`
 	PeakDB         float64 `json:"peak_db"`
-	SpeechRMSDB    float64 `json:"speech_rms_db"`   // mean level of the frames that hold sound; -120 when none
+	SpeechRMSDB    float64 `json:"speech_rms_db"`
 	NoiseFloorDB   float64 `json:"noise_floor_db"`  // level of the quietest tenth of the frames
 	SpeechSeconds  float64 `json:"speech_seconds"`  // time in frames that hold sound
 	ClippedPercent float64 `json:"clipped_percent"` // share of samples at or near full scale
@@ -31,9 +28,9 @@ type Quality struct {
 const (
 	frame      = SampleRate / 50 // 20 ms
 	floorDB    = -120.0
-	clipLevel  = 32000 // |sample| at or above this counts as clipped (about -0.2 dBFS)
+	clipLevel  = 32000
 	minDB      = -50.0 // frames quieter than this never count as sound
-	activeOver = 9.0   // dB above the noise floor a frame must be to count as sound
+	activeOver = 9.0
 )
 
 func db(x float64) float64 {
@@ -43,7 +40,7 @@ func db(x float64) float64 {
 	return 20 * math.Log10(x)
 }
 
-// Analyze measures a take. It is linear in the length and allocates one slice per 20 ms frame.
+// Analyze measures a take.
 func Analyze(pcm []int16) Quality {
 	q := Quality{Seconds: float64(len(pcm)) / SampleRate, PeakDB: floorDB, SpeechRMSDB: floorDB, NoiseFloorDB: floorDB}
 	if len(pcm) == 0 {
@@ -83,8 +80,6 @@ func Analyze(pcm []int16) Quality {
 	q.NoiseFloorDB = sorted[len(sorted)/10]
 	threshold := math.Max(minDB, q.NoiseFloorDB+activeOver)
 	if threshold >= sorted[len(sorted)-1] {
-		// no quiet stretch to compare with (a held sound, or a take that is all sound): the floor is
-		// unknown, so every frame above the absolute minimum counts as sound
 		q.NoiseFloorDB, threshold = floorDB, minDB
 	}
 
@@ -111,7 +106,6 @@ func Analyze(pcm []int16) Quality {
 	return q
 }
 
-// Hints are the gentle notes about a take, most useful first; none when it looks fine.
 func (q Quality) Hints() []string {
 	var h []string
 	switch {

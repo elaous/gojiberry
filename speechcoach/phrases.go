@@ -8,14 +8,12 @@ import (
 	"unicode/utf8"
 )
 
-// Limits on a phrase set, so an imported list cannot grow without bound.
 const (
 	MaxPhrases   = 1000
 	MaxPhraseLen = 240 // runes
 )
 
-// Set is a list of phrases to say. The built-in ones are written for this project (everyday requests and
-// answers), not copied from any other collection.
+// Set is a list of phrases to say.
 type Set struct {
 	ID      string   `json:"id"`
 	Lang    string   `json:"lang"` // BCP 47 language of the phrases, "en", "de", ...
@@ -23,9 +21,6 @@ type Set struct {
 	Phrases []string `json:"phrases"`
 }
 
-// ParseSet reads a plain-text list: one phrase per line, blank lines and lines starting with # ignored,
-// duplicates (ignoring case) dropped. It fails on invalid UTF-8, a phrase over MaxPhraseLen runes, more
-// than MaxPhrases phrases, or no phrase at all.
 func ParseSet(id, lang, title, text string) (Set, error) {
 	if !utf8.ValidString(text) {
 		return Set{}, errors.New("the list is not valid text")
@@ -61,7 +56,6 @@ func ParseSet(id, lang, title, text string) (Set, error) {
 	return s, nil
 }
 
-// cleanLine trims a line and drops control characters.
 func cleanLine(s string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -133,7 +127,6 @@ func Builtin() []Set {
 	}
 }
 
-// SetFor returns the built-in set for a language ("de-AT" finds "de"), or the English one.
 func SetFor(lang string) Set {
 	if i := strings.IndexAny(lang, "-_"); i >= 0 {
 		lang = lang[:i]
