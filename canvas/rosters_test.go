@@ -17,8 +17,7 @@ func (r fakeRoster) Has(h string) bool {
 	return false
 }
 
-// With a roster an address of a person with access is written down as their handle, so the address is not in the
-// document; an address of anyone else blocks the comment; a handle nobody has is a hint.
+// An address of a person with access is written as their handle.
 func TestCheckMentionsKeepsAddressesOutOfComments(t *testing.T) {
 	s := NewCommentSet()
 	s.Roster = fakeRoster{"ana@example.com": "ana", "bo@example.com": "bo"}
@@ -44,7 +43,7 @@ func TestCheckMentionsKeepsAddressesOutOfComments(t *testing.T) {
 	}
 }
 
-// A comment that came from elsewhere with an address in it is shown without it.
+// An address from elsewhere is hidden in shown comments.
 func TestVisibleHidesAddressesFromReaders(t *testing.T) {
 	s := NewCommentSet()
 	s.Add(Comment{ID: "c1", Text: "see eve@example.org and ana@example.com", Replies: []Reply{{Text: "or bo@example.com"}}})
@@ -61,8 +60,6 @@ func TestVisibleHidesAddressesFromReaders(t *testing.T) {
 	}
 }
 
-// The comment command sends the author back to the question when the text names an address with no access, and
-// keeps the handle of one with access.
 func TestCommentCommandAsksAgainForAnAddressWithNoAccess(t *testing.T) {
 	f, st := commentFlow(t)
 	f.CommentSet().Roster = fakeRoster{"ana@example.com": "ana"}

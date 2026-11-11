@@ -5,15 +5,7 @@ import (
 	"strings"
 )
 
-// A Roster says who has access to the document, so a comment can name a person without writing down the address
-// of someone who may not see it (roadmap 71, step 3). A comment is part of the document: whoever can read it reads
-// every word of it, and an e-mail address typed into it would reach all of them, and everyone the document is
-// later shared with, whether or not the person it belongs to ever agreed to that.
-//
-// With a roster on the CommentSet, a mention by e-mail address is written down as the person's handle (@ana) when
-// the address belongs to someone with access, so the address itself is never in the document; it is refused when
-// it belongs to nobody with access; and a comment that came from somewhere else with an address in it is shown
-// with the address hidden. Without a roster nothing changes: the text is kept as it was written.
+// Roster says who has access, so a comment can name a person safely.
 type Roster interface {
 	// HandleOf gives the handle (without the @) of the person with this e-mail address, if they have access.
 	HandleOf(address string) (handle string, ok bool)
@@ -25,10 +17,9 @@ type Roster interface {
 type MentionProblemKind int
 
 const (
-	// MentionNoAccess is an e-mail address of someone who has no access to the document: writing it would show it
-	// to everyone who reads the comment. The comment is not saved until it is taken out.
+	// MentionNoAccess: an e-mail address of someone without access.
 	MentionNoAccess MentionProblemKind = iota + 1
-	// MentionUnknown is a @handle that is nobody's with access: nobody is told. It is a hint, not a refusal.
+	// MentionUnknown: a @handle nobody with access has; nobody is told.
 	MentionUnknown
 )
 
@@ -49,10 +40,7 @@ func (p MentionProblem) Message() string {
 	return fmt.Sprintf("%s is nobody who has access to this document, so no one will be told.", p.Mention.Text)
 }
 
-// CheckMentions reads the mentions in text against the set's roster. clean is the text to save: each e-mail
-// address of a person with access is replaced by their @handle. problems lists the mentions the roster does not
-// know, in order; the text of a blocking one is left as written, for the caller to ask the author to change.
-// With no roster the text is returned as it is and there are no problems.
+// CheckMentions returns the mention problems in text against the roster.
 func (s *CommentSet) CheckMentions(text string) (clean string, problems []MentionProblem) {
 	if s == nil || s.Roster == nil {
 		return text, nil
@@ -89,8 +77,7 @@ func BlockingMention(problems []MentionProblem) (MentionProblem, bool) {
 	return MentionProblem{}, false
 }
 
-// hideAddresses writes text for a reader: an address of a person with access becomes their @handle, any other
-// address becomes @someone.
+// hideAddresses replaces addresses of people with access by their handles.
 func (s *CommentSet) hideAddresses(text string) string {
 	var b strings.Builder
 	last := 0
@@ -110,8 +97,7 @@ func (s *CommentSet) hideAddresses(text string) string {
 	return b.String()
 }
 
-// Visible lists the comments as a reader should see them: with a roster, no e-mail address is shown in a comment
-// or a reply (see Roster). The comments themselves are not changed.
+// Visible lists comments for readers, without addresses when rostered.
 func (s *CommentSet) Visible() []Comment {
 	list := s.List()
 	if s == nil || s.Roster == nil {

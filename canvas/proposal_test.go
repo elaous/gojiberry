@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// fixedProposals makes the ids and times of new proposals predictable (p1, p2, ...).
+// fixedProposals makes suggestion ids and times predictable.
 func fixedProposals(t *testing.T) {
 	t.Helper()
 	oldID, oldClock := proposalID, proposalClock
@@ -36,7 +36,7 @@ func TestProposalMarkRoundTrip(t *testing.T) {
 	}
 }
 
-// text of the flow as the person sees it: struck text in [..], added text in {..}.
+// marked shows struck text as [..] and added text as {..}.
 func marked(f *TextFlow) string {
 	var sb strings.Builder
 	for _, it := range f.Slice(0, len([]rune(f.EditText()))) {
@@ -262,7 +262,7 @@ func TestReviewCommands(t *testing.T) {
 	}
 }
 
-// Accepting a completion while suggesting is a proposal too: one proposal holding the whole word.
+// A completion accepted while suggesting is a proposal too.
 func TestCompletionWhileSuggestingIsAProposal(t *testing.T) {
 	fixedProposals(t)
 	f, _ := editFlow(t, 0, Chars{Text: "alpha alps\n"})
