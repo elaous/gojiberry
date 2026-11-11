@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package svg helps create SVG elements.
 package svg
 
 import "github.com/elaous/gojiberry/domrt/html"
