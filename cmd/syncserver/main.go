@@ -1,13 +1,4 @@
-// Command syncserver runs the delta-sync relay. Every deployment
-// detail — listen address, region label, merge strategy — comes from
-// the environment (GOJIBERRY_SYNC_ADDR, GOJIBERRY_SYNC_REGION,
-// GOJIBERRY_SYNC_STRATEGY -- "lww", the default, or "char-crdt"); this
-// same binary is what points at a domestic Brazilian data center for
-// the reference deployment, or any other operator's own
-// infrastructure, without a rebuild. Every client syncing through a
-// given deployment must use the same strategy this relay does -- see
-// syncserver.Config.Strategy's doc comment for what goes wrong
-// otherwise.
+// Command syncserver runs the delta-sync relay.
 package main
 
 import (

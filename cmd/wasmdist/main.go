@@ -1,12 +1,4 @@
-// Command wasmdist prepares a built wasm app for deployment (roadmap 82): it writes a precompressed
-// .gz (and, when the brotli tool is installed, a .br) next to every compressible file of a directory,
-// so the web server sends the small file with no compression work per request, and it can serve the
-// directory with the same rules for a quick look at what a visitor gets.
-//
-//	wasmdist dist/showcase                 # write main.wasm.gz, index.html.gz, ... (and .br with brotli)
-//	wasmdist -serve localhost:8080 dist/showcase
-//
-// See docs/deploy.md for the whole recipe (build, compress, nginx and Caddy settings, cache headers).
+// Command wasmdist prepares a built wasm app for deployment.
 package main
 
 import (
@@ -28,9 +20,7 @@ func main() {
 	}
 }
 
-// handlerFor serves dir the way a deployment should: wasm with its own type, the precompressed
-// sibling when the browser takes it, validators so a repeat visit is a 304, and app paths such as
-// /d/report answered with index.html.
+// handlerFor serves dir as a deployment should.
 func handlerFor(dir string) http.Handler {
 	return wasmserve.Handler(os.DirFS(dir), wasmserve.Options{Fallback: "index.html", ServiceWorker: true})
 }

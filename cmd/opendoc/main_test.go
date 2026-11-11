@@ -27,7 +27,7 @@ func TestPackListVerifyUnpackSignRecover(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(src, "Reports", "2026"), 0o755)
 	_ = os.WriteFile(filepath.Join(src, "notes.md"), []byte("# Notes\n\nhello"), 0o644)
 	_ = os.WriteFile(filepath.Join(src, "Reports", "q1.txt"), []byte("first quarter"), 0o644)
-	// A .docx made by the library's own exporter.
+	// A .docx made by the library's exporter.
 	reg := registry()
 	_, docx, _, err := reg.Export("docx", docfile.Document{Title: "Budget", Content: []docfile.Item{{Chars: &docfile.Chars{Text: "numbers"}}}})
 	if err != nil {
@@ -69,7 +69,7 @@ func TestPackListVerifyUnpackSignRecover(t *testing.T) {
 	if out := do(t, "verify", pk); !strings.Contains(out, "valid: true") {
 		t.Fatalf("%s", out)
 	}
-	// A cut pack: verify fails, recover keeps what is whole.
+	// A cut pack: verify fails, recover keeps what is intact.
 	data, _ := os.ReadFile(pk)
 	cutPath := filepath.Join(dir, "cut.opendoc")
 	_ = os.WriteFile(cutPath, data[:len(data)-200], 0o644)
@@ -137,13 +137,13 @@ func TestRecoverNeverTruncatesTheSource(t *testing.T) {
 
 func TestPackLeavesNoPartialOutputAndSkipsItself(t *testing.T) {
 	dir := t.TempDir()
-	// Nothing to pack from: an error, and no output file (nor a temporary one) is left.
+	// Nothing to pack from is an error with no output.
 	out := filepath.Join(dir, "out.opendoc")
 	_ = fails(t, "pack", out, filepath.Join(dir, "missing"))
 	if ents, _ := os.ReadDir(dir); len(ents) != 0 {
 		t.Errorf("left behind: %v", ents)
 	}
-	// The output inside the input folder is not packed into itself, even on a second run.
+	// An output inside the input folder is refused.
 	src := filepath.Join(dir, "src")
 	_ = os.MkdirAll(src, 0o755)
 	_ = os.WriteFile(filepath.Join(src, "n.md"), []byte("# n"), 0o644)
@@ -216,7 +216,7 @@ func TestSafeKeepsNamesWithinFileNameLimits(t *testing.T) {
 	if len(got)+len(".open") > 255 || len(got) > 240 || !utf8.ValidString(got) {
 		t.Fatalf("%d bytes, valid=%v", len(got), utf8.ValidString(got))
 	}
-	// A cut at the middle of a rune goes back to its start.
+	// A cut in the middle of a rune backs up to the rune start.
 	if got := safe(strings.Repeat("a", 239) + "日本"); got != strings.Repeat("a", 239) {
 		t.Errorf("%q", got)
 	}
@@ -247,7 +247,7 @@ func TestUnpackLongNamesCollisionsAndExistingFiles(t *testing.T) {
 			t.Errorf("file name of %d bytes", len(e.Name()))
 		}
 	}
-	// A second run does not overwrite anything, and says so with an error.
+	// A second run overwrites nothing.
 	victim := filepath.Join(un, entries[0].Name())
 	_ = os.WriteFile(victim, []byte("mine"), 0o644)
 	var out bytes.Buffer
@@ -265,7 +265,7 @@ func TestUnpackLongNamesCollisionsAndExistingFiles(t *testing.T) {
 	if got, _ := os.ReadFile(victim); string(got) == "mine" {
 		t.Errorf("--force did not overwrite")
 	}
-	// A directory in the way of a document is a failure for that document alone.
+	// A directory in the way of a document is an error.
 	un2 := filepath.Join(dir, "un2")
 	_ = os.MkdirAll(filepath.Join(un2, entries[0].Name()), 0o755)
 	out.Reset()
@@ -307,7 +307,7 @@ func TestRecoverWarnsLoudlyAboutEncryptedRecordsItCannotAttribute(t *testing.T) 
 	}
 }
 
-// cosign adds a second signer to a signed pack in place; verify names both and -pubkey accepts either.
+// cosign adds a second signer to a signed pack.
 func TestCosignAddsASigner(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")

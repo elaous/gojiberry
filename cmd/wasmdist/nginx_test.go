@@ -15,9 +15,7 @@ import (
 	"time"
 )
 
-// startNginx runs nginx with the showcase's own server block (examples/canvas-editor-showcase/nginx.conf) on a free
-// local port, serving dir, and returns the address. The test is skipped when nginx is not installed, unless
-// GOJIBERRY_REQUIRE_NGINX is set.
+// startNginx runs nginx with the showcase's server config.
 func startNginx(t *testing.T, dir string) string {
 	t.Helper()
 	bin, err := exec.LookPath("nginx")
@@ -43,7 +41,7 @@ func startNginx(t *testing.T, dir string) string {
 	}
 	tmp := t.TempDir()
 	user := ""
-	if os.Geteuid() == 0 { // as root nginx's workers would otherwise run as another user, who cannot read the test's directory
+	if os.Geteuid() == 0 {
 		user = "user root;\n"
 	}
 	main := fmt.Sprintf(user+`pid %[1]s/nginx.pid;
@@ -93,9 +91,7 @@ http {
 	return ""
 }
 
-// The nginx recipe of docs/deploy.md, run against a real nginx: the showcase's server block serves a directory that
-// wasmdist compressed with the wasm type, the precompressed file as it is, a validator that makes a repeat visit a
-// 304, a 404 for a script that is not there, and the start page for an app path.
+// The nginx recipe from docs/deploy.md, run against a real server.
 func TestShowcaseNginxRecipe(t *testing.T) {
 	dir, wasm := site(t)
 	if err := run([]string{"-brotli", "off", dir}, io.Discard); err != nil {

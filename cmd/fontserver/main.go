@@ -1,7 +1,4 @@
-// Command fontserver runs the font CDN: a local directory scan
-// (GOJIBERRY_FONTSERVER_DIR) plus, with an API key configured
-// (GOJIBERRY_FONTSERVER_GOOGLE_KEY), a cached proxy of the Google
-// Fonts catalog. See gojiberry/fontserver for the HTTP API.
+// Command fontserver runs the font CDN.
 package main
 
 import (

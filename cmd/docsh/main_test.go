@@ -23,7 +23,6 @@ func TestRunAgainstAFilesStoreAndAScript(t *testing.T) {
 	if err := run([]string{"-store", store, "-f", script}); err != nil {
 		t.Fatal(err)
 	}
-	// The folders are in the store, found by a second process.
 	if err := run([]string{"-store", store, "cd", "Work/Reports"}); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +72,7 @@ func TestOpenStoreEveryKind(t *testing.T) {
 	}
 }
 
-// With a token, a server store sends it as a bearer token on every request.
+// A server store sends the token as a bearer token.
 func TestOpenStoreSendsTheToken(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

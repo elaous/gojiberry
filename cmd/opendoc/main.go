@@ -1,24 +1,4 @@
-// Command opendoc works with .opendoc packs: many documents and their folders in one file
-// (docs/opendoc-format.md).
-//
-//	opendoc pack    [-sign key] [-name N] out.opendoc  file-or-folder...
-//	opendoc convert [-sign key] [-name N] out.opendoc  file-or-folder...   (the same: .docx, .pdf, .md, .txt, .open, .json too)
-//	opendoc unpack  [--force] pack.opendoc  dir   (each document as a .open file, folders as directories; an existing file is kept
-//	                                              unless --force, and exit is 1 if any document was not written)
-//	opendoc list    pack.opendoc
-//	opendoc verify  [-pubkey hex] pack.opendoc  (reads every document; exit 1 if anything is wrong)
-//	opendoc sign    -key key pack.opendoc (signs, or signs again, in place; the other signers' signatures are dropped)
-//	opendoc cosign  -key key pack.opendoc (adds one more signer to a signed pack, in place; the others stay valid)
-//	opendoc recover pack.opendoc out.opendoc  (what is intact in a cut or damaged pack)
-//
-//	opendoc keygen  [key-file]            (prints a seed; with a file, writes it there, mode 0600, and prints the public key)
-//
-// A key is a file holding an Ed25519 seed as 64 hex characters.
-//
-// "signed by" in list and verify names the key the pack carries, and "valid" says only that
-// the signature matches the pack under that key. Anyone can sign a pack with a key of
-// their own, so neither is trust: to know a pack is from someone, check it with
-// verify -pubkey, giving that someone's public key (64 hex characters).
+// Command opendoc works with .opendoc packs.
 package main
 
 import (
@@ -121,8 +101,7 @@ func keygenCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// esc makes text from a pack safe to print: control and invisible formatting characters
-// (terminal escapes, bidi overrides, newlines) become \u escapes.
+// esc makes pack text safe to print.
 func esc(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -135,8 +114,7 @@ func esc(s string) string {
 	return b.String()
 }
 
-// output is a file written beside its destination and renamed over it only when whole, so
-// an error leaves nothing partial, and an existing file is not touched until then.
+// output writes a file beside its destination, then renames it.
 type output struct {
 	f   *os.File
 	dst string
@@ -150,7 +128,7 @@ func newOutput(dst string) (*output, error) {
 	return &output{f: f, dst: dst}, nil
 }
 
-// finish closes the file and moves it into place if err is nil, else removes it.
+// finish closes the file and moves it into place.
 func (o *output) finish(err error) error {
 	if err == nil {
 		err = o.f.Sync()
@@ -169,7 +147,7 @@ func (o *output) finish(err error) error {
 	return err
 }
 
-// sameFile says whether the two paths are the same file (either may not exist).
+// sameFile reports whether two paths are the same file.
 func sameFile(a, b string) bool {
 	if filepath.Clean(a) == filepath.Clean(b) {
 		return true
@@ -190,7 +168,7 @@ func registry() *transfer.Registry {
 
 type outWriter interface{ Write([]byte) (int, error) }
 
-// say writes to the command's output; a failing stdout is not something to handle.
+// say writes to the command's output.
 func say(out outWriter, format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
 
 func packCmd(args []string, out outWriter) error {
@@ -212,7 +190,7 @@ func packCmd(args []string, out outWriter) error {
 	if err != nil {
 		return err
 	}
-	// The output, and what it replaces, are never packed, wherever they are.
+	// The output and what it replaces are never packed.
 	skip := []string{o.f.Name(), dst}
 	done := false
 	defer func() {
@@ -256,8 +234,7 @@ func packCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// addTree adds a file, or the files of a folder (its subfolders becoming folders of the
-// pack), converting each to a document.
+// addTree adds a file, or a folder's files recursively.
 func addTree(w *pack.Writer, reg *transfer.Registry, root string, skip []string) (added int, skipped []string, err error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -444,7 +421,7 @@ func unpackCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// shortID is the first 8 characters of an ID, or all of a shorter one.
+// shortID is the first 8 characters of an ID.
 func shortID(id string) string {
 	if len(id) > 8 {
 		return safe(id[:8])
@@ -467,12 +444,10 @@ func safe(s string) string {
 	return s
 }
 
-// maxName is the most bytes safe leaves a name: with ".open" it stays within the 255 a
-// file name can have on common file systems, and leaves room for a " (id)" suffix to be
-// cut in by the caller.
+// maxName is the longest name safe allows, given the extension.
 const maxName = 240
 
-// truncate cuts s to at most n bytes, on a rune boundary.
+// truncate cuts s to at most n bytes on a rune boundary.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -639,7 +614,7 @@ func cosignCmd(args []string, out outWriter) error {
 	return nil
 }
 
-// signersText lists the signers by the start of their keys, each with whether the signature holds.
+// signersText lists the signers by key prefix.
 func signersText(signers []pack.Signer) string {
 	var parts []string
 	for _, s := range signers {

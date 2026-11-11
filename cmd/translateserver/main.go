@@ -1,7 +1,4 @@
-// Command translateserver runs the translation proxy: with
-// GOJIBERRY_TRANSLATESERVER_DEEPL_KEY configured, POST /translate
-// forwards to DeepL and returns the translated text -- see
-// gojiberry/translate/server for the HTTP API.
+// Command translateserver runs the translation server.
 package main
 
 import (

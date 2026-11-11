@@ -1,9 +1,4 @@
-// Command voiceserver runs the text-to-speech/speech-to-text proxy:
-// GOJIBERRY_VOICESERVER_PIPER_BINARY/_PIPER_MODEL enable /speak (local
-// Piper), GOJIBERRY_VOICESERVER_WHISPER_BINARY/_WHISPER_MODEL enable
-// /transcribe (local whisper.cpp-compatible install). Either pair
-// left empty still starts the server -- that route just reports 503
-// until configured. See gojiberry/voice/server for the HTTP API.
+// Command voiceserver runs text-to-speech and speech recognition.
 package main
 
 import (
