@@ -260,7 +260,7 @@ func TestPasskeyAloneCannotMakeADocumentConfidentialARecoveryKeyCan(t *testing.T
 	if err := r.st.Enable(ctx, onlyPasskeys, passkey(t, r)); err != nil {
 		t.Fatal(err)
 	}
-	r.open(t, r.saved) // the page now uses the encrypted adapter
+	r.open(t, r.saved)
 	r.unlockPasskey(t)
 	if strings.Contains(r.stored(t), "ancient clear text") {
 		t.Fatal("what was saved before is still in the clear")

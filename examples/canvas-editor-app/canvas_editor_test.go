@@ -47,14 +47,12 @@ func TestCanvasEditorEndToEnd(t *testing.T) {
 	click := func(x, y float64) { px, py := at(x, y); d.MouseClick(px, py, 1) }
 	clearAll := func() { d.Press("Control+a"); d.Press("Backspace") }
 
-	// --- Regression: click positions the cursor, typing inserts there ---
 	click(10, 10)
 	clearAll()
 	ok(field("text") == "", "select-all + backspace clears the document")
 	d.Type("hello")
 	ok(field("text") == "hello", "typing after a click inserts at the cursor")
 
-	// --- Regression: drag-select + Bold toolbar button ---
 	x0, y0 := at(10, 20)
 	x1, _ := at(50, 20)
 	d.MouseMove(x0, y0)
