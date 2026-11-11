@@ -386,7 +386,7 @@ func (p *formulaParser) primary() fval {
 }
 
 func (p *formulaParser) call(name string) fval {
-	p.pos++ // (
+	p.pos++
 	var nums []float64
 	var args []fval
 	for !p.is(")") {
@@ -428,7 +428,7 @@ func (p *formulaParser) call(name string) fval {
 			return ferr("#ERR!")
 		}
 	}
-	p.pos++ // )
+	p.pos++
 	switch name {
 	case "SUM":
 		s := 0.0

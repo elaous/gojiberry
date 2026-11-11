@@ -63,6 +63,7 @@ func (d *AdapterDirectory) stateEntries(ctx context.Context, addrs []string) ([]
 	return out, nil
 }
 
+// caller holds the lock
 func (d *AdapterDirectory) reconcileLocked(ctx context.Context, email string, now time.Time) error {
 	addrs := d.LogAddressesFor(email)
 	ents, err := d.stateEntries(ctx, addrs)

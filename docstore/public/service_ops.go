@@ -19,6 +19,7 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
+// holds only the date and reason: the same bytes stay refused
 const blockedPrefix = docstore.PublicPrefix + "blocked/"
 
 type blockedRecord struct {

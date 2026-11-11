@@ -19,8 +19,9 @@ type Session struct {
 	// Get returns the document to save (the editor's current content).
 	Get func() docfile.Document
 	// OnOpen receives a document the user opened.
-	OnOpen              func(docfile.Document)
-	Author              string
+	OnOpen func(docfile.Document)
+	Author string
+	// possibly from another goroutine
 	OnChange            func()
 	OnUI                func(f func())
 	Pending             *components.Pending
@@ -120,6 +121,7 @@ func (s *Session) SaveState() string {
 	return s.saveState
 }
 
+// caller holds the session lock
 func (s *Session) unsaved() {
 	if s.saveState != "" {
 		s.saveState = SaveUnsaved
@@ -190,6 +192,7 @@ func (s *Session) Refresh(ctx context.Context) error {
 		return err
 	}
 	s.set(func() {
+		// a slow answer for a left target must not win
 		if s.target != target {
 			return
 		}

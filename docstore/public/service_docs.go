@@ -267,6 +267,7 @@ func (s *Service) editDoc(w http.ResponseWriter, r *http.Request) {
 	if !s.writeAllowed(w, r, sess) {
 		return
 	}
+	// checked now and again under the lock below
 	var early docMeta
 	if found, err := s.getJSON(ctx, docRecordPrefix+docID, &early); err != nil {
 		s.fail(w, err)

@@ -28,6 +28,7 @@ func (s *Saver) previousCopies() int {
 	return s.PreviousCopies
 }
 
+// new key per save: never overwrite the catalogued file
 func genKey(id string, c docfile.Codec) string {
 	var b [6]byte
 	_, _ = rand.Read(b[:])
@@ -81,6 +82,7 @@ func (s *Saver) tryRead(ctx context.Context, t Target, key, sum string) (docfile
 	return doc, stored.Data, nil
 }
 
+// a store failure is not missing: nothing stands in
 func missingOrDamaged(err error) bool {
 	return errors.Is(err, docstore.ErrNotFound) || errors.Is(err, ErrDamaged)
 }
@@ -346,6 +348,7 @@ func (s *Saver) Verify(ctx context.Context, target string) (VerifyReport, error)
 	return rep, err
 }
 
+// a save in progress must never be taken for a leftover
 const OrphanAge = time.Hour
 
 var generationKey = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}~[0-9a-f]{12}\.[a-z]+$`)

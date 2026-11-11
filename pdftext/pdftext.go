@@ -30,6 +30,7 @@ func ExtractPagesBytes(data []byte) (pages []string, err error) {
 	}
 	done := make(chan result, 1)
 	go func() {
+		// the parser panics on some malformed files
 		defer func() {
 			if p := recover(); p != nil {
 				done <- result{err: fmt.Errorf("pdftext: malformed PDF: %v", p)}

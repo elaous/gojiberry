@@ -20,6 +20,7 @@ type Store interface {
 	Save(ctx context.Context, data []byte) error
 }
 
+// a tampered store cannot make the server hold more
 const (
 	// MaxSnapshot is the largest snapshot Restore reads.
 	MaxSnapshot = 1 << 20
@@ -65,6 +66,7 @@ type decoded struct {
 	seed     []byte
 }
 
+// strict: unknown fields and out-of-range values are refused
 func decodeSnapshot(data []byte, now time.Time) (*decoded, error) {
 	if len(data) > MaxSnapshot {
 		return nil, errors.New("telemetry: the snapshot is too large")
@@ -171,6 +173,7 @@ func (c *Counters) SaveError() error { c.mu.Lock(); defer c.mu.Unlock(); return 
 
 const seedLen = 16
 
+// caller holds c.mu
 func (c *Counters) seedLocked() []byte {
 	if c.seed == nil {
 		b := make([]byte, seedLen)
@@ -208,6 +211,7 @@ func ParseNoise(s string) (int, error) {
 	return n, nil
 }
 
+// caller holds c.mu
 func (c *Counters) noisyLocked(day string, e Event, n int) int {
 	step := c.noise
 	if step <= 1 {

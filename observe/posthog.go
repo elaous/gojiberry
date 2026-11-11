@@ -337,6 +337,7 @@ func (p *PostHog) Close(ctx context.Context) error {
 	return p.Flush(ctx)
 }
 
+// never the key
 func (p *PostHog) Describe() any {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -108,6 +108,7 @@ func (s *Session) Forget() {
 	})
 }
 
+// caller holds the session lock
 func (s *Session) concealed(list []Entry) []Entry {
 	out := make([]Entry, len(list))
 	for i, e := range list {
@@ -132,6 +133,7 @@ func docOf(e Entry, revealed bool) components.Doc {
 	return d
 }
 
+// caller holds the session lock
 func (s *Session) docEntry(e Entry) components.Doc {
 	_, ok := s.revealed[e.ID]
 	return docOf(e, ok)

@@ -492,6 +492,7 @@ func isEventAttr(name string) bool {
 	return unicode.IsUpper(rune(name[2]))
 }
 
+// DOM event names are always fully lowercase
 func eventNameFor(attrName string) string {
 	return strings.ToLower(attrName[2:])
 }

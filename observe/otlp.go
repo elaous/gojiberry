@@ -35,7 +35,8 @@ func init() { RegisterSink("otlp", newOTLPFromEnv) }
 type OTLPConfig struct {
 	// MetricsURL and TracesURL are the full URLs ({endpoint}/v1/metrics and /v1/traces).
 	MetricsURL, TracesURL string
-	Headers               map[string]string
+	// never logged or described
+	Headers map[string]string
 	// Service is the service.name resource attribute.
 	Service string
 	// Interval is how often aggregates are sent.
@@ -81,6 +82,7 @@ func NewOTLP(cfg OTLPConfig) (*OTLP, error) {
 	return o, nil
 }
 
+// https only, except loopback: keys go in headers, never the URL
 func checkOTLPURL(s string) error {
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -353,6 +355,7 @@ func (o *OTLP) Close(ctx context.Context) error {
 	return o.Flush(ctx)
 }
 
+// never the headers
 func (o *OTLP) Describe() any {
 	o.mu.Lock()
 	defer o.mu.Unlock()

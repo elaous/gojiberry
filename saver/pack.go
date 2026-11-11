@@ -309,6 +309,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 			rep.Warnings = append(rep.Warnings, e.Name+": the folder's name is not valid; the folder is made confidential under the placeholder name")
 		}
 	}
+	// a folder and a document must never share an ID
 	docIDs := map[string]bool{}
 	err = s.view(ctx, target, func(_ Target, cat *catalog) error {
 		for id := range cat.Docs {
@@ -362,6 +363,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 		if name, ok := realName[f.ID]; ok {
 			made, err = s.createFolderLevel(ctx, target, newID, parent, name, true)
 		} else if sealed[f.ID] || f.Name == ConfidentialFolderName {
+			// hidden name: never create a plain folder of that name
 			made, err = s.createFolderLevel(ctx, target, newID, parent, ConfidentialFolderName, true)
 		} else {
 			made, err = s.createFolder(ctx, target, newID, parent, f.Name)
@@ -449,6 +451,7 @@ func (s *Saver) ImportPack(ctx context.Context, target string, r io.ReaderAt, si
 				replacing, prev = true, p
 			}
 		}
+		// end to end in one save, never ordinary first
 		saved, err := s.save(ctx, target, c, doc, secret)
 		if err != nil {
 			rep.Failed = append(rep.Failed, e.Name+": "+err.Error())

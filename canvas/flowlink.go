@@ -94,6 +94,7 @@ var _ Overlayer = (*TextFlow)(nil)
 // SetLinkHandler sets the handler the Stage uses to open links.
 func (f *TextFlow) SetLinkHandler(open func(url string)) { f.stageLink = open }
 
+// allow-list: never javascript: or data: links
 func SafeLinkURL(u string) bool {
 	u = strings.TrimSpace(u)
 	i := strings.IndexAny(u, ":/?#")

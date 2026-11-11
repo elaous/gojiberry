@@ -97,7 +97,7 @@ func Text(s string) Node {
 	return Node{Kind: KindText, Text: s}
 }
 
-// Frag groups children with no wrapper element, e.g.
+// Frag groups children with no wrapper element.
 func Frag(children ...Node) Node {
 	return Node{Kind: KindFragment, Children: children}
 }

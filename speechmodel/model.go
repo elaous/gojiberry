@@ -132,6 +132,7 @@ func Open(ctx context.Context, s Spec) (Model, error) {
 	return b.Open(ctx, s)
 }
 
+// a model is code the machine will run: verify before use
 func VerifyFile(path, wantHex string, max int64) error {
 	want := strings.ToLower(strings.TrimSpace(wantHex))
 	if want == "" {

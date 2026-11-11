@@ -20,10 +20,11 @@ type SourceChoice struct {
 }
 
 type Session struct {
-	Sources    []SourceChoice
-	Sink       func(docfile.Codec) Sink
-	Formats    []docfile.Codec
-	Deliver    func(file, mime string, data []byte)
+	Sources []SourceChoice
+	Sink    func(docfile.Codec) Sink
+	Formats []docfile.Codec
+	Deliver func(file, mime string, data []byte)
+	// possibly from another goroutine
 	OnChange   func()
 	OnDone     func(Report)
 	Known      func(ctx context.Context) (Ledger, error)

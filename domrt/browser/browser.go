@@ -112,6 +112,7 @@ func doFetch(url string, init map[string]any, timeout time.Duration) (*Response,
 		}
 		return nil, err
 	}
+	// keep the timer: a stalled body must not hang readers
 	resp.done, resp.timedOut, resp.timeout, resp.url = release, timedOut, timeout, url
 	return resp, nil
 }

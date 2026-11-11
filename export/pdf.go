@@ -120,6 +120,7 @@ func renderPDF(snap Snapshot, outline []OutlineEntry, tocPages map[int]int) ([]b
 			}
 			continue
 		}
+		// recorded before drawing, so the widow rule never moves it
 		flow.noWidow = b.Kind >= Heading1 && b.Kind <= Heading3
 		err := renderPDFBlock(&pdf, snap, b, i, contentWidth)
 		flow.noWidow = false
@@ -622,6 +623,7 @@ func renderPDFTable(pdf *gopdf.GoPdf, langs []string, cells []Block, base int, c
 
 	for r := 0; r < rows; r++ {
 		draws, rowHeight := allDraws[r], heights[r]
+		// widow and orphan rule: header and last rows never stand alone
 		if r < rows-1 && (r == 0 || r == rows-2) {
 			pdfKeepTogether(pdf, rowHeight+heights[r+1])
 		}

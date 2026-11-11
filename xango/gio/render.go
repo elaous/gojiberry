@@ -333,6 +333,7 @@ func (r *Renderer) layoutDivContent(gtx layout.Context, th *material.Theme, n xa
 	return clk.Layout(gtx, children)
 }
 
+// mirrors material.Button's hardcoded Inset
 var buttonInset = layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}
 
 func accessibleNameOf(n xango.Node) string {

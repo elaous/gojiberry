@@ -237,6 +237,7 @@ func (s *Server) handleGoogleFonts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"families": cached, "enabled": true})
 }
 
+// the key never reaches the browser
 func fetchGoogleFontsAPI(apiKey string) ([]googleFont, error) {
 	return fetchGoogleFontsFrom("https://www.googleapis.com/webfonts/v1/webfonts?key="+url.QueryEscape(apiKey)+"&sort=popularity", nil)
 }

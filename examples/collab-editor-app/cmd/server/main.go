@@ -34,6 +34,7 @@ func (h *hub) broadcast(ctx context.Context, from *websocket.Conn, msg []byte) {
 	}
 	h.mu.Unlock()
 	for _, c := range peers {
+		// a stalled peer must not hold up the others
 		wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		if err := c.Write(wctx, websocket.MessageText, msg); err != nil {
 			_ = c.CloseNow()

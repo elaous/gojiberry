@@ -25,6 +25,7 @@ func (h *Hub) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	replica := r.URL.Query().Get("replica")
+	// access decided above: the library's origin rule would only interfere
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		return // Accept has answered

@@ -164,6 +164,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 	} else if !docfile.ValidID(id) {
 		return Entry{}, ErrID
 	}
+	// a folder's ID is never a document's: refused before any hook
 	if s.Rekey == nil && s.ConfidentialCheck == nil {
 	} else if err := s.view(ctx, target, func(_ Target, cat *catalog) error {
 		if _, ok := cat.Folders[id]; ok {
@@ -190,6 +191,7 @@ func (s *Saver) save(ctx context.Context, target string, c docfile.Codec, doc do
 				case errors.Is(gerr, ErrNotFound):
 					want = want || doc.Protection() == ProtectionE2EE
 				default:
+					// never treated as not there: the document may be confidential
 					return Entry{}, gerr
 				}
 			} else {
@@ -265,6 +267,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 			}
 		}
 		if protection == ProtectionE2EE && s.Rekey != nil && !rekeyed {
+			// confidential but keys not asserted: not written
 			return errNeedRekey
 		}
 		doc.SetProtection(protection)
@@ -274,6 +277,7 @@ func (s *Saver) saveLocked(ctx context.Context, target string, c docfile.Codec, 
 		if err != nil {
 			return err
 		}
+		// new file: the replaced one stays as previous copy
 		key := genKey(id, c)
 		cat.fresh = append(cat.fresh, key)
 		err = t.Adapter.Save(ctx, key, data)

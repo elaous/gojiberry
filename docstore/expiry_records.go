@@ -163,7 +163,7 @@ func (e *ExpiringAdapter) readDeadlinesBad(ctx context.Context) (out map[string]
 	return out, bad, nil
 }
 
-// e.mu held; re-reads the record before repairing
+// takes e.mu per id; re-reads before repairing
 func (e *ExpiringAdapter) healBad(ctx context.Context, bad []string) error {
 	var first error
 	for _, id := range bad {

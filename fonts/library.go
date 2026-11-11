@@ -127,6 +127,7 @@ func (l *Library) fetch(ctx context.Context, u string) ([]byte, error) {
 		err = fmt.Errorf("fonts: %s is larger than %d bytes", u, maxFontSize)
 	}
 	if err == nil && !looksLikeFont(data) {
+		// a captive portal's HTML must not be kept as a font
 		err = fmt.Errorf("fonts: %s did not return a font file", u)
 	}
 	return data, err

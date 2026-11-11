@@ -146,6 +146,7 @@ func (s *Server) handleLocalDownload(w http.ResponseWriter, r *http.Request) {
 			name += "-italic"
 		}
 		name += ".ttf"
+		// beside the final name, then rename: no half font on rescan
 		tmp := filepath.Join(dir, "."+name+".part")
 		if err := os.WriteFile(tmp, f.Data, 0o644); err != nil {
 			log.Printf("fontserver: writing %s: %v", name, err)

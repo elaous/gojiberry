@@ -63,6 +63,7 @@ var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": tru
 func addRecursive(watcher *fsnotify.Watcher, root string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			// one unreadable entry must not stop the whole watch
 			log.Printf("devwatch: not watching %s: %v", path, err)
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
@@ -118,6 +119,7 @@ func (p *managedProcess) start() error {
 	return nil
 }
 
+// SIGTERM, SIGKILL after 5s: never orphan the port holder
 func (p *managedProcess) stop() {
 	p.mu.Lock()
 	cmd, done := p.cmd, p.done

@@ -224,6 +224,7 @@ type File struct {
 // Label implements Source.
 func (Files) Label() string { return "Word files" }
 
+// IDs are positions, not names: never skipped as already brought
 func (Files) Stable() bool { return false }
 
 // List implements Source: the files, all at the top.

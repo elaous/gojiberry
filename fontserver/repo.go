@@ -117,6 +117,7 @@ func (r *Repo) VariantPath(family string) (string, bool) {
 	return f.Variants[0].Path, true
 }
 
+// only paths Scan produced: traversal check
 func (r *Repo) Open(rel string) ([]byte, bool) {
 	r.mu.RLock()
 	ok := r.paths[rel]

@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 )
 
+// a pure function of path shape: no person-chosen segment appears
 func RouteOf(path string) string {
 	p := strings.ToLower(path)
 	switch {

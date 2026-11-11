@@ -37,6 +37,7 @@ func (cookieJar) All() map[string]string {
 		if !found {
 			continue
 		}
+		// PathUnescape: '+' stays a plus
 		if decoded, err := url.PathUnescape(value); err == nil {
 			value = decoded
 		}

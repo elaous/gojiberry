@@ -63,6 +63,7 @@ func (s *Saver) createFolder(ctx context.Context, target, id, parent, name strin
 	return s.createFolderLevel(ctx, target, id, parent, name, false)
 }
 
+// the real name is never written in the clear
 func (s *Saver) createFolderLevel(ctx context.Context, target, id, parent, name string, e2ee bool) (Folder, error) {
 	if !ValidName(name) {
 		return Folder{}, ErrName

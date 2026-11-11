@@ -225,6 +225,7 @@ func withDirectory(ctx context.Context, srv *docstore.Server, adapter docstore.A
 	return nil
 }
 
+// compared in constant time
 func adminToken(tok string) func(*http.Request) bool {
 	want := sha256.Sum256([]byte(tok))
 	return func(r *http.Request) bool {

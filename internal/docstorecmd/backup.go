@@ -69,6 +69,7 @@ func runOperatorCommand(ctx context.Context, adapter docstore.Adapter, args []st
 
 var errNotEmpty = errors.New("the store already has documents; use -force to restore into it (same ids are replaced)")
 
+// temp file renamed into place: no half file; owner-only mode
 func backupToFile(ctx context.Context, adapter docstore.Adapter, file string) (int, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(file), ".backup-*")
 	if err != nil {

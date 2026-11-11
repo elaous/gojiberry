@@ -283,6 +283,7 @@ func (s *Service) pruneRefs(ctx context.Context, meta *docMeta) (bool, error) {
 	return true, nil
 }
 
+// caller holds the document's lock
 func (s *Service) storeReport(ctx context.Context, meta *docMeta, rep Report) (id string, stored, over bool, err error) {
 	pruned := false
 	defer func() {

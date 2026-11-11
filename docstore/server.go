@@ -578,6 +578,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "conditional save is not supported", http.StatusNotImplemented)
 				return
 			}
+			// If-None-Match: * means only if none; If-Match carries a digest
 			prev := strings.Trim(match, `"`)
 			if none != "" {
 				if strings.TrimSpace(none) != "*" || match != "" {

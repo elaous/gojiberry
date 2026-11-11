@@ -28,7 +28,8 @@ const (
 
 var (
 	ErrNotShareable = errors.New("userconfig: only templates, styles and themes can be shared (names template.*, style.* and tokens.*)")
-	ErrBadBundle    = errors.New("userconfig: the shared file cannot be used")
+	// the message never repeats the file's content
+	ErrBadBundle = errors.New("userconfig: the shared file cannot be used")
 )
 
 type bundle struct {

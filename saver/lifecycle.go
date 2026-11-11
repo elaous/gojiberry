@@ -152,6 +152,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 		return Version{}, err
 	}
 	key := versionKey(id, c, now)
+	// keys must not collide on a coarse clock
 	for i := 1; ; i++ {
 		if _, err := t.Adapter.Load(ctx, key); errors.Is(err, docstore.ErrNotFound) {
 			break
@@ -170,6 +171,7 @@ func (s *Saver) SaveVersionBy(ctx context.Context, target string, c docfile.Code
 		kept := 0
 		meta, _ := s.loadMeta(ctx, t, id)
 		for _, v := range vs {
+			// newest first; a pinned snapshot is never dropped or counted
 			if v.Pinned {
 				continue
 			}

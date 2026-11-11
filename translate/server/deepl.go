@@ -42,7 +42,6 @@ func newDeeplClient(key string) (*deeplClient, error) {
 	return &deeplClient{key: key, base: base, http: &http.Client{Timeout: 30 * time.Second}}, nil
 }
 
-// Translate translates texts into target (e.g.
 func (c *deeplClient) Translate(ctx context.Context, texts []string, target, source string) ([]Translation, error) {
 	body := struct {
 		Text       []string `json:"text"`

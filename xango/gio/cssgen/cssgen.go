@@ -212,6 +212,7 @@ func findRules(css string) []rule {
 
 type decl struct{ prop, val string }
 
+// order kept: a later declaration overrides an earlier one
 func declsOf(decls string) []decl {
 	var out []decl
 	for _, d := range strings.Split(decls, ";") {
@@ -240,6 +241,7 @@ func customProps(decls string) map[string]string {
 
 var lengthRE = regexp.MustCompile(`^(-?[0-9]*\.?[0-9]+)(px|em)?$`)
 
+// em approximated at 16px: body font-size is never overridden
 func parseLength(s string) (unit.Dp, bool) {
 	s = strings.TrimSpace(s)
 	m := lengthRE.FindStringSubmatch(s)

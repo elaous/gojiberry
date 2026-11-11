@@ -29,6 +29,7 @@ var TextFormats = []Importer{
 	textFormat{textimport.INI, "Settings file (.ini, .cfg, .conf, .properties)", "text/plain", []string{".ini", ".cfg", ".conf", ".properties"}},
 	textFormat{textimport.Log, "Log file (.log)", "text/plain", []string{".log"}},
 	textFormat{textimport.XML, "XML (.xml)", "application/xml", []string{".xml"}},
+	// by name, never extension: a .html file is a page
 	textFormat{textimport.HTMLSource, "HTML as text (its source, not rendered)", "text/html", nil},
 	textFormat{textimport.Text, "Any text file, as it is", "text/plain", nil},
 }

@@ -22,6 +22,7 @@ func SealKey(secret []byte, purpose string) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
+// name is bound in as additional data
 func Seal(key []byte, name string, data []byte) ([]byte, error) {
 	g, err := gcm(key)
 	if err != nil {

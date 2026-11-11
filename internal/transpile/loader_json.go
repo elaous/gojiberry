@@ -28,6 +28,7 @@ func loadJSON(in LoaderInput) (LoaderResult, error) {
 	if ext == ".jsonc" {
 		data = stripJSONComments(raw)
 	}
+	// a malformed file is an xgc error, not a runtime panic
 	if !json.Valid(data) {
 		return LoaderResult{}, fmt.Errorf("xango: JSON import %q: invalid JSON", in.Path)
 	}

@@ -37,6 +37,7 @@ type translator interface {
 	Translate(ctx context.Context, text []string, targetLang, sourceLang string) ([]Translation, error)
 }
 
+// never exposes the API key to the browser
 type Server struct {
 	cfg        Config
 	translator translator // nil if cfg.DeepLAPIKey is empty

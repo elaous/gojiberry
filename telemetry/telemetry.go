@@ -20,6 +20,7 @@ const (
 	Locale Name = "locale"
 	// Error counts failures by a fixed code, never by message.
 	Error Name = "error"
+	// never a message, a stack, a file name or a line
 	Crash Name = "crash"
 )
 
@@ -104,6 +105,7 @@ type Batch struct {
 
 // Limits of a Batch.
 const (
+	// one request cannot poison a total
 	MaxCount = 1000
 	// MaxBody is the largest request body a Receiver reads.
 	MaxBody = 8 << 10
@@ -148,6 +150,7 @@ func (b Batch) Validate(now time.Time) error {
 	return nil
 }
 
+// strict: an extra field could smuggle in an identifier
 func Decode(body []byte) (Batch, error) {
 	var b Batch
 	dec := json.NewDecoder(bytes.NewReader(body))

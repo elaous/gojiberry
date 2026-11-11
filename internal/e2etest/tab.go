@@ -77,6 +77,7 @@ func chromiumPath(t testing.TB) string {
 		}
 	}
 	if os.Getenv("GOJIBERRY_REQUIRE_BROWSER") != "" {
+		// a gate must not pass by skipping
 		t.Fatal("no Chromium found (set CHROMIUM), and GOJIBERRY_REQUIRE_BROWSER is set")
 	}
 	t.Skip("no Chromium found (set CHROMIUM)")

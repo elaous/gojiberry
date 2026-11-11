@@ -36,6 +36,7 @@ func (e FetchEvent) RespondWith(work func() (js.Value, error)) {
 }
 
 func addSelfListener(name string, fn func(js.Value)) {
+	// never released: listeners live as long as the service worker
 	cb := js.FuncOf(func(this js.Value, args []js.Value) any {
 		var v js.Value
 		if len(args) > 0 {

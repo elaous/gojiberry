@@ -75,6 +75,7 @@ func (c *Collector) withholdLocked(outcome string) {
 	clear(c.counts)
 }
 
+// caller holds c.mu
 func (c *Collector) logLocked(outcome string, b Batch) {
 	if !c.logOn {
 		return

@@ -94,6 +94,7 @@ func publicIP(ip net.IP) bool {
 	return v4 == nil || v4[0] != 100 || v4[1]&0xc0 != 64 // 100.64.0.0/10 is carrier-grade NAT
 }
 
+// RFC 8291 aes128gcm, one record
 func Encrypt(sub Subscription, payload []byte) ([]byte, error) {
 	if len(payload) > MaxPayload {
 		return nil, ErrTooLarge
@@ -118,6 +119,7 @@ func Encrypt(sub Subscription, payload []byte) ([]byte, error) {
 	return encrypt(payload, uaKey, auth, asPriv, salt)
 }
 
+// salt and sender key given so tests can use known vectors
 func encrypt(payload []byte, uaKey *ecdh.PublicKey, auth []byte, asPriv *ecdh.PrivateKey, salt []byte) ([]byte, error) {
 	shared, err := asPriv.ECDH(uaKey)
 	if err != nil {
@@ -252,6 +254,7 @@ func (v *VAPID) Public() string {
 	return b64.EncodeToString(e.Bytes())
 }
 
+// RFC 8292 VAPID
 func (v *VAPID) authorization(endpoint, subject string, now time.Time) (string, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {

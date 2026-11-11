@@ -130,6 +130,7 @@ func cloneDecoded(d *decoded) *decoded {
 	return out
 }
 
+// a total below its base gains nothing
 func mergeDelta(remote, local, base *decoded) *decoded {
 	out := cloneDecoded(remote)
 	if remote.seed != nil {

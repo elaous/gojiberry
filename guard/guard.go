@@ -32,8 +32,9 @@ type Options struct {
 	Headers string
 	// TokenHeader names the header a Token guard reads.
 	TokenHeader string
-	TokenQuery  string
-	// Public lists paths (exact, e.g.
+	// only for "/ws" paths: browsers cannot set WebSocket headers
+	TokenQuery string
+	// Public lists paths that need no token.
 	Public []string
 }
 
@@ -93,6 +94,7 @@ func allowAnyOrigin(w http.ResponseWriter, o Options) {
 	setIfAbsent(h, "Access-Control-Allow-Headers", o.headers())
 }
 
+// checks nothing: not for data that matters or costly work
 func Open(opts ...Options) Guard {
 	o := pick(opts)
 	return Func(func(next http.Handler) http.Handler {
@@ -107,6 +109,7 @@ func Open(opts ...Options) Guard {
 	})
 }
 
+// another Origin gets 403 whatever the method; no Origin passes
 func Origins(origins ...string) Guard { return OriginsWith(Options{}, origins...) }
 
 // OriginsWith is Origins with explicit Options.
@@ -130,6 +133,7 @@ func OriginsWith(o Options, origins ...string) Guard {
 			case any:
 				allowAnyOrigin(w, o)
 			case origin == "":
+			// no Origin: not a browser cross-origin call
 			case allowed[strings.ToLower(origin)]:
 				h := w.Header()
 				h.Set("Access-Control-Allow-Origin", origin)
@@ -150,6 +154,8 @@ func OriginsWith(o Options, origins ...string) Guard {
 	})
 }
 
+// constant-time compare; preflight requests pass
+// constant-time compare; an empty secret refuses every request
 func Token(secret string, opts ...Options) Guard {
 	o := pick(opts)
 	return TokenFunc(func(r *http.Request) bool {
@@ -178,6 +184,7 @@ func TokenFunc(ok func(*http.Request) bool, opts ...Options) Guard {
 	})
 }
 
+// put Origins first: its CORS headers must win
 func Chain(guards ...Guard) Guard {
 	return Func(func(next http.Handler) http.Handler {
 		h := next

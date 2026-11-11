@@ -72,6 +72,7 @@ func isLoopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// rejects a configuration that would send secrets unsafely
 func (s SMTP) Validate() error {
 	if strings.TrimSpace(s.Host) == "" || strings.ContainsAny(s.Host, " /\r\n") {
 		return errors.New("mail: the SMTP host is not set or not a host name")

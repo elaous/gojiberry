@@ -5,7 +5,7 @@ import "unicode"
 type Format struct {
 	FontFamily string
 	FontSize   float64
-	// Scale multiplies the font size and line height, e.g.
+	// Scale multiplies the font size and line height.
 	Scale      float64
 	FontWeight int
 	FontStyle  string

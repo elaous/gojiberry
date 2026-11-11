@@ -55,6 +55,7 @@ func (pdfImporter) Format() transfer.Format {
 }
 func (pdfImporter) Import(b []byte) (docfile.Document, error) { return pdftext.Import(b) }
 
+// text proposed for removal must not reach a file
 type acceptedExporter struct{ transfer.Exporter }
 
 func (a acceptedExporter) Export(d docfile.Document) ([]byte, error) {

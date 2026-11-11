@@ -39,6 +39,7 @@ func finite(vs ...float64) bool {
 	return true
 }
 
+// strict: anything but MarshalState's exact output is refused
 func (b *Builtin) RestoreState(data []byte) error {
 	var p persisted
 	dec := json.NewDecoder(bytes.NewReader(data))

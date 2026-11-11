@@ -115,6 +115,7 @@ func (c *Counters) Report(k int) []Reported {
 	return out
 }
 
+// reads no header: no cookie, token or user agent
 type Receiver struct {
 	counters *Counters
 	now      func() time.Time
@@ -129,6 +130,7 @@ func NewReceiver(c *Counters) *Receiver { return &Receiver{counters: c, now: tim
 // WithClock sets the clock (for tests).
 func (r *Receiver) WithClock(now func() time.Time) *Receiver { r.now = now; return r }
 
+// the receiver never reads the address
 func (r *Receiver) WithLimit(allow func(*http.Request) (bool, time.Duration)) *Receiver {
 	r.allow = allow
 	return r

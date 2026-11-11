@@ -188,6 +188,7 @@ func hasAttr(attrs []xango.Attr, name string) bool {
 	return false
 }
 
+// on creation only, never on re-render
 func takeFocus(rn *renderedNode) {
 	if active := document().Get("activeElement"); !active.IsNull() && !active.IsUndefined() && !active.Equal(document().Get("body")) {
 		rn.opener = active

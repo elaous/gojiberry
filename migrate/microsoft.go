@@ -74,6 +74,7 @@ func (o *OneDrive) Fetch(ctx context.Context, item Item) ([]byte, error) {
 	return getBytes(ctx, o.Client, o.Token, o.base()+"/me/drive/items/"+url.PathEscape(item.ID)+"/content")
 }
 
+// next-page links carry the token: never leave the host
 func sameHost(a, b string) bool {
 	ua, err1 := url.Parse(a)
 	ub, err2 := url.Parse(b)

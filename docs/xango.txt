@@ -112,14 +112,14 @@ func El(tag string, attrs []Attr, children ...Node) Node
     El constructs an element node.
 
 func Frag(children ...Node) Node
-    Frag groups children with no wrapper element, e.g.
+    Frag groups children with no wrapper element.
 
 func Host(tag string, props any, children ...Node) Node
 
 func Raw(html string) Node
 
 func Style(css string) Node
-    Style returns a <style> element injecting css verbatim -- e.g.
+    Style injects css verbatim; "</style" inside is escaped as "<\/style".
 
 func Styles() Node
 

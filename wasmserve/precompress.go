@@ -95,6 +95,7 @@ func Precompress(dir string, opt PrecompressOptions) ([]Compressed, error) {
 	return out, err
 }
 
+// temp file then rename: a stop never leaves half a file
 func writeCompressed(src, dst, enc, brotli string) (int64, error) {
 	tmp := dst + ".tmp"
 	defer func() { _ = os.Remove(tmp) }()
@@ -126,6 +127,7 @@ func writeCompressed(src, dst, enc, brotli string) (int64, error) {
 	if err := os.Rename(tmp, dst); err != nil {
 		return 0, err
 	}
+	// the sibling must not look older than its source
 	now := time.Now()
 	if err := os.Chtimes(dst, now, now); err != nil {
 		return 0, err

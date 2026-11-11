@@ -137,6 +137,7 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, bson.M{})
 }
 
+// anchored and quoted: answered from the _id index
 func prefixFilter(prefix string) bson.M {
 	return bson.M{"_id": bson.M{"$regex": "^" + regexp.QuoteMeta(prefix)}}
 }

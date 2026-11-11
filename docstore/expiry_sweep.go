@@ -95,6 +95,7 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 			continue
 		}
 		e.mu.Lock()
+		// a Save may have renewed it since the listing
 		cur, ok, rerr := e.readRecord(ctx, id)
 		if rerr == nil && ok && e.expired(cur) {
 			var found bool
@@ -123,6 +124,7 @@ func (e *ExpiringAdapter) Sweep(ctx context.Context) (deleted int, err error) {
 	return deleted, first
 }
 
+// re-checked under the lock, which a Save holds across both writes
 func (e *ExpiringAdapter) sweepCreated(ctx context.Context) error {
 	metas, err := ListPrefix(ctx, e.Inner, ExpiryCreatedPrefix)
 	if err != nil {
@@ -230,6 +232,7 @@ func (e *ExpiringAdapter) sweepOrphans(ctx context.Context) (deleted int, first 
 	return deleted, first
 }
 
+// re-checks under the lock: a hub save keeps the entry
 func (e *ExpiringAdapter) dropOrphan(ctx context.Context, prefix, id string, ttl time.Duration) (bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

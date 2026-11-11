@@ -90,6 +90,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// never needs or exposes any API key
 type Server struct {
 	cfg Config
 
@@ -243,6 +244,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
 }
 
+// synthesis and transcription have separate slots
 func acquire(w http.ResponseWriter, sem chan struct{}) bool {
 	if sem == nil {
 		return true

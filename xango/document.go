@@ -50,7 +50,7 @@ func (d Document) Render() Node {
 	)
 }
 
-// Style returns a <style> element injecting css verbatim -- e.g.
+// Style injects css verbatim; "</style" inside is escaped as "<\/style".
 func Style(css string) Node {
 	return El("style", nil, Raw(styleEnd.ReplaceAllString(css, `<\/$1`)))
 }

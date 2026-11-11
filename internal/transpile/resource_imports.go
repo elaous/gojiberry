@@ -109,6 +109,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 			i = k
 		}
 
+		// never valid in a real import spec
 		var typeName string
 		if alias != "" && alias != "." && i+1 < n && runes[i] == '.' && runes[i+1] == '(' {
 			i += 2

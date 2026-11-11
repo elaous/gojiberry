@@ -336,6 +336,7 @@ func splitHunspellFlags(raw string, mode hunspellFlagMode) []string {
 	}
 }
 
+// the first line's word count is never checked
 func parseHunspellDic(data string) []hunspellDicEntry {
 	lines := strings.Split(data, "\n")
 	var entries []hunspellDicEntry

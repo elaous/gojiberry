@@ -91,6 +91,7 @@ const (
 	maxPresence = 256     // cursors kept
 )
 
+// deferred unlock: a panic in Apply must not leave it locked
 func (s *Server) applyOps(ops []crdt.Op) {
 	done := observe.Default().Work("sync_merge")
 	s.mu.Lock()
@@ -134,6 +135,7 @@ func (s *Server) handlePresence(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		now := s.now()
 		for id, e := range s.presence {
+			// a poster that never polls must not grow the map
 			if now.Sub(e.lastSeen) > presenceTTL {
 				delete(s.presence, id)
 			}

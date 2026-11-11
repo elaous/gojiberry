@@ -11,8 +11,10 @@ type Window struct {
 	Window js.Value
 }
 
+// package-level: GetWindow returns a fresh Window on every call
 var pendingTimers = map[int]js.Func{}
 
+// separate id space from timers: ids can be equal
 var pendingFrames = map[int]js.Func{}
 
 // SetTimeout runs fn once after delay milliseconds; returns its id.
@@ -136,6 +138,7 @@ func (w *Window) ClearAnimationFrame(id int) {
 	}
 }
 
+// no-op if id already fired
 func releasePendingTimer(id int) {
 	if cb, ok := pendingTimers[id]; ok {
 		delete(pendingTimers, id)

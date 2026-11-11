@@ -7,6 +7,7 @@ import (
 
 const maxVoices = 500
 
+// a licence address that is not https is dropped
 func parseVoices(data []byte) ([]Entry, error) {
 	var raw []struct {
 		ID      string `json:"id"`

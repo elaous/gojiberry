@@ -73,6 +73,7 @@ func (s *Saver) readCatalog(ctx context.Context, t Target) (*catalog, error) {
 	return c, err
 }
 
+// built catalog is stored only if nobody got there first
 func (s *Saver) readCatalogRev(ctx context.Context, t Target) (*catalog, string, error) {
 	for try := 0; try < maxUpdateTries; try++ {
 		stored, err := t.Adapter.Load(ctx, t.catalogKey())
@@ -139,6 +140,7 @@ func (s *Saver) writeCatalogIf(ctx context.Context, t Target, c *catalog, rev st
 
 const maxUpdateTries = 12
 
+// one update at a time within this process
 func (s *Saver) update(ctx context.Context, target string, f func(t Target, c *catalog, later *[]func()) error) error {
 	t, err := s.Target(target)
 	if err != nil {

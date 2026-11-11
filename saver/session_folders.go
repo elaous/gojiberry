@@ -152,6 +152,7 @@ func docFolderOf(f Folder) components.DocFolder {
 	return components.DocFolder{ID: f.ID, Name: f.Name, Parent: f.Parent, Confidential: f.Protection == ProtectionE2EE}
 }
 
+// caller holds the session lock
 func (s *Session) docFolder(f Folder) components.DocFolder {
 	d := docFolderOf(f)
 	_, ok := s.revealedFolders[f.ID]

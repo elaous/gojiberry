@@ -26,6 +26,7 @@ func webLock(ctx context.Context, name string) (func(), error) {
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
 		close(acquired)
+		// held until the returned promise settles
 		var executor js.Func
 		executor = js.FuncOf(func(_ js.Value, p []js.Value) any {
 			resolve := p[0]

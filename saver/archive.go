@@ -31,6 +31,7 @@ func (s *Saver) ArchiveReport(ctx context.Context, target, folder string) (data 
 	}
 	var items []item
 	var t Target
+	// lock released after the read: others are not blocked
 	err = s.view(ctx, target, func(tg Target, cat *catalog) error {
 		t = tg
 		if folder != "" {

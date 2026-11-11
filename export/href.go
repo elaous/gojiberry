@@ -2,6 +2,7 @@ package export
 
 import "strings"
 
+// allow-list: never javascript: or data: links
 func safeHref(u string) bool {
 	u = strings.TrimSpace(u)
 	i := strings.IndexAny(u, ":/?#")

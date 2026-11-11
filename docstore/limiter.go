@@ -301,6 +301,7 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 	return false, time.Second
 }
 
+// a record that is not valid is replaced as if new
 func (l *StoreLimiter) read(ctx context.Context, a Adapter, id string) (limitState, string, error) {
 	doc, err := a.Load(ctx, id)
 	if errors.Is(err, ErrNotFound) {

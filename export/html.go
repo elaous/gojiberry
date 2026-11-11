@@ -134,6 +134,7 @@ func renderHTMLDocument(snap Snapshot, xhtml bool, theme string) string {
 			case Quote:
 				body.WriteString("<blockquote><p>" + htmlInline(b.Segments, br) + "</p></blockquote>\n")
 			case Code:
+				// HTML-escaped only: a stray "<" must not become a tag
 				class := ""
 				if lang := cleanCodeLang(b.CodeLang); lang != "" {
 					class = ` class="language-` + lang + `"`

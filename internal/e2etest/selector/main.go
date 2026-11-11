@@ -152,6 +152,7 @@ func centre(sel string) (res js.Value, err error) {
 	return array([]js.Value{js.ValueOf(x), js.ValueOf(y)}), nil
 }
 
+// a Go function cannot throw into the page: errors are returned
 func wrap(f func(args []js.Value) (js.Value, error)) js.Func {
 	return js.FuncOf(func(_ js.Value, args []js.Value) (ret any) {
 		defer func() {

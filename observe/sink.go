@@ -18,6 +18,7 @@ type Sink interface {
 	Close(ctx context.Context) error
 }
 
+// must hold no secret: never the API key
 type Describer interface {
 	Describe() any
 }
@@ -102,6 +103,7 @@ func (f *fanout) Describe() any {
 	return out
 }
 
+// a panic becomes an error naming the sink and nothing else
 func safely(name string, f func() error) (err error) {
 	defer func() {
 		if recover() != nil {
@@ -182,6 +184,7 @@ type Series struct {
 	Last   float64           `json:"last"`
 }
 
+// never a span
 type SpanStat struct {
 	Name         SpanName `json:"name"`
 	Count        int64    `json:"count"`

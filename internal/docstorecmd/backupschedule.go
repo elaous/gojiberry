@@ -16,12 +16,14 @@ import (
 
 const defaultKeep = 7
 
+// matches only files backup writes: rotation never touches others
 var backupName = regexp.MustCompile(`^gojiberry-backup-\d{8}T\d{6}Z\.tar$`)
 
 func scheduledName(t time.Time) string {
 	return "gojiberry-backup-" + t.UTC().Format("20060102T150405Z") + ".tar"
 }
 
+// only after a new backup was written: a failed run keeps old ones
 func rotateBackups(dir string, keep int) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

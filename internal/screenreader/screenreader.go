@@ -150,6 +150,7 @@ var namesFromContent = map[string]bool{
 	"rowheader": true, "gridcell": true, "caption": true, "legend": true, "img": true, "image": true,
 }
 
+// structural roles are never a stop by themselves
 var structural = map[string]bool{
 	"": true, "generic": true, "none": true, "presentation": true, "paragraph": true, "listitem": true, "row": true, "rowgroup": true,
 	"InlineTextBox": true, "LineBreak": true, "RootWebArea": true, "WebArea": true, "Section": true, "LabelText": true, "caption": true, "legend": true, "DescriptionList": true,

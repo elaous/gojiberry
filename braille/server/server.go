@@ -43,6 +43,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// never needs or exposes any API key
 type Server struct {
 	cfg Config
 
