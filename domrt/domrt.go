@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package domrt is the client-side runtime for xango trees.
 package domrt
 
 import (
@@ -28,7 +27,6 @@ func Mount(container js.Value, initial xango.Node) *Root {
 	return &Root{container: container, tree: rn}
 }
 
-// Update diffs next against the mounted tree and patches the DOM.
 func (r *Root) Update(next xango.Node) {
 	r.tree = patch(r.container, r.tree, next)
 }
@@ -52,7 +50,6 @@ func (r *Root) Listener(event string) js.Func {
 	return js.Func{}
 }
 
-// renderedNode pairs a rendered xango.Node with its DOM nodes.
 type renderedNode struct {
 	kind      xango.Kind
 	tag       string
@@ -63,8 +60,7 @@ type renderedNode struct {
 	attrs     []xango.Attr
 	text      string
 	listeners map[string]*eventBinding
-	// opener is the element that had focus before a modal opened.
-	opener js.Value
+	opener    js.Value
 }
 
 type eventBinding struct {
@@ -72,7 +68,6 @@ type eventBinding struct {
 	handler xango.EventHandler
 }
 
-// ownedNodes returns every top-level DOM node this node owns.
 func (rn *renderedNode) ownedNodes() []js.Value {
 	switch rn.kind {
 	case xango.KindFragment:
@@ -110,7 +105,6 @@ func createInner(n xango.Node) *renderedNode {
 	case xango.KindRaw:
 		return &renderedNode{kind: xango.KindRaw, rawNodes: parseHTMLFragment(n.Text), text: n.Text}
 	case xango.KindHost:
-		// Host nodes belong to another renderer; leave a hole.
 		return &renderedNode{kind: xango.KindFragment}
 	case xango.KindFragment:
 		rn := &renderedNode{kind: xango.KindFragment}
@@ -140,7 +134,6 @@ func createInner(n xango.Node) *renderedNode {
 	}
 }
 
-// parseHTMLFragment parses an HTML string into DOM nodes.
 func parseHTMLFragment(html string) []js.Value {
 	tmpl := document().Call("createElement", "template")
 	tmpl.Set("innerHTML", html)
@@ -154,7 +147,6 @@ func parseHTMLFragment(html string) []js.Value {
 	return nodes
 }
 
-// propAttrs are set as DOM properties, not HTML attributes.
 var propAttrs = map[string]bool{"value": true, "checked": true, "disabled": true, "selected": true}
 
 func truthyAttr(s string) bool {
@@ -176,7 +168,6 @@ func applyAttr(rn *renderedNode, a xango.Attr) {
 	}
 	rn.dom.Call("setAttribute", a.Name, a.Value)
 	if a.Name == "autofocus" {
-		// Focus the element once it is in the page.
 		el := rn.dom
 		var focus js.Func
 		focus = js.FuncOf(func(js.Value, []js.Value) any {
@@ -197,7 +188,6 @@ func hasAttr(attrs []xango.Attr, name string) bool {
 	return false
 }
 
-// takeFocus notes what has focus before a new modal is shown.
 func takeFocus(rn *renderedNode) {
 	if active := document().Get("activeElement"); !active.IsNull() && !active.IsUndefined() && !active.Equal(document().Get("body")) {
 		rn.opener = active
@@ -214,7 +204,6 @@ func takeFocus(rn *renderedNode) {
 	js.Global().Call("requestAnimationFrame", focus)
 }
 
-// giveBackFocus returns focus after a node is removed.
 func giveBackFocus(rn *renderedNode) {
 	var openers []js.Value
 	var collect func(*renderedNode)
@@ -267,7 +256,6 @@ func removeAttr(rn *renderedNode, a xango.Attr) {
 	rn.dom.Call("removeAttribute", a.Name)
 }
 
-// setListener registers an event listener once per element.
 func setListener(rn *renderedNode, name string, handler xango.EventHandler) {
 	if b, ok := rn.listeners[name]; ok {
 		b.handler = handler
@@ -325,7 +313,6 @@ func domEventToXangoEvent(ev js.Value) xango.Event {
 	})
 }
 
-// moveFocus implements xango.Event.MoveFocus over the DOM event.
 func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	target := ev.Get("target")
 	if target.IsUndefined() || target.IsNull() || target.Get("closest").IsUndefined() {
@@ -335,7 +322,6 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	if rootEl.IsNull() || rootEl.IsUndefined() {
 		return false
 	}
-	// ":scope" names the widget element itself.
 	var all []js.Value
 	if strings.TrimSpace(items) == ":scope" {
 		all = append(all, rootEl)
@@ -394,7 +380,6 @@ func moveFocus(ev js.Value, root, items string, step xango.FocusStep) bool {
 	return true
 }
 
-// nearestInDirection returns the candidate nearest in a direction.
 func nearestInDirection(cands []js.Value, cur int, down bool) int {
 	rect := func(el js.Value) (top, bottom, cx float64) {
 		r := el.Call("getBoundingClientRect")
@@ -427,7 +412,6 @@ func nearestInDirection(cands []js.Value, cur int, down bool) int {
 	return best
 }
 
-// patch diffs newNode against the tree rooted at old.
 func patch(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	if old == nil {
 		rn := create(next)
@@ -464,7 +448,6 @@ func patch(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	return old
 }
 
-// replace swaps old's DOM nodes for next's.
 func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode {
 	oldNodes := old.ownedNodes()
 	rn := create(next)
@@ -485,7 +468,6 @@ func replace(parent js.Value, old *renderedNode, next xango.Node) *renderedNode 
 	return rn
 }
 
-// anchorAfter returns the DOM node after rn's owned nodes.
 func anchorAfter(parent js.Value, rn *renderedNode) js.Value {
 	nodes := rn.ownedNodes()
 	if len(nodes) == 0 {
@@ -509,7 +491,6 @@ func patchAttrs(old *renderedNode, next []xango.Attr) {
 	}
 }
 
-// patchChildren reconciles old children against the new list.
 func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, next []xango.Node) []*renderedNode {
 	oldByKey := make(map[string]*renderedNode)
 	oldKeys := make([]string, len(old))
@@ -542,7 +523,6 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 		}
 	}
 
-	// Remove anything from old that wasn't reused.
 	for _, o := range old {
 		if !used[o] {
 			for _, dn := range o.ownedNodes() {
@@ -552,7 +532,6 @@ func patchChildren(parent js.Value, endAnchor js.Value, old []*renderedNode, nex
 		}
 	}
 
-	// Keep DOM order equal to the result order.
 	for i := len(result) - 1; i >= 0; i-- {
 		var ref js.Value
 		if i+1 < len(result) {
@@ -584,10 +563,8 @@ func reverse(vs []js.Value) []js.Value {
 	return out
 }
 
-// key is the xango.Node key, kept for keyed diffing.
 func (rn *renderedNode) key() string { return rn.k }
 
-// inPlace reports whether dn is already in place.
 func inPlace(parent, dn, ref js.Value) bool {
 	if !dn.Get("parentNode").Equal(parent) {
 		return false

@@ -9,7 +9,6 @@ import (
 
 // Await blocks the calling goroutine until the JS Promise settles.
 func Await(p js.Value) (js.Value, error) {
-	// A non-promise value is its own result.
 	if (p.Type() != js.TypeObject && p.Type() != js.TypeFunction) || p.Get("then").Type() != js.TypeFunction {
 		return p, nil
 	}
@@ -59,7 +58,6 @@ func ToPromise(work func() (js.Value, error)) js.Value {
 	return js.Global().Get("Promise").New(executor)
 }
 
-// rejectionMessage describes a rejection's reason.
 func rejectionMessage(args []js.Value) (msg string) {
 	msg = "promise rejected"
 	if len(args) == 0 || args[0].IsUndefined() || args[0].IsNull() {

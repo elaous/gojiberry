@@ -1,6 +1,5 @@
 package domrt // import "github.com/elaous/gojiberry/domrt"
 
-Package domrt is the client-side runtime for xango trees.
 
 FUNCTIONS
 
@@ -31,5 +30,4 @@ func (r *Root) Listener(event string) js.Func
     Listener returns the js.Func trampoline for an event.
 
 func (r *Root) Update(next xango.Node)
-    Update diffs next against the mounted tree and patches the DOM.
 
