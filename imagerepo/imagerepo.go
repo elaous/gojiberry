@@ -1,7 +1,3 @@
-// Package imagerepo is the register of image repositories: places a person can search for public-domain and Creative
-// Commons pictures, managed like the font repositories (fonts.Repository). Nothing is searched until a repository
-// has been enabled by name, every result carries its author, licence and source, and a picture is fetched only
-// when the person chooses one, with a size limit and a media-type check.
 package imagerepo
 
 import (
@@ -15,7 +11,7 @@ import (
 	"sync"
 )
 
-// Result is one picture a repository found. Nothing about it is fetched yet but the thumbnail address.
+// Result is one picture a repository found.
 type Result struct {
 	Repo       string // the repository's name
 	ID         string
@@ -25,7 +21,7 @@ type Result struct {
 	LicenseURL string
 	Source     string // the page the picture lives on
 	Thumb      string // address of a small preview
-	URL        string // address to fetch the picture itself from (must allow cross-origin reads)
+	URL        string
 	W, H       int
 }
 
@@ -36,13 +32,11 @@ type Repository interface {
 	Search(ctx context.Context, query string, page int) ([]Result, error)
 }
 
-// Accepted media types: the ones the editor can show and the exports carry.
 var accepted = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/avif": true, "image/svg+xml": true}
 
 // DefaultMaxBytes is the largest picture Fetch reads.
 const DefaultMaxBytes = 8 << 20
 
-// ErrNotEnabled is returned when a repository has not been enabled by the person.
 var ErrNotEnabled = errors.New("imagerepo: repository is not enabled")
 
 // ErrTooLarge and ErrBadType are the limits Fetch enforces.
@@ -51,7 +45,6 @@ var (
 	ErrBadType  = errors.New("imagerepo: not a png, jpeg, gif, webp, avif or svg picture")
 )
 
-// Library holds the registered repositories and which of them the person has enabled.
 type Library struct {
 	// Client is used for every fetch; nil means http.DefaultClient.
 	Client *http.Client
@@ -72,12 +65,11 @@ type cached struct {
 
 const cacheMax = 16
 
-// New returns an empty library: no repository is registered or enabled.
 func New() *Library {
 	return &Library{repos: map[string]Repository{}, enabled: map[string]bool{}, cache: map[string]cached{}}
 }
 
-// Register adds a repository (replacing one of the same name). It stays disabled.
+// Register adds a repository (replacing one of the same name).
 func (l *Library) Register(r Repository) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -96,7 +88,6 @@ func (l *Library) Names() []string {
 	return out
 }
 
-// Enable turns a repository on or off; it reports whether the name is registered.
 func (l *Library) Enable(name string, on bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -114,7 +105,7 @@ func (l *Library) Enabled(name string) bool {
 	return l.enabled[name]
 }
 
-// Search asks one enabled repository. A repository that is off is never contacted.
+// Search asks one enabled repository.
 func (l *Library) Search(ctx context.Context, name, query string, page int) ([]Result, error) {
 	l.mu.Lock()
 	r, ok := l.repos[name]
@@ -132,8 +123,6 @@ func (l *Library) Search(ctx context.Context, name, query string, page int) ([]R
 	return r.Search(ctx, query, page)
 }
 
-// Fetch reads one picture, at most MaxBytes, of a type the editor carries. Repeated fetches of the same
-// address come from a small cache.
 func (l *Library) Fetch(ctx context.Context, res Result) (data []byte, mime string, err error) {
 	if !l.Enabled(res.Repo) {
 		return nil, "", ErrNotEnabled
@@ -189,7 +178,6 @@ func (l *Library) Fetch(ctx context.Context, res Result) (data []byte, mime stri
 	return data, mime, nil
 }
 
-// Credit is the line written under a picture and kept with it: "Title by Creator, licence, via Repo".
 func (r Result) Credit() string {
 	var b strings.Builder
 	title := strings.TrimSpace(r.Title)
@@ -209,7 +197,6 @@ func (r Result) Credit() string {
 	return b.String()
 }
 
-// getJSON is the one place a repository reads its API.
 func getJSON(ctx context.Context, c *http.Client, u string, into any, decode func(io.Reader, any) error) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
