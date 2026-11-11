@@ -25,8 +25,6 @@ func ops(t *testing.T, n, size int) []crdt.Op {
 	return d.Drain()
 }
 
-// run sends batch to a hub whose request limit is limit and reports whether
-// everything was accepted, and what the client heard on the way.
 func run(t *testing.T, limit int64, batch []crdt.Op) (pending int, rejected bool) {
 	t.Helper()
 	h := hub.New(hub.Config{MaxBody: limit, SaveDelay: 10 * time.Millisecond, KeepAlive: time.Second})
@@ -45,8 +43,6 @@ func run(t *testing.T, limit int64, batch []crdt.Op) (pending int, rejected bool
 		case <-time.After(5 * time.Millisecond):
 		}
 		if conn.Pending() == 0 {
-			// A refused operation leaves the queue before its Rejected event is handed over: look for
-			// the event a moment longer before deciding that everything was accepted.
 			settle := time.After(200 * time.Millisecond)
 			for {
 				select {
@@ -63,16 +59,12 @@ func run(t *testing.T, limit int64, batch []crdt.Op) (pending int, rejected bool
 	return conn.Pending(), false
 }
 
-// Many operations that together exceed the hub's limit are sent as several
-// frames instead of one the hub would refuse (and then be sent again forever).
 func TestLargeBatchIsSplit(t *testing.T) {
 	if pending, rejected := run(t, 300<<10, ops(t, 12, 100<<10)); pending != 0 || rejected {
 		t.Fatalf("pending %d, rejected %v", pending, rejected)
 	}
 }
 
-// One operation the hub will not take is reported as refused, not retried
-// without end.
 func TestOversizedOperationIsRefusedNotRetried(t *testing.T) {
 	pending, rejected := run(t, 64<<10, ops(t, 1, 200<<10))
 	if !rejected {
@@ -80,7 +72,7 @@ func TestOversizedOperationIsRefusedNotRetried(t *testing.T) {
 	}
 }
 
-// dial connects replica to a doc on srv and collects what it hears until the test ends.
+// dial connects a replica to a document on srv.
 type listener struct {
 	conn   *ws.Conn
 	events chan client.Event
@@ -130,8 +122,6 @@ func newHub(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// A replica says hello, goes online, and what one sends the other receives; a cursor update reaches
-// the other too, a burst of them merged into the last.
 func TestTwoReplicasExchangeOpsAndPresence(t *testing.T) {
 	srv := newHub(t)
 	a := dialDoc(t, srv, "ra", client.Options{PresenceInterval: 20 * time.Millisecond})
@@ -177,8 +167,6 @@ func TestCloseIsFinalAndRepeatable(t *testing.T) {
 	a.conn.SetPresence(wire.Presence{Name: "late"})
 }
 
-// A bad address is an error told to OnError, and the connection goes on trying, backing off, rather than
-// spinning or giving up.
 func TestBadAddressIsReportedAndRetried(t *testing.T) {
 	var mu sync.Mutex
 	var errs []string
@@ -209,7 +197,6 @@ func TestBadAddressIsReportedAndRetried(t *testing.T) {
 	}
 }
 
-// A server that is not there is an error each try, and the replica comes online once it is.
 func TestConnectsWhenTheServerComesUp(t *testing.T) {
 	h := hub.New(hub.Config{SaveDelay: 10 * time.Millisecond, KeepAlive: time.Second})
 	defer func() { _ = h.Close() }()
@@ -261,7 +248,6 @@ func (q *memQueue) Load() []crdt.Op  { q.mu.Lock(); defer q.mu.Unlock(); return 
 func (q *memQueue) Save(o []crdt.Op) { q.mu.Lock(); q.ops = o; q.mu.Unlock() }
 func (q *memQueue) len() int         { q.mu.Lock(); defer q.mu.Unlock(); return len(q.ops) }
 
-// Ops sent with no server are kept in the Queue; a later connection (a reloaded page) delivers them.
 func TestQueueSurvivesARestart(t *testing.T) {
 	q := &memQueue{}
 	dead := ws.Dial(client.Options{BaseURL: "http://127.0.0.1:1", Doc: "d", Replica: "r1", Retry: 5 * time.Millisecond, MaxRetry: 20 * time.Millisecond, Queue: q})

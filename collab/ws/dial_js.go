@@ -15,9 +15,7 @@ import (
 // dialOptions: a browser WebSocket takes no headers.
 func dialOptions(client.Options) *websocket.DialOptions { return nil }
 
-// addCredentials puts the tokens in the query, the only place a browser
-// socket can carry them: the sign-in token (Authorization: Bearer ...) as
-// access_token and a guard token (X-Gojiberry-Token) as guard_token.
+// addCredentials puts the tokens in the query string.
 func addCredentials(q url.Values, h http.Header) {
 	if tok, ok := strings.CutPrefix(h.Get("Authorization"), "Bearer "); ok && tok != "" {
 		q.Set("access_token", tok)

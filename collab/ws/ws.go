@@ -1,18 +1,4 @@
-// Package ws is a collab transport over one WebSocket (collab.Transport):
-// what HTTPEndpoints does with an event stream and POSTs, here with a single
-// connection to the hub's /docs/{id}/ws endpoint. Use it where a long-lived
-// socket is better than a stream plus requests -- lower latency, one
-// connection instead of two, cheaper cursor traffic -- and your proxies allow
-// WebSockets.
-//
-//	collab.ConnectWith(ws.WebSockets(), replica, flow, client.Options{BaseURL: "https://host", Doc: "d1"})
-//
-// BaseURL must be absolute (http or https; the socket uses ws or wss). A
-// browser cannot set headers on a WebSocket, so under js/wasm the sign-in
-// token (Authorization: Bearer ...) is sent as ?access_token= and a guard
-// token (X-Gojiberry-Token) as ?guard_token=; other platforms send headers.
-// The connection reconnects with backoff, sends what waited while offline, and
-// reports the same events and statuses as the HTTP transport.
+// Package ws is a collab transport over one WebSocket.
 package ws
 
 import (
@@ -37,10 +23,7 @@ func WebSockets() link.Transport {
 	return link.TransportFunc(func(opts client.Options) link.Conn { return Dial(opts) })
 }
 
-// maxBatch is how many operations one frame carries, and maxFrame (bytes of
-// encoded operations) how much: a hub refuses a frame over its MaxBody, which
-// would otherwise close the socket and have the same batch sent again forever.
-// An operation that alone is over maxOp is not sent at all.
+// maxBatch is how many operations one frame carries.
 const (
 	maxBatch = 200
 	maxFrame = 256 << 10
@@ -107,14 +90,14 @@ func (c *Conn) Status() client.Status {
 	return c.status
 }
 
-// persistLocked saves the waiting ops to the Queue option; c.mu is held.
+// persistLocked saves waiting ops to the Queue option.
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
 	}
 }
 
-// takeOffline returns how many ops were made while the connection was not up, and starts counting again.
+// takeOffline returns how many ops were made while offline.
 func (c *Conn) takeOffline() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -130,7 +113,7 @@ func (c *Conn) Pending() int {
 	return len(c.pending)
 }
 
-// Send implements collab.Conn: ops are kept until the server accepts them.
+// Send implements collab.Conn.
 func (c *Conn) Send(ops []crdt.Op) {
 	if len(ops) == 0 {
 		return
@@ -145,8 +128,7 @@ func (c *Conn) Send(ops []crdt.Op) {
 	signal(c.kick)
 }
 
-// SetPresence implements collab.Conn: not queued, merged and throttled (see
-// client.Options.PresenceInterval); the latest always goes out.
+// SetPresence implements collab.Conn; presence is merged, not queued.
 func (c *Conn) SetPresence(p wire.Presence) {
 	p.Replica = c.opts.Replica
 	c.mu.Lock()
@@ -179,8 +161,7 @@ func signal(ch chan struct{}) {
 	}
 }
 
-// emit queues an event; pump hands them over in order without ever blocking
-// the connection on a slow consumer.
+// emit queues an event; pump hands them over in order.
 func (c *Conn) emit(e client.Event) {
 	c.mu.Lock()
 	c.queue = append(c.queue, e)
@@ -254,7 +235,7 @@ func (c *Conn) wsURL() (string, error) {
 	return u.String(), nil
 }
 
-// run connects, serves until the socket ends, and reconnects with backoff.
+// run connects, serves until the socket ends, and reconnects.
 func (c *Conn) run() {
 	delay := c.opts.Retry
 	for c.ctx.Err() == nil {
@@ -358,7 +339,7 @@ func (c *Conn) session() (retErr error) {
 			c.persistLocked()
 			c.mu.Unlock()
 			c.emit(client.Event{Kind: client.Rejected, Ops: batch, Err: errors.New("collab: an operation is too large to send")})
-			return nil // the session repairs itself; what is left goes after
+			return nil
 		}
 		data, err := json.Marshal(batch)
 		if err != nil {
@@ -375,9 +356,6 @@ func (c *Conn) session() (retErr error) {
 		c.mu.Unlock()
 		inflight = nil
 	}
-	// When a write fails because the hub shut the socket over a batch that is too
-	// big, the close code is in the reader's error: look for it, and give the
-	// batch up (it would be sent again, and refused again, for ever).
 	defer func() {
 		if len(inflight) == 0 || retErr == nil {
 			return
@@ -465,7 +443,7 @@ func (c *Conn) session() (retErr error) {
 			wait := c.opts.PresenceInterval - time.Since(c.lastPres)
 			c.mu.Unlock()
 			if c.opts.PresenceInterval > 0 && wait > 0 {
-				// Too soon: merge into one update when the interval ends.
+				// Too soon: merge into one update.
 				c.mu.Lock()
 				if c.presTimer == nil {
 					c.presTimer = time.AfterFunc(wait, func() {
@@ -483,7 +461,6 @@ func (c *Conn) session() (retErr error) {
 			}
 		case err := <-readErr:
 			if websocket.CloseStatus(err) == websocket.StatusMessageTooBig && len(inflight) > 0 {
-				// The hub will not take this batch however often it is sent.
 				refused := inflight
 				settle()
 				c.emit(client.Event{Kind: client.Rejected, Ops: refused, Err: errors.New("collab: the hub refused a batch as too large")})
