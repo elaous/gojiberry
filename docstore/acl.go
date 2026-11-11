@@ -259,6 +259,7 @@ func UserCatalogPrefix(userID string) string {
 	return "catalog:u/" + hex.EncodeToString(sum[:16]) + "/"
 }
 
+// RequireACL: own catalog only; shared catalog:index is closed
 func (s *Server) checkCatalog(r *http.Request, id string) (allowed bool, status int) {
 	if !s.requireACL {
 		return true, 0

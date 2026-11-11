@@ -110,7 +110,6 @@ func El(tag string, attrs []Attr, children ...Node) Node
     El constructs an element node.
 
 func Frag(children ...Node) Node
-    Frag groups children with no wrapper element.
 
 func Host(tag string, props any, children ...Node) Node
 

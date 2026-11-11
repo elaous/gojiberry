@@ -78,6 +78,7 @@ func parseNameTable(table []byte) (map[uint16]string, error) {
 		return nil, fmt.Errorf("fontserver: 'name' table too short")
 	}
 	count := binary.BigEndian.Uint16(table[2:4])
+	// format 1 adds langtag records; stringOffset already skips them
 	stringOffset := binary.BigEndian.Uint16(table[4:6])
 	const recSize = 12
 	recsEnd := 6 + int(count)*recSize

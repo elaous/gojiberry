@@ -122,6 +122,7 @@ func TestTallHeaderAndFooterShrinkTheContentArea(t *testing.T) {
 		PageNumber: &PageNumberConfig{Show: true, Start: 1, TextStyle: TextStyle{FontSize: 12, LineHeight: 20}},
 	})
 	_, y, _, h := ps.ContentRect(0)
+	// top 5+60+6=71; bottom 4+20+6=30
 	if y != 24+71 || h != 200-71-30 {
 		t.Fatalf("content y=%g h=%g", y, h)
 	}

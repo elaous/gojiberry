@@ -168,6 +168,7 @@ func rewriteImportBlock(filename, baseDir string, runes []rune, pos int, opts Op
 				extraGoImports[gi] = true
 			}
 		} else {
+			// no newline: next iteration copies original whitespace
 			existingPaths[path] = true
 			blockOut.WriteString(string(runes[specStart:i]))
 		}

@@ -52,6 +52,7 @@ func ParseWatchState(raw string) (WatchState, error) {
 	if err := json.Unmarshal([]byte(raw), &st); err != nil {
 		return WatchState{}, fmt.Errorf("%w: %v", ErrBadWatchState, err)
 	}
+	// json null decodes without error: reject it
 	if strings.TrimSpace(raw) == "null" {
 		return WatchState{}, fmt.Errorf("%w: null", ErrBadWatchState)
 	}
@@ -265,6 +266,7 @@ func (c *Client) WatchLog(ctx context.Context, email string, st *WatchState, opt
 	}
 	keys, entries, filtered := read.keys, read.entries, read.filtered
 	rep.Filtered = filtered
+	// an enrolled address gets the whole log: filtered is withholding
 	if filtered && st.Enrolled {
 		return rep, ErrFilteredEnrolled
 	}

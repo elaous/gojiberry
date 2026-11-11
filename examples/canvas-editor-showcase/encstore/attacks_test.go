@@ -481,6 +481,7 @@ func TestRoomIsCountedInStorageUnitsWithAMargin(t *testing.T) {
 		bytesUsed += int64(m.Size)
 	}
 	_ = bytesUsed
+	// capacity in storage units plus age overhead, not file bytes
 	r.st.Capacity = units + 18000
 	rk, _ := recovery(t)
 	err := r.st.Enable(ctx, Options{}, passkey(t, r), rk)

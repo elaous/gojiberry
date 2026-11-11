@@ -247,6 +247,7 @@ func main() {
 		state.Items, state.Source = nil, ""
 		renderCanvas()
 		state.Items = docfile.ToItems(d.Content)
+		// sets are filled in place: the page holds these pointers
 		if len(d.Styles) > 0 {
 			state.Styles = docfile.ToStyles(d.Styles)
 		} else {
@@ -292,6 +293,7 @@ func main() {
 		u.title = ""
 		openDoc(docfile.Document{})
 		u.find, u.spell.spans, u.spell.words, u.spell.text = findState{}, nil, nil, ""
+		// lock clears translated text and drafts too
 		u.lang.translated, u.lang.transText, u.lang.issues, u.lang.text = "", "", nil, ""
 		u.lang.selFrom, u.lang.selTo, u.lang.checked, u.lang.err = 0, 0, false, ""
 		u.drafts = map[string]string{}

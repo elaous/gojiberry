@@ -2,6 +2,7 @@ package components
 
 import "fmt"
 
+// identity until an app sets it, before first render
 var Translate = func(id, def string) string { return def }
 
 func tr(id, def string) string { return Translate(id, def) }

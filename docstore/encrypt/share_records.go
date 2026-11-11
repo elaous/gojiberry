@@ -26,6 +26,7 @@ type Shared struct {
 type sharedRecord struct {
 	V   int    `json:"v"`
 	Doc string `json:"doc"`
+	// grows each change: readers detect replayed records
 	Seq uint64 `json:"seq"`
 	// Pending means the document's files may not be consistent yet.
 	Pending bool `json:"pending,omitempty"`
@@ -34,7 +35,8 @@ type sharedRecord struct {
 	// Signed says every stored file of the document was signed.
 	Signed bool `json:"signed,omitempty"`
 	// PendingSince is when Pending was set, in Unix seconds.
-	PendingSince      int64         `json:"pendingSince,omitempty"`
+	PendingSince int64 `json:"pendingSince,omitempty"`
+	// older builds drop these fields on write
 	UnsignedLate      []string      `json:"unsignedLate,omitempty"`
 	UnsignedLateCount int           `json:"unsignedLateCount,omitempty"`
 	UnsignedLateSince int64         `json:"unsignedLateSince,omitempty"`

@@ -269,6 +269,7 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	if !s.readBudget(w, r, u, readLookup) {
 		return
 	}
+	// asked after the budgets; a refusal leaks nothing
 	if !s.policy().CanLookup(u, email) {
 		http.Error(w, "this directory does not look up that address for you", http.StatusForbidden)
 		return

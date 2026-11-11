@@ -166,6 +166,7 @@ func (u *ui) watchMirrorSelection(flow func() *canvas.TextFlow, scroller func() 
 			return nil
 		}
 		u.mirrorAt = fmt.Sprint(anchor, caret)
+		// mirror already has this selection: do not re-apply it
 		fl.GotoOffset(caret)
 		if anchor != caret {
 			fl.SetSelection(anchor, caret)

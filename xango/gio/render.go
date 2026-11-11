@@ -43,6 +43,7 @@ type Renderer struct {
 
 	checkedRequests map[string]bool
 
+	// key is "<id>\x00<event>"
 	handlers map[string]xango.EventHandler
 
 	Styles map[string]ClassStyle
@@ -336,6 +337,7 @@ func (r *Renderer) layoutDivContent(gtx layout.Context, th *material.Theme, n xa
 // mirrors material.Button's hardcoded Inset
 var buttonInset = layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}
 
+// aria-label wins: title alone is unreliably announced
 func accessibleNameOf(n xango.Node) string {
 	var title string
 	for _, a := range n.Attrs {

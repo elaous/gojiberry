@@ -11,6 +11,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
+// keys: comment:<id>, reply:<id>:<key>, note:<id>, style:<name>
 const sideKind = crdt.LWWKindPrefix + ":side"
 
 type sideSync struct {
@@ -160,6 +161,7 @@ func (b *Bridge) pullSide() {
 	})
 	replies := map[string][]docfile.Reply{}
 	for _, pr := range pendingReplies {
+		// longest matching comment id wins: ids may contain a colon
 		best := ""
 		for _, c := range comments {
 			if strings.HasPrefix(pr.rest, c.ID+":") && len(c.ID) >= len(best) {

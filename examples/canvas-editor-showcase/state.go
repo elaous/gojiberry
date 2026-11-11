@@ -27,17 +27,18 @@ type State struct {
 	EvenHeader, EvenFooter         string
 	OutlineCollapsed               []int
 	Spread                         bool
-	Source                         string
-	Items                          []canvas.Item
-	Image                          canvas.ImageSource
-	Note                           string
-	Styles                         []canvas.StyleDef
-	Role                           canvas.Role
-	Comments                       *canvas.CommentSet
-	Author                         string
-	Footnotes                      *canvas.FootnoteSet
-	Live                           *collab.CollabProps
-	FindFeature                    canvas.FindFeature
+	// canvas owns the text after edits, until Source changes
+	Source      string
+	Items       []canvas.Item
+	Image       canvas.ImageSource
+	Note        string
+	Styles      []canvas.StyleDef
+	Role        canvas.Role
+	Comments    *canvas.CommentSet
+	Author      string
+	Footnotes   *canvas.FootnoteSet
+	Live        *collab.CollabProps
+	FindFeature canvas.FindFeature
 	// CompleteFeature is the command that opens the word suggestions.
 	CompleteFeature canvas.CompleteFeature
 	// Review is the suggestion-mode commands (turn it on, accept, reject).

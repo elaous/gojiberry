@@ -66,6 +66,8 @@ var Papers = []Paper{
     Papers are the paper sizes offered, A4 first.
 
 var Translate = func(id, def string) string { return def }
+    identity until an app sets it, before first render
+
 var TranslatePlural = func(id, one, other string, n int) string {
 	m := other
 	if n == 1 {

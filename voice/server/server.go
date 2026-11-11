@@ -14,6 +14,7 @@ import (
 )
 
 type Config struct {
+	// nil means open: any origin, no check
 	Guard guard.Guard
 	Addr  string // listen address, e.g. ":8084"
 

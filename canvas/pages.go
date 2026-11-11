@@ -26,6 +26,7 @@ const (
 	NumUpperAlpha                        // A, B, C
 )
 
+// Text: '\n' starts a new line
 type HeaderFooter struct {
 	Text   string
 	Style  TextStyle // zero value: DefaultTextStyle at 12px

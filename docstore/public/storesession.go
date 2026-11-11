@@ -93,6 +93,7 @@ func (r sessionRecord) session() Session {
 	return Session(r)
 }
 
+// same fields as Session: a new one breaks the build
 func recordOf(s Session) sessionRecord {
 	return sessionRecord(s)
 }

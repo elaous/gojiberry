@@ -322,6 +322,7 @@ func (a *FileSystemAdapter) SaveIf(ctx context.Context, id string, data []byte, 
 		return ErrConflict
 	case err != nil:
 		return err
+	// not allowed or unreadable: not a conflict
 	case Digest(back) != Digest(data):
 		return ErrConflict
 	}

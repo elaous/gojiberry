@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// 8px runes, 22px lines, padding 8, toolbar x 100..332
 func newFloat(text string) (*FloatingText, *fakePainter) {
 	p := &fakePainter{}
 	ft := NewFloatingText(text, 100, 100, 200, 100)

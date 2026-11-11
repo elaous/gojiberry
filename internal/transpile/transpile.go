@@ -40,6 +40,7 @@ type parser struct {
 	src  []rune // the whole original file, used for line/col in error messages
 }
 
+// after these, '<' can only open a tag
 var exprIntroducingWords = map[string]bool{
 	"return": true, "go": true, "defer": true, "range": true,
 	"case": true, "if": true, "for": true, "switch": true, "else": true,

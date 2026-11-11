@@ -50,7 +50,8 @@ type Config struct {
 	Guard   guard.Guard
 	MaxBody int64
 	// CookieOrigins lists the origins allowed to send cookies.
-	CookieOrigins      []string
+	CookieOrigins []string
+	// set only if the proxy sets X-Forwarded-Host itself
 	TrustForwardedHost bool
 	// MaxRooms limits how many documents the hub keeps in memory.
 	MaxRooms int

@@ -100,6 +100,7 @@ func Check(data []byte) ([]Finding, error) {
 	for l := range badLang {
 		add("Lang", fmt.Sprintf("a structure element has /Lang %q, which is not a valid language tag", l))
 	}
+	// /StructParent and /Rect identify the link: no object numbers
 	for pn := 1; pn <= r.NumPage(); pn++ {
 		annots := r.Page(pn).V.Key("Annots")
 		for i := 0; i < annots.Len() && i < maxNodes; i++ {

@@ -27,8 +27,6 @@ type SiteConfig struct {
 	Title string `json:"title"`
 }
 
-// Page renders the configured title as a heading.
-//
 // @title resource-imports-demo
 func Page(cfg SiteConfig) xango.Node {
 	return xango.Document{Title: "resource-imports-demo", Head: []xango.Node{}, Body: xango.El("h1", nil, xango.Child(cfg.Title))}.Render()

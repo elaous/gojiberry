@@ -2,6 +2,7 @@ package transpile
 
 import "strings"
 
+// deliberately excludes obsolete elements (center, font, marquee)
 var validHTMLTags = map[string]bool{
 	"a": true, "abbr": true, "address": true, "area": true, "article": true,
 	"aside": true, "audio": true, "b": true, "base": true, "bdi": true,

@@ -34,6 +34,7 @@ func main() {
 				return err
 			}
 			if d.IsDir() {
+				// "experimental" dirs need -experimental: else skipped
 				if d.Name() == "experimental" && !opts.Experimental {
 					return filepath.SkipDir
 				}

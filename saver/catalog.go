@@ -436,6 +436,7 @@ func (s *Saver) touch(ctx context.Context, t Target, cat *catalog, id string, e 
 	return write()
 }
 
+// prepare first: nothing changes until the returned write runs
 func (s *Saver) prepareTouch(ctx context.Context, t Target, cat *catalog, id string, e *catalogEntry, later *[]func(), f func(*docfile.Document)) (write func() error, err error) {
 	c, _ := s.codecOf(e.Key)
 	if c == nil {
