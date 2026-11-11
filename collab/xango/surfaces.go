@@ -12,9 +12,6 @@ import (
 	"github.com/elaous/gojiberry/collab"
 )
 
-// The surfaces are the parts of the canvas shared besides the text.
-
-// finder is what a surface needs of the wrapper.
 type finder interface {
 	Find(tag string, n int) any
 	Each(tag string, f func(key string, n int, v any))
@@ -26,7 +23,6 @@ func put(m map[string]string, id string, v any) {
 	}
 }
 
-// pageRecord splits "header:3" into 3.
 func pageRecord(id, kind string) (int, bool) {
 	rest, ok := strings.CutPrefix(id, kind+":")
 	if !ok {
@@ -36,7 +32,6 @@ func pageRecord(id, kind string) (int, bool) {
 	return n, err == nil && n >= 0
 }
 
-// furniture shares the pages' headers and footers.
 type furniture struct {
 	in     finder
 	footer bool
@@ -110,7 +105,6 @@ func (f furniture) Write(recs map[string]string) {
 	}
 }
 
-// objects shares floating text, tables and images.
 type objects struct{ in finder }
 
 type floatRec struct {
@@ -129,7 +123,6 @@ type tableRec struct {
 	Anchor *canvas.Anchor
 }
 
-// styledCell is a cell's style with its place.
 type styledCell struct {
 	Row, Col int
 	Style    canvas.CellStyle
@@ -145,7 +138,6 @@ var objectKinds = []struct{ kind, tag string }{
 	{"float", cxango.TagFloatingText}, {"table", cxango.TagTable}, {"image", cxango.TagImage},
 }
 
-// ref names an element by key, or #n by place.
 func ref(key string, n int) string {
 	if key != "" {
 		return key
@@ -162,7 +154,6 @@ func (objects) Owns(id string) bool {
 	return false
 }
 
-// find returns the element of the kind the record names.
 func (o objects) find(tag, want string) any {
 	var found any
 	o.in.Each(tag, func(key string, n int, v any) {
@@ -245,7 +236,6 @@ func (o objects) Write(recs map[string]string) {
 	}
 }
 
-// sharing lists what a Flow shares.
 func (f Flow) sharing(in finder) (collab.Sharing, bool) {
 	switch f {
 	case "", FlowText:

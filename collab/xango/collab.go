@@ -1,4 +1,3 @@
-// Package xango shares xango elements between people in real time.
 package xango
 
 import (
@@ -44,7 +43,7 @@ var ErrNoFlow = errors.New("collab: no canvas.TextFlow inside the Collab element
 
 // State is what the wrapper tells OnState.
 type State struct {
-	Replica string // this session's own id: the others' Peers are the ones that are not it
+	Replica string
 	Status  client.Status
 	Role    wire.Role
 	Peers   []wire.Presence // the other people, by name
@@ -79,7 +78,6 @@ type CollabProps struct {
 	Interval time.Duration
 	// OnState is called when the connection or state changes.
 	OnState func(State)
-	// Holding, when set, is asked every tick for the held object.
 	Holding func() string
 	// TypedFor, when set, gives how long typed text stays marked.
 	TypedFor func() time.Duration
@@ -96,7 +94,6 @@ func init() {
 	cxango.Register(TagCollab, func() cxango.Element { return &element{} })
 }
 
-// element is the live wrapper.
 type element struct {
 	kids  cxango.Children
 	props CollabProps
@@ -161,7 +158,6 @@ func (e *element) Update(c *cxango.Context, props any, children []xango.Node) (b
 	return changed, nil
 }
 
-// start connects, or reports why it cannot.
 func (e *element) start(p CollabProps, flow *canvas.TextFlow, id string) {
 	report := func(err error) {
 		if err == e.err {
@@ -192,7 +188,6 @@ func (e *element) start(p CollabProps, flow *canvas.TextFlow, id string) {
 	e.run = newRunner(e.ctx, sess, flow, &p)
 }
 
-// identity is what a running session was made from.
 func identity(p CollabProps, flow *canvas.TextFlow) string {
 	hdr := make([]string, 0, len(p.Client.Header))
 	for k, v := range p.Client.Header {
@@ -202,7 +197,6 @@ func identity(p CollabProps, flow *canvas.TextFlow) string {
 	return fmt.Sprint(p.Key, "|", p.Client.BaseURL, "|", p.Client.Doc, "|", p.Replica, "|", p.Flow, "|", hdr, "|", transportID(p.Transport), "|", flow != nil)
 }
 
-// transportID tells two transports apart.
 func transportID(t collab.Transport) string {
 	if t == nil {
 		return "http"

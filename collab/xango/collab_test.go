@@ -21,7 +21,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// painter draws nothing and measures 8px a rune.
 type painter struct{}
 
 func (painter) SetFillStyle(string)               {}
@@ -48,7 +47,6 @@ func (painter) Rotate(float64)                    {}
 func (painter) DrawImage(canvas.ImageSource, float64, float64, float64, float64, float64, float64, float64, float64) {
 }
 
-// user is one person's canvas with a Collab element.
 type user struct {
 	mu      sync.Mutex
 	root    *cxango.Root
@@ -124,7 +122,6 @@ func wait(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// hubHasDocument reports whether the hub holds the document.
 func hubHasDocument(srv *httptest.Server, role string) bool {
 	req, _ := http.NewRequest("GET", srv.URL+"/docs/d1/snapshot", nil)
 	req.Header.Set("X-Role", role)
@@ -211,7 +208,6 @@ func TestUnknownFlowIsReported(t *testing.T) {
 	}
 }
 
-// page is a canvas with furniture and objects.
 func page(text, header string) func(u *user) []xango.Node {
 	return func(u *user) []xango.Node {
 		tpl := func(pg xango.Node, _ int) xango.Node {
@@ -297,7 +293,6 @@ func TestNoFlowInsideIsReported(t *testing.T) {
 	}
 }
 
-// A viewer cannot change page furniture.
 func TestViewerDoesNotPushSurfaces(t *testing.T) {
 	srv := httptest.NewServer(hub.New(hub.Config{Roles: func(r *http.Request, _ string) hub.Role {
 		return hub.Role(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -335,7 +330,6 @@ func TestViewerDoesNotPushSurfaces(t *testing.T) {
 	}
 }
 
-// Objects with a Key are shared under that key.
 func TestKeyedObjectsDoNotShift(t *testing.T) {
 	srv := httptest.NewServer(hub.New(hub.Config{}).Handler())
 	t.Cleanup(srv.Close)

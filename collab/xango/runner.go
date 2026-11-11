@@ -12,7 +12,6 @@ import (
 	"github.com/elaous/gojiberry/collab/wire"
 )
 
-// runner polls a session on a timer and applies what arrives.
 type runner struct {
 	sess  *collab.Session
 	flow  *canvas.TextFlow
@@ -29,7 +28,6 @@ func newRunner(ctx *cxango.Context, sess *collab.Session, flow *canvas.TextFlow,
 	return r
 }
 
-// stop ends the runner without waiting for it.
 func (r *runner) stop() {
 	close(r.quit)
 	r.sess.Bridge.Detach()
@@ -76,7 +74,6 @@ func (r *runner) loop() {
 				redraw = true
 			}
 			s.RefreshPeers()
-			// Send this replica's cursor to the others.
 			if f := r.props.Load().TypedFor; f != nil {
 				s.TypedFor = f()
 			}
@@ -109,7 +106,6 @@ func (r *runner) loop() {
 	}
 }
 
-// state summarises the session for OnState.
 func (r *runner) state() State {
 	s := r.sess
 	st := State{Replica: s.Replica(), Status: s.Status, Role: s.Role, Pending: s.Pending(), Repairs: s.Repairs, Merged: s.Merged, Rejected: s.Rejected, Conflicts: s.Conflicts, ConflictWith: slices.Clone(s.ConflictWith), Err: s.Err}
@@ -137,5 +133,4 @@ func (r *runner) state() State {
 	return st
 }
 
-// holdRenew is how often a held object is announced.
 const holdRenew = 3 * time.Second
