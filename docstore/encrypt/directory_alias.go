@@ -16,7 +16,6 @@ const aliasPrefix = docstore.DirectoryLogPrefix + "alias/"
 
 const aliasDomain = "gojiberry-directory-alias|"
 
-// aliasRecord is the stored form of an alias list.
 type aliasRecord struct {
 	Current  string   `json:"current"`
 	Previous []string `json:"previous"`
@@ -28,7 +27,6 @@ func aliasMessage(current string, previous []string) []byte {
 	return []byte(aliasDomain + current + "|" + strings.Join(previous, ","))
 }
 
-// loadAliases reads the alias records of the store.
 func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 	if d.Signer == nil {
 		return nil
@@ -68,7 +66,6 @@ func (d *AdapterDirectory) loadAliases(ctx context.Context) error {
 	return nil
 }
 
-// recordAliases records, for every address, its log pseudonyms.
 func (d *AdapterDirectory) recordAliases(ctx context.Context) error {
 	if d.Signer == nil {
 		return nil

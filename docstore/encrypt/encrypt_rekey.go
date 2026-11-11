@@ -8,10 +8,8 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// rekeyAttempts is how many times a re-key re-reads.
 const rekeyAttempts = 5
 
-// planned is a stored file opened for re-keying.
 type planned struct {
 	plain     []byte
 	rawDigest string
@@ -19,7 +17,6 @@ type planned struct {
 	b         Binding
 }
 
-// plan opens one stored file for re-keying and checks it.
 func (a *Adapter) plan(ctx context.Context, id string, rk rekeyOpts) (planned, error) {
 	d, err := a.Inner.Load(ctx, id)
 	if err != nil {
@@ -48,7 +45,6 @@ func (a *Adapter) plan(ctx context.Context, id string, rk rekeyOpts) (planned, e
 	return planned{plain, docstore.Digest(d.Data), rs, b}, nil
 }
 
-// rekeyOne re-keys one file: read, open, seal to the recipients.
 func (a *Adapter) rekeyOne(ctx context.Context, id string, rk rekeyOpts) error {
 	for range rekeyAttempts {
 		p, err := a.plan(ctx, id, rk)
@@ -70,13 +66,11 @@ func (a *Adapter) rekeyOne(ctx context.Context, id string, rk rekeyOpts) error {
 	return docstore.ErrConflict
 }
 
-// rekeyGroup re-keys the files of one document.
 func (a *Adapter) rekeyGroup(ctx context.Context, ids []string) (int, error) {
 	done, _, err := a.rekeyGroupFiles(ctx, ids, rekeyOpts{})
 	return len(done), err
 }
 
-// rekeyGroupFiles is rekeyGroup that reports which files changed.
 func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string, rk rekeyOpts) (written, unreadable []string, err error) {
 	var errs []error
 	var present []string
@@ -110,7 +104,6 @@ func (a *Adapter) rekeyGroupFiles(ctx context.Context, ids []string, rk rekeyOpt
 	return done, nil, errors.Join(errs...)
 }
 
-// unsignedFiles lists the stored files of a document without signatures.
 func (a *Adapter) unsignedFiles(ctx context.Context, docID string) ([]string, error) {
 	ids, err := a.filesOf(ctx, docID)
 	if err != nil {
@@ -152,7 +145,6 @@ func (a *Adapter) exclusive(ctx context.Context) (func(), error) {
 	return func() { a.mu.Unlock(); unlock() }, nil
 }
 
-// groupOf names the group of files that are re-keyed together.
 func groupOf(id string) string {
 	if d := DocID(id); d != "" {
 		return d
@@ -160,7 +152,6 @@ func groupOf(id string) string {
 	return id
 }
 
-// filesOf lists the stored files, not skipped.
 func (a *Adapter) filesOf(ctx context.Context, g string) ([]string, error) {
 	metas, err := a.Inner.List(ctx)
 	if err != nil {
@@ -225,9 +216,7 @@ func (a *Adapter) RekeyDocumentReport(ctx context.Context, docID string) (done, 
 	return a.rekeyDocumentReport(ctx, docID, rekeyOpts{})
 }
 
-// rekeyOpts changes what a re-key accepts.
 type rekeyOpts struct {
-	// acceptUnsigned allows unsigned (v1, v2) files.
 	acceptUnsigned bool
 }
 

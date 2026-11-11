@@ -16,11 +16,8 @@ import (
 	"time"
 )
 
-// The floors keep the highest record sequence seen per document.
-
 // KV is a small string store for floor values.
 type KV interface {
-	// Get returns the value of key, and false when there is none.
 	Get(key string) (string, bool, error)
 	// Set stores value under key.
 	Set(key, value string) error
@@ -55,7 +52,6 @@ func noteFloorDegraded(err error) {
 	}
 }
 
-// floorGet is floor.Get with degraded-floor handling.
 func floorGet(ctx context.Context, f SeqFloor, id string) (uint64, error) {
 	n, err := f.Get(ctx, id)
 	if errors.Is(err, ErrFloorDegraded) {
@@ -65,7 +61,6 @@ func floorGet(ctx context.Context, f SeqFloor, id string) (uint64, error) {
 	return n, err
 }
 
-// floorRaise is floor.Raise with degraded-floor handling.
 func floorRaise(ctx context.Context, f SeqFloor, id string, seq uint64) error {
 	err := f.Raise(ctx, id, seq)
 	if errors.Is(err, ErrFloorDegraded) {
@@ -109,7 +104,6 @@ func floorRaiseMany(ctx context.Context, f SeqFloor, seqs map[string]uint64) err
 
 // StorageSeqFloor is a SeqFloor over a KV store.
 type StorageSeqFloor struct {
-	// Prefix is put before the document ID to make the key.
 	Prefix string
 	Store  KV
 
@@ -125,14 +119,12 @@ func (f *StorageSeqFloor) fail(err error) error {
 	return fmt.Errorf("%w: %w", ErrFloorDegraded, err)
 }
 
-// Err returns the last error of the KV, nil if none.
 func (f *StorageSeqFloor) Err() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.err
 }
 
-// stored reads the KV's value: 0 when there is none.
 func (f *StorageSeqFloor) stored(docID string) (uint64, error) {
 	v, ok, err := f.Store.Get(f.Prefix + docID)
 	if err != nil || !ok {
@@ -187,7 +179,6 @@ func (f *StorageSeqFloor) RaiseMany(ctx context.Context, seqs map[string]uint64)
 
 // FileSeqFloor is a SeqFloor kept in a JSON file.
 type FileSeqFloor struct {
-	// Path is the file; it is created on the first Raise.
 	Path string
 
 	mu     sync.Mutex
@@ -215,7 +206,6 @@ func (f *FileSeqFloor) stat() (fileStamp, error) {
 	return fileStamp{true, st.Size(), st.ModTime()}, nil
 }
 
-// load returns the floor's values, reading the file only if needed.
 func (f *FileSeqFloor) load() (map[string]uint64, error) {
 	stamp, err := f.stat()
 	if err != nil {
@@ -291,7 +281,6 @@ func (f *FileSeqFloor) RaiseMany(_ context.Context, seqs map[string]uint64) erro
 	return nil
 }
 
-// syncDir makes a rename in dir durable where the platform allows.
 var syncDir = func(dir string) error {
 	if runtime.GOOS == "windows" || runtime.GOOS == "js" {
 		return nil

@@ -25,7 +25,6 @@ type instanceRecord struct {
 	At int64 `json:"at"`
 }
 
-// instanceID is this process's registration name.
 func (d *AdapterDirectory) instanceID() string {
 	d.idMu.Lock()
 	defer d.idMu.Unlock()

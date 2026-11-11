@@ -67,7 +67,6 @@ func rank(level string) int {
 	return 0
 }
 
-// frameInfo says which frame version a file has.
 type frameInfo struct {
 	version int
 	b       Binding
@@ -75,7 +74,6 @@ type frameInfo struct {
 	sig     []byte
 }
 
-// frameSigMessage is what a v3 frame's signature covers.
 func frameSigMessage(id string, level byte, seq uint64, recipients, content [sha256.Size]byte) []byte {
 	out := append([]byte(frameSigContext), 0)
 	out = binary.AppendUvarint(out, uint64(len(id)))
@@ -86,7 +84,6 @@ func frameSigMessage(id string, level byte, seq uint64, recipients, content [sha
 	return append(out, content[:]...)
 }
 
-// frame writes the frame: v3, signed, when there is a signer.
 func frame(id string, b Binding, data []byte, signer *Signer) []byte {
 	out := make([]byte, 0, len(frameMagic)+binary.MaxVarintLen64*2+len(id)+1+2*sha256.Size+ed25519.SignatureSize+len(data))
 	if signer == nil {
@@ -107,7 +104,6 @@ func frame(id string, b Binding, data []byte, signer *Signer) []byte {
 	return append(out, data...)
 }
 
-// unframe checks the frame of decrypted bytes.
 func unframe(id string, b []byte) ([]byte, frameInfo, error) {
 	var fi frameInfo
 	switch {
@@ -181,7 +177,6 @@ func forged(id, format string, args ...any) error {
 // ErrNoFrameSigner is returned by Save when no signer is set.
 var ErrNoFrameSigner = errors.New("encrypt: a confidential document is saved with the owner's signature: the Adapter has no Signer")
 
-// crossCheck compares what a file says with the record.
 func crossCheck(id string, f frameInfo, r Binding, strict bool) error {
 	if r.Exists && r.Signed && f.version < 3 {
 		return forged(id, "its frame is not signed (v%d), but the document's record says every file of it is: it was not written by an owner"+unsignedHint, f.version)
@@ -214,7 +209,6 @@ func levelName(l string) string {
 	return "server"
 }
 
-// frameVerifiers are the keys that may sign frames.
 func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
 	out := append([]ed25519.PublicKey(nil), a.OwnerSigners...)
 	if sk, ok := a.Ring.(signerKeys); ok {
@@ -226,7 +220,6 @@ func (a *Adapter) frameVerifiers() []ed25519.PublicKey {
 	return out
 }
 
-// frameSigner is the public key that signed a frame.
 func (a *Adapter) frameSigner(id string, fi frameInfo) ed25519.PublicKey {
 	if fi.version != 3 {
 		return nil
@@ -240,7 +233,6 @@ func (a *Adapter) frameSigner(id string, fi frameInfo) ed25519.PublicKey {
 	return nil
 }
 
-// verifyFrame checks the signature of a frame.
 func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, acceptUnsigned bool) error {
 	if !a.binds(id) || a.TrustFrames {
 		return nil
@@ -266,7 +258,6 @@ func (a *Adapter) verifyFrame(id string, fi frameInfo, data []byte, full, accept
 	return nil
 }
 
-// peekFrame reads only the frame header of a stored file.
 func (a *Adapter) peekFrame(ctx context.Context, id string, stored []byte) (frameInfo, error) {
 	return a.peekFrameWith(ctx, id, stored, false)
 }

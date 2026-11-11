@@ -87,7 +87,6 @@ func TestLogTimesDoNotGoBack(t *testing.T) {
 	if len(audit.Violations) == 0 || !strings.Contains(audit.Violations[0].Why, "went back") {
 		t.Errorf("%+v", audit.Violations)
 	}
-	// Within the skew it is fine.
 	ok := append([]LogEntry(nil), ents...)
 	e3 := ok[1]
 	e3.At = ents[0].At - 60

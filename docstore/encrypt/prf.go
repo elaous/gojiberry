@@ -13,8 +13,6 @@ import (
 // TypePasskey is the Recipient.Type of a passkey-derived key.
 const TypePasskey = "passkey-prf"
 
-// A passkey cannot hand out a private key.
-
 // PRFSalt is the salt every passkey is asked with.
 var PRFSalt = func() []byte { s := sha256.Sum256([]byte("gojiberry/encrypt/passkey/v1")); return s[:] }()
 
@@ -70,10 +68,8 @@ func CheckRecoverableOwner(owner, shared []Recipient) error {
 	return CheckRecoverable(owner...)
 }
 
-// ageSecretKey encodes 32 bytes as age's secret key text.
 func ageSecretKey(b []byte) string { return strings.ToUpper(bech32Encode("age-secret-key-", b)) }
 
-// bech32Encode is Bech32 of data under a human-readable prefix.
 func bech32Encode(hrp string, b []byte) string {
 	const charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 	var data []byte

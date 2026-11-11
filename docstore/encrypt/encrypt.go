@@ -1,4 +1,3 @@
-// Package encrypt wraps a docstore.Adapter so stored documents are encrypted.
 package encrypt
 
 import (
@@ -18,7 +17,6 @@ import (
 // ErrNoKey is returned when no key can open a document.
 var ErrNoKey error = noKeyError{}
 
-// noKeyError is ErrNoKey, which is also docstore.ErrLocked.
 type noKeyError struct{}
 
 func (noKeyError) Error() string { return "encrypt: none of your keys opens this document" }
@@ -48,7 +46,6 @@ type Keyring interface {
 	Identities(ctx context.Context, id string) ([]age.Identity, error)
 }
 
-// Static is a Keyring with one key set for all documents.
 type Static struct {
 	To   []age.Recipient
 	Keys []age.Identity
@@ -71,7 +68,6 @@ func DefaultSkip(id string) bool {
 	return false
 }
 
-// defaultSkipPrefixes are DefaultSkip's keyspaces, lower-cased.
 var defaultSkipPrefixes = []string{"catalog:", "acl:", "fonts/", strings.ToLower(KeysPrefix), strings.ToLower(directoryPrefix),
 	strings.ToLower(docstore.DirectoryLogPrefix), strings.ToLower(docstore.DirectoryEnrollPrefix), strings.ToLower(docstore.RateLimitPrefix), strings.ToLower(RevokedSignerPrefix)}
 
@@ -94,13 +90,10 @@ type Adapter struct {
 	// TrustFrames makes the Adapter accept every frame as it is.
 	TrustFrames bool
 
-	warnOnce sync.Once
-	// afterBind, when set, runs between Save's bind and write.
-	afterBind func()
-	// beforeBinding, when set, runs between read and bind in Load.
+	warnOnce      sync.Once
+	afterBind     func()
 	beforeBinding func()
 
-	// mu serializes saves of encrypted ids with re-keys.
 	mu sync.Mutex
 }
 
@@ -116,7 +109,6 @@ func (a *Adapter) skip(id string) bool {
 
 // Binding ties a stored file to the signed key record.
 type Binding struct {
-	// Exists is set for a record that was found and verified.
 	Exists bool
 	// Level is "" (server) or ProtectionE2EE.
 	Level string
@@ -124,13 +116,11 @@ type Binding struct {
 	Seq uint64
 	// Pending flags a level switch or recipient change in progress.
 	Pending bool
-	// Hash is a hash of the recipient list; zero when unset.
-	Hash [sha256.Size]byte
+	Hash    [sha256.Size]byte
 	// Signed flags that every file of the document is signed.
 	Signed bool
 }
 
-// Binder is a Keyring that can also return a record's Binding.
 type Binder interface {
 	Keyring
 	// Bind is Recipients and the record's Binding, read once.
@@ -144,7 +134,6 @@ var ErrUnreadable = errors.New("encrypt: a stored file of this document cannot b
 
 var reservedPrefixes = []string{"catalog:", "acl:", "fonts/"}
 
-// checkID refuses an id in a keyspace reserved for other data.
 func (a *Adapter) checkID(id string) error {
 	if a.skip(id) {
 		return nil
@@ -160,7 +149,6 @@ func (a *Adapter) checkID(id string) error {
 // IsEncrypted says whether stored bytes are an age file.
 func IsEncrypted(b []byte) bool { return bytes.HasPrefix(b, header) }
 
-// bind returns id's recipients and the Binding of their record.
 func (a *Adapter) bind(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	if b, ok := a.Ring.(Binder); ok && DocID(id) != "" {
 		rs, bd, err := b.Bind(ctx, id)
@@ -170,12 +158,10 @@ func (a *Adapter) bind(ctx context.Context, id string) ([]age.Recipient, Binding
 	return rs, Binding{}, keyringNotFound(err)
 }
 
-// keyringErr keeps the keyring's not-found error.
 type keyringErr struct{ msg string }
 
 func (e keyringErr) Error() string { return e.msg }
 
-// keyringNotFound returns err, or docstore.ErrNotFound if it wraps it.
 func keyringNotFound(err error) error {
 	if errors.Is(err, docstore.ErrNotFound) {
 		return keyringErr{"encrypt: keyring: " + err.Error()}
@@ -188,7 +174,6 @@ func (a *Adapter) binds(id string) bool {
 	return ok && DocID(id) != ""
 }
 
-// sealTo encrypts data to rs under the frame for binding b.
 func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) ([]byte, error) {
 	if len(rs) == 0 {
 		return nil, ErrNoRecipients
@@ -213,7 +198,6 @@ func (a *Adapter) sealTo(id string, rs []age.Recipient, b Binding, data []byte) 
 	return buf.Bytes(), nil
 }
 
-// signerKeys is implemented by keyrings that know owner keys.
 type signerKeys interface{ ownerSignerKeys() []ed25519.PublicKey }
 
 func (k StoreKeyring) ownerSignerKeys() []ed25519.PublicKey { return k.OwnerSigners }

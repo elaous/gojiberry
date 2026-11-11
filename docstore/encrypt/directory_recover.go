@@ -13,9 +13,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Recovery of owner enrollments from the log.
-
-// reconcileGrace is how long an owner-state entry may stay unapplied.
 const reconcileGrace = 2 * time.Minute
 
 func (d *AdapterDirectory) grace() time.Duration {
@@ -25,7 +22,6 @@ func (d *AdapterDirectory) grace() time.Duration {
 	return reconcileGrace
 }
 
-// stateEntry says an entry is of the owner-state kind.
 func stateEntry(op string) bool {
 	switch op {
 	case OpEnroll, OpRotate, OpReset, OpResetRequest, OpResetCancel, OpOperatorReset, OpVoid:
@@ -34,13 +30,11 @@ func stateEntry(op string) bool {
 	return false
 }
 
-// logIndex is the owner-state entries of the log by address.
 type logIndex struct {
 	scanned int64
 	byAddr  map[string][]LogEntry
 }
 
-// stateEntries returns the owner-state entries of the log.
 func (d *AdapterDirectory) stateEntries(ctx context.Context, addrs []string) ([]LogEntry, error) {
 	d.idxMu.Lock()
 	defer d.idxMu.Unlock()
@@ -68,7 +62,6 @@ func (d *AdapterDirectory) stateEntries(ctx context.Context, addrs []string) ([]
 	return out, nil
 }
 
-// reconcileLocked completes the enrollment records of an address.
 func (d *AdapterDirectory) reconcileLocked(ctx context.Context, email string, now time.Time) error {
 	addrs := d.LogAddressesFor(email)
 	ents, err := d.stateEntries(ctx, addrs)
@@ -117,7 +110,6 @@ func (d *AdapterDirectory) reconcileLocked(ctx context.Context, email string, no
 	return nil
 }
 
-// deleteEnrollment removes the enrollment record of an address.
 func (d *AdapterDirectory) deleteEnrollment(ctx context.Context, email string) error {
 	for _, id := range d.enrollNames(email) {
 		doc, err := d.Store.Load(ctx, id)
@@ -150,7 +142,6 @@ func (d *AdapterDirectory) ReconcileEnrollments(ctx context.Context) (int, error
 	return rep.Completed, err
 }
 
-// reconcileAll is ReconcileEnrollments with the whole log.
 func (d *AdapterDirectory) reconcileAll(ctx context.Context) (ReconcileReport, error) {
 	var rep ReconcileReport
 	if d.Signer == nil {
@@ -197,7 +188,6 @@ func (d *AdapterDirectory) reconcileAll(ctx context.Context) (ReconcileReport, e
 // DefaultUnmappedCap is how many unmapped addresses are listed by default.
 const DefaultUnmappedCap = 100
 
-// findUnmapped returns the pseudonyms of the index without an address.
 func (d *AdapterDirectory) findUnmapped(covered map[string]bool) []docstore.DirectoryUnmappedAddress {
 	d.idxMu.Lock()
 	defer d.idxMu.Unlock()
@@ -269,7 +259,6 @@ func (d *AdapterDirectory) UnmappedAddresses(ctx context.Context) (docstore.Dire
 	return out, nil
 }
 
-// warnUnmapped logs the unmapped count when it changes.
 func (d *AdapterDirectory) warnUnmapped(n int) {
 	d.unmappedMu.Lock()
 	changed := n != d.unmappedWarned
@@ -284,7 +273,6 @@ func (d *AdapterDirectory) warnUnmapped(n int) {
 	}
 }
 
-// knownEmails lists the e-mail addresses the store knows.
 func (d *AdapterDirectory) knownEmails(ctx context.Context) ([]string, error) {
 	seen := map[string]bool{}
 	var out []string

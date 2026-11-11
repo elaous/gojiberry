@@ -25,7 +25,7 @@ import (
 
 type flaky struct {
 	*docstore.MemoryAdapter
-	failOn atomic.Value // string: a substring of the ids whose writes fail ("" none)
+	failOn atomic.Value
 }
 
 func (f *flaky) fails(id string) error {
@@ -405,7 +405,6 @@ func TestConfidentialKeyringFailsClosed(t *testing.T) {
 	if err := w.ad.Save(ctx, f, []byte("x")); !errors.Is(err, ErrBadSignature) {
 		t.Errorf("a record with its level stripped: %v", err)
 	}
-	// Unsigned, damaged: also refused.
 	_ = w.inner.Save(ctx, KeysPrefix+id, []byte(`{"payload":"e30="}`))
 	if err := w.ad.Save(ctx, f, []byte("x")); !errors.Is(err, ErrUnsignedRecord) {
 		t.Errorf("an unsigned record: %v", err)

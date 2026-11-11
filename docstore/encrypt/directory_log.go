@@ -18,9 +18,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// The transparency log: an append-only record of directory changes.
-
-// zeroHash is the Prev of the first entry.
 var zeroHash = strings.Repeat("0", 64)
 
 const (
@@ -45,10 +42,8 @@ const (
 // DefaultAtSkew is how far back an entry's time may be.
 const DefaultAtSkew = 5 * time.Minute
 
-// VoidWindow is how long a void entry may cancel an entry.
 const VoidWindow = 2 * time.Minute
 
-// voidable says an entry of this kind may be cancelled.
 func voidable(op string) bool {
 	switch op {
 	case OpPublish, OpRevoke, OpEnroll, OpRotate, OpResetRequest, OpReset, OpResetCancel:
@@ -90,7 +85,6 @@ func SignLogEntry(s DirectorySigner, e LogEntry) LogEntry {
 	return e
 }
 
-// logHash hashes an entry's fields.
 func logHash(e LogEntry) string {
 	fields := []any{"gojiberry-directory-log-v2", e.Seq, e.Prev, e.At, e.Op, e.Address, e.Fingerprint, e.Kid,
 		e.Ref, e.OwnerPub, e.OwnerSig, e.ProofSig, e.OpTime, e.OwnerPrev}
@@ -125,7 +119,6 @@ func (d *AdapterDirectory) readLogHead(ctx context.Context) (logHead, string, er
 	return h, docstore.Digest(doc.Data), nil
 }
 
-// logInput is an entry's content, without its place.
 type logInput struct {
 	Op, Email, Fingerprint string
 	Ref                    int64
@@ -138,7 +131,6 @@ type logInput struct {
 	Address string
 }
 
-// maxLogRounds bounds the rounds an append loses to others.
 const maxLogRounds = 16
 
 var logBackoffBase = 2 * time.Millisecond
@@ -148,7 +140,6 @@ func logBackoff(lost int) time.Duration {
 	return base/2 + time.Duration(mrand.Int64N(int64(base/2)+1))
 }
 
-// appendLog adds an entry and returns its number.
 func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.Time) (int64, error) {
 	lost := 0
 	for lost < maxLogRounds {
@@ -158,7 +149,6 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 		}
 		next := head.Seq + 1
 		if doc, err := d.Store.Load(ctx, logEntryID(next)); err == nil {
-			// The head may lag the latest entry after a crash.
 			var e LogEntry
 			if json.Unmarshal(doc.Data, &e) != nil || e.Seq != next || e.Hash == "" {
 				return 0, fmt.Errorf("encrypt: the directory log entry %d is unreadable", next)
@@ -206,7 +196,6 @@ func (d *AdapterDirectory) appendLog(ctx context.Context, in logInput, at time.T
 	return 0, docstore.ErrDirectoryBusy
 }
 
-// voidLog appends the compensating entry of an entry.
 func (d *AdapterDirectory) voidLog(ctx context.Context, email string, ref int64, fingerprint string, at time.Time) {
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -215,13 +204,11 @@ func (d *AdapterDirectory) voidLog(ctx context.Context, email string, ref int64,
 	}
 }
 
-// advanceHead moves the head to e, best effort.
 func (d *AdapterDirectory) advanceHead(ctx context.Context, e LogEntry, prevDigest string) {
 	data, _ := json.Marshal(logHead{Seq: e.Seq, Hash: e.Hash})
 	_ = d.saveIf(ctx, logHeadID, data, prevDigest)
 }
 
-// latest walks from the head hint to the last entry.
 func (d *AdapterDirectory) latest(ctx context.Context) (logHead, error) {
 	head, _, err := d.readLogHead(ctx)
 	if err != nil {
@@ -341,7 +328,6 @@ func (d *AdapterDirectory) ReadLog(ctx context.Context, since int64, limit int) 
 	return out, nil
 }
 
-// readEntry loads one log entry.
 func (d *AdapterDirectory) readEntry(ctx context.Context, seq int64) (e LogEntry, found bool, err error) {
 	if seq <= 0 {
 		return LogEntry{}, false, nil

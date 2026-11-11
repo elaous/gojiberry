@@ -21,7 +21,6 @@ func (e *dirEnv) post(path, tok string, v any) *httptest.ResponseRecorder {
 	return e.do("POST", path, tok, string(b))
 }
 
-// prove asks for a challenge for key and answers it.
 func (e *dirEnv) prove(tok string, key Recipient, id age.Identity) docstore.DirectoryProof {
 	e.t.Helper()
 	rec := e.post("/directory/challenge", tok, map[string]string{"key": key.Text})
@@ -263,7 +262,7 @@ func TestDirectoryLookupHasAGlobalBudget(t *testing.T) {
 		})
 	})
 	var codes []int
-	for _, u := range usersInShardOf(ana, 5, "x.io") { // five different users of one shard, one lookup each: its budget is 3
+	for _, u := range usersInShardOf(ana, 5, "x.io") {
 		code, _ := e.lookup(e.token(u), "bo@x.io")
 		codes = append(codes, code)
 	}

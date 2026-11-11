@@ -184,7 +184,6 @@ func TestRepairAllDryRunLimitAndResume(t *testing.T) {
 	if err != nil || r1.Repaired != 1 || r1.Remaining == 0 {
 		t.Fatalf("%v %+v", err, r1)
 	}
-	// Running again carries on and finishes.
 	r2, err := w.sharing.RepairAll(ctx, RepairAllOptions{})
 	if err != nil || r2.Repaired != 2 || r2.Remaining != 0 || len(r2.Skipped) != 2 {
 		t.Fatalf("%v %+v", err, r2)
@@ -295,12 +294,10 @@ func TestRepairAllWithConcurrentSaves(t *testing.T) {
 
 type listCounter struct {
 	*flaky
-	lists atomic.Int64
-	// saveErr, when set, is returned by a conditional write of an id that contains saveOn.
+	lists   atomic.Int64
 	saveOn  string
 	saveErr error
-	// onSave, when set, runs before such a write.
-	onSave func()
+	onSave  func()
 }
 
 func (c *listCounter) List(ctx context.Context) ([]docstore.Meta, error) {

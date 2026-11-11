@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-// decrypt opens the age layer of a stored file.
 func (a *Adapter) decrypt(ctx context.Context, id string, stored []byte) (r io.Reader, ok bool, err error) {
 	if !IsEncrypted(stored) {
 		if !a.AllowPlaintext {
@@ -38,12 +37,10 @@ func (a *Adapter) decrypt(ctx context.Context, id string, stored []byte) (r io.R
 	return r, true, nil
 }
 
-// open returns a stored file's plaintext.
 func (a *Adapter) open(ctx context.Context, id string, stored []byte) (plain []byte, fi frameInfo, encrypted bool, err error) {
 	return a.openWith(ctx, id, stored, false)
 }
 
-// openWith is open with a given verification mode.
 func (a *Adapter) openWith(ctx context.Context, id string, stored []byte, acceptUnsigned bool) (plain []byte, fi frameInfo, encrypted bool, err error) {
 	r, enc, err := a.decrypt(ctx, id, stored)
 	if err != nil || !enc {
@@ -66,7 +63,6 @@ func (a *Adapter) openWith(ctx context.Context, id string, stored []byte, accept
 	return plain, fi, true, nil
 }
 
-// mainPrefix is the prefix of the stored main files.
 func mainPrefix(id string) string {
 	if strings.HasPrefix(id, docstore.FolderSecretPrefix) {
 		return id
@@ -74,17 +70,14 @@ func mainPrefix(id string) string {
 	return DocID(id)
 }
 
-// checkDocument cross-checks the record binding with the files.
 func (a *Adapter) checkDocument(ctx context.Context, id string, r Binding) error {
 	return a.checkFiles(ctx, DocID(id), []string{mainPrefix(id)}, r)
 }
 
-// checkDocumentByID is checkDocument given an id.
 func (a *Adapter) checkDocumentByID(ctx context.Context, docID string, r Binding) error {
 	return a.checkFiles(ctx, docID, []string{docID, docstore.FolderSecretPrefix + docID}, r)
 }
 
-// checkFiles cross-checks the record with every stored file.
 func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []string, r Binding) error {
 	if docID == "" || !a.binds(docID) {
 		return nil
@@ -129,7 +122,6 @@ func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []strin
 			return fmt.Errorf("%w: %s: %w", ErrUnreadable, id, err)
 		}
 	}
-	// The highest seq comes first.
 	sort.SliceStable(found, func(i, j int) bool { return found[i].fi.b.Seq > found[j].fi.b.Seq })
 	for _, e := range found {
 		if err := crossCheck(e.id, e.fi, r, false); err != nil {
@@ -139,7 +131,6 @@ func (a *Adapter) checkFiles(ctx context.Context, docID string, prefixes []strin
 	return nil
 }
 
-// bindChecked reads the record and checks the binding.
 func (a *Adapter) bindChecked(ctx context.Context, id string) ([]age.Recipient, Binding, error) {
 	for attempt := 0; ; attempt++ {
 		rs, b, err := a.bind(ctx, id)
@@ -184,7 +175,6 @@ func (a *Adapter) Save(ctx context.Context, id string, data []byte) error {
 	return a.afterUnsignedWrite(ctx, id, b)
 }
 
-// afterUnsignedWrite closes the loop on an unsigned write.
 func (a *Adapter) afterUnsignedWrite(ctx context.Context, id string, before Binding) error {
 	if a.Signer != nil || before.Signed || !a.binds(id) {
 		return nil
@@ -241,8 +231,6 @@ func (a *Adapter) ListPrefix(ctx context.Context, prefix string) ([]docstore.Met
 // Delete implements docstore.Adapter.
 func (a *Adapter) Delete(ctx context.Context, id string) error { return a.Inner.Delete(ctx, id) }
 
-// DeleteIf implements docstore.ConditionalDeleter for the ids this adapter leaves in the clear
-// (see DefaultSkip); an encrypted id is docstore.ErrConditionalUnsupported.
 func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) error {
 	c, ok := a.Inner.(docstore.ConditionalDeleter)
 	if !ok || !a.skip(id) {
@@ -251,12 +239,7 @@ func (a *Adapter) DeleteIf(ctx context.Context, id string, prevDigest string) er
 	return c.DeleteIf(ctx, id, prevDigest)
 }
 
-// SaveIf implements docstore.ConditionalAdapter. prevDigest is the Digest of what the caller
-// read through this adapter: for an encrypted id, the plaintext (what Load returned), and ""
-// for "there is no such document". It is compared with the decrypted stored file, and the
-// write is then conditional on the stored bytes being the ones that were just read, so a
-// concurrent change between the check and the write is an ErrConflict (read again and
-// retry). A store that cannot write conditionally says so (ErrConditionalUnsupported).
+// SaveIf implements docstore.ConditionalAdapter.
 func (a *Adapter) SaveIf(ctx context.Context, id string, data []byte, prevDigest string) error {
 	c, ok := a.Inner.(docstore.ConditionalAdapter)
 	if !ok {

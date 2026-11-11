@@ -481,7 +481,6 @@ func TestRepairAllCursorEdges(t *testing.T) {
 		if want := groups[i+1:]; strings.Join(seen, ",") != strings.Join(want, ",") || rep.Total != len(want) {
 			t.Errorf("After %q: %v, want %v", groups[i], seen, want)
 		}
-		// Between two groups.
 		_, seen = run(groups[i] + "\x00")
 		if want := groups[i+1:]; strings.Join(seen, ",") != strings.Join(want, ",") {
 			t.Errorf("After %q+NUL: %v, want %v", groups[i], seen, want)

@@ -30,7 +30,6 @@ func collide(r Recipient, keyed bool) age.Recipient {
 	return collidedKeyed{collided{Recipient: r.Key, tag: "COLL"}}
 }
 
-// collidedKeyed forwards the fingerprint of the wrapped sshKeyed.
 type collidedKeyed struct{ collided }
 
 func (c collidedKeyed) keyFingerprint() string {

@@ -16,7 +16,7 @@ import (
 type Recipient struct {
 	Label       string
 	Type        string // "ssh-ed25519", "ssh-rsa" or "age-x25519"
-	Fingerprint string // "SHA256:..." for an SSH key, the key itself for an age key
+	Fingerprint string
 	Key         age.Recipient
 	// Text is the public key as it was read.
 	Text string
@@ -42,7 +42,6 @@ func ParseSSHRecipient(line string) (Recipient, error) {
 	return Recipient{Label: comment, Type: pub.Type(), Fingerprint: fp, Key: sshKeyed{Recipient: r, fp: fp}, Text: line}, nil
 }
 
-// sshKeyed is an SSH age recipient that remembers its fingerprint.
 type sshKeyed struct {
 	age.Recipient
 	fp string
@@ -50,7 +49,6 @@ type sshKeyed struct {
 
 func (s sshKeyed) keyFingerprint() string { return s.fp }
 
-// keyFingerprinter is implemented by recipients that know their fingerprint.
 type keyFingerprinter interface{ keyFingerprint() string }
 
 // ParseAgeRecipient reads an age public key ("age1...").

@@ -216,13 +216,11 @@ func TestDirectoryKeepsAtMostMaxKeysPerAddress(t *testing.T) {
 	if err := d.Publish(ctx, u, newRecovery(t)); !errors.Is(err, ErrTooManyKeys) {
 		t.Errorf("%v", err)
 	}
-	// Another address has its own room.
 	if err := d.Publish(ctx, auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}, newRecovery(t)); err != nil {
 		t.Error(err)
 	}
 }
 
-// countingStore counts how it is listed.
 type countingStore struct {
 	docstore.Adapter
 	lists, prefixLists int
@@ -253,7 +251,6 @@ func TestDirectoryLookupDoesNotListTheWholeStore(t *testing.T) {
 	}
 }
 
-// slowListStore widens the list-then-save window.
 type slowListStore struct{ docstore.Adapter }
 
 func (s slowListStore) List(ctx context.Context) ([]docstore.Meta, error) {

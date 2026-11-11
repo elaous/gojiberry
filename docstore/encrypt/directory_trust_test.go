@@ -25,7 +25,6 @@ var (
 	bo  = auth.User{ID: "google:2", Email: "bo@x.io", VerifiedEmail: true}
 )
 
-// testClock is a clock the tests move.
 type testClock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -145,7 +144,6 @@ func TestDirectoryRotationKeepsRecordsValidAndResignMovesThem(t *testing.T) {
 	if rep, err := d2.Resign(ctx); err != nil || rep.Resigned != 0 {
 		t.Fatalf("second Resign = %+v %v", rep, err)
 	}
-	// Now the retired key can go.
 	d3 := &AdapterDirectory{Store: store, Signer: mustSigner(t, newSeed)}
 	got, _ = d3.Lookup(ctx, "ana@x.io")
 	if len(got) != 2 {
@@ -439,7 +437,6 @@ func TestDirectoryProofIsBoundToUserKeyAndTime(t *testing.T) {
 	if err := publish(ana, key, proof); err != nil {
 		t.Fatalf("%v", err)
 	}
-	// ...and not after it.
 	c3, _ := d.Challenge(ctx, ana, other.Text)
 	p3, _ := OpenChallenge(c3, otherID)
 	clk.Add(ChallengeTTL + time.Second)
@@ -679,7 +676,6 @@ func TestDirectoryLogChainsAndDetectsRewrites(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// Another key's signatures do not verify.
 	if _, err := VerifyLog(l.Entries, "", 0, map[string]ed25519.PublicKey{l.Entries[0].Kid: logKeys(t, &AdapterDirectory{Signer: testSigner(t, 5)})[testSigner(t, 5).KeyID()]}); !errors.Is(err, ErrLogBroken) {
 		t.Errorf("wrong key: %v", err)
 	}

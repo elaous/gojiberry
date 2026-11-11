@@ -264,7 +264,6 @@ func TestAdminFailureBudgetFollowsTheConfiguredClientAddress(t *testing.T) {
 	}
 }
 
-// The per-address lookup budget follows the configured client address too.
 func TestLookupIPBudgetFollowsTheConfiguredClientAddress(t *testing.T) {
 	limits := func(name string, perMinute float64, burst int) docstore.Limiter {
 		if name == "dir-lookup-ip" {

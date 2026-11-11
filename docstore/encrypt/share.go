@@ -28,10 +28,8 @@ type Sharing struct {
 	// PendingWarnAfter is how long a re-key may stay pending.
 	PendingWarnAfter time.Duration
 
-	now func() time.Time // tests
-	// afterRead, when set, is called by mutate between reads.
-	afterRead func()
-	// beforeFlip, when set, is called by finishFiles before the flip.
+	now        func() time.Time // tests
+	afterRead  func()
 	beforeFlip func()
 }
 
@@ -62,19 +60,14 @@ func (s *Sharing) verifiers() []ed25519.PublicKey {
 	return out
 }
 
-// mutateAttempts is how many times a list change is retried.
 const mutateAttempts = 5
 
-// mutateOpts changes how mutate reads and numbers a record.
 type mutateOpts struct {
-	// recover is Recover's: the record is read without checks.
 	recover bool
 	minSeq  uint64
-	// noCheck skips the cross-check with the files' frames.
 	noCheck bool
 }
 
-// mutate reads, verifies, changes and saves the list.
 func (s *Sharing) mutate(ctx context.Context, docID string, fn func(*sharedRecord) (changed bool, err error)) (sharedRecord, error) {
 	return s.mutateWith(ctx, docID, mutateOpts{}, fn)
 }
@@ -154,7 +147,6 @@ func (s *Sharing) Resign(ctx context.Context, docID string) error {
 	return err
 }
 
-// List says who a document is shared with, besides the owners.
 func (s *Sharing) List(ctx context.Context, docID string) ([]Shared, error) {
 	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	if err != nil {
@@ -233,7 +225,6 @@ func (s *Sharing) Remove(ctx context.Context, docID, fingerprint string) (int, e
 	return s.finish(ctx, docID)
 }
 
-// Repair encrypts every file of a document again to its recipients.
 func (s *Sharing) Repair(ctx context.Context, docID string, opts ...RepairOption) (int, error) {
 	if !docfile.ValidID(docID) {
 		return 0, errors.New("encrypt: not a document ID")

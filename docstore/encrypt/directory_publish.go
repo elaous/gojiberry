@@ -24,7 +24,6 @@ func (d *AdapterDirectory) Publish(ctx context.Context, user auth.User, key Reci
 	return err
 }
 
-// PublishWith records key as a key of an address, with options.
 func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key Recipient, opt PublishOptions) (PublishedKey, error) {
 	if d.Signer == nil {
 		return PublishedKey{}, ErrDirectoryOff
@@ -42,7 +41,6 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	now := d.now()
 	email := normalizeEmail(user.Email)
 
-	// Check what the request carries before anything is written.
 	var att *docstore.DirectoryAttestation
 	if opt.Attestation != nil {
 		if r.Type != "ssh-ed25519" {
@@ -162,7 +160,6 @@ func (d *AdapterDirectory) PublishWith(ctx context.Context, user auth.User, key 
 	return PublishedKey{}, docstore.ErrDirectoryBusy
 }
 
-// dropOtherNames deletes the records of other pseudonyms.
 func (d *AdapterDirectory) dropOtherNames(ctx context.Context, email, fp, id string) {
 	for _, prefix := range d.names(email) {
 		if other := prefix + fingerprintSegment(fp); other != id {
@@ -171,7 +168,6 @@ func (d *AdapterDirectory) dropOtherNames(ctx context.Context, email, fp, id str
 	}
 }
 
-// pruneTombstone removes a tombstone past its window.
 func (d *AdapterDirectory) pruneTombstone(ctx context.Context, email string, tomb directoryRecord, id, digest string) error {
 	if r, err := parsePublic(tomb.Key); err == nil {
 		seg := fingerprintSegment(r.Fingerprint)
@@ -200,7 +196,6 @@ func (d *AdapterDirectory) pruneTombstone(ctx context.Context, email string, tom
 	return d.deleteIf(ctx, id, digest)
 }
 
-// deleteIf deletes the record id only if it is unchanged.
 func (d *AdapterDirectory) deleteIf(ctx context.Context, id, prev string) error {
 	if c, ok := d.Store.(docstore.ConditionalDeleter); ok {
 		err := c.DeleteIf(ctx, id, prev)

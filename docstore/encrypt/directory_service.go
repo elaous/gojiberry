@@ -15,7 +15,6 @@ func DirectoryService(d *AdapterDirectory) docstore.DirectoryService { return di
 
 type dirService struct{ d *AdapterDirectory }
 
-// refusal wraps the directory's own refusals.
 func refusal(err error) error {
 	switch {
 	case errors.Is(err, docstore.ErrDirectoryBadAddress):

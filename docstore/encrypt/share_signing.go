@@ -61,7 +61,6 @@ var ErrBadSignature = errors.New("encrypt: the recipient list's signature is not
 // ErrNoSigner is returned by Sharing operations that need a Signer.
 var ErrNoSigner = errors.New("encrypt: sharing needs the owner's signing key")
 
-// recordContext separates what the owner signs for records.
 const recordContext = "gojiberry/keys-record/v1"
 
 // Signer is the owner's key for signing recipient records.
@@ -101,7 +100,6 @@ func SignerFromSSH(pem []byte) (*Signer, error) {
 // Public is the key that verifies this Signer's signatures.
 func (s *Signer) Public() ed25519.PublicKey { return s.key.Public().(ed25519.PublicKey) }
 
-// messageContext separates what Sign signs from other uses.
 const messageContext = "gojiberry/signed-message/v1"
 
 // Sign signs msg with the Signer's key.

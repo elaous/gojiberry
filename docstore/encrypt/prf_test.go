@@ -35,7 +35,6 @@ func TestPRFIdentityIsDeterministicAndASoundAgeKey(t *testing.T) {
 	if err != nil || !r.IsPasskey() || r.Hint != "cred-1" || r.Label != "ana's phone" || r.Text != a.Recipient().String() {
 		t.Fatalf("%+v %v", r, err)
 	}
-	// Encrypt to the recipient, open with the derived identity.
 	var buf bytes.Buffer
 	w, _ := age.Encrypt(&buf, r.Key)
 	_, _ = w.Write([]byte("hello"))

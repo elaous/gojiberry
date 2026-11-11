@@ -188,7 +188,6 @@ func TestDirectoryRoutesAreLimitedPerUser(t *testing.T) {
 func TestDirectoryRoutesNeedSignInAndAService(t *testing.T) {
 	store := docstore.NewMemoryAdapter()
 	d := DirectoryService(&AdapterDirectory{Store: store, Signer: testSigner(t, 1)})
-	// No auth.Manager: not mounted.
 	h := docstore.NewServer(store, "memory").WithDirectory(d).Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/directory/lookup?email=a@x.io", nil))
@@ -241,7 +240,6 @@ func TestDirectoryRouteShowsAForgedRecordUnverified(t *testing.T) {
 	if code != 200 || len(keys) != 1 || keys[0].Verified || keys[0].Label != "mallory" {
 		t.Fatalf("%d %+v: a forged record must come back unverified", code, keys)
 	}
-	// Unsigned altogether.
 	unsigned, _ := json.Marshal(directoryRecord{V: 2, Key: key.Text, Provider: "google", Publisher: "google:9", Email: "ana@x.io"})
 	_ = e.store.Save(context.Background(), id, unsigned)
 	if _, keys := e.lookup(ana, "ana@x.io"); len(keys) != 1 || keys[0].Verified {

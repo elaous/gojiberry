@@ -24,7 +24,6 @@ type IndexEntry struct {
 	Seq   uint64 `json:"seq"`
 }
 
-// indexRecord is the signed payload of the index.
 type indexRecord struct {
 	V    int                   `json:"v"`
 	Seq  uint64                `json:"seq"`
@@ -43,7 +42,6 @@ func indexMessage(payload []byte) []byte {
 	return append([]byte(indexContext+"\x00"+IndexKey+"\x00"), payload...)
 }
 
-// loadIndex reads and verifies the index.
 func loadIndex(ctx context.Context, store docstore.Adapter, owners []ed25519.PublicKey, floor SeqFloor) (rec indexRecord, digest string, err error) {
 	d, err := store.Load(ctx, IndexKey)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -110,7 +108,6 @@ func (s *Sharing) Index(ctx context.Context) (Index, error) {
 	return Index{Seq: rec.Seq, Docs: docs}, nil
 }
 
-// setIndex records a document's level in the index.
 func (s *Sharing) setIndex(ctx context.Context, docID, level string, seq uint64) error {
 	return s.changeIndex(ctx, func(rec *indexRecord) bool {
 		cur, has := rec.Docs[docID]
@@ -137,7 +134,6 @@ func (s *Sharing) ResignIndex(ctx context.Context) error {
 	return s.changeIndex(ctx, func(rec *indexRecord) bool { return rec.Seq > 0 || len(rec.Docs) > 0 })
 }
 
-// changeIndex reads and verifies the index, changes it, and saves.
 func (s *Sharing) changeIndex(ctx context.Context, fn func(rec *indexRecord) bool) error {
 	if s.Signer == nil {
 		return ErrNoSigner
@@ -264,7 +260,6 @@ func levelOf(r sharedRecord) string {
 	return ""
 }
 
-// highestSeq is the highest record seq seen for a document.
 func (s *Sharing) highestSeq(ctx context.Context, docID string) (uint64, error) {
 	var top uint64
 	if s.SeqFloor != nil {

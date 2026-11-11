@@ -76,7 +76,6 @@ func readAll(t *testing.T, r io.Reader) []byte {
 	return b
 }
 
-// ageHeaderJunk starts like an age file and is not one.
 func ageHeaderJunk(n int) []byte {
 	return append(append([]byte(nil), header...), bytes.Repeat([]byte{byte(n)}, 64)...)
 }
@@ -256,7 +255,7 @@ func TestUnsignedFramesAreAcceptedUntilRepairThenForgedAndRequireSigned(t *testi
 	if _, err := strict.Load(ctx, f); !errors.Is(err, ErrForgedFrame) {
 		t.Errorf("RequireSigned: %v", err)
 	}
-	_ = w.inner.Delete(ctx, f) // the forged file is not something to re-key (a missing file is fine)
+	_ = w.inner.Delete(ctx, f)
 	if _, err := w.sharing.Repair(ctx, id); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +369,7 @@ func TestSaveRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 		id := w.history(t)
 		b := other(w)
 		fired := 0
-		w.ad.afterBind = func() { // the record was read as "none"; now the other client switches
+		w.ad.afterBind = func() {
 			if fired++; fired == 1 {
 				if _, err := b.SetProtection(ctx, id, ProtectionE2EE); err != nil {
 					t.Error(err)
@@ -482,7 +481,6 @@ func TestStuckPendingIsSurfacedByVerifyAndTheErrorNamesRepair(t *testing.T) {
 	if err != nil || len(rep.PendingStuck) != 1 || rep.PendingStuck[0] != id {
 		t.Fatalf("Verify: %+v %v", rep, err)
 	}
-	// The limit is configurable.
 	w.sharing.PendingWarnAfter = 2 * time.Hour
 	if st, _ := w.sharing.PendingStatus(ctx, id); st.Stuck {
 		t.Errorf("%+v", st)
@@ -521,7 +519,7 @@ func TestLoadRacingASwitchByAnotherClientIsNotADowngrade(t *testing.T) {
 	b.Signer = w.signer
 	other := &Sharing{Store: w.inner, Adapter: b, Signer: w.signer}
 	fired := 0
-	w.ad.beforeBinding = func() { // the file was read at the server level; now the switch completes
+	w.ad.beforeBinding = func() {
 		if fired++; fired == 1 {
 			if _, err := other.SetProtection(ctx, id, ProtectionE2EE); err != nil {
 				t.Error(err)

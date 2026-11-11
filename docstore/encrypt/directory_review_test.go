@@ -102,7 +102,7 @@ func TestResignDoesNotResurrectAKeyRevokedWhileItRuns(t *testing.T) {
 		if id != oldID || fired {
 			return
 		}
-		if loads++; loads == 2 { // the first read is the survey, the second the one under the address lock
+		if loads++; loads == 2 {
 			fired = true
 			if _, err := d3.Revoke(ctx, ana, k1.Fingerprint, nil); err != nil {
 				t.Errorf("revoke: %v", err)
@@ -186,7 +186,7 @@ func TestResignLeavesRecordsWithoutALogEntryUnendorsed(t *testing.T) {
 	if v := verified(); !v[good.Fingerprint] || v[evil1.Fingerprint] || v[evil2.Fingerprint] {
 		t.Errorf("after Resign: %v", v)
 	}
-	for _, id := range []string{id1, id2} { // left under the old name, not copied under the current one
+	for _, id := range []string{id1, id2} {
 		if _, err := store.Load(ctx, id); err != nil {
 			t.Errorf("the forged record was touched: %v", err)
 		}
@@ -355,7 +355,6 @@ func TestPublishLeavesAVoidEntryWhenTheRecordCannotBeWritten(t *testing.T) {
 	if got, _ := d.Lookup(ctx, "ana@x.io"); len(got) != 0 {
 		t.Errorf("%+v", got)
 	}
-	// The same for a revoke.
 	hs.failSaveIf = nil
 	if err := d.Publish(ctx, ana, key); err != nil {
 		t.Fatal(err)
@@ -398,7 +397,7 @@ func TestBusyLogIsBoundedAndAnswers503(t *testing.T) {
 	hs.mu.Lock()
 	n := hs.saveIfs
 	hs.mu.Unlock()
-	if n > 20 { // 16 rounds lost, and the writes of the head and the claims around them
+	if n > 20 {
 		t.Errorf("%d conditional writes: the retries are not bounded", n)
 	}
 	if got, _ := e.dir.Lookup(context.Background(), "ana@x.io"); len(got) != 0 {
@@ -433,7 +432,6 @@ func TestChallengesVerifyAgainstTheCurrentKeyOnly(t *testing.T) {
 	if _, err := dNew.PublishWith(ctx, ana, key2, PublishOptions{Challenge: p2.Token, Nonce: p2.Nonce}); !errors.Is(err, ErrBadProof) {
 		t.Fatalf("a challenge of a retired key = %v, want ErrBadProof", err)
 	}
-	// And the new key's own work.
 	c3, _ := dNew.Challenge(ctx, ana, key2.Text)
 	p3, _ := OpenChallenge(c3, id2)
 	if _, err := dNew.PublishWith(ctx, ana, key2, PublishOptions{Challenge: p3.Token, Nonce: p3.Nonce}); err != nil {
@@ -666,7 +664,7 @@ func TestLookupSpendsTheUsersOwnBudgetBeforeTheSharedOnes(t *testing.T) {
 	if code, _ := e.lookup(tok, "bo@x.io"); code != 200 {
 		t.Fatalf("first = %d", code)
 	}
-	for range 5 { // over their own limit: refused without touching the IP or global budget
+	for range 5 {
 		if code, _ := e.lookup(tok, "bo@x.io"); code != 429 {
 			t.Fatalf("over the limit = %d", code)
 		}
@@ -723,7 +721,6 @@ func TestGlobalLookupBudgetCanBePerPolicyDomain(t *testing.T) {
 	}
 }
 
-// bareStore hides every optional capability of the store it wraps.
 type bareStore struct{ docstore.Adapter }
 
 func TestCheckStoreRefusesReplicasOnAStoreWithoutConditionalWrites(t *testing.T) {

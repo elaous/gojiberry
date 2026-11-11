@@ -25,7 +25,6 @@ func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 			t.Errorf("%s: reason %q, since %v", name, docs[0].Reason, docs[0].Since)
 		}
 	}
-	// PendingDocs stays about re-keys in flight.
 	if p, err := w.sharing.PendingDocs(ctx); err != nil || len(p) != 0 {
 		t.Errorf("PendingDocs = %v, %v", p, err)
 	}
@@ -41,7 +40,6 @@ func TestUnsignedAfterFlipDocIsListedAsNeedingAction(t *testing.T) {
 	}
 }
 
-// Repair without the option refuses and leaves the marker.
 func TestUnsignedMarkerSurvivesARefusedRepair(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)
@@ -54,7 +52,6 @@ func TestUnsignedMarkerSurvivesARefusedRepair(t *testing.T) {
 	}
 }
 
-// Recover with AcceptUnsigned also settles it.
 func TestUnsignedMarkerClearedByRecoverAcceptUnsigned(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld(t)

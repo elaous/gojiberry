@@ -141,13 +141,10 @@ func (k ConfidentialKeyring) serverIDs() (map[string][]string, error) {
 	return m, nil
 }
 
-// ErrUncomparableRecipient is returned for a recipient key that cannot be compared.
 var ErrUncomparableRecipient = errors.New("encrypt: a recipient's key cannot be compared with the server's keys")
 
-// recipID identifies a recipient's key.
 type recipID struct{ id, fp string }
 
-// isServer says whether r is one of the server keys.
 func (r recipID) isServer(server map[string][]string) bool {
 	for _, fp := range server[r.id] {
 		if r.fp == "" || fp == "" || fp == r.fp {
@@ -157,7 +154,6 @@ func (r recipID) isServer(server map[string][]string) bool {
 	return false
 }
 
-// recipientID is the identity of a recipient's key.
 func recipientID(r age.Recipient) (recipID, error) {
 	if s, ok := r.(fmt.Stringer); ok {
 		return recipID{id: "text:" + s.String()}, nil

@@ -15,10 +15,9 @@ import (
 )
 
 type mapKV struct {
-	mu   sync.Mutex
-	m    map[string]string
-	fail error
-	// failSet fails only writes (a full quota: reads still work).
+	mu      sync.Mutex
+	m       map[string]string
+	fail    error
 	failSet error
 }
 
@@ -79,7 +78,6 @@ func TestFileSeqFloorSurvivesARestartAndOnlyRises(t *testing.T) {
 	if ents, _ := os.ReadDir(filepath.Dir(path)); len(ents) != 1 {
 		t.Errorf("no temporary files are left: %v", ents)
 	}
-	// Failures are reported, not swallowed.
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +262,7 @@ func TestVerifyIndexRaisesTheFloorInOneWrite(t *testing.T) {
 	if _, err := s.VerifyIndex(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if fresh.writes > 2 { // the index's own seq when it is read, then every document at once
+	if fresh.writes > 2 {
 		t.Errorf("VerifyIndex wrote the floor %d times for 5 documents", fresh.writes)
 	}
 	idx, _ := s.Index(ctx)

@@ -23,11 +23,9 @@ type Shared struct {
 	Added       time.Time
 }
 
-// sharedRecord is the signed payload of a share record.
 type sharedRecord struct {
 	V   int    `json:"v"`
 	Doc string `json:"doc"`
-	// Seq grows with each change, so readers can spot stale records.
 	Seq uint64 `json:"seq"`
 	// Pending means the document's files may not be consistent yet.
 	Pending bool `json:"pending,omitempty"`
@@ -43,7 +41,6 @@ type sharedRecord struct {
 	Recipients        []sharedEntry `json:"recipients"`
 }
 
-// binding is the Binding the record gives its document.
 func (r sharedRecord) binding(exists bool) Binding {
 	b := Binding{Exists: exists, Seq: r.Seq, Pending: r.Pending, Signed: r.Signed}
 	if r.Protection == ProtectionE2EE {
@@ -67,7 +64,6 @@ func (r sharedRecord) binding(exists bool) Binding {
 	return b
 }
 
-// signedRecord is what is stored under keys:<ID>.
 type signedRecord struct {
 	Payload []byte `json:"payload"`
 	Sig     []byte `json:"sig"`
@@ -84,7 +80,6 @@ type sharedEntry struct {
 	Added       int64  `json:"added,omitempty"`
 }
 
-// parseShared reads an entry's key and returns the record.
 func parseShared(e sharedEntry) (Recipient, error) {
 	switch e.Type {
 	case "age-x25519", TypePasskey:
@@ -108,13 +103,11 @@ func parseShared(e sharedEntry) (Recipient, error) {
 	return r, nil
 }
 
-// verifyRecord checks a stored record's signature.
 func verifyRecord(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, error) {
 	rec, _, err := verifyRecordBy(raw, docID, owners)
 	return rec, err
 }
 
-// verifyRecordBy is verifyRecord that also says which key signed.
 func verifyRecordBy(raw []byte, docID string, owners []ed25519.PublicKey) (sharedRecord, ed25519.PublicKey, error) {
 	var rec sharedRecord
 	var sr signedRecord
@@ -141,7 +134,6 @@ func verifyRecordBy(raw []byte, docID string, owners []ed25519.PublicKey) (share
 	return rec, by, nil
 }
 
-// loadRecord reads and verifies a document's record.
 func loadRecord(ctx context.Context, store docstore.Adapter, docID string, owners []ed25519.PublicKey, floor SeqFloor) (rec sharedRecord, digest string, err error) {
 	d, err := store.Load(ctx, KeysPrefix+docID)
 	if errors.Is(err, docstore.ErrNotFound) {

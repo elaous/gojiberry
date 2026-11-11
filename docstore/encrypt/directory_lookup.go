@@ -12,10 +12,8 @@ import (
 	"time"
 )
 
-// ErrTooManyKeys is returned by Publish when an address has too many keys.
 var ErrTooManyKeys = errors.New("encrypt: this address already has the most keys the directory keeps")
 
-// publishedKey is the lookup row of a stored record.
 func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want string, includeRevoked bool, enr *enrollRecord) (PublishedKey, error) {
 	rec := st.rec
 	k := PublishedKey{Label: rec.Label, Text: st.text, Type: st.typ, Fingerprint: st.fp, Kid: rec.Kid, Seq: rec.Seq}
@@ -60,7 +58,6 @@ func (d *AdapterDirectory) publishedKey(ctx context.Context, st stored, want str
 	return k, nil
 }
 
-// ownerEvidence says the record carries the owner signature.
 func ownerEvidence(enr *enrollRecord, st stored, entry LogEntry, haveEntry bool) (docstore.DirectoryOwnerEvidence, bool) {
 	rec := st.rec
 	if !haveEntry || rec.V < 4 || rec.OwnerSig == "" || entry.OwnerSig != rec.OwnerSig || entry.OpTime != rec.OwnerTime || entry.OwnerPrev != rec.OwnerPrev || entry.OwnerV != rec.OwnerV {

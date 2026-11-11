@@ -14,7 +14,6 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// DeviceUse says when a key of the store last unlocked it.
 type DeviceUse struct {
 	Fingerprint string    `json:"fp"`
 	Device      string    `json:"device,omitempty"`
@@ -24,7 +23,6 @@ type DeviceUse struct {
 // MaxDeviceLabel is the longest device label kept.
 const MaxDeviceLabel = 60
 
-// deviceUseID is the file of one key's record.
 func deviceUseID(fp string) (string, error) {
 	if fp == "" || len(fp) > 256 || strings.TrimSpace(fp) != fp || strings.ContainsFunc(fp, unicode.IsControl) {
 		return "", errors.New("encrypt: not a key fingerprint")
@@ -71,13 +69,11 @@ func (a *Adapter) DeviceUses(ctx context.Context) ([]DeviceUse, error) {
 	return out, nil
 }
 
-// deviceUseNamed says whether a file is a device-use record.
 func deviceUseNamed(fp, id string) bool {
 	want, err := deviceUseID(fp)
 	return err == nil && want == id
 }
 
-// cleanDeviceLabel keeps a device label printable and short.
 func cleanDeviceLabel(s string) string {
 	var b strings.Builder
 	n := 0

@@ -403,7 +403,6 @@ func TestRepairAllResignCrashBetweenRecordAndFiles(t *testing.T) {
 	if _, err := r.ad.Load(ctx, f); err != nil {
 		t.Fatalf("both keys listed, after the crash: %v", err)
 	}
-	// The next run finishes it.
 	w.inner.failOn.Store("")
 	rep, err = r.sharing.RepairAll(ctx, RepairAllOptions{Resign: true})
 	if err != nil || rep.Left() != 0 || rep.Resigned != 1 {

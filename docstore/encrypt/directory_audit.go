@@ -14,10 +14,8 @@ type AuditViolation struct {
 	Why string
 }
 
-// AuditNote is an entry that is odd but within the rules.
 type AuditNote struct {
-	Seq int64
-	// Ahead is how far the entry is dated after the auditor's clock.
+	Seq   int64
 	Ahead time.Duration
 	Why   string
 }
@@ -25,17 +23,13 @@ type AuditNote struct {
 // AddressAudit is what AuditAddress found about one address.
 type AddressAudit struct {
 	// Entries are the entries about the address.
-	Entries []LogEntry
-	// Voided maps an entry's number to the void that cancels it.
-	Voided map[int64]int64
-	// OperatorResets are the entries by which the operator reset an address.
+	Entries        []LogEntry
+	Voided         map[int64]int64
 	OperatorResets []LogEntry
-	// Enrolled says the address has an owner key after the entries.
-	Enrolled   bool
-	OwnerKeys  []docstore.DirectoryOwnerKey
-	ResetSince int64
-	// LastSeq is the number of the last entry that was audited.
-	LastSeq int64
+	Enrolled       bool
+	OwnerKeys      []docstore.DirectoryOwnerKey
+	ResetSince     int64
+	LastSeq        int64
 	// Notes are entries dated ahead of the auditor's clock.
 	Notes []AuditNote
 	// Violations are the entries that break the rules.
@@ -46,16 +40,14 @@ type AddressAudit struct {
 type AuditOptions struct {
 	// ResetWait is the shortest time a reset may take.
 	ResetWait time.Duration
-	// Start is the state before the entries, when the audit begins mid-log.
-	Start *AddressAudit
+	Start     *AddressAudit
 	// AtSkew is how far back an entry's time may be.
 	AtSkew time.Duration
 	// Now, when set, is the auditor's clock.
 	Now time.Time
 	// FutureSkew is the tolerance of the future-time check.
 	FutureSkew time.Duration
-	// NoteSkew is how far ahead of Now an entry may be before a note.
-	NoteSkew time.Duration
+	NoteSkew   time.Duration
 }
 
 // AuditAddress checks the log entries about one address.
@@ -277,7 +269,6 @@ func AuditAddress(email string, addresses []string, entries []LogEntry, opt Audi
 	return out
 }
 
-// aheadText writes a gap in seconds.
 func aheadText(secs int64) string {
 	if secs > int64(math.MaxInt64/int64(time.Second)) {
 		return "more than 290 years"

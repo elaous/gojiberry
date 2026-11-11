@@ -46,7 +46,7 @@ func (e *ownerEnv) pos() string {
 }
 
 func (e *ownerEnv) sign(priv ed25519.PrivateKey, op, fp string) *docstore.DirectoryOwnerSig {
-	if op == OpPublish { // a publication is signed over its label too (version 2); these keys have none
+	if op == OpPublish {
 		s := SignOwnerPublish(priv, "ana@x.io", fp, "", e.clk.Now(), e.pos())
 		return &s
 	}
@@ -139,7 +139,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 	age1, _ := ageKey(t)
 	ssh, _, _ := edSSHKey(t)
 	_ = ssh
-	// The session alone no longer publishes.
 	if _, err := e.publish(nil, age1); !errors.Is(err, ErrOwnerRequired) {
 		t.Fatalf("no signature: %v", err)
 	}
@@ -195,7 +194,6 @@ func TestOwnerEnrolledAddressNeedsTheOwnersSignatureAndLookupMarksIt(t *testing.
 		t.Error("and for this fingerprint only")
 	}
 
-	// Revoking needs the signature too.
 	if _, err := e.d.Revoke(ctx, ana, age1.Fingerprint, nil); !errors.Is(err, ErrOwnerRequired) {
 		t.Errorf("revoke without: %v", err)
 	}
@@ -507,7 +505,6 @@ func TestEnrollChallengeIsSingleUseBoundToTheUserAndCurrentKeyOnly(t *testing.T)
 	if view, _ := dOld.Enrollment(ctx, "ana@x.io"); len(view.Keys) != 2 {
 		t.Errorf("%+v", view)
 	}
-	// A mode that is not one.
 	ch3, _ := dOld.EnrollChallenge(ctx, ana)
 	weird := e.enrollRequest(ch3, OpEnroll, priv2, nil)
 	weird.Mode = "delete"
@@ -613,7 +610,6 @@ func TestAuditAddressContinuesFromAnEarlierRun(t *testing.T) {
 	if len(alone.Violations) == 0 {
 		t.Error("a run that starts mid-history has no enrollment to check against: the rotation is flagged")
 	}
-	// Entries of other addresses are skipped.
 	if other := AuditAddress("bo@x.io", e.d.LogAddressesFor("bo@x.io"), l1.Entries, AuditOptions{}); len(other.Entries) != 0 || other.Enrolled {
 		t.Errorf("%+v", other)
 	}

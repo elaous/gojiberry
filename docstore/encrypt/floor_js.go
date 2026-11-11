@@ -34,7 +34,6 @@ func storage() js.Value {
 	return storageFn
 }
 
-// localStorageKV is a KV over the browser's localStorage.
 type localStorageKV struct{}
 
 func call(op, key, value string) (res js.Value, err error) {

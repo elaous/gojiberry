@@ -18,7 +18,6 @@ import (
 // RevokedSignerPrefix is the keyspace of revoked-signer manifests.
 const RevokedSignerPrefix = docstore.RevokedSignerPrefix
 
-// signerManifest is what a removed key had written.
 type signerManifest struct {
 	Key    string      `json:"key"` // SignerFingerprint of the removed key
 	At     int64       `json:"at"`
@@ -37,7 +36,6 @@ func (m signerManifest) message() []byte {
 	return h.Sum(nil)
 }
 
-// loadSignerManifest reads the manifest of a key.
 func (s *Sharing) loadSignerManifest(ctx context.Context, fp string) (*signerManifest, error) {
 	d, err := s.Adapter.Inner.Load(ctx, RevokedSignerPrefix+fp)
 	if errors.Is(err, docstore.ErrNotFound) {
@@ -107,8 +105,7 @@ type RevokeSignerReport struct {
 	Late []string
 	// Manifest is how many frames the removed key signed.
 	Manifest int
-	// During are the files the removed key wrote during the run.
-	During []string
+	During   []string
 	// Skipped are the documents that could not be repaired.
 	Skipped []RepairSkip
 }

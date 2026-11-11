@@ -36,7 +36,7 @@ func TestUnsignedWriterIsToldWhenTheRecordFlipsUnderIt(t *testing.T) {
 			id := w.history(t)
 			f := id + "~cccccccccccc.open"
 			other := w.otherClient()
-			other.afterBind = func() { // the record was read as not signed; now the owner flips it
+			other.afterBind = func() {
 				other.afterBind = nil
 				if _, err := w.sharing.Repair(ctx, id); err != nil {
 					t.Error(err)

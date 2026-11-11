@@ -23,20 +23,15 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 )
 
-// Proof of possession and attestation.
-
 // ChallengeTTL is how long a challenge can be answered.
 const ChallengeTTL = 2 * time.Minute
 
-// popGrace is how long a used challenge's record is kept.
 const popGrace = time.Minute
 
-// attestSkew is how far an attestation's time may be off.
 const attestSkew = 10 * time.Minute
 
 var errBadPublicKey = errors.New("not a public key")
 
-// challengeToken is the payload of a challenge's token.
 type challengeToken struct {
 	ID    string `json:"id"`
 	Kid   string `json:"kid"`
@@ -87,7 +82,6 @@ func (d *AdapterDirectory) Challenge(_ context.Context, user auth.User, keyText 
 	return docstore.DirectoryChallenge{Token: token, Encrypted: base64.StdEncoding.EncodeToString(enc.Bytes()), Expires: exp}, nil
 }
 
-// nonceLen is the length of a challenge's nonce.
 const nonceLen = 32
 
 // ErrNotAChallenge is returned by OpenChallenge for a non-challenge.
@@ -113,7 +107,6 @@ func OpenChallenge(c docstore.DirectoryChallenge, id age.Identity) (docstore.Dir
 	return docstore.DirectoryProof{Token: c.Token, Nonce: string(nonce)}, nil
 }
 
-// checkProof verifies a proof for a user and key at a time.
 func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce string, now time.Time) (challengeToken, error) {
 	bad := func(why string) (challengeToken, error) {
 		return challengeToken{}, fmt.Errorf("%w: %s", ErrBadProof, why)
@@ -128,7 +121,6 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	if err1 != nil || err2 != nil || json.Unmarshal(payload, &tok) != nil {
 		return bad("malformed")
 	}
-	// Only the current key's challenges are honoured.
 	if tok.Kid == "" || tok.Kid != d.Signer.KeyID() || !d.Signer.Verify(tok.Kid, challengeMessage(payload), sig) {
 		return bad("not issued by this directory")
 	}
@@ -145,7 +137,6 @@ func (d *AdapterDirectory) checkProof(user auth.User, r Recipient, token, nonce 
 	return tok, nil
 }
 
-// claimChallenge uses a challenge up, so it cannot be reused.
 func (d *AdapterDirectory) claimChallenge(ctx context.Context, tok challengeToken) error {
 	data, _ := json.Marshal(map[string]int64{"exp": tok.Exp})
 	err := d.createOnly(ctx, popPrefix+tok.ID, data)
@@ -155,7 +146,6 @@ func (d *AdapterDirectory) claimChallenge(ctx context.Context, tok challengeToke
 	return err
 }
 
-// createOnly saves data under id only if none exists.
 func (d *AdapterDirectory) createOnly(ctx context.Context, id string, data []byte) error {
 	if c, ok := d.Store.(docstore.ConditionalAdapter); ok {
 		err := c.SaveIf(ctx, id, data, "")
@@ -173,7 +163,6 @@ func (d *AdapterDirectory) createOnly(ctx context.Context, id string, data []byt
 	return d.Store.Save(ctx, id, data)
 }
 
-// saveIf replaces record id when it still has the digest.
 func (d *AdapterDirectory) saveIf(ctx context.Context, id string, data []byte, prev string) error {
 	if c, ok := d.Store.(docstore.ConditionalAdapter); ok {
 		err := c.SaveIf(ctx, id, data, prev)
@@ -202,7 +191,6 @@ func AttestationMessage(email, fingerprint string, at int64) []byte {
 	return []byte("directory-binding|" + normalizeEmail(email) + "|" + fingerprint + "|" + strconv.FormatInt(at, 10))
 }
 
-// Attest signs the binding of the key with its private half.
 func Attest(priv ed25519.PrivateKey, email string, at time.Time) (docstore.DirectoryAttestation, error) {
 	pub, err := ssh.NewPublicKey(priv.Public())
 	if err != nil {
@@ -235,7 +223,6 @@ func AttestSSH(pem []byte, email string, at time.Time) (publicKey string, att do
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))), att, err
 }
 
-// sshEd25519Public is the Ed25519 public key inside an SSH key.
 func sshEd25519Public(text string) (ed25519.PublicKey, bool) {
 	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(text)))
 	if err != nil || pub.Type() != "ssh-ed25519" {

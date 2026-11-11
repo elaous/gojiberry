@@ -39,7 +39,6 @@ func TestPackSealerSealsForTheOwnerKeysAndOpensWithThem(t *testing.T) {
 	if _, err := openNone(ctx, id, env); !errors.Is(err, docstore.ErrLocked) {
 		t.Errorf("no keys: %v", err)
 	}
-	// No recipients: nothing is sealed.
 	sealNone, _ := PackSealer(nil, nil)
 	if _, err := sealNone(ctx, id, []byte("x")); err == nil {
 		t.Error("sealed to no one")

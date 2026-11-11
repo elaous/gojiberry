@@ -38,5 +38,4 @@ type KeyDirectory interface {
 	Lookup(ctx context.Context, email string) ([]PublishedKey, error)
 }
 
-// normalizeEmail is the form an address is compared in.
 func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }

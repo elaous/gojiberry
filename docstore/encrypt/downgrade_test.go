@@ -104,7 +104,6 @@ func (w *world) frameOf(t *testing.T, f string) frameInfo {
 
 func (w *world) frameVersion(t *testing.T, f string) int { return w.frameOf(t, f).version }
 
-// snapshot is the digest of everything in the store.
 func (w *world) snapshot(t *testing.T) map[string]string {
 	t.Helper()
 	ctx := context.Background()
@@ -677,7 +676,6 @@ func TestIndexIsSignedByTheOwner(t *testing.T) {
 	if idx, err := w.sharing.Index(ctx); err != nil || len(idx.Docs) != 1 {
 		t.Errorf("%+v %v", idx, err)
 	}
-	// Usage ignores it.
 	if docs, err := w.sharing.Usage(ctx, w.bo.r.Fingerprint); err != nil || len(docs) != 0 {
 		t.Errorf("%v %v", docs, err)
 	}

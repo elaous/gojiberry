@@ -146,7 +146,6 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 	if err != nil {
 		return rep, err
 	}
-	// One listing serves the whole run.
 	groups := map[string][]string{}
 	var docs []string
 	for _, m := range metas {
@@ -161,7 +160,6 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 	}
 	sort.Strings(docs)
 	if o.After != "" {
-		// Groups after the cursor only.
 		after := groupOf(o.After)
 		docs = docs[sort.Search(len(docs), func(i int) bool { return docs[i] > after }):]
 	}
@@ -272,7 +270,6 @@ func (s *Sharing) RepairAll(ctx context.Context, o RepairAllOptions) (RepairAllR
 	return rep, nil
 }
 
-// recordSigner is the owner key that signed the document's record.
 func (s *Sharing) recordSigner(ctx context.Context, doc string) ed25519.PublicKey {
 	if !docfile.ValidID(doc) {
 		return nil
@@ -288,7 +285,6 @@ func (s *Sharing) recordSigner(ctx context.Context, doc string) ed25519.PublicKe
 	return by
 }
 
-// indexSigner is the owner key that signed the keys index.
 func (s *Sharing) indexSigner(ctx context.Context) ed25519.PublicKey {
 	d, err := s.Store.Load(ctx, IndexKey)
 	if err != nil {
@@ -306,7 +302,6 @@ func (s *Sharing) indexSigner(ctx context.Context) ed25519.PublicKey {
 	return nil
 }
 
-// tally adds one document's signers to the report.
 func tally(rep *RepairAllReport, sc frameScan, rec ed25519.PublicKey, cur *Signer, signs bool) (other bool) {
 	row := func(k ed25519.PublicKey) *SignerFrames {
 		for i := range rep.BySigner {
@@ -335,7 +330,6 @@ func tally(rep *RepairAllReport, sc frameScan, rec ed25519.PublicKey, cur *Signe
 	return other
 }
 
-// repairGroup seals one group again, signed.
 func (s *Sharing) repairGroup(ctx context.Context, group string, ids []string) (int, error) {
 	if docfile.ValidID(group) {
 		return s.Repair(ctx, group)
@@ -350,7 +344,6 @@ func (s *Sharing) repairGroup(ctx context.Context, group string, ids []string) (
 	return n, nil
 }
 
-// allGone reports whether none of ids is stored any more.
 func (s *Sharing) allGone(ctx context.Context, ids []string) bool {
 	for _, id := range ids {
 		if _, _, err := docstore.LoadHead(ctx, s.Adapter.Inner, id, 1); !errors.Is(err, docstore.ErrNotFound) {
@@ -383,7 +376,6 @@ func classifyRepairErr(err error) (RepairSkipReason, []string) {
 	return SkipError, nil
 }
 
-// frameMark is a v3 frame as the scan saw it.
 type frameMark struct {
 	file   string
 	signer ed25519.PublicKey
@@ -396,7 +388,6 @@ type FrameMark struct {
 	Hash string `json:"h"`
 }
 
-// frameScan is what scanFrames found in one document's files.
 type frameScan struct {
 	unsigned []string            // v1, v2 frames
 	plain    []string            // files stored in the clear (only with encryptPlain)
@@ -407,10 +398,8 @@ type frameScan struct {
 	err      error // set when the document cannot be judged
 }
 
-// repairHeadBytes is how much of each file the scan reads.
 var repairHeadBytes = 128 << 10
 
-// scanFrames reads the frame header of every file of ids.
 func (a *Adapter) scanFrames(ctx context.Context, ids []string, encryptPlain bool) frameScan {
 	var sc frameScan
 	fail := func(id string, reason RepairSkipReason, err error) {

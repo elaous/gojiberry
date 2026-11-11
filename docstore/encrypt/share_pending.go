@@ -27,7 +27,6 @@ type PendingStatus struct {
 	Pending bool
 	// Since is when the record was marked pending.
 	Since time.Time
-	// Stuck says it has been pending for longer than the warning time.
 	Stuck bool
 }
 
@@ -121,16 +120,13 @@ func UnsignedHook(sharing *Sharing) func(ctx context.Context, target string) ([]
 	}
 }
 
-// finishAttempts is how many times finish retries.
 const finishAttempts = 5
 
-// finish encrypts every file of the document again.
 func (s *Sharing) finish(ctx context.Context, docID string) (int, error) {
 	n, _, _, err := s.finishFiles(ctx, docID, repairOpts{})
 	return n, err
 }
 
-// finishFiles is finish that also reports unsigned files.
 func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) (n int, stale, unreadable []string, err error) {
 	if ro.acceptUnsigned && (s.Adapter == nil || s.Adapter.Signer == nil) {
 		return 0, nil, nil, fmt.Errorf("%w: %s: AcceptUnsigned seals files again with the owner's signature", ErrNoFrameSigner, docID)
@@ -206,10 +202,8 @@ func (s *Sharing) finishFiles(ctx context.Context, docID string, ro repairOpts) 
 	return n, nil, nil, docstore.ErrConflict
 }
 
-// unsignedLateCap is how many file ids the record lists.
 const unsignedLateCap = 64
 
-// listCapped joins ids with commas, capped in length.
 func listCapped(files []string) string {
 	if len(files) <= unsignedLateCap {
 		return strings.Join(files, ", ")
@@ -217,7 +211,6 @@ func listCapped(files []string) string {
 	return fmt.Sprintf("%s ... and %d more", strings.Join(files[:unsignedLateCap], ", "), len(files)-unsignedLateCap)
 }
 
-// markUnsignedLate records unsigned files in the signed record.
 func (s *Sharing) markUnsignedLate(ctx context.Context, docID string, files []string, wantSeq uint64) error {
 	files = slices.Clone(files)
 	sort.Strings(files)
@@ -247,7 +240,6 @@ func (s *Sharing) markUnsignedLate(ctx context.Context, docID string, files []st
 	return nil
 }
 
-// clearUnsignedLate drops the mark once no file is unsigned.
 func (s *Sharing) clearUnsignedLate(ctx context.Context, docID string) error {
 	rec, _, err := loadRecord(ctx, s.Store, docID, s.verifiers(), s.SeqFloor)
 	if err != nil || len(rec.UnsignedLate) == 0 {
@@ -269,8 +261,7 @@ func (s *Sharing) clearUnsignedLate(ctx context.Context, docID string) error {
 
 // UnsignedDoc is a document whose re-key ended with unsigned files.
 type UnsignedDoc struct {
-	Doc string
-	// Files are the ids of the files that were not signed.
+	Doc   string
 	Files []string
 	Count int
 	// Since is when the re-key found them.

@@ -25,8 +25,7 @@ type ResignReport struct {
 	Skipped int
 	// Unverified carry a signature that no known key verifies.
 	Unverified int
-	// Unknown are named under a key the server does not know.
-	Unknown int
+	Unknown    int
 	// Dropped are tombstones past the revoke window.
 	Dropped int
 	// Enrollments are owner enrollment records moved.
@@ -167,7 +166,6 @@ func (d *AdapterDirectory) resignOne(ctx context.Context, id string, rep *Resign
 	return nil
 }
 
-// resignEnrollments moves owner enrollment records to the current key.
 func (d *AdapterDirectory) resignEnrollments(ctx context.Context, rep *ResignReport) error {
 	metas, err := docstore.ListPrefix(ctx, d.Store, docstore.DirectoryEnrollPrefix)
 	if err != nil {

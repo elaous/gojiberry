@@ -18,13 +18,10 @@ import (
 	"time"
 )
 
-// DefaultResetWait is how long a reset of the owner key waits.
 const DefaultResetWait = 24 * time.Hour
 
-// ownerSkew is how far an owner signature's time may be off.
 const ownerSkew = 10 * time.Minute
 
-// auditSkew is the tolerance an auditor allows.
 const auditSkew = ownerSkew + time.Minute
 
 // OwnerOpMessage is what the owner key signs for an operation.
@@ -61,7 +58,6 @@ func SignOwnerPublishWith(signer crypto.Signer, email, fingerprint, label string
 	return docstore.DirectoryOwnerSig{Time: at.Unix(), Prev: prev, V: 2, Sig: base64.StdEncoding.EncodeToString(sig)}, nil
 }
 
-// verifyOwnerPublishV2 checks a version 2 publication.
 func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	b, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil || len(b) != ed25519.SignatureSize || len(pub) != ed25519.PublicKeySize {
@@ -70,7 +66,6 @@ func verifyOwnerPublishV2(pub ed25519.PublicKey, email, fingerprint, labelHash s
 	return ed25519.Verify(pub, OwnerPublishMessageV2(email, fingerprint, labelHash, at, prev), b)
 }
 
-// verifyOwnerVersion checks the signature of an entry's version.
 func verifyOwnerVersion(pub ed25519.PublicKey, v int, op, email, fingerprint, labelHash string, at int64, prev, sig string) bool {
 	if v == 2 {
 		return op == OpPublish && verifyOwnerPublishV2(pub, email, fingerprint, labelHash, at, prev, sig)
@@ -140,7 +135,6 @@ func verifyOwner(pub ed25519.PublicKey, op, email, fingerprint string, at int64,
 	return ed25519.Verify(pub, OwnerOpMessage(op, email, fingerprint, at, prev), b)
 }
 
-// VerifyOwnerOp says sig is the owner key's signature of the message.
 func VerifyOwnerOp(pub ed25519.PublicKey, op, email, fingerprint string, at int64, prev, sig string) bool {
 	return verifyOwner(pub, op, email, fingerprint, at, prev, sig)
 }
@@ -162,7 +156,6 @@ func VerifyOwnerEvidence(email string, k docstore.DirectoryKey) bool {
 	return verifyOwnerVersion(pub, k.Owner.V, OpPublish, email, k.Fingerprint, LabelHash(k.Label), k.Owner.Time, k.Owner.Prev, k.Owner.Sig)
 }
 
-// enrollRecord is the stored enrollment of an address.
 type enrollRecord struct {
 	V          int                          `json:"v"`
 	Kid        string                       `json:"kid"`
@@ -204,7 +197,6 @@ func (d *AdapterDirectory) enrollNames(email string) []string {
 
 var errEnrollmentCorrupt = errors.New("encrypt: the owner enrollment of this address cannot be read or verified")
 
-// readEnrollment reads the enrollment of an address.
 func (d *AdapterDirectory) readEnrollment(ctx context.Context, email string) (*enrollRecord, string, error) {
 	want := normalizeEmail(email)
 	for _, id := range d.enrollNames(want) {
@@ -254,7 +246,6 @@ func (d *AdapterDirectory) Enrollment(ctx context.Context, email string) (docsto
 	return d.enrollmentView(rec), nil
 }
 
-// writeEnrollment saves rec, signed now.
 func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, rec enrollRecord, prev string) error {
 	names := d.enrollNames(email)
 	id := names[0]
@@ -278,7 +269,6 @@ func (d *AdapterDirectory) writeEnrollment(ctx context.Context, email string, re
 	return nil
 }
 
-// checkLogPosition says prev names an entry that is the head.
 func (d *AdapterDirectory) checkLogPosition(ctx context.Context, prev string) error {
 	seq, hash, err := ParseLogPosition(prev)
 	if err != nil {
@@ -309,7 +299,6 @@ var (
 	ErrResetWait     = docstore.ErrDirectoryResetWait
 )
 
-// checkOwner checks the owner signature of an operation.
 func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op, email, fingerprint, labelHash string, o *docstore.DirectoryOwnerSig, now time.Time) (*docstore.DirectoryOwnerSig, error) {
 	if enr == nil {
 		return nil, nil
@@ -341,7 +330,6 @@ func (d *AdapterDirectory) checkOwner(ctx context.Context, enr *enrollRecord, op
 	return o, nil
 }
 
-// enrollToken is the payload of an enroll challenge.
 type enrollToken struct {
 	ID    string `json:"id"`
 	Kid   string `json:"kid"`
@@ -407,7 +395,6 @@ func (d *AdapterDirectory) checkEnrollToken(user auth.User, token string, now ti
 	return tok, nil
 }
 
-// checkUser is the common gate of the operations on an address.
 func (d *AdapterDirectory) checkUser(user auth.User) error {
 	if !publishable(user) {
 		return ErrNotPublishable
@@ -623,5 +610,4 @@ func (d *AdapterDirectory) CancelReset(ctx context.Context, user auth.User, owne
 	return docstore.DirectoryEnrollment{}, docstore.ErrDirectoryBusy
 }
 
-// maxCASRounds bounds how often an operation retries.
 const maxCASRounds = 8

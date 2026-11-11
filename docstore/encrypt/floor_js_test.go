@@ -52,7 +52,6 @@ func TestLocalStorageSeqFloorPersistsInTheBrowsersStorage(t *testing.T) {
 	if v, _ := g.Get(ctx, "doc"); v != 6 {
 		t.Errorf("%d", v)
 	}
-	// Another account's prefix is another floor.
 	if v, _ := LocalStorageSeqFloor("gojiberry-floor:bo:").Get(ctx, "doc"); v != 0 {
 		t.Errorf("%d", v)
 	}

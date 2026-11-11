@@ -96,7 +96,6 @@ func TestWrongKeyAndTamperedCiphertextAreRefused(t *testing.T) {
 	if _, err := stranger.Load(ctx, "d"); !errors.Is(err, ErrNoKey) {
 		t.Fatalf("a key that is not a recipient: %v", err)
 	}
-	// Flip a byte in the payload.
 	raw, _ := inner.Load(ctx, "d")
 	bad := append([]byte(nil), raw.Data...)
 	bad[len(bad)-3] ^= 1
@@ -516,14 +515,12 @@ func TestSaveIfOnAnEncryptedID(t *testing.T) {
 	if err := a.SaveIf(ctx, "gone", []byte("x"), docstore.Digest([]byte("x"))); !errors.Is(err, docstore.ErrConflict) {
 		t.Fatalf("%v", err)
 	}
-	// Not conditional inside: it says so.
 	plainStore := New(unconditional{inner}, Static{})
 	if err := plainStore.SaveIf(ctx, "d", nil, ""); !errors.Is(err, docstore.ErrConditionalUnsupported) {
 		t.Fatalf("%v", err)
 	}
 }
 
-// unconditional hides the inner adapter's SaveIf.
 type unconditional struct{ docstore.Adapter }
 
 func sharingSetup(t *testing.T, inner docstore.Adapter, owner person) (*Adapter, *Sharing) {
@@ -559,7 +556,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	if err := ad.Save(ctx, f, []byte("v2")); !errors.Is(err, ErrUnsignedRecord) {
 		t.Fatalf("unsigned: %v", err)
 	}
-	// Signed by Mallory's own signing key.
 	evil, _ := NewSigner(bytes.Repeat([]byte{9}, 32))
 	forged := &Sharing{Store: inner, Adapter: ad, Signer: evil}
 	_ = inner.Delete(ctx, KeysPrefix+docA)
@@ -579,7 +575,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	if _, err := sh.List(ctx, docA); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("a record moved between documents: %v", err)
 	}
-	// A changed payload.
 	var sr signedRecord
 	_ = json.Unmarshal(good.Data, &sr)
 	sr.Payload = bytes.Replace(sr.Payload, []byte(`"v":1`), []byte(`"v":2`), 1)
@@ -596,7 +591,6 @@ func TestAStoreWriterCannotAddARecipientOrChangeTheList(t *testing.T) {
 	if err := noSigners.Save(ctx, f, []byte("v3")); !errors.Is(err, ErrBadSignature) {
 		t.Fatalf("%v", err)
 	}
-	// No signer, no change.
 	if err := (&Sharing{Store: inner, Adapter: ad}).Add(ctx, docA, mallory.r, mallory.r.Fingerprint); !errors.Is(err, ErrNoSigner) {
 		t.Fatalf("%v", err)
 	}
