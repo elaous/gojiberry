@@ -1,4 +1,3 @@
-// Package addons lists the page's add-ons and their required methods.
 package addons
 
 import (
@@ -15,8 +14,7 @@ type Spec struct {
 	// Name is the property of window.addons.
 	Name string
 	// Method is the method the page needs from the add-on.
-	Method string
-	// Purpose is a sentence in English about what it is for.
+	Method  string
 	Purpose string
 	// Models reports whether the add-on has downloadable models.
 	Models bool
@@ -44,23 +42,17 @@ func Find(name string) (Spec, bool) {
 	return Spec{}, false
 }
 
-// Model is a download an add-on keeps: a speech model, dictionary or language pair.
 type Model struct {
-	// ID is passed to install and remove; Label is shown to people.
 	ID, Label string
-	// Lang is the BCP 47 tag it serves, "" for any (or none).
-	Lang string
-	// Size is what installing downloads, in bytes (0 when not known).
-	Size int64
-	// Licence is an https address or a short name such as "MIT".
-	Licence string
+	Lang      string
+	Size      int64
+	Licence   string
 	// Installed says it is on the device.
 	Installed bool
 }
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:\-]{0,119}$`)
 
-// ParseModels reads an add-on's models() JSON; it drops models without an id.
 func ParseModels(data []byte) ([]Model, error) {
 	var raw []struct {
 		ID        string  `json:"id"`
@@ -95,7 +87,6 @@ func ParseModels(data []byte) ([]Model, error) {
 	return out, nil
 }
 
-// LicenceLink returns the licence as a link, only for https addresses.
 func (m Model) LicenceLink() (string, bool) {
 	u, err := url.Parse(m.Licence)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
