@@ -55,7 +55,6 @@ func New(ctx context.Context, dsn string) (*Adapter, error) {
 	return a, nil
 }
 
-// newFromDB wraps an already-open database.
 func newFromDB(db *sql.DB) *Adapter {
 	return &Adapter{db: db, table: "documents"}
 }
@@ -168,7 +167,6 @@ func (a *Adapter) List(ctx context.Context) ([]docstore.Meta, error) {
 	return a.list(ctx, `SELECT id, length(data), updated_at FROM documents`)
 }
 
-// likeEscaper escapes what LIKE treats as wildcards.
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // ListPrefix implements docstore.PrefixLister.
