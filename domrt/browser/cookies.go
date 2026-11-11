@@ -12,9 +12,9 @@ import (
 
 // CookieOptions configures Cookies.Set.
 type CookieOptions struct {
-	Path     string    // "" defaults to the current path
-	Domain   string    // "" defaults to the current domain
-	MaxAge   int       // seconds; 0 means unset (a session cookie); negative deletes it immediately
+	Path     string // "" defaults to the current path
+	Domain   string // "" defaults to the current domain
+	MaxAge   int
 	Expires  time.Time // zero means unset; MaxAge takes precedence where browsers support both
 	Secure   bool
 	SameSite string // "Strict", "Lax", or "None"; "" leaves the browser's own default
@@ -45,7 +45,6 @@ func (cookieJar) All() map[string]string {
 	return out
 }
 
-// Get returns the named cookie's value and whether it was present.
 func (j cookieJar) Get(name string) (string, bool) {
 	v, ok := j.All()[name]
 	return v, ok
@@ -59,7 +58,7 @@ func (cookieJar) Set(name, value string, opts CookieOptions) {
 	var b strings.Builder
 	b.WriteString(name)
 	b.WriteString("=")
-	b.WriteString(strings.ReplaceAll(url.QueryEscape(value), "+", "%20")) // a space as %20, so a literal '+' stays one on the way back
+	b.WriteString(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
 	if opts.Path != "" {
 		fmt.Fprintf(&b, "; path=%s", opts.Path)
 	}
@@ -86,7 +85,6 @@ func (j cookieJar) Delete(name string, path, domain string) {
 	j.Set(name, "", CookieOptions{Path: path, Domain: domain, MaxAge: -1})
 }
 
-// cookieTokenOK reports whether s can be written into a cookie.
 func cookieTokenOK(s string) bool {
 	for _, r := range s {
 		if r == ';' || r < 0x20 || r == 0x7f {

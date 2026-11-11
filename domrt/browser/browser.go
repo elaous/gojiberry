@@ -1,6 +1,5 @@
 //go:build js && wasm
 
-// Package browser exposes browser JavaScript APIs to Go WASM code.
 package browser
 
 import (
@@ -38,7 +37,6 @@ func (r *Response) Close() {
 	}
 }
 
-// bodyErr names a timeout that cut the body short.
 func (r *Response) bodyErr(err error) error {
 	if err != nil && r.timedOut != nil && *r.timedOut {
 		return fmt.Errorf("fetch %s: timed out after %s", r.url, r.timeout)
@@ -86,7 +84,6 @@ func FetchTimeout(url string, timeout time.Duration) (*Response, error) {
 	return doFetch(url, map[string]any{}, timeout)
 }
 
-// doFetch issues window.fetch, optionally bounded by a timeout.
 func doFetch(url string, init map[string]any, timeout time.Duration) (*Response, error) {
 	if timeout <= 0 {
 		return awaitFetch(js.Global().Call("fetch", url, js.ValueOf(init)))
@@ -137,7 +134,6 @@ func (r *Response) Text() (string, error) {
 	return v.String(), nil
 }
 
-// JSON reads the full response body and decodes it as JSON.
 func (r *Response) JSON(v any) error {
 	text, err := r.Text()
 	if err != nil {
@@ -159,7 +155,6 @@ func (r *Response) Bytes() ([]byte, error) {
 	return out, nil
 }
 
-// storageArea wraps window.localStorage or window.sessionStorage.
 type storageArea struct{ name string }
 
 // LocalStorage wraps window.localStorage.
@@ -168,7 +163,6 @@ var LocalStorage = storageArea{"localStorage"}
 // SessionStorage wraps window.sessionStorage.
 var SessionStorage = storageArea{"sessionStorage"}
 
-// Get returns the stored value for key and whether it was found.
 func (s storageArea) Get(key string) (value string, ok bool) {
 	defer func() {
 		if recover() != nil { // storage blocked: nothing is stored
@@ -182,7 +176,6 @@ func (s storageArea) Get(key string) (value string, ok bool) {
 	return v.String(), true
 }
 
-// Set stores value under key; it returns an error when storage is full.
 func (s storageArea) Set(key, value string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {

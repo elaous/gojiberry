@@ -12,37 +12,9 @@ import (
 	"github.com/elaous/gojiberry/domrt"
 )
 
-// FetchTransport implements http.RoundTripper by translating a real
-// *http.Request into a browser fetch() call and the resulting Response
-// back into a real *http.Response -- task #107's own mobile-backend
-// groundwork (see OnDesign's docs/ROADMAP.md, "genuine native mobile
-// backend"): the point is that application code written against plain
-// *http.Client/*http.Request never has to know or care whether it's
-// running in a browser or as a real native binary. On native/mobile,
-// http.DefaultTransport already does real TCP/TLS via the OS -- no
-// wrapper needed there at all, that's the whole win. On web, wire this
-// in instead:
-//
-//	client := &http.Client{Transport: browser.FetchTransport{}}
-//	resp, err := client.Get("https://example.com")
-//
-// Deliberately not a replacement for Fetch/FetchOpts/FetchTimeout
-// above: those already have real callers across this repo and
-// OnDesign, migrating them is its own separate, mechanical task (see
-// the ROADMAP entry's own "third bucket"), not attempted here. This is
-// new infrastructure for code written from here on, or migrated
-// deliberately -- both can coexist indefinitely, they just reach the
-// same browser fetch() through two different Go-level shapes.
 type FetchTransport struct{}
 
-// RoundTrip implements http.RoundTripper. The request body (if any) is
-// read fully into memory before the call -- fetch() has no streaming
-// request-body support worth relying on across browsers -- and so is
-// the response body, the same "read the whole thing, no true
-// streaming" tradeoff Response.Bytes() above already makes for the
-// same reason. Cancellation (req.Context() being done, including a
-// deadline) aborts the underlying fetch via a real AbortController,
-// mirroring doFetch's own timeout-driven abort above.
+// RoundTrip implements http.RoundTripper.
 func (FetchTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var body []byte
 	if req.Body != nil {
@@ -56,13 +28,6 @@ func (FetchTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	init := map[string]any{"method": req.Method}
 	if len(req.Header) > 0 {
-		// A real Headers object, built via repeated append calls, not a
-		// plain map[string]any -- a plain object literal can only ever
-		// hold one value per key, silently dropping a request with
-		// multiple values for the same header (multiple Accept entries,
-		// say); Headers.append preserves every one, matching what
-		// *http.Request.Header (a map[string][]string) can actually
-		// represent.
 		headers := js.Global().Get("Headers").New()
 		for k, vs := range req.Header {
 			for _, v := range vs {

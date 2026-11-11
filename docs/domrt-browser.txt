@@ -1,6 +1,5 @@
 package browser // import "github.com/elaous/gojiberry/domrt/browser"
 
-Package browser exposes browser JavaScript APIs to Go WASM code.
 
 CONSTANTS
 
@@ -63,9 +62,9 @@ func WriteClipboardText(text string) error
 TYPES
 
 type CookieOptions struct {
-	Path     string    // "" defaults to the current path
-	Domain   string    // "" defaults to the current domain
-	MaxAge   int       // seconds; 0 means unset (a session cookie); negative deletes it immediately
+	Path     string // "" defaults to the current path
+	Domain   string // "" defaults to the current domain
+	MaxAge   int
 	Expires  time.Time // zero means unset; MaxAge takes precedence where browsers support both
 	Secure   bool
 	SameSite string // "Strict", "Lax", or "None"; "" leaves the browser's own default
@@ -99,35 +98,9 @@ type FetchOptions struct {
     FetchOptions configures FetchOpts.
 
 type FetchTransport struct{}
-    FetchTransport implements http.RoundTripper by translating a real
-    *http.Request into a browser fetch() call and the resulting Response back
-    into a real *http.Response -- task #107's own mobile-backend groundwork (see
-    OnDesign's docs/ROADMAP.md, "genuine native mobile backend"): the point is
-    that application code written against plain *http.Client/*http.Request never
-    has to know or care whether it's running in a browser or as a real native
-    binary. On native/mobile, http.DefaultTransport already does real TCP/TLS
-    via the OS -- no wrapper needed there at all, that's the whole win. On web,
-    wire this in instead:
-
-        client := &http.Client{Transport: browser.FetchTransport{}}
-        resp, err := client.Get("https://example.com")
-
-    Deliberately not a replacement for Fetch/FetchOpts/FetchTimeout above: those
-    already have real callers across this repo and OnDesign, migrating them
-    is its own separate, mechanical task (see the ROADMAP entry's own "third
-    bucket"), not attempted here. This is new infrastructure for code written
-    from here on, or migrated deliberately -- both can coexist indefinitely,
-    they just reach the same browser fetch() through two different Go-level
-    shapes.
 
 func (FetchTransport) RoundTrip(req *http.Request) (*http.Response, error)
-    RoundTrip implements http.RoundTripper. The request body (if any) is read
-    fully into memory before the call -- fetch() has no streaming request-body
-    support worth relying on across browsers -- and so is the response body,
-    the same "read the whole thing, no true streaming" tradeoff Response.Bytes()
-    above already makes for the same reason. Cancellation (req.Context()
-    being done, including a deadline) aborts the underlying fetch via a real
-    AbortController, mirroring doFetch's own timeout-driven abort above.
+    RoundTrip implements http.RoundTripper.
 
 type File struct {
 	Value js.Value
@@ -266,7 +239,6 @@ func (r *Response) Close()
     Close releases what a bounded fetch holds.
 
 func (r *Response) JSON(v any) error
-    JSON reads the full response body and decodes it as JSON.
 
 func (r *Response) Text() (string, error)
     Text reads the full response body as a string.
@@ -337,29 +309,14 @@ func (t *Transaction) ObjectStore(name string) *ObjectStore
 type Worker struct {
 	// Has unexported fields.
 }
-    Worker wraps a browser dedicated Worker: a separate Go/WASM binary running
-    on a real background thread, isolated from the DOM and this program's
-    memory, reachable only through PostMessage/OnMessage (see domrt/worker
-    for the worker-side half). Unlike a service worker (domrt/sw), a dedicated
-    Worker needs no separate registration step -- NewWorker starts it directly.
 
 func NewWorker(url string) *Worker
-    NewWorker starts a new Worker running the script at url -- typically a
-    small JS bootstrap that does importScripts('wasm_exec.js') and instantiates
-    a separate .wasm binary built from a domrt/worker program (see the
-    wasm-worker-demo example).
 
 func (w *Worker) OnError(fn func(err *html.JSError))
-    OnError registers the handler called when the worker throws an uncaught
-    exception.
 
 func (w *Worker) OnMessage(fn func(data js.Value))
-    OnMessage registers the handler called for each message the worker posts
-    back. Calling it again replaces the previous handler.
 
 func (w *Worker) PostMessage(data any)
-    PostMessage sends data to the worker (structured-clone, not shared memory --
-    the same constraint domrt/worker.PostMessage has sending the other way).
 
 func (w *Worker) Terminate()
     Terminate immediately stops the worker and releases its registered

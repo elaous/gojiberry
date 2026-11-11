@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// awaitIDBRequest blocks until an IDBRequest succeeds or fails.
 func awaitIDBRequest(req js.Value) (js.Value, error) {
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
@@ -55,7 +54,6 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
 
-	// The handlers stay alive until the request settles.
 	var onUpgrade, onSuccess, onError js.Func
 	abandoned := false
 	releaseAll := func() {
@@ -102,7 +100,6 @@ func OpenDatabase(name string, version int, upgrade func(db *Database)) (*Databa
 	}
 }
 
-// openTimeout is how long OpenDatabase waits for the browser.
 const openTimeout = 30 * time.Second
 
 // CreateObjectStore creates a new object store keyed by key.

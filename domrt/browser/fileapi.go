@@ -7,7 +7,6 @@ import (
 	"syscall/js"
 )
 
-// awaitFileReader blocks until a FileReader finishes.
 func awaitFileReader(reader js.Value) (js.Value, error) {
 	result := make(chan js.Value, 1)
 	fail := make(chan error, 1)
