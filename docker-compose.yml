@@ -121,10 +121,5 @@ services:
     restart: unless-stopped
     ports: ["8025:8025", "1025:1025"]
 
-  showcase:
-    build: { context: ., dockerfile: examples/canvas-editor-showcase/Dockerfile }
-    restart: unless-stopped
-    ports: ["8000:80"]
-
 volumes:
   db-data:
