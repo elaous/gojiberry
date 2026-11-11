@@ -330,16 +330,12 @@ type DirectoryService interface {
 	CancelReset(ctx context.Context, user auth.User, owner *DirectoryOwnerSig) (DirectoryEnrollment, error)
 }
 
-// DirectoryHealther is implemented by a DirectoryService that reports on itself (the start-up
-// census): /health shows it under "directory".
+// DirectoryHealther is implemented by a directory with health data.
 type DirectoryHealther interface {
 	DirectoryHealth() DirectoryHealth
 }
 
-// DirectoryPolicy decides who may look up an address. The default allows every signed-in
-// provider user (a public key is public, and finding it by address is the feature); a
-// deployment that wants to bound probing for addresses narrows it (SameDomain, Contacts, AnyOf,
-// or its own).
+// DirectoryPolicy decides who may look up an address.
 type DirectoryPolicy interface {
 	CanLookup(user auth.User, email string) bool
 }
@@ -350,11 +346,10 @@ type DirectoryPolicyFunc func(user auth.User, email string) bool
 // CanLookup implements DirectoryPolicy.
 func (f DirectoryPolicyFunc) CanLookup(user auth.User, email string) bool { return f(user, email) }
 
-// AllowAllLookups is the default policy: any signed-in provider user may look up any address.
+// AllowAllLookups is the default policy: anyone may look up.
 var AllowAllLookups DirectoryPolicy = DirectoryPolicyFunc(func(auth.User, string) bool { return true })
 
-// SameDomain allows a user to look up addresses of their own e-mail domain, which must be a
-// verified one (User.VerifiedEmail): a company's directory that answers only its own people.
+// SameDomain allows a user to look up addresses in their domain.
 func SameDomain() DirectoryPolicy {
 	return DirectoryPolicyFunc(func(u auth.User, email string) bool {
 		d := addressDomain(u.Email)
@@ -362,8 +357,7 @@ func SameDomain() DirectoryPolicy {
 	})
 }
 
-// Contacts allows a user to look up the addresses contacts returns for them (their address book,
-// the people they share documents with), compared case-insensitively.
+// Contacts allows lookups of addresses the user has contact with.
 func Contacts(contacts func(auth.User) []string) DirectoryPolicy {
 	return DirectoryPolicyFunc(func(u auth.User, email string) bool {
 		want := NormalizeAddress(email)
@@ -376,7 +370,7 @@ func Contacts(contacts func(auth.User) []string) DirectoryPolicy {
 	})
 }
 
-// AnyOf allows a lookup that any of the policies allows (none: nothing is allowed).
+// AnyOf allows a lookup that any of the policies allows.
 func AnyOf(policies ...DirectoryPolicy) DirectoryPolicy {
 	return DirectoryPolicyFunc(func(u auth.User, email string) bool {
 		for _, p := range policies {
@@ -388,9 +382,7 @@ func AnyOf(policies ...DirectoryPolicy) DirectoryPolicy {
 	})
 }
 
-// ParseDirectoryLookupMode parses GOJIBERRY_DOCSTORE_DIRECTORY_LOOKUP: "" or "any" (every
-// signed-in provider user may look up any address) or "domain" (only addresses of the user's own
-// verified e-mail domain). It returns the policy.
+// ParseDirectoryLookupMode parses the lookup mode setting.
 func ParseDirectoryLookupMode(raw string) (DirectoryPolicy, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "any":
@@ -410,91 +402,31 @@ func addressDomain(email string) string {
 	return email[i+1:]
 }
 
-// WithDirectory turns on the directory routes, mounted next to /docs when an auth.Manager is
-// present (without sign-in there is nobody to vouch for an address, so they are not mounted):
-//
-//	POST   /directory/challenge     {"key"}  -> {token, encrypted, expires}: a nonce encrypted to the key
-//	POST   /directory/publish       {"key", "label", "proof": {token, nonce}, "attestation": {at, sig}, "owner": {time, prev, sig}}
-//	DELETE /directory/keys/<fingerprint>   [{"owner": {time, prev, sig}}] -> the revoked key
-//	GET    /directory/lookup?email=[&revoked=1] -> {"keys": [{key, type, fingerprint, verified, held, attested, owner_signed, ...}]}
-//	GET    /directory/log?since=    -> {"entries": [...], "keys": {...}}: the transparency log (200 entries at most)
-//	GET    /directory/log/head      -> {seq, hash, at, kid, sig}: the signed head of the log
-//	GET    /directory/log/address   -> {address, previous}: the signed-in owner's pseudonym in the log
-//	GET    /directory/enroll?email= -> the owner enrollment of an address
-//	POST   /directory/enroll/challenge, POST /directory/enroll, POST /directory/enroll/reset,
-//	POST   /directory/enroll/cancel -> owner key enrollment, rotation and reset (see DirectoryEnroll)
-//	GET    /admin/directory/unmapped -> the log pseudonyms no record or key names (operator only, with the reset route)
-//
-// Every route needs a signed-in identity-provider session (a passkey session gets 403). Publishing
-// and revoking, and the owner routes, need an explicitly verified e-mail (User.VerifiedEmail: the
-// provider sent email_verified true, or is configured with auth.Provider.AssumeEmailVerified) and
-// act on that address only: only the signed-in owner of an address can publish or revoke its
-// keys, and an "email" in the body that is not the session's own is refused. What the directory
-// proves, and what it does not, is in docs/encryption-and-passkeys.md (step 4b).
-//
-// Lookup reveals the public keys published for any address to every signed-in provider user
-// that the DirectoryPolicy allows (all, by default), by design: a key is public, and finding a
-// person's key by address is what the directory is for. The log, its head and the enrollment
-// follow the same rule (the log asks the policy about the user's own address, since it names no
-// address in the clear). Every route is limited (WithDirectoryLimits): publishes and revokes per
-// user, lookups and log reads per user first and then per client IP and for the whole server (a
-// user over their own limit does not spend the shared tokens). The IP is the connection's
-// address unless WithDirectoryClientIP says otherwise: behind a proxy every client shares the
-// proxy's, so the real per-client limiting, and any limiting of unauthenticated floods, belongs
-// to the gateway in front of the server; the shared
-// budgets only keep one tenant from draining the service. WithDirectoryGlobalPerDomain makes
-// the whole-server lookup budget one per e-mail domain of the caller. Bodies are small.
+// WithDirectory turns on the directory routes.
 func (s *Server) WithDirectory(d DirectoryService) *Server {
 	s.directory = d
 	return s
 }
 
-// WithDirectoryLimits chooses where the directory's rate limits live: MemoryLimiters (the
-// default, a budget per process) or StoreLimiters(store), which replicas sharing one store
-// share. The names are "dir-publish", "dir-challenge", "dir-lookup" and "dir-log" (per user),
-// "dir-lookup-ip" and "dir-lookup-all-0" to "dir-lookup-all-15" (the whole-server budget, in shards).
+// WithDirectoryLimits sets the directory budgets.
 func (s *Server) WithDirectoryLimits(f LimiterFactory) *Server {
 	s.dirLimitFactory = f
 	return s
 }
 
-// WithDirectoryAdmin names who is the operator: allow is asked of a request on the admin routes
-// and on the log route. It does two things.
-//
-// The log. Without it, the whole log (GET /directory/log) is read only by the owner of an enrolled
-// address (a provider session whose verified e-mail has an owner key: they need the whole chain to
-// audit), and every other provider user gets only the entries about their own address
-// (Filtered), so that under a SameDomain policy a colleague cannot read everybody's activity (the
-// log names no address in the clear, but it shows who publishes, rotates and revokes, and when).
-// An operator (allow true) reads all of it. The signed head (log/head) stays open to every
-// provider session.
-//
-// The operator route POST /admin/directory/reset-enrollment/<address pseudonym> (see
-// DirectoryOperator), mounted only when allow is set. A request that fails allow counts against
-// a per-client budget of failures (10 a minute, "dir-admin"), past which it answers 429. The
-// client is the connection's remote address unless WithDirectoryClientIP says otherwise: behind a
-// reverse proxy that is the proxy's address for everybody, so one budget is then shared by every
-// caller (an attacker's failures lock the operator out of the route too, for a minute at a time)
-// until the proxy's addresses are given to WithDirectoryClientIP (docstorecmd does it from
-// GOJIBERRY_DOCSTORE_PASSKEY_TRUSTED_PROXIES). allow must compare a secret in constant time;
-// docstorecmd's is the header X-Gojiberry-Admin-Token against
-// GOJIBERRY_DOCSTORE_DIRECTORY_ADMIN_TOKEN.
+// WithDirectoryAdmin names who is the operator.
 func (s *Server) WithDirectoryAdmin(allow func(*http.Request) bool) *Server {
 	s.dirAdmin = allow
 	return s
 }
 
-// WithDirectoryClientIP chooses how the directory names the client of a request for its
-// per-client budgets (the lookup budget per address and the failed-admin budget): f returns the
-// client's address, for instance passkey.TrustedProxies(...) behind a reverse proxy, which reads
-// X-Forwarded-For only from the proxies it is given. nil (the default) is the connection's
-// remote address, which behind a proxy is the proxy's.
+// WithDirectoryClientIP chooses how the client address is found.
 func (s *Server) WithDirectoryClientIP(f func(*http.Request) string) *Server {
 	s.dirClientIP = f
 	return s
 }
 
-// clientAddr is the client of r for the per-client budgets.
+// clientAddr is the client of r for the per-client budget.
 func (s *Server) clientAddr(r *http.Request) string {
 	if s.dirClientIP != nil {
 		return s.dirClientIP(r)
@@ -502,22 +434,18 @@ func (s *Server) clientAddr(r *http.Request) string {
 	return clientIP(r)
 }
 
-// WithDirectoryGlobalPerDomain makes the whole-server lookup budget one per e-mail domain of the
-// caller instead of one for everybody: with the SameDomain policy that is one budget per policy
-// domain, so one company's probing cannot spend another's. Off by default (one shared budget).
+// WithDirectoryGlobalPerDomain sets a global budget per domain.
 func (s *Server) WithDirectoryGlobalPerDomain(on bool) *Server {
 	s.dirDomainBudget = on
 	return s
 }
 
-// WithDirectoryPolicy narrows who may look up an address (see DirectoryPolicy); nil means
-// AllowAllLookups.
+// WithDirectoryPolicy narrows who may look up addresses.
 func (s *Server) WithDirectoryPolicy(p DirectoryPolicy) *Server {
 	s.dirPolicy = p
 	return s
 }
 
-// The directory's budgets: per minute on average, and at once.
 const (
 	maxDirectoryBody   = 4 << 10
 	maxLookupKeys      = 50
@@ -528,24 +456,15 @@ const (
 	lookupsPerMinute   = 60
 	lookupsPerIP       = 120
 	lookupsInTotal     = 1200
-	// Reads of the log have budgets of their own, with the same numbers as lookups, so a client that polls the
-	// log hard cannot use up the lookups of everyone behind its address or in its shard, nor the reverse.
-	logsPerIP   = 120
-	logsInTotal = 1200
-	// adminFailuresPerMinute is how many wrong admin credentials one client may try a minute.
+	logsPerIP          = 120
+	logsInTotal        = 1200
+	// adminFailuresPerMinute caps failed admin attempts per minute.
 	adminFailuresPerMinute = 10
-	// maxLogScan is how many entries one filtered log read looks at.
+	// maxLogScan is how many entries one filtered read may scan.
 	maxLogScan = 500
 )
 
-// lookupShards is how many sub-budgets the whole-server lookup budget is split into. One shared
-// key would be one record every caller of every replica compare-and-sets (a StoreLimiter loses
-// the race under load and answers 429 to callers who are within every budget); sixteen keys,
-// chosen by the caller's user ID, cut that contention sixteen-fold. Each shard has the whole
-// budget divided by sixteen, so the total is unchanged, and a user (at most lookupsPerMinute a
-// minute, below one shard's budget) cannot spend more than their own shard. Reads of the log
-// (GET /directory/log) have their own per-user, per-address and whole-server shard budgets (dir-log,
-// dir-log-ip, dir-log-all-N), so polling the log never uses up lookups.
+// lookupShards is how many sub-budgets the lookup budget splits into.
 const lookupShards = 16
 
 type directoryLimits struct {
@@ -577,16 +496,13 @@ func (s *Server) limits() *directoryLimits {
 	return s.dirLimits
 }
 
-// tooMany answers 429 with the Retry-After the limiter gave (at least a second).
+// tooMany answers 429 with the Retry-After time.
 func tooMany(w http.ResponseWriter, wait time.Duration) {
 	w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(wait.Seconds())))))
 	http.Error(w, "too many requests", http.StatusTooManyRequests)
 }
 
-// ValidAddress reports whether email is an address the directory accepts: at most 320 bytes,
-// exactly one "@" with something on each side, and no space or control character. The directory
-// names records by the address and takes its domain after the "@", so a malformed one ("a@b@c")
-// would be read differently by different parts of the program.
+// ValidAddress reports whether email is an acceptable address.
 func ValidAddress(email string) bool {
 	email = NormalizeAddress(email)
 	if email == "" || len(email) > 320 || strings.Count(email, "@") != 1 {
@@ -604,7 +520,7 @@ func ValidAddress(email string) bool {
 	return true
 }
 
-// readKind says which family of budgets a read of the directory spends.
+// readKind says which family of budgets a read uses.
 type readKind int
 
 const (
@@ -615,5 +531,5 @@ const (
 func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v) // a write failure here means the client disconnected
+	_ = json.NewEncoder(w).Encode(v)
 }

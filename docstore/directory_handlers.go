@@ -22,8 +22,6 @@ func (s *Server) directoryUser(w http.ResponseWriter, r *http.Request) (auth.Use
 	return u, true
 }
 
-// directoryPublisher is directoryUser for the routes that act on the user's own address: only a
-// provider session with a verified e-mail can vouch for one.
 func (s *Server) directoryPublisher(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	u, ok := s.directoryUser(w, r)
 	if !ok {
@@ -36,7 +34,7 @@ func (s *Server) directoryPublisher(w http.ResponseWriter, r *http.Request) (aut
 	return u, true
 }
 
-// directoryError maps what a DirectoryService returned to a status.
+// directoryError maps a DirectoryService error to an HTTP answer.
 func directoryError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrDirectoryRefused):
@@ -151,17 +149,12 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, k)
 }
 
-// DirectoryFingerprintSegment is a fingerprint ("SHA256:ab+/c") as a path segment: "/" becomes
-// "_", "+" becomes "-" and ":" becomes "-". It is how a record is named and the form
-// DELETE /directory/keys/<fingerprint> is best called with (an encoded "/" would be cleaned out
-// of the URL path by servers).
+// DirectoryFingerprintSegment is a key fingerprint in a path.
 func DirectoryFingerprintSegment(fp string) string {
 	return strings.NewReplacer("/", "_", "+", "-", ":", "-").Replace(fp)
 }
 
-// handleRevoke serves DELETE /directory/keys/<fingerprint>. The fingerprint is the one lookup
-// shows ("SHA256:...") or its DirectoryFingerprintSegment form. The body is optional: the
-// owner's signature ({"owner": {...}}), which an address with an owner key needs.
+// handleRevoke serves the revoke route.
 func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -202,9 +195,6 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, k)
 }
 
-// directoryReader is directoryUser for the routes that read the directory: only a provider
-// session may (a passkey account's address was typed by whoever made it, and nothing vouches for
-// the account, so it is not a directory reader).
 func (s *Server) directoryReader(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	u, ok := s.directoryUser(w, r)
 	if !ok {
@@ -225,11 +215,7 @@ func clientIP(r *http.Request) string {
 	return ip
 }
 
-// readBudget spends the budgets of a read of the directory (a lookup, or the log): the user's own
-// first, and only then the shared ones (per client IP, and for the whole server or, with
-// WithDirectoryGlobalPerDomain, the caller's e-mail domain), so a user who is over their own
-// limit is refused without taking a token from the budget everybody shares. The log has budgets of its own,
-// apart from the lookups'. It answers 429 itself and returns false when a budget is spent.
+// readBudget spends the budgets of a log read.
 func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User, kind readKind) bool {
 	lim := s.limits()
 	all := "all"
@@ -252,7 +238,7 @@ func (s *Server) readBudget(w http.ResponseWriter, r *http.Request, u auth.User,
 	return true
 }
 
-// lookupShard picks the sub-budget of the whole-server lookup budget a user spends from.
+// lookupShard picks the sub-budget for an address.
 func lookupShard(userID string) int {
 	h := fnv.New32a()
 	h.Write([]byte(userID))
@@ -287,8 +273,6 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	if !s.readBudget(w, r, u, readLookup) {
 		return
 	}
-	// The policy is asked after the budgets, so that probing a refused address costs budget too.
-	// Its answer does not depend on whether the address has keys, so a refusal leaks nothing.
 	if !s.policy().CanLookup(u, email) {
 		http.Error(w, "this directory does not look up that address for you", http.StatusForbidden)
 		return
@@ -308,9 +292,7 @@ func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// logReader is what the log routes check: a provider session (like lookup), the policy (asked
-// about the user's own address: the log names no address in the clear, so the question is whether
-// this user is a reader of this directory at all) and the per-user, per-IP and global budgets.
+// logReader is what the log routes need of a directory.
 func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	u, ok := s.directoryReader(w, r)
 	if !ok {
@@ -326,9 +308,7 @@ func (s *Server) logReader(w http.ResponseWriter, r *http.Request) (auth.User, b
 	return u, true
 }
 
-// handleLog serves GET /directory/log?since=<seq>: the entries after seq since (at most 200;
-// ask again from the last number for more). The whole log goes to the operator and to the owner
-// of an enrolled address; everybody else gets the entries about their own address only.
+// handleLog serves GET /directory/log.
 func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -349,8 +329,6 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	}
 	full := s.dirAdmin != nil && s.dirAdmin(r)
 	if !full && u.VerifiedEmail && ValidAddress(u.Email) && !strings.HasPrefix(u.ID, "passkey:") {
-		// Only a verified address can claim an enrollment (an unverified e-mail is whatever the
-		// provider's user typed).
 		enr, err := s.directory.Enrollment(r.Context(), u.Email)
 		if err != nil {
 			directoryError(w, err)
@@ -376,7 +354,7 @@ func (s *Server) handleLog(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, l)
 }
 
-// handleOwnLog answers the log read of a caller who may see only their own address's entries.
+// handleOwnLog answers the log read of an owner.
 func (s *Server) handleOwnLog(w http.ResponseWriter, r *http.Request, u auth.User, since int64) {
 	f, ok := s.directory.(DirectoryLogFilterer)
 	if !ok {
@@ -404,7 +382,7 @@ func (s *Server) handleOwnLog(w http.ResponseWriter, r *http.Request, u auth.Use
 	writeJSONStatus(w, http.StatusOK, l)
 }
 
-// handleOperatorReset serves POST /admin/directory/reset-enrollment/<address pseudonym>.
+// handleOperatorReset serves the operator reset route.
 func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -440,10 +418,9 @@ func (s *Server) handleOperatorReset(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
-// handleUnmapped serves GET /admin/directory/unmapped: the log pseudonyms the reconciliation
-// cannot name, for the operator (same credential and failure budget as the operator reset).
+// handleUnmapped serves GET /admin/directory/unmapped.
 func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store") // on every answer, errors too
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -472,7 +449,7 @@ func (s *Server) handleUnmapped(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, u)
 }
 
-// handleLogHead serves GET /directory/log/head: the signed head of the log.
+// handleLogHead serves GET /directory/log/head.
 func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -489,9 +466,7 @@ func (s *Server) handleLogHead(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, h)
 }
 
-// handleWitness serves POST /directory/log/witness: a witness's cosignature of a log entry. No
-// sign-in: the witness is known by its signature, which the directory checks against the keys it
-// was given. Rate limited per client address.
+// handleWitness serves POST /directory/witness.
 func (s *Server) handleWitness(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -517,7 +492,7 @@ func (s *Server) handleWitness(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleCosigned serves GET /directory/log/cosigned: the entries witnesses cosigned, newest first.
+// handleCosigned serves GET /directory/cosigned.
 func (s *Server) handleCosigned(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -542,7 +517,7 @@ func (s *Server) handleCosigned(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, c)
 }
 
-// handleLogAddress serves GET /directory/log/address: the signed-in owner's pseudonym in the log.
+// handleLogAddress serves GET /directory/log/address.
 func (s *Server) handleLogAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

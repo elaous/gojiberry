@@ -11,27 +11,25 @@ import (
 	"github.com/elaous/gojiberry/auth"
 )
 
-// stubDirectory is a DirectoryService that answers from fields; the routes' own work (method,
-// sign-in, limits, bodies, the mapping of errors to statuses) is what these tests are about. The
-// service's real behaviour is tested where it lives, in docstore/encrypt.
+// stubDirectory is a DirectoryService that records calls.
 type stubDirectory struct {
-	DirectoryService // the methods a test does not use
-	err              error
-	keys             []DirectoryKey
-	published        DirectoryPublish
-	revoked          string
-	revokedOwner     *DirectoryOwnerSig
-	includeRevoked   bool
-	asked            string
-	enrollment       DirectoryEnrollment
-	log              DirectoryLog
-	logAddress       DirectoryLogAddress
-	head             DirectoryHead
-	filteredFor      []string
-	resetPseudonym   string
-	unmapped         DirectoryUnmapped
-	cancelOwner      *DirectoryOwnerSig
-	enrolled         DirectoryEnroll
+	DirectoryService
+	err            error
+	keys           []DirectoryKey
+	published      DirectoryPublish
+	revoked        string
+	revokedOwner   *DirectoryOwnerSig
+	includeRevoked bool
+	asked          string
+	enrollment     DirectoryEnrollment
+	log            DirectoryLog
+	logAddress     DirectoryLogAddress
+	head           DirectoryHead
+	filteredFor    []string
+	resetPseudonym string
+	unmapped       DirectoryUnmapped
+	cancelOwner    *DirectoryOwnerSig
+	enrolled       DirectoryEnroll
 }
 
 func (d *stubDirectory) Enrollment(_ context.Context, email string) (DirectoryEnrollment, error) {
@@ -63,7 +61,7 @@ func (d *stubDirectory) LogAddress(context.Context, auth.User) (DirectoryLogAddr
 	return d.logAddress, d.err
 }
 
-// filteringDirectory also lets a caller read the entries about their own address only.
+// filteringDirectory also lets a caller filter its log.
 type filteringDirectory struct{ *stubDirectory }
 
 func (d filteringDirectory) LogFor(_ context.Context, addresses []string, _ int64, _, _ int) (DirectoryLog, error) {
@@ -71,7 +69,7 @@ func (d filteringDirectory) LogFor(_ context.Context, addresses []string, _ int6
 	return DirectoryLog{Entries: nil}, d.err
 }
 
-// operatorDirectory also has the operator's routes.
+// operatorDirectory also has operator tools.
 type operatorDirectory struct{ *stubDirectory }
 
 func (d operatorDirectory) OperatorResetEnrollment(_ context.Context, pseudonym string) (DirectoryEnrollment, error) {
@@ -115,7 +113,7 @@ func newDirRoutes(t *testing.T, opt func(*Server)) *dirRoutes {
 	return newDirRoutesWith(t, nil, opt)
 }
 
-// newDirRoutesWith is newDirRoutes with the stub wrapped (to give it more of the optional interfaces).
+// newDirRoutesWith is newDirRoutes with options.
 func newDirRoutesWith(t *testing.T, wrap func(*stubDirectory) DirectoryService, opt func(*Server)) *dirRoutes {
 	t.Helper()
 	mgr, err := auth.NewManager(context.Background(), auth.Config{BaseURL: "https://x.test"})
@@ -164,7 +162,6 @@ func TestDirectoryRoutesNeedTheRightSession(t *testing.T) {
 			t.Errorf("%s %s signed out: %d", rt.method, rt.path, rec.Code)
 		}
 	}
-	// a passkey account's address was typed by whoever made it: it can neither publish nor read
 	for _, rt := range []struct{ method, path, body string }{
 		{"POST", "/directory/challenge", `{"key":"k"}`}, {"POST", "/directory/publish", `{"key":"k"}`},
 		{"DELETE", "/directory/keys/SHA256-x", ""}, {"GET", "/directory/lookup?email=bo@corp.example", ""},
@@ -224,7 +221,7 @@ func TestDirectoryErrorsBecomeStatuses(t *testing.T) {
 		ErrDirectoryBadOwnerSig: 403, ErrDirectoryEnrolled: 409, ErrDirectoryNotEnrolled: 409, ErrDirectoryResetWait: 409,
 		ErrDirectoryNotFound: 404, ErrDirectoryRevoked: 409, ErrDirectoryBusy: 503, errors.New("disk on fire"): 500,
 	} {
-		d := newDirRoutes(t, nil) // one each: the publish budget is per user
+		d := newDirRoutes(t, nil)
 		d.dir.err = err
 		rec := d.do("POST", "/directory/publish", &ana, `{"key":"k"}`)
 		if rec.Code != want {

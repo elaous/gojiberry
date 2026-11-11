@@ -6,9 +6,7 @@ import (
 	"strings"
 )
 
-// handleEnrollment serves GET /directory/enroll?email=: whether an address has an owner key, the
-// chain of its keys and a pending reset. It is a read of the directory like lookup (same session,
-// budgets and policy).
+// handleEnrollment serves GET /directory/enrollment.
 func (s *Server) handleEnrollment(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -88,7 +86,7 @@ func (s *Server) handleEnroll(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
-// handleReset serves POST /directory/enroll/reset: it starts the waiting period of a reset.
+// handleReset serves POST /directory/enroll/reset.
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -112,7 +110,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
-// handleCancelReset serves POST /directory/enroll/cancel: {"owner": {time, prev, sig}}.
+// handleCancelReset serves POST /directory/enroll/cancel.
 func (s *Server) handleCancelReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -138,8 +136,7 @@ func (s *Server) handleCancelReset(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, e)
 }
 
-// handleEnrollSub routes /directory/enroll/<challenge|reset|cancel>, and GET /directory/enroll/
-// (the enrollment of ?email=).
+// handleEnrollSub routes requests under /directory/enroll/.
 func (s *Server) handleEnrollSub(w http.ResponseWriter, r *http.Request) {
 	switch strings.TrimPrefix(r.URL.Path, "/directory/enroll/") {
 	case "challenge":
@@ -153,7 +150,7 @@ func (s *Server) handleEnrollSub(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleEnrollRoot serves /directory/enroll: GET reads an enrollment, POST makes one.
+// handleEnrollRoot serves the enrollment root route.
 func (s *Server) handleEnrollRoot(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		s.handleEnrollment(w, r)
