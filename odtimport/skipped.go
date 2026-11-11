@@ -1,6 +1,5 @@
 package odtimport
 
-// Skipped counts what an .odt file holds that Import does not bring into the document.
 type Skipped struct {
 	Comments       int // annotations (their text and authors are not read)
 	HeaderFoots    int // headers and footers that hold text
@@ -8,7 +7,7 @@ type Skipped struct {
 	Drawings       int // shapes, charts and other objects that are not pictures
 	TrackedChanges int // tracked changes: the text is read as it stands
 	Endnotes       int // endnotes (only footnotes are read)
-	Fields         int // fields (date, page number...): their last shown text stays, the field is gone
+	Fields         int
 	Bookmarks      int // bookmarks
 	Links          int // links whose address is not http, https, mailto or in-page
 	Columns        int // sections or pages laid out in columns
@@ -19,8 +18,6 @@ func (s Skipped) Total() int {
 	return s.Comments + s.HeaderFoots + s.TextBoxes + s.Drawings + s.TrackedChanges + s.Endnotes + s.Fields + s.Bookmarks + s.Links + s.Columns
 }
 
-// countSkipped counts the parts of the package that Import has no place for, apart from those it meets
-// while reading (links, fields, bookmarks, endnotes, text boxes and drawings, counted in place).
 func (r *reader) countSkipped(content, styles *node) {
 	content.walk(func(n *node) bool {
 		switch n.name {
