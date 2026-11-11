@@ -9,7 +9,6 @@ import (
 	"github.com/elaous/gojiberry/xango"
 )
 
-// config is decoded from config.json at transpile time; it must say what the file says.
 func TestConfigIsTheDecodedConfigJSON(t *testing.T) {
 	raw, err := os.ReadFile("config.json")
 	if err != nil {
