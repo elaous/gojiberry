@@ -6,7 +6,7 @@
 #
 #   .github/scripts/local-ci.sh              all steps, stop at the first failure
 #   .github/scripts/local-ci.sh -k           keep going and list every failure at the end
-#   .github/scripts/local-ci.sh lint            only the named targets, in the workflow's order
+#   .github/scripts/local-ci.sh lint     only the named targets, in the workflow's order
 #
 # LOCAL_CI_SKIP is a space-separated list of targets to leave out (default: coverage-badge, which
 # needs the whole test suite a second time; the badge is updated by hand at a full run). A short report goes to

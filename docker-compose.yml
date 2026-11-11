@@ -1,5 +1,5 @@
 # Runs the whole stack: PostgreSQL, the docstore server, the collaboration hub, the sync, font and
-# translation servers, a mail catcher (Mailpit) and the canvas editor showcase.
+# translation servers and a mail catcher (Mailpit).
 #
 #   cp .env.local.example .env.local      # then edit; optional, every value has a development default
 #   make stack-up                         # same as: docker compose --env-file .env.local up --build
