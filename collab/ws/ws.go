@@ -1,4 +1,3 @@
-// Package ws is a collab transport over one WebSocket.
 package ws
 
 import (
@@ -44,7 +43,7 @@ type Conn struct {
 	mu        sync.Mutex
 	queue     []client.Event
 	pending   []crdt.Op
-	offline   int // ops made while the connection was not up, until the next Hello
+	offline   int
 	status    client.Status
 	presence  *wire.Presence
 	lastPres  time.Time
@@ -90,14 +89,12 @@ func (c *Conn) Status() client.Status {
 	return c.status
 }
 
-// persistLocked saves waiting ops to the Queue option.
 func (c *Conn) persistLocked() {
 	if c.opts.Queue != nil {
 		c.opts.Queue.Save(append([]crdt.Op(nil), c.pending...))
 	}
 }
 
-// takeOffline returns how many ops were made while offline.
 func (c *Conn) takeOffline() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -161,7 +158,6 @@ func signal(ch chan struct{}) {
 	}
 }
 
-// emit queues an event; pump hands them over in order.
 func (c *Conn) emit(e client.Event) {
 	c.mu.Lock()
 	c.queue = append(c.queue, e)
@@ -213,7 +209,6 @@ func (c *Conn) fail(err error) {
 	}
 }
 
-// wsURL is the socket's address.
 func (c *Conn) wsURL() (string, error) {
 	u, err := url.Parse(strings.TrimRight(c.opts.BaseURL, "/") + "/docs/" + url.PathEscape(c.opts.Doc) + "/ws")
 	if err != nil {
@@ -235,7 +230,6 @@ func (c *Conn) wsURL() (string, error) {
 	return u.String(), nil
 }
 
-// run connects, serves until the socket ends, and reconnects.
 func (c *Conn) run() {
 	delay := c.opts.Retry
 	for c.ctx.Err() == nil {
@@ -261,7 +255,6 @@ func (c *Conn) run() {
 	}
 }
 
-// session is one connection's life.
 func (c *Conn) session() (retErr error) {
 	u, err := c.wsURL()
 	if err != nil {
@@ -443,7 +436,6 @@ func (c *Conn) session() (retErr error) {
 			wait := c.opts.PresenceInterval - time.Since(c.lastPres)
 			c.mu.Unlock()
 			if c.opts.PresenceInterval > 0 && wait > 0 {
-				// Too soon: merge into one update.
 				c.mu.Lock()
 				if c.presTimer == nil {
 					c.presTimer = time.AfterFunc(wait, func() {

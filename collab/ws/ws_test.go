@@ -72,7 +72,6 @@ func TestOversizedOperationIsRefusedNotRetried(t *testing.T) {
 	}
 }
 
-// dial connects a replica to a document on srv.
 type listener struct {
 	conn   *ws.Conn
 	events chan client.Event
