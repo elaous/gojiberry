@@ -2,11 +2,7 @@ package export
 
 import "github.com/elaous/gojiberry/docfile"
 
-// BlockKind mirrors editor's own document.BlockMeta.Kind, translated
-// to this package's own type by document.exportSnapshot -- kept as a
-// separate type (not editor's own BlockKind) so this package has no
-// dependency on editor's internal block-kind numbering at all, only on
-// the meaning of each value.
+// BlockKind is the kind of a snapshot block.
 type BlockKind int
 
 const (
@@ -23,38 +19,23 @@ const (
 	MediaClip // an audio or video clip, written only by the formats that can embed one (HTML)
 )
 
-// Format is one character run's own formatting -- editor's own
-// charFormat, reduced to only the fields any Exporter actually reads
-// (Color/Highlight/FontSize/FontFamily/CommentID are real charFormat
-// fields with no Exporter in this package that renders them, matching
-// every hand-written format's own long-standing "content over
-// presentation" scope -- see the individual Exporter doc comments).
-// Href non-empty means this run is a hyperlink -- document.
-// exportSnapshot only ever sets it when the run's own StyleName is
-// "Link", the same condition every exporter used to check directly
-// against charFormat before Snapshot existed.
+// Format is one character run's own formatting.
 type Format struct {
 	Bold, Italic, Underline, Strikethrough, Superscript, Subscript bool
 	Href                                                           string
-	// Comment is the IDs (comma separated) of the comments on the run, "" for none.
+	// Comment is the IDs of the comments on this run.
 	Comment string
-	// NoteRef is the number of the footnote this run is the mark of (0 for none): the exports that can
-	// link the mark to its note, and the note back to the mark, do so.
+	// NoteRef is the number of the footnote this run marks.
 	NoteRef int
-	// NoteBack is the number of the footnote a run at the end of its note links back to (0 for none): the PDF
-	// draws it as a small link to the mark. FromDocument sets it; the other formats link back their own way.
+	// NoteBack is the number of the footnote a run at a note's end points back to.
 	NoteBack int
-	// Lang is the run's language tag, "" for the document's own.
+	// Lang is the run's language tag.
 	Lang string
-	// Formula is the notation of a formula that stands in this run's line of text (the run's text is its words);
-	// the HTML export writes it as inline MathML, the other formats keep the words.
+	// Formula is the notation of a formula standing in this run.
 	Formula string
-	// Field is a form field that stands in this run's line (the run's text is its label and value); the HTML export
-	// writes a control, the other formats keep the words.
+	// Field is a form field standing in this run's line.
 	Field *docfile.FormFieldItem
-	// Change says the run is a suggested change not yet accepted or rejected (see FromDocumentTracked): text
-	// proposed to be added or proposed to be removed, by Author at Time (unix seconds). A Snapshot
-	// from FromDocument never has it: it shows the document as it would be if every suggestion were accepted.
+	// Change says the run is a suggested change not yet accepted.
 	Change ChangeKind
 	Author string
 	Time   int64
@@ -69,48 +50,16 @@ const (
 	Deleted             // text proposed to be removed (still in the document)
 )
 
-// Segment is one contiguous run of a block's own text sharing one
-// Format, or a single soft line break standing in place of one
-// (SoftBreak true, Text/Format both zero) -- document.exportSnapshot
-// does this maximal-run splitting once, so every Exporter consumes
-// the same pre-split sequence instead of each re-walking the live
-// document's own characters to rediscover it (five formats used to
-// each do this walk independently before Snapshot existed).
-//
-// A Code block's own Segments is the one exception: exactly one
-// Segment carrying the block's raw, unsplit text with a zero Format
-// and SoftBreak false, regardless of any soft breaks or formatting the
-// live text actually has -- code content is verbatim by definition
-// (every Exporter already treated it that way), and different formats
-// disagree on what to do with an embedded soft break inside one (RTF/
-// DOCX/PDF leave it as a literal character via their own escaping,
-// Markdown's fenced block does too, PlainText alone converts it to a
-// real newline), so a single raw segment lets each Exporter keep
-// deciding that for itself rather than Snapshot forcing one answer.
+// Segment is one contiguous run of a block's text with one format.
 type Segment struct {
 	Text      string
 	SoftBreak bool
 	Format    Format
 }
 
-// Block is one of a document's own blocks -- BlockMeta plus its
-// already-resolved Segments and (for a numbered item) its own already-
-// computed 1-based position within its consecutive numbered run
-// (NumberedIndex, editor's own numberedItemIndex called once by
-// document.exportSnapshot rather than by each Exporter separately).
-// TableRow/TableCol/TableRows/TableCols/TableColSpan/TableRowSpan/
-// TableCovered/ImageW/ImageH/ImageSrc/ImageCaption are meaningful only
-// for their own matching Kind (TableCell/Image respectively) and zero
-// otherwise, mirroring BlockMeta's own "fields only some kinds use"
-// shape.
+// Block is one of a document's blocks, with its metadata.
 type Block struct {
-	// Start is where the block's first rune falls in the editor's text stream (canvas.TextFlow.EditText,
-	// counted in runes; an inline object such as a picture, a rule, a table or a footnote mark is one
-	// rune), -1 for a block the exporter made up (the notes at the end), and of a table cell the place of
-	// the table. It is that of the document passed in, so with FromDocument (suggested removals left
-	// out) it counts what the stream no longer has. Lead is how many runes at the start of the first
-	// segment are not in the stream (the box of a check-list item). The accessible copy uses them to
-	// map the caret to its text and back.
+	// Start is where the block's first rune falls in the edit stream.
 	Start, Lead  int
 	Kind         BlockKind
 	Level        int
@@ -118,34 +67,15 @@ type Block struct {
 	ImageW       float64
 	ImageH       float64
 	ImageCaption string
-	// ImageAlt describes the image; ImageDecorative says it needs no description
-	// (written as an empty alt, left out of the reading copy).
+	// ImageAlt describes the image.
 	ImageAlt        string
 	ImageDecorative bool
-	// ImageCredit and ImageSourceURL name the author, licence and page of a picture found in an image repository;
-	// they travel in the document properties of Word and OpenDocument files.
+	// ImageCredit and ImageSourceURL name the picture's source.
 	ImageCredit, ImageSourceURL string
-	// For a MediaClip: where the clip is, its kind ("audio" or "video"), its title, a caption track as WebVTT text
-	// or its address, its transcript and the size of a video.
+	// For a MediaClip: where the clip is and its kind.
 	MediaURL, MediaKind, MediaTitle, MediaCaptions, MediaCaptionsURL, MediaTranscript string
 	MediaW, MediaH                                                                    float64
-	// TableRow/TableCol are this cell's own zero-based grid position;
-	// TableRows/TableCols are the whole table's own shape, carried on
-	// every cell (mirroring model.BlockMeta's own reasoning, see that
-	// field's own doc comment) so an Exporter walking blocks one at a
-	// time still knows a table's full extent as soon as it reaches
-	// cell (0,0), with no separate lookahead needed. TableColSpan/
-	// TableRowSpan are this cell's own already-resolved effective span
-	// (model.EffectiveTableSpan -- always >=1, 1 for an ordinary,
-	// never-merged cell), meaningful only on an owner cell (mirroring
-	// model.BlockMeta.TableColSpan/TableRowSpan's own "meaningless
-	// elsewhere" scope). TableCovered is true for a cell absorbed by
-	// another cell's own merge (model.BlockMeta.TableMergeOwner != "")
-	// -- collapsed to a bool rather than carrying the owner's own ID
-	// across, since no Exporter needs to identify *which* owner, only
-	// "should I draw this cell's own grid position at all" (every
-	// Exporter skips a covered cell's own output entirely, the owner's
-	// span already reserves its space in the rendered grid).
+	// TableRow and TableCol are the cell's zero-based grid position.
 	TableRow     int
 	TableCol     int
 	TableRows    int
@@ -153,86 +83,63 @@ type Block struct {
 	TableColSpan int
 	TableRowSpan int
 	TableCovered bool
-	// TableBackground is a cell's fill ("#rrggbb", "" for none) and TableAlign its
-	// horizontal alignment (0 left, 1 centre, 2 right).
+	// TableBackground is a cell's fill colour.
 	TableBackground string
 	TableAlign      int
-	// TableColW and TableRowH are the width of this cell's column and the height of its row, in CSS pixels, when a
-	// person set them by dragging a grip (0: the format's own layout).
+	// TableColW and TableRowH are the widths of the cell's column and row.
 	TableColW, TableRowH float64
-	// TableField is the form field in this table cell, if it has one: the cell's text is the field's words, and the HTML export
-	// writes the control.
+	// TableField is the form field in this table cell.
 	TableField    *docfile.FormFieldItem
 	NumberedIndex int
-	// Note is the number of the footnote a list item is the text of (0 for none).
+	// Note is the number of the footnote a list item is the text of.
 	Note int
-	// CodeLang is the programming language of a Code block as a short lower-case name ("go", "python"),
-	// "" when unknown.
+	// CodeLang is the programming language of a code block.
 	CodeLang string
-	// Equation is a formula in a linear notation (see MathML), on a Paragraph block whose Segments are
-	// its text alternative: every format shows that text, the HTML export also writes MathML from the formula.
+	// Equation is a formula in a linear notation.
 	Equation string
-	// DescribesImage says a Paragraph block is the long description of the Image block before it.
+	// DescribesImage says a paragraph is the long description of an image.
 	DescribesImage bool
 	Segments       []Segment
 }
 
-// Snapshot is a complete, self-contained, point-in-time view of one
-// document -- everything every Exporter in this package needs, and
-// nothing more. ID is document.replica (EPUB's own dc:identifier
-// wants a stable-enough-for-one-export unique string); PageWidth/
-// PageHeight/Margin* are PDF's own page geometry, in the same CSS-px
-// units document.pageDimensions/marginLeft etc. already use --
-// unused by every other format, but cheap enough to always populate
-// rather than making Snapshot's own shape depend on which Exporter
-// the caller happens to want.
+// Snapshot is a complete, point-in-time view of a document.
 type Snapshot struct {
 	Title string
 	ID    string
-	// Lang is the document's language as a BCP 47 tag, "" when it has none: the exporters that can
-	// say so (HTML, EPUB, Word) write it, so a reader or a search engine knows how to read the text.
+	// Lang is the document's language as a BCP 47 tag.
 	Lang   string
 	Blocks []Block
 
-	// Theme is the document's design-token CSS (see docfile.ThemeKey), "" when it has none. The HTML export
-	// writes it when it is a plain :root block and no theme was set on the exporter; anything else is left out.
+	// Theme is the document's design-token CSS.
 	Theme string
 
-	// Header and Footer are the running header and footer of the paged formats (PDF, Word, RTF, and the
-	// HTML print stylesheet), with the fields {page}, {pages} and {title}; a tab separates left, centre
-	// and right parts (see docfile.PageLayout). TOC puts a table of contents from the headings first,
-	// under TOCTitle ("Contents" when empty).
+	// Header and Footer are the running header and footer.
 	Header, Footer string
-	// FirstDiffers gives the first page the header and footer FirstHeader and FirstFooter instead (empty
-	// means none there).
+	// FirstDiffers gives the first page its own header and footer.
 	FirstDiffers             bool
 	FirstHeader, FirstFooter string
-	// EvenDiffers gives the even pages EvenHeader and EvenFooter; Header and Footer are then the odd pages'.
+	// EvenDiffers gives the even pages their own header and footer.
 	EvenDiffers            bool
 	EvenHeader, EvenFooter string
 	TOC                    bool
 	TOCTitle               string
-	// TOCStyle is "" (a dotted leader from each entry to its page number) or "plain" (no leader), and TOCDepth the
-	// deepest heading level listed (0: all three); a table of contents the document holds sets them.
+	// TOCStyle is the table of contents's leader style.
 	TOCStyle string
 	TOCDepth int
-	// TOCAt is the index of the block the contents are written before (0: at the start, and a number past the last
-	// block: at the end); a table of contents the document holds sets it to where the document has it.
+	// TOCAt is the index of the block the contents are written at.
 	TOCAt int
 
-	// FormAction is the address the HTML export sends the answers of the form fields to (set by HTML.SubmitTo, checked
-	// there); FormButton is the text of the button.
+	// FormAction is the address the HTML export sends answers to.
 	FormAction, FormButton string
 
-	// Vertical sets the text in vertical lines, top to bottom, from right to left (vertical-rl).
+	// Vertical sets the text in vertical lines.
 	Vertical bool
 
 	PageWidth, PageHeight                            float64
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
 }
 
-// HeadingLevel is the level, 1 to 6, of a heading block (Heading1 to Heading3, and Heading3 with a Level of 4 to
-// 6 for the deeper ones); 0 for a block that is not a heading.
+// HeadingLevel is the level, 1 to 6, of a heading block.
 func (b Block) HeadingLevel() int {
 	switch b.Kind {
 	case Heading1:

@@ -7,12 +7,10 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Feature names one thing a document can hold that a file format may not be able to write (or read back): a kind
-// of text formatting, a block, a table feature, or a property of the whole document. The names are stable ids:
-// a host translates them (the showcase's fidelity panel), a test locks them.
+// Feature names one thing a document can hold that a format may lose.
 type Feature string
 
-// The features a document is checked for. Each is something the editor keeps and a format may drop.
+// The features a document is checked for.
 const (
 	FeatBold            Feature = "bold"
 	FeatItalic          Feature = "italic"
@@ -63,16 +61,15 @@ const (
 	FeatVertical        Feature = "vertical-text"
 	FeatMedia           Feature = "media"
 	FeatMediaCaptions   Feature = "media-captions"
-	// FeatEquation is a formula with its text alternative (also what a Word import leaves out, see fidelity_import.go);
-	// FeatCodeLanguage the language of a code block; FeatImageLongDesc the long description of a diagram.
+	// FeatEquation is a formula with its text alternative.
 	FeatEquation Feature = "equation"
-	// FeatFormField is a form field (every format writes its label and what was written in it as text).
+	// FeatFormField is a form field.
 	FeatFormField     Feature = "form-field"
 	FeatCodeLanguage  Feature = "code-language"
 	FeatImageLongDesc Feature = "image-long-desc"
 )
 
-// Features lists every Feature in the order a report shows them.
+// Features lists every Feature in report order.
 var Features = []Feature{
 	FeatBold, FeatItalic, FeatUnderline, FeatStrike, FeatSuperscript, FeatSubscript, FeatLink,
 	FeatColour, FeatHighlight, FeatFontSize, FeatFontFamily, FeatTextCase, FeatRunLanguage,
@@ -91,12 +88,11 @@ var Features = []Feature{
 type Treatment int
 
 const (
-	// Kept: the format writes the feature, so a reader of the file sees it.
+	// Kept: the format writes the feature.
 	Kept Treatment = iota
-	// Simplified: the format writes something that stands for it (a placeholder, a character, a plainer
-	// construct) and the meaning is only partly there.
+	// Simplified: the format writes something standing in for it.
 	Simplified
-	// Dropped: the format does not write it at all; any text it held stays as ordinary text.
+	// Dropped: the format does not write the feature at all.
 	Dropped
 )
 
@@ -110,9 +106,7 @@ func (t Treatment) String() string {
 	return "kept"
 }
 
-// Loss is one line of a fidelity report: a feature the document uses (Count places) and what the format does
-// with it. Note is a stable id of how it is simplified or dropped ("" for the plain case), which a host
-// translates.
+// Loss is one line of a fidelity report.
 type Loss struct {
 	Feature   Feature
 	Treatment Treatment
@@ -120,7 +114,7 @@ type Loss struct {
 	Count     int
 }
 
-// Notes say how a feature is written when it is not written as it is.
+// Notes say how a feature is written when it is not kept.
 const (
 	NoteText         = "text"           // the format keeps the characters and nothing else
 	NotePlaceholder  = "placeholder"    // an "[Image]" marker stands in
@@ -146,30 +140,27 @@ type entry struct {
 	note string
 }
 
-// Formats are the names of the export formats a Report can be made for, in the order a host lists them.
+// Formats are the names of the export formats a Report can cover.
 var Formats = []string{"docx", "odt", "pdf", "rtf", "epub", "html", "markdown", "text"}
 
 // Report is what exporting a document as one format loses.
 type Report struct {
 	Format string
-	// Losses lists, for the features the document uses, those the format does not write as they are.
+	// Losses lists the losses for the features the document uses.
 	Losses []Loss
-	// Known says the package knows what the format writes. It is false for a format it has no table for
-	// (an empty Losses then means nothing is known, not that nothing is lost).
+	// Known says the package knows what the format writes.
 	Known bool
-	// Complete says the format keeps everything the editor holds (the editor's own file formats).
+	// Complete says the format keeps everything the editor holds.
 	Complete bool
 }
 
 // Lossless is whether the report is known and lists no loss.
 func (r Report) Lossless() bool { return (r.Known || r.Complete) && len(r.Losses) == 0 }
 
-// completeFormats keep the whole document: they are the editor's own file formats.
+// completeFormats keep the whole document.
 var completeFormats = map[string]bool{"json": true, "proto-text": true, "proto": true, "open": true}
 
-// Fidelity reports what exporting d as format loses, from the features the document uses and a table of what
-// each format does with each (exportMatrix). Tests lock the table against what the exporters really write, so
-// a loss cannot become silent: an exporter that starts dropping a feature, or stops, fails them.
+// Fidelity reports what exporting d as format loses.
 func Fidelity(format string, d docfile.Document) Report {
 	r := Report{Format: format, Complete: completeFormats[format]}
 	m, ok := exportMatrix[format]
@@ -193,16 +184,13 @@ func Fidelity(format string, d docfile.Document) Report {
 	return r
 }
 
-// partOf names the feature a feature is a part of: when the format leaves the whole out, its parts are not
-// listed again.
+// partOf names the feature a feature is part of.
 var partOf = map[Feature]Feature{
 	FeatColSpan: FeatTable, FeatRowSpan: FeatTable, FeatCellShading: FeatTable, FeatCellAlign: FeatTable, FeatCellTextStyle: FeatTable,
 	FeatImageAlt: FeatImage, FeatImageEffects: FeatImage, FeatImageLongDesc: FeatImage, FeatCodeLanguage: FeatCode,
 }
 
-// Reported says whether a report for the format lists the feature when it is lost: false for a feature that
-// is part of one the format leaves out altogether (a table's merged cells in a format with no tables), which
-// the loss of the whole already says.
+// Reported says whether a report for the format lists the feature.
 func Reported(format string, f Feature) bool {
 	if parent, ok := partOf[f]; ok {
 		if pe := exportMatrix[format][parent]; pe.t == Dropped {
@@ -390,7 +378,7 @@ func usageOfPara(p docfile.Para, add func(Feature)) {
 	switch {
 	case style == "":
 	case style == "code":
-		add(FeatCode) // a code block: a paragraph of the Code style
+		add(FeatCode)
 	case style == "title":
 		add(FeatHeading)
 	case strings.HasPrefix(style, "heading "):
