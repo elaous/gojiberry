@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ImageTool is what dragging does to an Image in edit mode.
+// ImageTool is what dragging does to an Image.
 type ImageTool int
 
 const (
@@ -78,37 +78,26 @@ type Image struct {
 	Alpha float64 // 0 (transparent) to 1 (opaque)
 	// Snap is the drag granularity in px (NewImage sets 5).
 	Snap float64
-	// BoundsW, if non-zero, keeps the visible rectangle within x in
-	// [0, BoundsW] while dragging.
+	// BoundsW, if set, keeps the visible rectangle within x in [0, BoundsW].
 	BoundsW float64
-	// Wrap turns on text wrap-around; it has an effect once a Flow is set.
+	// Wrap turns on text wrap-around once a Flow is set.
 	Wrap bool
-	// WrapMargin is the clear space kept between wrapped text and the
-	// image (NewImage sets 8).
+	// WrapMargin is the clear space around a wrapped image.
 	WrapMargin float64
 
 	ChromeStyle ImageStyle
 	Painter     ImagePainter
 
-	// Alt describes the image for a person who cannot see it. Decorative says
-	// the image carries nothing a description would add (a rule, a flourish):
-	// it is then left out of the reading copy and exported with an empty alt.
-	// An image with neither is a gap in the document (see package a11ycheck).
+	// Alt describes the image for people who cannot see it.
 	Alt        string
 	Decorative bool
-	// LongDesc is a longer description for an image that needs more than a sentence (a diagram, a
-	// chart): what a person who cannot see it needs to follow the text around it. The exports write it
-	// as text after the image, linked to it in HTML.
+	// LongDesc is a longer description for complex images.
 	LongDesc string
-	// Diagram is the kind ("flowchart", "map") of a picture drawn by the diagram add-on from a description; the
-	// description is kept in LongDesc, so the picture can be drawn again from it. "" for any other picture.
+	// Diagram is the kind of diagram, such as flowchart or map.
 	Diagram string
-	// Legend is the visible caption under the picture ("Figure 1: ..."), drawn in small italic type, centred and wrapped to
-	// the picture's width. Unlike Alt and LongDesc, which are for people who cannot see the picture, everybody reads it;
-	// the exports write it under the picture.
+	// Legend is the caption under the picture, drawn in small text.
 	Legend string
-	// Credit and SourceURL say where a picture found through an image repository came from: the author, the licence
-	// and the page it lives on. They are kept with the picture in the saved file; the legend is where a reader sees them.
+	// Credit and SourceURL give the picture's source.
 	Credit, SourceURL string
 
 	// OnChange is called after any change made by dragging or the toolbar.
@@ -129,8 +118,7 @@ type imageDrag struct {
 	startClip      Insets
 }
 
-// NewImage returns an image of src displayed at (x, y) at its natural
-// size, fully opaque, in ModeView with the Move tool.
+// NewImage returns an image of src shown at its natural size.
 func NewImage(src ImageSource, x, y float64) *Image {
 	w, h := src.Size()
 	return &Image{
@@ -139,11 +127,9 @@ func NewImage(src ImageSource, x, y float64) *Image {
 	}
 }
 
-// SetPainter implements PainterSetter.
 func (im *Image) SetPainter(p ImagePainter) { im.Painter = p }
 
-// SetFlow sets the text flow to wrap around and registers the image as
-// one of its obstacles (removing it from any previous flow).
+// SetFlow sets the flow to wrap around; the image becomes an obstacle.
 func (im *Image) SetFlow(f *TextFlow) {
 	if im.flow != nil {
 		im.flow.RemoveObstacle(im)
@@ -165,8 +151,7 @@ func (im *Image) SetWrap(on bool) {
 // Dragging reports whether a drag is in progress.
 func (im *Image) Dragging() bool { return im.drag != nil }
 
-// ContainsPoint implements Hitter: a floating image's visible part (and,
-// in edit mode, its toolbar) keeps presses from reaching the text beneath.
+// ContainsPoint: a floating image's visible part, and handles in edit mode.
 func (im *Image) ContainsPoint(x, y float64) bool {
 	if im.Placement != PlaceFloating {
 		return false
@@ -177,11 +162,9 @@ func (im *Image) ContainsPoint(x, y float64) bool {
 	return im.mode == ModeEdit && im.whatAt(x, y) != ""
 }
 
-// Mode returns the current mode.
 func (im *Image) Mode() Mode { return im.mode }
 
-// SetMode switches mode; leaving edit mode cancels any drag. Returns
-// true if a redraw is needed.
+// SetMode switches mode; leaving edit mode cancels any drag.
 func (im *Image) SetMode(m Mode) bool {
 	if m == im.mode {
 		return false
@@ -193,10 +176,8 @@ func (im *Image) SetMode(m Mode) bool {
 	return true
 }
 
-// Tool returns the active edit tool.
 func (im *Image) Tool() ImageTool { return im.tool }
 
-// SetTool picks the edit tool.
 func (im *Image) SetTool(t ImageTool) { im.tool = t }
 
 // Visible returns the visible (cropped) rectangle: x, y, w, h.
@@ -207,8 +188,7 @@ func (im *Image) Visible() (x, y, w, h float64) {
 		(im.W - im.Clip.Left - im.Clip.Right) * sc, (im.H - im.Clip.Top - im.Clip.Bottom) * sc
 }
 
-// sc is the displayed-to-nominal scale: 1 unless the image was fitted
-// into the text by the flow.
+// sc is the displayed-to-nominal scale; 1 unless fitted.
 func (im *Image) sc() float64 {
 	if im.Placement == PlaceInline && im.scale > 0 {
 		return im.scale
@@ -240,8 +220,7 @@ func (im *Image) syncAnchor() {
 	}
 }
 
-// Measure implements InlineObject: the image's visible part, scaled
-// down (never up) to fit maxW x maxH, keeping its aspect ratio.
+// Measure returns the visible part's size, scaled down to fit.
 func (im *Image) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	vw, vh := im.W-im.Clip.Left-im.Clip.Right, im.H-im.Clip.Top-im.Clip.Bottom
 	if vw <= 0 || vh <= 0 {
@@ -251,8 +230,7 @@ func (im *Image) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	return vw * im.scale, vh*im.scale + im.legendHeight(p, vw*im.scale)
 }
 
-// DrawAt implements InlineObject: it draws the visible part with its
-// top-left at (x, y) and remembers where, for the edit chrome.
+// DrawAt draws the visible part with its top-left at (x, y).
 func (im *Image) DrawAt(p Painter, x, y float64) {
 	sc := im.sc()
 	im.X, im.Y = x-im.Clip.Left*sc, y-im.Clip.Top*sc
@@ -277,7 +255,7 @@ const (
 	legendMinW  = 100.0
 )
 
-// legendLines wraps the legend to the picture's width (never narrower than legendMinW).
+// legendLines wraps the legend to the picture's width.
 func (im *Image) legendLines(p Painter, w float64) []string {
 	if strings.TrimSpace(im.Legend) == "" || p == nil {
 		return nil
@@ -286,7 +264,7 @@ func (im *Image) legendLines(p Painter, w float64) []string {
 	return wrapToWidth(p, im.Legend, max(w, legendMinW))
 }
 
-// legendHeight is the room under the picture the legend takes: its lines and the gap above them; 0 with no legend.
+// legendHeight is the room the legend takes under the picture.
 func (im *Image) legendHeight(p Painter, w float64) float64 {
 	n := len(im.legendLines(p, w))
 	if n == 0 {
@@ -295,7 +273,7 @@ func (im *Image) legendHeight(p Painter, w float64) float64 {
 	return legendGap + float64(n)*legendLineH
 }
 
-// drawLegend writes the legend under a picture whose bottom edge is at y and which is w wide, centred on it.
+// drawLegend writes the legend under a picture.
 func (im *Image) drawLegend(p Painter, x, y, w float64) {
 	lines := im.legendLines(p, w)
 	if len(lines) == 0 {
@@ -311,8 +289,7 @@ func (im *Image) drawLegend(p Painter, x, y, w float64) {
 	p.SetTextAlign("left")
 }
 
-// Exclusion implements Obstacle: while Wrap is on, the visible
-// rectangle plus WrapMargin is off limits to text.
+// Exclusion: with Wrap on, the visible rectangle plus WrapMargin is an obstacle.
 func (im *Image) Exclusion(y0, y1 float64) (x0, x1 float64, ok bool) {
 	if !im.Wrap || im.Placement == PlaceInline {
 		return 0, 0, false
@@ -341,8 +318,6 @@ func (im *Image) changed() {
 	}
 }
 
-// --- toolbar -------------------------------------------------------
-
 var toolbarLabels = [...]string{"Move", "Clip", "Alpha", "Wrap"}
 
 // buttonRect returns toolbar button i (0-2 tools, 3 Wrap): x, y, w, h.
@@ -359,8 +334,7 @@ func (im *Image) sliderRect() [4]float64 {
 	return [4]float64{vx, vy + vh + s.SliderGap, vw, s.SliderH}
 }
 
-// handleRect returns the crop handle on an edge ("left", "right",
-// "top", "bottom"): x, y, w, h.
+// handleRect returns the crop handle rectangle for an edge.
 func (im *Image) handleRect(edge string) [4]float64 {
 	hs := im.ChromeStyle.HandleSize
 	vx, vy, vw, vh := im.Visible()
@@ -376,16 +350,12 @@ func (im *Image) handleRect(edge string) [4]float64 {
 	}
 }
 
-// --- pointer -------------------------------------------------------
-
 func (im *Image) contains(x, y float64) bool {
 	vx, vy, vw, vh := im.Visible()
 	return inRect(x, y, [4]float64{vx, vy, vw, vh})
 }
 
-// whatAt returns what a press at (x, y) would grab: a toolbar button
-// ("button:N"), a clip handle, the alpha slider, or the image body
-// ("move"); "" for nothing.
+// whatAt returns what a press grabs: a toolbar button, handle or image.
 func (im *Image) whatAt(x, y float64) string {
 	for i := range toolbarLabels {
 		if inRect(x, y, im.buttonRect(i)) {
@@ -412,8 +382,7 @@ func (im *Image) whatAt(x, y float64) string {
 	return ""
 }
 
-// MouseDown handles toolbar clicks and starts a drag with the active
-// tool (edit mode only).
+// MouseDown handles toolbar clicks and starts a drag with the active tool.
 func (im *Image) MouseDown(x, y float64) bool {
 	if im.mode != ModeEdit {
 		return false
@@ -545,10 +514,7 @@ func (im *Image) CSSCursor() string {
 	return im.hover
 }
 
-// --- drawing -------------------------------------------------------
-
-// Draw paints the image (cropped, at Alpha) and, in edit mode, the
-// toolbar and the active tool's handles.
+// Draw paints the image at Alpha and, in edit mode, the toolbar.
 func (im *Image) Draw() {
 	p, s := im.Painter, im.ChromeStyle
 	nw, nh := im.Src.Size()

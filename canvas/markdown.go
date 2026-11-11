@@ -7,27 +7,7 @@ import (
 	"unicode"
 )
 
-// Markdown is a Transform for extended Markdown. It supports:
-//
-//	# Headings (1-6)            **bold**  __bold__  *italic*  _italic_  ***both***
-//	~~strikethrough~~           ++underline++       ==highlight==
-//	^superscript^               ~subscript~         `inline code`
-//	[links](url)                ![images](url)      \* backslash escapes
-//	- bullets, 1. numbers, - [ ] task lists (nest with 2-space indents)
-//	> block quotes              --- horizontal rules
-//	``` fenced code blocks      | pipe | tables |  (a header row, a ---|--- row, then rows)
-//
-// plus directives on a line of their own:
-//
-//	\pagebreak          a user page break
-//	\columnbreak        a user column break
-//	\columns N [gap=G]  N equal columns (default gap 24) from here on; \columns 1 goes back to one
-//
-// Tables become read-only table objects (the cells' inline markup is
-// stripped to plain text), rules become Rule objects, and images
-// become whatever Images returns for them. Soft line breaks inside a
-// paragraph are spaces; end a line with two spaces or a backslash for
-// a hard break.
+// Markdown is a Transform for extended Markdown syntax.
 type Markdown struct {
 	CodeFamily     string     // default "monospace"
 	HeadingScale   [6]float64 // size multipliers for # to ######; default 2, 1.6, 1.35, 1.2, 1.05, 1

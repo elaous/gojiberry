@@ -2,9 +2,7 @@ package canvas
 
 import "testing"
 
-// 200x100 bitmap shown at natural size at (40, 60): the visible
-// rectangle is x 40..240, y 60..160. Toolbar buttons sit at y 32..54,
-// x = 40 + 56*i, 52 wide.
+// Test image: 200x100 at (40, 60), natural size.
 
 func newImg() (*Image, *fakePainter) {
 	p := &fakePainter{}
@@ -294,8 +292,6 @@ func TestHoverCursor(t *testing.T) {
 	}
 }
 
-// --- wrap-around ---
-
 func TestExclusion(t *testing.T) {
 	im, _ := newImg()
 	if _, _, ok := im.Exclusion(60, 160); ok {
@@ -332,8 +328,7 @@ func wrapSetup(wrap bool) (*Image, *TextFlow) {
 	return im, f
 }
 
-// overlaps reports whether any laid-out line intrudes on the x0..x1 by
-// y0..y1 rectangle.
+// overlaps reports whether any line intrudes on the given area.
 func overlaps(l Layout, lineH, x0, x1, y0, y1 float64) bool {
 	for _, ln := range l.Lines {
 		if ln.Y < y1 && ln.Y+lineH > y0 && ln.X < x1 && ln.X+ln.W > x0 {

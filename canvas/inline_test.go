@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// fakeObj is an InlineObject that wants w x h, shrinking (keeping its
-// aspect ratio) to fit what it is offered.
+// fakeObj is an InlineObject that shrinks, keeping its aspect ratio.
 type fakeObj struct {
 	w, h         float64
 	gotMaxW      float64
@@ -87,8 +86,7 @@ func TestInlineObjectSitsInTheLine(t *testing.T) {
 	if ln.Text != "ab ￼ cd" || len(ln.Objects) != 1 || len(ln.Runs) != 2 {
 		t.Fatalf("line = %+v", ln)
 	}
-	// Taller than the 22px leading: the line grows to the object plus
-	// room under the baseline for descenders (0.25 x size).
+	// A line taller than its leading grows to fit the object.
 	if ln.H != 60+0.25*16 {
 		t.Fatalf("line height = %g", ln.H)
 	}
@@ -200,7 +198,7 @@ func TestRuleObject(t *testing.T) {
 func TestTableObjectMeasureAndClip(t *testing.T) {
 	tbl := NewTableObject(NewTableFrom([][]string{{"a", "b"}, {"c", "d"}}))
 	p := &fakePainter{}
-	// Two 80px columns (MinColWidth), two 32px rows, +6 air, and the room for the grips (20px above and at both sides).
+	// Two 80px columns, two 32px rows, plus padding and grip room.
 	if w, h := tbl.Measure(p, 500, 500); w != 200 || h != 90 {
 		t.Fatalf("natural size = %gx%g", w, h)
 	}
@@ -218,8 +216,6 @@ func TestTableObjectMeasureAndClip(t *testing.T) {
 		t.Fatal("an inline table is read-only: no + bars")
 	}
 }
-
-// --- transform ---
 
 type countingTransform struct{ calls int }
 

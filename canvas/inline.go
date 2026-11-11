@@ -2,34 +2,21 @@ package canvas
 
 import "time"
 
-// InlineObject is a canvas object that sits in a TextFlow's line of
-// text like a (very large) character: an Image in inline mode, a table
-// from the Markdown transform, a horizontal rule.
+// InlineObject is a canvas object placed in a TextFlow line.
 type InlineObject interface {
-	// Measure returns the size the object wants given the room it has:
-	// at most maxW wide and maxH high (the column and the page's text
-	// area). An object that can scale or clip itself to fit does so;
-	// this is how an inline image "tries to fit the image inside the
-	// page borders". p measures text.
+	// Measure returns the object's size for the room it has.
 	Measure(p Painter, maxW, maxH float64) (w, h float64)
-	// DrawAt draws the object with its top-left corner at (x, y), at
-	// the size Measure last returned.
+	// DrawAt draws the object with its top-left at (x, y).
 	DrawAt(p Painter, x, y float64)
 }
 
-// DescentObject is an InlineObject with a baseline of its own inside its box: Descent is how far the baseline is above
-// the bottom of the box (after Measure). A non-block object sits on the line's baseline; with Descent the object's
-// baseline is on it instead, so a formula with a subscript or a fraction lines up with the words round it.
+// DescentObject is an InlineObject with its own baseline inside its box.
 type DescentObject interface {
 	InlineObject
 	Descent() float64
 }
 
-// Inline is a TextFlow item that places an InlineObject in the text.
-// It takes one position in the text stream (so offsets and carets
-// still line up). Block objects get a line to themselves (a table, a
-// rule); others share a line with the text around them, sitting on the
-// baseline and making the line taller if need be.
+// Inline is a TextFlow item placing an InlineObject in the text.
 type Inline struct {
 	Object InlineObject
 	Block  bool
@@ -46,25 +33,22 @@ type PlacedObject struct {
 	X, Y   float64 // absolute top-left
 	W, H   float64
 	Offset int // text-stream offset
-	// Descent is how far the object's own baseline is above its bottom (a DescentObject); zero for the others.
+	// Descent is the baseline height above the box bottom.
 	Descent float64
 }
 
-// Rule is a horizontal rule, a block InlineObject spanning the column.
-// Use it as *Rule: it remembers the width it was measured at.
+// Rule is a horizontal rule: a block object spanning the column.
 type Rule struct {
 	Color     string
 	Thickness float64 // default 1
 	w         float64
 }
 
-// Measure implements InlineObject.
 func (r *Rule) Measure(_ Painter, maxW, _ float64) (float64, float64) {
 	r.w = maxW
 	return maxW, 14
 }
 
-// DrawAt implements InlineObject.
 func (r *Rule) DrawAt(p Painter, x, y float64) {
 	color, th := r.Color, r.Thickness
 	if color == "" {
@@ -77,30 +61,24 @@ func (r *Rule) DrawAt(p Painter, x, y float64) {
 	p.FillRect(x, y+7-th/2, r.w, th)
 }
 
-// TableObject is a Table drawn read-only in the text, as a block
-// InlineObject. A table wider than its column (or taller than the
-// page) is clipped to it.
+// TableObject draws a Table read-only in the text, as a block object.
 type TableObject struct {
 	View *TableView
 	w, h float64
-	// pad is the room around a table with a formula or a form field, above and at both sides, where the grips of its
-	// columns, rows and the eye/pen switch are drawn (the same grips as an editable table's); tableW is the table's own width.
+	// pad is the room around a table with formulas or form fields.
 	pad, tableW float64
 	resize      *tableResize
-	// Allow, if set, is asked before the table's column or row is resized (by dragging a grip's edge, or a double press
-	// that gives the size back): false leaves it as it is. A host that shares the document uses it to say the table is
-	// busy with somebody else.
+	// Allow, if set, is asked before a column or row is resized.
 	Allow    func() bool
 	lastEdge *tableResize // the edge pressed last, and when, to tell a double press
 	lastAt   time.Time
 }
 
-// NewTableObject wraps t for placing in a flow with Inline{Block: true}.
+// NewTableObject wraps t for placing in a flow.
 func NewTableObject(t *Table) *TableObject {
 	return &TableObject{View: NewTableView(t, nil)}
 }
 
-// Measure implements InlineObject.
 func (o *TableObject) Measure(p Painter, maxW, maxH float64) (float64, float64) {
 	o.View.Painter = p
 	o.View.X, o.View.Y = 0, 0
@@ -112,7 +90,6 @@ func (o *TableObject) Measure(p Painter, maxW, maxH float64) (float64, float64) 
 	return o.w, o.h
 }
 
-// DrawAt implements InlineObject.
 func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	o.View.Painter = p
 	o.View.menu.Painter = p
@@ -134,8 +111,7 @@ func (o *TableObject) DrawAt(p Painter, x, y float64) {
 	o.View.drawHandles(g)
 }
 
-// DragStart implements DragObject: a press on a column grip near the edge between two columns (or at the right edge of
-// the last), or on a row grip near the edge under a row, starts a resize of that column or row.
+// DragStart: a press on a column or row grip starts a resize.
 func (o *TableObject) DragStart(x, y float64) bool {
 	v := o.View
 	if v == nil || v.Table == nil || v.Painter == nil {
@@ -183,7 +159,7 @@ func (o *TableObject) DragStart(x, y float64) bool {
 	return o.resize != nil
 }
 
-// Select selects a column, a row or the whole table (the grips do it when pressed; the host acts on the selection).
+// Select selects a column, a row or the whole table.
 func (o *TableObject) Select(sel Selection) {
 	if sel.Kind == SelColumn && (sel.Index < 0 || sel.Index >= o.View.Table.Cols()) || sel.Kind == SelRow && (sel.Index < 0 || sel.Index >= o.View.Table.Rows()) {
 		sel = Selection{}
@@ -191,11 +167,10 @@ func (o *TableObject) Select(sel Selection) {
 	o.View.sel = sel
 }
 
-// Selected is what is selected in the table: a column, a row, the table, or nothing (Kind SelNone).
+// Selected returns what is selected in the table.
 func (o *TableObject) Selected() Selection { return o.View.sel }
 
-// gripAt says which grip the point is on, relative to the object (the column grips above, the row grips at the left, the
-// table icon in the corner), or SelNone.
+// gripAt returns which grip the point is on, relative to the object.
 func (o *TableObject) gripAt(x, y float64) Selection {
 	v := o.View
 	hs, gap := v.Style.HandleSize, v.Style.BarGap
@@ -215,7 +190,6 @@ func (o *TableObject) gripAt(x, y float64) Selection {
 	return Selection{}
 }
 
-// DragMove implements DragObject.
 func (o *TableObject) DragMove(x, y float64) bool {
 	d := o.resize
 	if d == nil {
@@ -234,19 +208,16 @@ func (o *TableObject) DragMove(x, y float64) bool {
 	return t.RowHeightSet(d.index) != before
 }
 
-// DragEnd implements DragObject.
 func (o *TableObject) DragEnd() { o.resize = nil }
 
-// tableResize is a column or row being resized: where the press was and how big it was then.
+// tableResize records a column or row being resized.
 type tableResize struct {
 	col         bool
 	index       int
 	start, size float64
 }
 
-// ClickAt implements ClickObject: a press on the switch beside the top right corner changes the view, and a press on a
-// cell that is a form field fills it in (a checkbox is ticked) or, in the formula view, changes it. The table is
-// read-only in the text otherwise, so a press anywhere else is not used.
+// ClickAt handles a press on the corner switch.
 func (o *TableObject) ClickAt(x, y float64) (used, changed bool) {
 	v := o.View
 	if v == nil || v.Table == nil || v.Painter == nil {
