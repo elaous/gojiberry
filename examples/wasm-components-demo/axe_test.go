@@ -8,7 +8,6 @@ import (
 	"github.com/elaous/gojiberry/internal/e2etest"
 )
 
-// The components gallery is under the accessibility gate: axe finds nothing wrong with it.
 func TestNoAccessibilityViolationsAxe(t *testing.T) {
 	d := e2etest.NewSite(t, "../../components/*.css").OpenURL(t, "/index.html", e2etest.Options{Width: 1400, Height: 1000, ConsoleErrors: true})
 	d.Sleep(1000)
