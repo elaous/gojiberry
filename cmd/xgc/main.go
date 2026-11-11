@@ -1,4 +1,3 @@
-// Command xgc transpiles .xg files into gofmt-clean .go files.
 package main
 
 import (
@@ -35,7 +34,6 @@ func main() {
 				return err
 			}
 			if d.IsDir() {
-				// Directories named experimental hold experimental .xg files.
 				if d.Name() == "experimental" && !opts.Experimental {
 					return filepath.SkipDir
 				}
