@@ -23,8 +23,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ErrNotFound is wrapped in the error of an operation on a document that does not
-// exist (an unknown ID, or one that is not a UUID at all).
 var ErrNotFound = errors.New("canvas: document not found")
 
 // Store is the canvas document store.
@@ -70,8 +68,6 @@ func (s *Store) CreateDocument(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-// GetDocument returns a document's content, or an error wrapping ErrNotFound if it
-// doesn't exist. Any other error is the database's.
 func (s *Store) GetDocument(ctx context.Context, id string) (string, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return "", fmt.Errorf("%w: %s", ErrNotFound, id)
@@ -111,8 +107,6 @@ func (s *Store) SaveDocument(ctx context.Context, id, content string) error {
 	return nil
 }
 
-// ListDocuments returns every document, most recently updated first,
-// truncating each one's content to a short preview.
 func (s *Store) ListDocuments(ctx context.Context) ([]DocumentSummary, error) {
 	query := sqlQuery(`//language=SQL
 		SELECT id, left(content, 60) FROM documents ORDER BY updated_at DESC
@@ -121,7 +115,7 @@ func (s *Store) ListDocuments(ctx context.Context) ([]DocumentSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas: listing documents: %w", err)
 	}
-	defer func() { _ = rows.Close() }() // read-only cursor, fully consumed (rows.Err is checked below); a close failure is not actionable
+	defer func() { _ = rows.Close() }()
 
 	var out []DocumentSummary
 	for rows.Next() {
