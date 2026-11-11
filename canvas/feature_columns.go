@@ -1,10 +1,6 @@
 package canvas
 
-// Columns sets the number of text columns from the caret's paragraph on:
-// one to four equal columns, a wide column beside a narrow one (2+1) and the
-// mirror (1+2), and the space between them. A new region starts at that
-// paragraph; the text above keeps its own columns. A column break
-// (break.column) moves the text on to the next column.
+// Columns sets the column count from the caret's paragraph on.
 type Columns struct{}
 
 // Command names.
@@ -18,8 +14,7 @@ const (
 	CmdGapNarrow   Command = "columns.gap-narrow"
 	CmdGapStandard Command = "columns.gap-standard"
 	CmdGapWide     Command = "columns.gap-wide"
-	// CmdColumnsReset gives the columns back equal widths (what dragging a grip changed is undone); the number of
-	// columns and the space between them stay.
+	// CmdColumnsReset restores equal widths; the column count is unchanged.
 	CmdColumnsReset Command = "columns.reset-widths"
 )
 
@@ -35,8 +30,7 @@ const DefaultColumnGap = 24
 // Name implements Feature.
 func (Columns) Name() string { return "columns" }
 
-// proportion is a column width ratio: only the ratio counts, the layout scales
-// the widths down to fit the page.
+// proportion is a column width ratio; widths scale to fit the page.
 const proportion = 1000
 
 // Install implements Feature.

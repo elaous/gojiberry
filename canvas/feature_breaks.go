@@ -1,17 +1,6 @@
 package canvas
 
-// Breaks inserts page breaks, column breaks and horizontal rules into a
-// TextFlow:
-//
-//   - Ctrl/Cmd+Enter is a page break: the text carries on at the top of
-//     the next page;
-//   - Ctrl/Cmd+Shift+Enter is a column break: it carries on in the next
-//     column (or the next page from the last column);
-//   - Ctrl/Cmd+Alt+Enter inserts a horizontal rule (like Markdown ---).
-//
-// The caret ends up after the break, ready to type on the new page. Delete
-// in front of a break, or Backspace right after it, removes it. Targets
-// that cannot hold breaks (a FloatingText) decline.
+// Breaks inserts page breaks, column breaks and horizontal rules.
 type Breaks struct{}
 
 // Command names.

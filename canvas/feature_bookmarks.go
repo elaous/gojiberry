@@ -1,13 +1,6 @@
 package canvas
 
-// Bookmarks names places in the text (see Bookmark):
-//
-//   - Ctrl/Cmd+Alt+B names the selection (or the character at the caret) as
-//     a bookmark, asking for the name; a name already in use moves;
-//   - bookmark.remove takes off the bookmark at the caret;
-//   - Ctrl/Cmd+Alt+G asks for a name and goes to it.
-//
-// A link whose address is "#name" jumps to the bookmark when followed.
+// Bookmarks names text ranges; Ctrl/Cmd+Alt+B names the selection or character.
 type Bookmarks struct{}
 
 // Command names.
@@ -73,8 +66,7 @@ func (Bookmarks) Install(r *Registry) {
 	})
 }
 
-// bookmarkAtCursor returns the bookmark at the primary cursor (the first
-// selected character's, or the one at or before the caret), or "".
+// bookmarkAtCursor returns the bookmark at the primary cursor.
 func bookmarkAtCursor(t EditTarget) string {
 	if _, ok := t.(BookmarkHost); !ok {
 		return ""
@@ -93,8 +85,7 @@ func bookmarkAtCursor(t EditTarget) string {
 	return ""
 }
 
-// retagRange rewrites the format of the characters in [from, to) with fn,
-// keeping the cursors.
+// retagRange rewrites the format of [from, to) with fn.
 func retagRange(t EditTarget, from, to int, fn func(*Format)) {
 	items := t.Slice(from, to)
 	out := make([]Item, len(items))
@@ -110,7 +101,7 @@ func retagRange(t EditTarget, from, to int, fn func(*Format)) {
 	t.SetCursors(cs)
 }
 
-// retagAll applies fn to the format of every character that fn changes.
+// retagAll applies fn to every character's format.
 func retagAll(t EditTarget, fn func(*Format)) {
 	n := len([]rune(t.EditText()))
 	fms := charFormats(t.Slice(0, n))

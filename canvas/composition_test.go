@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// The preedit of an input method is drawn at the caret, underlined, and the stage says where the caret is so
-// that the candidate window can be put there; it is not in the document.
+// Preedit is drawn at the caret, underlined; the caret position is reported.
 func TestPreeditIsDrawnAtTheCaretAndNotInTheDocument(t *testing.T) {
 	f, p := selFlow(Chars{Text: "hello wor", Format: Format{FontSize: 20}})
 	f.SetMode(ModeEdit)
@@ -64,7 +63,7 @@ func TestNoPreeditWhenNotEditing(t *testing.T) {
 	}
 }
 
-// The sentence being read aloud is marked faintly and its word strongly, and the marks do not move the caret.
+// Read-aloud marks are faint and do not move the caret.
 func TestReadMarksAreDrawnUnderTheText(t *testing.T) {
 	f, p := newFlow("one two three", 400, 100)
 	if sf, _, wf, _ := f.ReadMarks(); sf >= 0 || wf >= 0 {
@@ -80,7 +79,7 @@ func TestReadMarksAreDrawnUnderTheText(t *testing.T) {
 	if !sent || !word {
 		t.Errorf("sentence %v word %v in %v", sent, word, p.calls)
 	}
-	if !p.has("fillRect 50 ") && !p.has("fillRect 42 ") { // "two" starts after "one " (4 letters of 8px from x 10)
+	if !p.has("fillRect 50 ") && !p.has("fillRect 42 ") { // "two" begins after "one " (8px per rune).
 		t.Errorf("no rectangle at the word: %v", p.calls)
 	}
 	if c := f.Cursors()[0]; c.Caret != 0 {
