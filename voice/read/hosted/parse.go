@@ -5,11 +5,8 @@ import (
 	"net/url"
 )
 
-// maxVoices bounds the list taken from a server.
 const maxVoices = 500
 
-// parseVoices reads the server's list. An entry without an ID is left out, a name defaults to the ID, and a licence
-// address that is not https is dropped (a page must not link to anything else from here).
 func parseVoices(data []byte) ([]Entry, error) {
 	var raw []struct {
 		ID      string `json:"id"`
