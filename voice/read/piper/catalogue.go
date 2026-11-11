@@ -9,8 +9,6 @@ import (
 	"github.com/elaous/gojiberry/voice/read"
 )
 
-// Defaults of the catalogue Piper's voices are published in (the rhasspy/piper-voices repository). An operator can
-// point a page elsewhere (a mirror) with ParseConfig.
 const (
 	DefaultCatalogue = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
 	DefaultBase      = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
@@ -19,24 +17,16 @@ const (
 // CatalogueVoice is one voice of the catalogue.
 type CatalogueVoice struct {
 	// ID is the catalogue's key ("en_US-lessac-medium").
-	ID string
-	// Name is the voice's own name ("lessac"); Lang the BCP 47 tag ("en-US"); Quality "low", "medium" or "high".
-	Name, Lang, Quality string
-	Speakers            int
-	// Model and Config are the paths of the two files below the base URL, with their sizes and MD5 checksums.
+	ID                    string
+	Name, Lang, Quality   string
+	Speakers              int
 	Model, Config         string
 	ModelSize, ConfigSize int64
 	ModelMD5, ConfigMD5   string
-	// Card is the path of the model card, which says whose voice it is and under what terms its data is used.
-	Card string
+	Card                  string
 
-	// Base is the address the paths are below ("" is the engine's Config.Base): a voice of another repository has its own.
-	Base string
-	// Source says which source the voice is listed by ("hub", a repository's id), "" for the engine's own catalogue.
-	Source string
-	// Licence is the name of the terms of the voice's data ("CC0 1.0"), LicenceURL where they are written, Credit what the
-	// terms ask to be said, Dataset where the recordings come from; all "" for a voice whose source does not say (the
-	// model card then does). Gender and Accent are for a person to choose by when the name does not say.
+	Base                                 string
+	Source                               string
 	Licence, LicenceURL, Credit, Dataset string
 	Gender                               string
 }
@@ -58,7 +48,7 @@ type rawVoice struct {
 	} `json:"files"`
 }
 
-// ParseCatalogue reads the catalogue's voices.json. A voice without both its files is left out.
+// ParseCatalogue reads the catalogue's voices.json.
 func ParseCatalogue(data []byte) ([]CatalogueVoice, error) {
 	var raw map[string]rawVoice
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -90,8 +80,6 @@ func ParseCatalogue(data []byte) ([]CatalogueVoice, error) {
 	return out, nil
 }
 
-// ForLanguage lists the voices of a language tag: the same base language ("de" for "de-AT"), the exact tag first,
-// then by quality (high first), then by name.
 func ForLanguage(all []CatalogueVoice, lang string) []CatalogueVoice {
 	if lang == "*" { // every language
 		out := append([]CatalogueVoice(nil), all...)
@@ -124,12 +112,10 @@ func ForLanguage(all []CatalogueVoice, lang string) []CatalogueVoice {
 	return out
 }
 
-// asVoice describes a catalogue voice for the player's lists.
 func (c CatalogueVoice) asVoice() read.Voice {
 	return read.Voice{ID: c.ID, Name: strings.ToUpper(c.Name[:min(1, len(c.Name))]) + c.Name[min(1, len(c.Name)):], Lang: c.Lang, Local: true}
 }
 
-// base is the address the voice's paths are below, the given default when it has none of its own.
 func (c CatalogueVoice) base(def string) string {
 	if c.Base != "" {
 		return c.Base

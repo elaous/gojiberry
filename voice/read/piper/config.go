@@ -7,25 +7,15 @@ import (
 	"strings"
 )
 
-// Config says where the voices come from and what runs them. An operator writes it as reader-voices.json next to the
-// page; the page reads it with ParseConfig. Every address is https or relative to the page (a mirror of the voices on
-// the operator's own server is the usual reason to set it); a plain http address or any other scheme is refused.
 type Config struct {
-	// Catalogue is the address of voices.json, Base the address the paths in it are below.
 	Catalogue, Base string
-	// Runtime is the address of the script that offers the Piper runtime to the page (window.addons.piper); "" for a page
-	// that carries it already, or has none.
-	Runtime string
-	// Server is the address of a voice server (cmd/voiceserver) whose voices can be chosen as a third reader; "" for
-	// none. Its voices send the text to it, so they are offered only to a person who allowed voices that use the internet.
-	Server string
+	Runtime         string
+	Server          string
 }
 
 // DefaultConfig points at the published voices and names no runtime.
 func DefaultConfig() Config { return Config{Catalogue: DefaultCatalogue, Base: DefaultBase} }
 
-// ParseConfig reads the operator's reader-voices.json: {"catalogue": "...", "base": "...", "runtime": "..."}. Missing
-// entries keep the defaults (a base is taken from the catalogue's folder when only the catalogue is given).
 func ParseConfig(data []byte) (Config, error) {
 	var raw struct {
 		Catalogue string `json:"catalogue"`
