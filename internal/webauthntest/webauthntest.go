@@ -1,8 +1,3 @@
-// Package webauthntest is a software authenticator: it answers a WebAuthn registration and
-// sign-in the way a browser's navigator.credentials.create and .get would, so the server side
-// can be tested end to end without a browser (the browser side is tested with Chrome's virtual
-// authenticator). It makes "none" attestation and ES256 keys, which is what the server verifies
-// most often, and can be told to skip user verification or to misbehave.
 package webauthntest
 
 import (
@@ -20,12 +15,10 @@ import (
 
 // Authenticator holds one credential.
 type Authenticator struct {
-	RPID string
-	// UserVerified says whether the authenticator checked the person (a PIN, a fingerprint).
+	RPID         string
 	UserVerified bool
-	// Counter is the signature counter; each assertion raises it, unless Frozen.
-	Counter uint32
-	Frozen  bool
+	Counter      uint32
+	Frozen       bool
 
 	key    *ecdsa.PrivateKey
 	credID []byte
@@ -107,8 +100,6 @@ func clientData(typ, challenge, origin string) []byte {
 	return b
 }
 
-// Create answers a registration (the options JSON the server sent, as {"publicKey": ...}) as
-// coming from origin, and returns the JSON the browser would post back.
 func (a *Authenticator) Create(options []byte, origin string) ([]byte, error) {
 	var o creationOptions
 	if err := json.Unmarshal(options, &o); err != nil {
@@ -127,8 +118,6 @@ func (a *Authenticator) Create(options []byte, origin string) ([]byte, error) {
 	})
 }
 
-// Get answers a sign-in (the options JSON, as {"publicKey": ...}) as coming from origin, and
-// returns the JSON the browser would post back.
 func (a *Authenticator) Get(options []byte, origin string) ([]byte, error) {
 	var o requestOptions
 	if err := json.Unmarshal(options, &o); err != nil {
