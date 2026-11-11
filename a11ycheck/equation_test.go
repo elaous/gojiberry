@@ -50,8 +50,7 @@ func TestCheckFindsAnEquationWithoutAnAlternativeWhereItIs(t *testing.T) {
 	if len(eq) != 1 {
 		t.Fatalf("equation findings: %+v", eq)
 	}
-	// "Intro\n" is 6 runes: the equation is the next one in the text stream, and the second equation and the
-	// picture after "Between\n" (8 runes) must still be counted as one rune each
+	// Offsets count runes; each equation and picture counts as one.
 	if eq[0].Offset != 6 || eq[0].Item != 1 || eq[0].Severity != Error {
 		t.Errorf("finding = %+v", eq[0])
 	}

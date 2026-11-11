@@ -8,11 +8,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// checkTable looks at the header row of a table. In every export the first row is the header (a <th> row
-// in HTML, a tagged header row in PDF, a header row in Word), and the document model has no per-table
-// flag to turn that off, so a header that is "not marked" cannot happen; what can happen is a header
-// row with no text in it, which leaves a screen-reader user without a name for the column. A table of one
-// row has no data rows to name, so it is left alone, and so is a header cell that a merge covers.
+// checkTable flags a table whose header row has no text.
 func checkTable(t *docfile.TableItem, offset, item int) []Finding {
 	if len(t.Rows) < 2 {
 		return nil
@@ -59,19 +55,17 @@ func joinInts(v []int) string {
 	return strings.Join(s, ", ")
 }
 
-// fakeListRun gathers consecutive paragraphs that start with a typed marker ("- ", "• ", "1. ") but are not
-// list items, to report them together once there are two (one such line is often just a dash in a sentence).
-// Blank paragraphs between them do not end the run; anything else does.
+// fakeListRun gathers typed-marker paragraphs; blank paragraphs do not end it.
 type fakeListRun struct {
 	family      string // "bullet" or "number" of the run in progress
 	n           int
 	start, item int
 	text        string
-	end         int      // where the last paragraph of the run ends
+	end         int
 	spans       [][2]int // the typed marker of each paragraph: its offset and length in runes
 }
 
-// add takes a finished paragraph that is not a heading and returns the findings so far.
+// add takes a non-heading paragraph and returns findings so far.
 func (r *fakeListRun) add(out []Finding, text string, listKind, start, item int) []Finding {
 	if strings.TrimSpace(text) == "" {
 		return out
@@ -114,8 +108,7 @@ func (r *fakeListRun) flush(out []Finding) []Finding {
 		Action:  ActionToList, Arg: arg, Length: r.end - r.start, Spans: r.spans})
 }
 
-// markerFamily says whether text starts with a typed list marker: a bullet character or a dash or
-// asterisk followed by a space, or a number with a point or bracket and a space.
+// markerFamily names the typed list marker text starts with, or "" for none.
 func markerFamily(text string) string {
 	rs := []rune(strings.TrimLeftFunc(text, unicode.IsSpace))
 	if len(rs) < 2 {
@@ -138,8 +131,7 @@ func markerFamily(text string) string {
 	return ""
 }
 
-// markerLength is how many runes of text the typed list marker takes, with the spaces before and after it:
-// what a fix has to remove once the paragraph is a real list item. It is 0 for text with no marker.
+// markerLength returns the runes of the typed marker, with spaces, or 0.
 func markerLength(text string) int {
 	if markerFamily(text) == "" {
 		return 0

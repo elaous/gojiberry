@@ -10,8 +10,7 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// WCAG 2 success criterion 1.4.3: text needs a contrast ratio of 4.5 to its background, or 3 when it
-// is large (24px, or 18.66px and bold).
+// WCAG 2 SC 1.4.3: contrast 4.5 for text, 3 for large text.
 const (
 	minRatio      = 4.5
 	minRatioLarge = 3.0
@@ -28,7 +27,7 @@ func checkContrast(doc docfile.Document, opt Options) []Finding {
 	for i, it := range doc.Content {
 		c := it.Chars
 		if c == nil || strings.TrimSpace(c.Text) == "" || c.Format.Color == "" {
-			continue // the default colour is the page's own to get right
+			continue
 		}
 		fg, ok := parseColor(c.Format.Color)
 		if !ok {
@@ -84,8 +83,7 @@ func contrast(a, b rgb) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// parseColor reads "#rgb", "#rrggbb", "rgb(r, g, b)" and the CSS colour names; anything else (a transparent
-// colour, a variable, a name not listed) is not understood, and the caller skips the check.
+// parseColor reads a hex, rgb() or basic colour name; false if not understood.
 func parseColor(s string) (rgb, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
 	if c, ok := colornames.Map[s]; ok {
@@ -123,8 +121,7 @@ func parseColor(s string) (rgb, bool) {
 	return rgb{}, false
 }
 
-// Contrast is the WCAG 2 contrast ratio (1 to 21) of two CSS colours given as text ("#rgb", "#rrggbb",
-// "rgb(r, g, b)" or a basic name). ok is false when either one is not understood.
+// Contrast returns the WCAG 2 contrast ratio of two CSS colours, 1 to 21.
 func Contrast(fg, bg string) (ratio float64, ok bool) {
 	a, ok1 := parseColor(fg)
 	b, ok2 := parseColor(bg)

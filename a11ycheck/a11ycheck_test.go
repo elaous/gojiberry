@@ -73,7 +73,7 @@ func TestLowContrastIsFoundAgainstTheBackgroundOrThePage(t *testing.T) {
 	if want := "faint grey|yellow on white|grey on grey|small mid grey"; strings.Join(got, "|") != want {
 		t.Errorf("flagged %q, want %q", strings.Join(got, "|"), want)
 	}
-	// on a dark page the faint grey is fine and the dark text is not
+	// on a dark page, the grey passes and the dark text fails.
 	dark := Check(docfile.Document{Content: []docfile.Item{chars("light", docfile.Format{Color: "#cccccc"}), chars("dim", docfile.Format{Color: "#222222"})}}, Options{Page: "#101010"})
 	if len(dark) != 1 || dark[0].Text != "dim" {
 		t.Errorf("dark page: %+v", dark)
@@ -103,8 +103,7 @@ func TestACleanDocumentHasNoFindings(t *testing.T) {
 	}
 }
 
-// A finding says where it is, as a caret position: text counts its runes, an object (an image, a table)
-// counts one, and the levels above 3 are seen as they are.
+// Findings carry their caret position in the text stream.
 func TestFindingsCarryTheirPositionInTheTextStream(t *testing.T) {
 	doc := docfile.Document{Content: []docfile.Item{
 		chars("Intro\n", docfile.Format{}),                                            // offsets 0 to 5, the newline is 5
