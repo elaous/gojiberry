@@ -63,23 +63,13 @@ func (t telemetryShared) SaveIf(ctx context.Context, data []byte, version string
 // telemetryPerMinute is how many batches one client may send per minute.
 const telemetryPerMinute = 6
 
-// WithTelemetry mounts the usage receiver (package telemetry): POST /telemetry takes a batch of
-// counts from the allowlist and only increments counters, and GET /admin/telemetry (the guard of
-// WithDirectoryAdmin) reports the totals of at least k, and /admin/usage the request totals. The
-// route reads no cookie or token and keeps no address: the per-client budget is keyed by a hash of
-// the address that lives in memory only and is never written to the store or to a log.
-// Without this call the route does not exist.
+// WithTelemetry mounts the usage receiver.
 func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 	if c == nil {
 		return s
 	}
 	s.telemetry = c
-	// The totals live in the store, so a restart does not start the counts again. They hold only what the
-	// counters hold (a number per day, name and value; see telemetry.Counters.Snapshot), are bounded by the
-	// allowlist and the 90 day retention, and a record that cannot be read is replaced, not trusted.
-	// Several server processes on one store add their counts to each other's when the store has conditional
-	// writes (see telemetry.Counters.PersistShared); without them each overwrites the record with its own totals
-	// (the last write wins), and the server says so.
+	// The totals live in the store, so restarts keep the counts.
 	if s.adapter != nil {
 		var err error
 		if ca, ok := s.adapter.(ConditionalAdapter); ok {
@@ -101,8 +91,7 @@ func (s *Server) WithTelemetry(c *telemetry.Counters) *Server {
 	return s
 }
 
-// handleTelemetryReport serves GET /admin/telemetry: the totals of at least k (?k=, default 5,
-// never below the default), by day, name and value.
+// handleTelemetryReport serves GET /admin/telemetry.
 func (s *Server) handleTelemetryReport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -129,9 +118,7 @@ func (s *Server) handleTelemetryReport(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"k": k, "totals": s.telemetry.Report(k)})
 }
 
-// WithTelemetryNoise makes the report of /admin/telemetry round each total at random to a multiple of
-// step (2 to 1000; 0 or 1 is exact), before the k threshold is applied. See telemetry.Counters.SetNoise
-// for what that protects and what it does not. It does nothing without WithTelemetry.
+// WithTelemetryNoise makes the report round each total.
 func (s *Server) WithTelemetryNoise(step int) error {
 	if s.telemetry == nil {
 		return nil
