@@ -2,14 +2,7 @@ package canvas
 
 import "strconv"
 
-// Footnotes: a FootnoteRef (an inline object, so it moves, copies and
-// deletes with the text) marks the place, drawn as a small raised number;
-// the note's text is in a FootnoteSet under the ref's ID. The flow numbers
-// the refs in text order, and draws each page's notes in a band reserved at
-// the bottom of that page, under a short rule. A page gives its notes exactly the room they need (the text above
-// gives way, so a mark and its note stay on the same page), up to a cap (FootnoteBand, by default 40 % of the
-// page); a note that does not fit in the cap goes on at the foot of the next page. A page always holds at least the
-// start of the notes of its marks. Nothing is cut: no note ends in an ellipsis.
+// Footnotes: FootnoteRef is an inline mark that moves with its text.
 
 // Footnote is a note's text.
 type Footnote struct {
@@ -35,8 +28,7 @@ func NewFootnoteSet(notes ...Footnote) *FootnoteSet {
 	return s
 }
 
-// Add stores n, giving it an ID ("n1", "n2", ...) if it has none, and
-// returns it. An existing ID replaces that note.
+// Add stores n, assigning an ID if it has none.
 func (s *FootnoteSet) Add(n Footnote) Footnote {
 	if rs := []rune(n.Text); len(rs) > MaxFootnoteRunes {
 		n.Text = string(rs[:MaxFootnoteRunes])
@@ -101,22 +93,19 @@ func (s *FootnoteSet) Len() int {
 	return len(s.list)
 }
 
-// FootnoteRef is the footnote mark in the text: use it as *FootnoteRef in
-// an Inline item. N is set by the flow (1, 2, ... in text order).
+// FootnoteRef is the footnote mark in the text, used in an Inline item.
 type FootnoteRef struct {
 	ID string
 	N  int
 	w  float64
 }
 
-// Measure implements InlineObject.
 func (r *FootnoteRef) Measure(p Painter, _, _ float64) (float64, float64) {
 	p.SetFont(footnoteMarkFont)
 	r.w = p.MeasureTextWidth(strconv.Itoa(max(r.N, 1))) + 2
 	return r.w, 8 // short: it must not make the line taller
 }
 
-// DrawAt implements InlineObject.
 func (r *FootnoteRef) DrawAt(p Painter, x, y float64) {
 	p.SetFont(footnoteMarkFont)
 	p.SetFillStyle(LinkColor)
@@ -131,16 +120,15 @@ const (
 	footnoteMarkFont = "bold 10px sans-serif"
 	footnoteFont     = "11px sans-serif"
 	footnoteLineH    = 14.0
-	// footnotePad is the room above a page's notes (the rule) and below them.
+	// footnotePad is the space around a page's notes.
 	footnotePad = 8.0
-	// footnoteCapShare is the share of a page's text area its notes may take when FootnoteBand is not set.
+	// footnoteCapShare is the page share notes may take without FootnoteBand.
 	footnoteCapShare = 0.4
-	// MaxFootnoteRunes is the longest a note can be (FootnoteSet.Add keeps the first MaxFootnoteRunes characters).
+	// MaxFootnoteRunes is the longest note; Add truncates longer text.
 	MaxFootnoteRunes = 1000
 )
 
-// footnoteBandOf is the height kept at the bottom of page for its notes: none when it has none. It is set by the
-// layout (see Layout), which places the notes of each page and gives the text above only what is left.
+// footnoteBandOf returns the height kept at a page bottom for its notes.
 func (f *TextFlow) footnoteBandOf(page int) float64 {
 	if f.Footnotes.Len() == 0 || page < 0 || page >= len(f.fnBands) {
 		return 0
@@ -156,8 +144,7 @@ type FootnoteEntry struct {
 	Offset int // where its mark is in the text stream
 }
 
-// FootnoteList returns the notes whose marks are in the text, in order
-// (a note whose mark was deleted is not listed).
+// FootnoteList returns referenced notes in text order.
 func (f *TextFlow) FootnoteList() []FootnoteEntry {
 	var out []FootnoteEntry
 	off := 0
@@ -177,7 +164,7 @@ func (f *TextFlow) FootnoteList() []FootnoteEntry {
 	return out
 }
 
-// drawFootnotes draws each page's notes in the band the layout gave them.
+// drawFootnotes draws each page's notes in their band.
 func (f *TextFlow) drawFootnotes(lay Layout) {
 	if f.Painter == nil || len(f.fnLines) == 0 {
 		return
@@ -203,11 +190,10 @@ func (f *TextFlow) drawFootnotes(lay Layout) {
 	}
 }
 
-// fnLine is one line of a page's notes and the note it belongs to.
+// fnLine is one line of a page's notes.
 type fnLine struct{ text, id string }
 
-// footnoteAt is the note whose line on a page's band holds the point (x, y), if any: a click there edits the note
-// on the page itself.
+// footnoteAt returns the note whose line holds point (x, y), if any.
 func (f *TextFlow) footnoteAt(x, y float64) (string, bool) {
 	for pg, lines := range f.fnLines {
 		if len(lines) == 0 {
@@ -223,9 +209,7 @@ func (f *TextFlow) footnoteAt(x, y float64) (string, bool) {
 	return "", false
 }
 
-// footnotePlan works out, for the layout lay, which lines of notes each page shows and how tall its band is. The
-// notes of the marks on a page come after what the pages before could not hold; a page shows as many lines as its
-// cap allows (at least two) and passes the rest on; the last page shows everything up to four fifths of itself.
+// footnotePlan decides which note lines each page shows.
 func (f *TextFlow) footnotePlan(lay Layout) (bands []float64, lines [][]fnLine) {
 	n := f.pageCount()
 	bands, lines = make([]float64, n), make([][]fnLine, n)
@@ -278,7 +262,7 @@ func (f *TextFlow) footnotePlan(lay Layout) (bands []float64, lines [][]fnLine) 
 	return bands, lines
 }
 
-// pageContent is the rectangle of page's text area before the notes take their share.
+// pageContent is a page's text area before notes take their share.
 func (f *TextFlow) pageContent(page int) (x, y, w, h float64) {
 	if f.Pages != nil {
 		return f.Pages.ContentRect(page)
@@ -286,8 +270,7 @@ func (f *TextFlow) pageContent(page int) (x, y, w, h float64) {
 	return f.X, f.Y, f.Width, f.Height
 }
 
-// wrapToWidth breaks text into lines no wider than w (in the painter's
-// current font), at spaces.
+// wrapToWidth breaks text into lines no wider than w, at spaces.
 func wrapToWidth(p Painter, text string, w float64) []string {
 	var lines []string
 	cur := ""

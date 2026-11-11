@@ -5,23 +5,19 @@ import (
 	"strings"
 )
 
-// FontUse is one font cut a document uses: a family at a weight and
-// style. A font library can fetch it the first time it shows up (see
-// Stage.OnFontUse and the fonts package).
+// FontUse is one font cut a document uses: family, weight and style.
 type FontUse struct {
 	Family string
 	Weight int // CSS weight; 400 when nothing says
 	Italic bool
 }
 
-// FontUser is implemented by components that can list the fonts their
-// content uses.
+// FontUser is implemented by components that list their fonts.
 type FontUser interface {
 	UsedFonts() []FontUse
 }
 
-// firstFamily returns the first family of a CSS font-family list,
-// without quotes ("Georgia, serif" -> "Georgia").
+// firstFamily returns the first family of a CSS font-family list.
 func firstFamily(list string) string {
 	name, _, _ := strings.Cut(list, ",")
 	return strings.Trim(strings.TrimSpace(name), `"'`)
@@ -87,9 +83,7 @@ func genericFamily(name string) bool {
 	return false
 }
 
-// UsedFonts implements FontUser: the fonts the text is in, counting named
-// styles the content refers to (generic families like serif are not
-// reported: there is nothing to fetch).
+// UsedFonts lists the fonts the text uses, including named styles.
 func (f *TextFlow) UsedFonts() []FontUse {
 	u := newFontUses(f.Style)
 	for _, it := range f.items() {
@@ -107,7 +101,6 @@ func (f *TextFlow) UsedFonts() []FontUse {
 	return u.list()
 }
 
-// UsedFonts implements FontUser.
 func (ft *FloatingText) UsedFonts() []FontUse {
 	u := newFontUses(ft.Style)
 	for _, r := range ft.runes {
@@ -116,7 +109,6 @@ func (ft *FloatingText) UsedFonts() []FontUse {
 	return u.list()
 }
 
-// UsedFonts implements FontUser for the components in the stage.
 func (s *Stage) UsedFonts() []FontUse {
 	set := map[FontUse]bool{}
 	var out []FontUse
@@ -133,11 +125,9 @@ func (s *Stage) UsedFonts() []FontUse {
 	return out
 }
 
-// UsedFonts implements FontUser for the scrolled content.
 func (sv *ScrollView) UsedFonts() []FontUse { return sv.content.UsedFonts() }
 
-// reportFonts tells OnFontUse about each font cut the first time the
-// stage's content uses it.
+// reportFonts tells OnFontUse about each new font cut in use.
 func (s *Stage) reportFonts() {
 	if s.OnFontUse == nil {
 		return
@@ -153,6 +143,5 @@ func (s *Stage) reportFonts() {
 	}
 }
 
-// ForgetFonts makes OnFontUse report every font in use again at the
-// next draw (after a font was added to the browser, for instance).
+// ForgetFonts makes OnFontUse report all fonts again at the next draw.
 func (s *Stage) ForgetFonts() { s.fontsSeen = nil }

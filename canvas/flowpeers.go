@@ -1,16 +1,14 @@
 package canvas
 
-// Other people's cursors, when several people edit the same document (see
-// the collab package): each is drawn as a tinted selection, a thin caret in
-// the person's color and a small name flag above it.
+// Remote cursors: other people's cursors when several edit a document.
 
-// RemoteCursor is another person's cursor, as stream offsets in the flow.
+// RemoteCursor is another person's cursor, as stream offsets.
 type RemoteCursor struct {
 	Name, Color   string
 	Anchor, Caret int
 }
 
-// DefaultPeerColor is used for a cursor with no color of its own.
+// DefaultPeerColor colours cursors with no colour of their own.
 const DefaultPeerColor = "#7c5cff"
 
 func peerColor(c RemoteCursor) string {
@@ -20,14 +18,10 @@ func peerColor(c RemoteCursor) string {
 	return c.Color
 }
 
-// ColourBlindPalette is a set of colours people with the common kinds of colour blindness can tell apart
-// (Paul Tol's "bright" qualitative scheme, without its two palest colours, which a white name label cannot be
-// read on). Set TextFlow.PeerPalette to it.
+// ColourBlindPalette is colours that people with colour blindness can tell apart.
 var ColourBlindPalette = []string{"#4477AA", "#EE6677", "#228833", "#AA3377", "#BB5500", "#006D77"}
 
-// peerColour is the colour a remote cursor is drawn in: its own, or, when the flow has a PeerPalette, the
-// palette's colour for the cursor's place among the names of the people on show (so each person keeps one colour
-// while the same people are there, and no two of them share one until the palette runs out).
+// peerColour returns the cursor colour: its own, else from PeerPalette.
 func (f *TextFlow) peerColour(c RemoteCursor) string {
 	if len(f.PeerPalette) == 0 {
 		return peerColor(c)

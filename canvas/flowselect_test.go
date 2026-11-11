@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A single-page flow at (10, 30) of 160x200: 8px runes (20 per line), 22px lines.
+// Single-page flow at (10, 30), 160x200, 8px runes, 22px lines.
 func selFlow(items ...Item) (*TextFlow, *fakePainter) {
 	p := &fakePainter{}
 	f := NewTextFlow("", 10, 30, 160, 200)

@@ -104,7 +104,6 @@ func (f *TextFlow) setParagraph(ps, pe int, fn func(*ParaFormat)) bool {
 	return after != before
 }
 
-// ApplyParagraph implements ParagraphEditor.
 func (f *TextFlow) ApplyParagraph(fn func(*ParaFormat)) bool {
 	changed := false
 	rs := f.flatten().runes
@@ -121,14 +120,13 @@ func (f *TextFlow) ApplyParagraph(fn func(*ParaFormat)) bool {
 	return changed
 }
 
-// ToggleCheckAt ticks or unticks the check box at (x, y), if there is
-// one.
+// ToggleCheckAt ticks or unticks the check box at (x, y).
 func (f *TextFlow) ToggleCheckAt(x, y float64) bool {
 	x, y = f.vpt(x, y)
 	return f.toggleCheckAt(x, y)
 }
 
-// toggleCheckAt is ToggleCheckAt for a point in the plane the text is laid out in.
+// toggleCheckAt is ToggleCheckAt in layout coordinates.
 func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	for _, ln := range f.Layout().Lines {
 		m := ln.Marker
@@ -145,9 +143,7 @@ func (f *TextFlow) toggleCheckAt(x, y float64) bool {
 	return false
 }
 
-// enter handles Enter: in a formatted paragraph the new one continues
-// the format (a list gets its next item), and Enter on an empty list
-// item ends the list instead of adding a line.
+// enter handles Enter, continuing list and paragraph formats.
 func (f *TextFlow) enter() bool {
 	if len(f.extra) > 0 || f.HasSelection() {
 		return f.InsertText("\n")
@@ -176,8 +172,7 @@ func (f *TextFlow) enter() bool {
 	return ok
 }
 
-// indentList changes the nesting level of the list item at the caret
-// (Tab and Shift+Tab); it reports whether there was one.
+// indentList changes the list nesting level at the caret.
 func (f *TextFlow) indentList(delta int) bool {
 	if len(f.extra) > 0 {
 		return false
@@ -194,15 +189,7 @@ func (f *TextFlow) indentList(delta int) bool {
 	return true
 }
 
-// markdownTableOnEnter turns three lines typed as a Markdown table into a table when Enter ends the third:
-//
-//	| A | B |
-//	|---|---|
-//	| a | b |
-//
-// A header row, the row of dashes under it and one row of cells, all with the same number of columns, is the least that
-// makes a table. The lines are replaced by the table and the caret goes to the paragraph after it. Cells keep their
-// text, so a cell that starts with = is a formula. It reports whether it made a table; otherwise Enter is untouched.
+// markdownTableOnEnter turns three typed Markdown table lines into a table.
 func (f *TextFlow) markdownTableOnEnter() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret
@@ -235,10 +222,7 @@ func (f *TextFlow) markdownTableOnEnter() bool {
 	return f.InsertText("\n")
 }
 
-// dollarMathOnType turns text typed as $formula$ into an inline formula when the closing $ is typed: the text between
-// two dollar signs of the same paragraph, not empty, without a space next to either sign (so a price like "$5 and $6"
-// stays text) and without an object in it. The formula has no text alternative yet; the accessibility check asks for
-// words. It reports whether it made a formula.
+// dollarMathOnType turns $formula$ typed text into an inline formula.
 func (f *TextFlow) dollarMathOnType() bool {
 	rs := f.flatten().runes
 	c := f.sel.caret
