@@ -1,21 +1,3 @@
-// Package server is a small standalone speech proxy: text-to-
-// speech via a local Piper (github.com/OHF-Voice/piper1-gpl, formerly
-// rhasspy/piper) install, and speech-to-text via a local whisper.cpp-
-// compatible install (github.com/mutablelogic/go-whisper embeds
-// whisper.cpp itself, so its own CLI or plain whisper.cpp's own `main`/
-// `whisper-cli` both work here) -- both genuinely local, offline tools
-// with no API key or third-party network call involved, so (unlike
-// translate/server's DeepL proxy) there's no secret to hide server-
-// side. This package exists purely because neither tool speaks HTTP on
-// its own the way Ollama does (task #160's own scripts/start-ollama.sh
-// needed no server code at all, just a startup script, since Ollama
-// already exposes a local HTTP API): it execs each one as a subprocess
-// per request and adapts its stdin/output-file CLI plumbing into one
-// small HTTP contract OnDesign's own browser-side editor/voice package
-// talks to instead. Same environment-configured, CORS-open, single-
-// binary shape as gojiberry/syncserver, gojiberry/fontserver, and
-// gojiberry/translate/server -- see cmd/voiceserver for the entry
-// point.
 package server
 
 import (
@@ -31,44 +13,30 @@ import (
 	"github.com/elaous/gojiberry/voice/speak"
 )
 
-// Config is loaded entirely from the environment, the same posture
-// syncserver.Config/fontserver.Config/server.Config take.
 type Config struct {
-	// Guard decides who may call the server: guard.Origins(...) for pages from
-	// listed origins, guard.Token(...) for callers holding a token, both with
-	// guard.Chain, or your own. Nil means guard.Open() (any origin, no check).
-	// ConfigFromEnv reads GOJIBERRY_VOICESERVER_ALLOW_ORIGINS and GOJIBERRY_VOICESERVER_TOKEN.
 	Guard guard.Guard
 	Addr  string // listen address, e.g. ":8084"
 
-	// PiperBinary/PiperModel gate /speak the same way
-	// server.Config.DeepLAPIKey gates /translate: with
-	// PiperBinary empty, /speak always reports 503.
 	PiperBinary string // e.g. "piper", or a full path
-	PiperModel  string // path to a Piper .onnx voice model (its .onnx.json sits alongside it)
+	PiperModel  string
 
 	// WhisperBinary/WhisperModel gate /transcribe the same way.
 	WhisperBinary string // e.g. "whisper-cli", or a full path
 	WhisperModel  string // path to a whisper.cpp .bin/.gguf model
 
-	// Voices are the voices /speak can read with, for a page that lets a person pick a hosted voice. Each names the
-	// model file it uses; with none, /speak uses PiperModel alone. ConfigFromEnv reads them from the JSON file named
-	// by GOJIBERRY_VOICESERVER_VOICES.
 	Voices []Voice
 }
 
-// Voice is one voice the server offers. Model stays on the server; the page is told the rest.
+// Voice is one voice the server offers.
 type Voice struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	// Lang is the BCP 47 tag ("en-GB").
-	Lang string `json:"lang"`
-	// Licence is the address of the terms of the voice, shown to the person before they choose it.
+	Lang    string `json:"lang"`
 	Licence string `json:"licence,omitempty"`
 	Model   string `json:"-"`
 }
 
-// loadVoices reads a voices file: [{"id","name","lang","licence","model"}].
 func loadVoices(path string) ([]Voice, error) {
 	if path == "" {
 		return nil, nil
@@ -99,11 +67,6 @@ func loadVoices(path string) ([]Voice, error) {
 	return out, nil
 }
 
-// ConfigFromEnv reads GOJIBERRY_VOICESERVER_ADDR (default ":8084"),
-// GOJIBERRY_VOICESERVER_PIPER_BINARY/_PIPER_MODEL, and
-// GOJIBERRY_VOICESERVER_WHISPER_BINARY/_WHISPER_MODEL (all empty by
-// default -- see NewServer's own doc comment for what an unset pair
-// means for each route).
 func ConfigFromEnv() Config {
 	voices, err := loadVoices(os.Getenv("GOJIBERRY_VOICESERVER_VOICES"))
 	if err != nil {
@@ -127,51 +90,22 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// Server proxies TTS/STT requests to local Piper/whisper installs,
-// never needing (or exposing) any API key.
 type Server struct {
 	cfg Config
 
-	// speak/transcribe are swappable so tests can inject a fake
-	// instead of shelling out to a real piper/whisper-cli binary --
-	// the same "swappable network call" reasoning fontserver's own
-	// fetchGoogleFonts field and translate/server's own translator
-	// interface document.
-	speak      func(binary, model, text string) ([]byte, error)
-	speakAt    func(binary, model, text string, rate float64) ([]byte, error)
-	transcribe func(binary, model string, wav []byte) (string, error)
-	// transcribeBias is used when the request carries a prompt or a language (the listener's own
-	// words, to bias the recogniser; nothing is trained).
+	speak          func(binary, model, text string) ([]byte, error)
+	speakAt        func(binary, model, text string, rate float64) ([]byte, error)
+	transcribe     func(binary, model string, wav []byte) (string, error)
 	transcribeBias func(binary, model string, wav []byte, o listen.Options) (string, error)
 
-	// speakSlots and transcribeSlots bound the processes of each kind.
 	speakSlots, transcribeSlots chan struct{}
 }
 
-// NewServer creates a voice server for the given config. With
-// PiperBinary/WhisperBinary empty, the corresponding route stays wired
-// but always reports 503 -- the same "still runs, just reports the
-// feature is off" posture server.NewServer/fontserver's own
-// handleGoogleFonts take with no key configured, rather than refusing
-// to start at all.
+// NewServer creates a voice server for the given config.
 func NewServer(cfg Config) *Server {
 	return &Server{cfg: cfg, speak: speak.Piper, speakAt: speak.PiperAt, transcribe: listen.Whisper, transcribeBias: listen.WhisperWith, speakSlots: make(chan struct{}, 2), transcribeSlots: make(chan struct{}, 2)}
 }
 
-// Handler returns the HTTP routes:
-//
-//	GET  /health       -- confirms the server is up
-//	GET  /voices       -- the voices /speak can use: [{"id","name","lang","licence"}]
-//	POST /speak        -- {"text", "voice", "rate"} -> audio/wav bytes (voice and rate are optional)
-//	POST /transcribe   -- multipart form, field "audio" holding a WAV
-//	                       file -> {"text"}; the optional fields "prompt" (words the
-//	                       speaker is likely to say, up to listen.MaxPrompt bytes) and
-//	                       "language" (a code such as "de") bias the recogniser
-//
-// Every response carries permissive CORS headers, the same reasoning
-// as syncserver/fontserver/translate/server's own Handler: this
-// server's whole point is being reachable from a page served from a
-// different origin.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
@@ -186,8 +120,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 type speakRequest struct {
-	Text string `json:"text"`
-	// Voice is the ID of one of the server's voices, "" for the default model.
+	Text  string `json:"text"`
 	Voice string `json:"voice,omitempty"`
 	// Rate is the speed (1 normal), 0 for normal.
 	Rate float64 `json:"rate,omitempty"`
@@ -205,12 +138,8 @@ func (s *Server) handleVoices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// maxSpeakBody/maxTranscribeBody cap request bodies at a generous but
-// finite size, the same defensive posture translate/server's own
-// maxTranslateBody takes against a client-supplied Content-Length that
-// can't be trusted.
-const maxSpeakBody = 200 * 1024            // ~200KB of text, plenty for a document read aloud in one request
-const maxTranscribeBody = 25 * 1024 * 1024 // ~25MB of 16kHz mono WAV is a long dictation clip already
+const maxSpeakBody = 200 * 1024
+const maxTranscribeBody = 25 * 1024 * 1024
 
 func (s *Server) handleSpeak(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -314,9 +243,6 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"text": text})
 }
 
-// acquire takes a slot from sem (nil: no limit) or answers 429. Synthesis and
-// transcription have their own, so a long transcription does not turn every
-// /speak request away.
 func acquire(w http.ResponseWriter, sem chan struct{}) bool {
 	if sem == nil {
 		return true
