@@ -1,4 +1,3 @@
-// Command fontserver runs the font CDN.
 package main
 
 import (
