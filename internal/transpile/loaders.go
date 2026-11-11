@@ -19,7 +19,6 @@ type LoaderInput struct {
 
 type LoaderResult struct {
 	Decls string
-	// GoImports lists extra plain Go imports Decls needs.
 	GoImports  []string
 	ImportPath string
 }

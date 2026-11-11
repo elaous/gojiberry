@@ -24,7 +24,6 @@ const (
 // defaultTitleIdent: the package var @title falls back to.
 const defaultTitleIdent = "DefaultTitle"
 
-// processPageMetadata wraps annotated page returns in xango.Document.
 func processPageMetadata(filename, baseDir, src string) (string, error) {
 	if !strings.Contains(src, titleMarker) && !strings.Contains(src, stylesheetsMarker) && !strings.Contains(src, stylesMarker) && !strings.Contains(src, wasmMarker) {
 		return src, nil

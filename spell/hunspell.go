@@ -6,6 +6,7 @@ type hunspellFlagMode int
 
 const (
 	// hunspellFlagDefault: each flag is exactly one ASCII byte.
+	//nolint:unused // the zero value, selected by not naming a FLAG mode
 	hunspellFlagDefault hunspellFlagMode = iota
 	hunspellFlagUTF8
 	hunspellFlagLong

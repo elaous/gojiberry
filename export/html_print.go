@@ -15,9 +15,9 @@ func cssString(s string) string {
 		case r == '\\' || r == '"':
 			sb.WriteByte('\\')
 			sb.WriteRune(r)
+		// never a tag or entity inside the style element
 		case r == '<' || r == '>' || r == '&':
 			fmt.Fprintf(&sb, "\\%X ", r)
-		// never a tag or entity inside the style element
 		case r < 0x20 || r == 0x7f:
 			sb.WriteByte(' ')
 		default:

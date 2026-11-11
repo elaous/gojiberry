@@ -273,8 +273,8 @@ func (l *StoreLimiter) Allow(ctx context.Context, key string) (bool, time.Durati
 				return l.memory().Allow(ctx, key)
 			}
 		}
-		at := max(st.At, now.UnixNano())
 		// never move a record's time backwards (within the skew)
+		at := max(st.At, now.UnixNano())
 		tokens := refill(st.Tokens, time.Duration(now.UnixNano()-st.At), l.PerMinute, l.Burst)
 		if tokens < 1 {
 			return false, waitFor(tokens, l.PerMinute)

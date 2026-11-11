@@ -374,8 +374,8 @@ func main() {
 	u.console = newConsole(u, func() { renderUI() })
 	u.pub = newPublic(u, func() { renderUI() })
 	u.people = newPeople("you@example.com", func() { renderUI() })
+	// comments name people by handle, never by address
 	state.Comments.Roster = u.people
-	// by handle, never an address that is not theirs to show
 	u.people.links.use, u.people.links.stop = u.useShareLink, u.stopShareLink
 	u.people.remote = func() (*docstore.HTTPAdapter, string, bool) {
 		if encTarget == "server" || u.saver.Target() != serverTarget || u.saver.ID() == "" {

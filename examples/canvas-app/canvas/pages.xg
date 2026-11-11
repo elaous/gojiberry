@@ -41,8 +41,6 @@ type CanvasPageProps struct {
 	Content string
 }
 
-// CanvasPage is the typing canvas for one document.
-//
 // @wasm /static/main.wasm
 // @title xango-canvas
 func CanvasPage(props CanvasPageProps) xango.Node {
