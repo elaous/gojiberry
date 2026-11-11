@@ -14,8 +14,7 @@ const (
 	FeatDrawing      Feature = "drawing"
 	FeatEndnote      Feature = "endnote"
 	FeatField        Feature = "field"
-	// FeatLayout is the layout of a file that holds only drawn text.
-	FeatLayout Feature = "layout"
+	FeatLayout       Feature = "layout"
 	// FeatScript is script that a web page holds.
 	FeatScript      Feature = "script"
 	FeatStyleSheet  Feature = "stylesheet"

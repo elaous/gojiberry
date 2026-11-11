@@ -1,4 +1,3 @@
-// Package export writes a Snapshot as one file per format.
 package export
 
 // Exporter converts a Snapshot into one format's file bytes.

@@ -52,8 +52,8 @@ var (
 
 var exportMatrix = map[string]map[Feature]entry{
 	"docx": formatTable(foldedFeatures, textForm, longDescText, map[Feature]entry{
-		FeatEquation:  kept(),                         // Office Math, with the words that stand for it as hidden text
-		FeatHighlight: drop(""), FeatFootnote: kept(), // a footnote's mark and note link both ways (bookmarks and internal links)
+		FeatEquation:  kept(),
+		FeatHighlight: drop(""), FeatFootnote: kept(),
 	}),
 	"odt": formatTable(foldedFeatures, textForm, textEquation, longDescText, map[Feature]entry{
 		FeatHighlight: drop(""), FeatFootnote: kept(), FeatSuggestion: drop(NoteAccepted),

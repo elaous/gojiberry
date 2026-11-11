@@ -26,10 +26,9 @@ type odtBuilder struct {
 	media  map[string][]byte
 	imgs   int
 	notes  map[int]string // footnote text by number
-	// open lists, outermost first: true is a numbered list
-	open  []bool
-	cur   int
-	marks map[int]string
+	open   []bool
+	cur    int
+	marks  map[int]string
 }
 
 func (b *odtBuilder) textStyle(f Format) string {

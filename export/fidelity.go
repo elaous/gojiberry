@@ -7,7 +7,6 @@ import (
 	"github.com/elaous/gojiberry/docfile"
 )
 
-// Feature names one thing a document can hold that a format may lose.
 type Feature string
 
 // The features a document is checked for.
@@ -114,11 +113,10 @@ type Loss struct {
 	Count     int
 }
 
-// Notes say how a feature is written when it is not kept.
 const (
-	NoteText         = "text"           // the format keeps the characters and nothing else
-	NotePlaceholder  = "placeholder"    // an "[Image]" marker stands in
-	NoteAccepted     = "accepted"       // suggestions are written as if accepted; struck text is left out
+	NoteText         = "text"        // the format keeps the characters and nothing else
+	NotePlaceholder  = "placeholder" // an "[Image]" marker stands in
+	NoteAccepted     = "accepted"
 	NoteInlineHTML   = "inline-html"    // Markdown writes the HTML tag it has no syntax for
 	NoteBlankCells   = "blank-cells"    // the cells a merge covers are left empty
 	NoteGrid         = "grid"           // a table is drawn as a text grid
@@ -140,7 +138,6 @@ type entry struct {
 	note string
 }
 
-// Formats are the names of the export formats a Report can cover.
 var Formats = []string{"docx", "odt", "pdf", "rtf", "epub", "html", "markdown", "text"}
 
 // Report is what exporting a document as one format loses.
@@ -154,10 +151,8 @@ type Report struct {
 	Complete bool
 }
 
-// Lossless is whether the report is known and lists no loss.
 func (r Report) Lossless() bool { return (r.Known || r.Complete) && len(r.Losses) == 0 }
 
-// completeFormats keep the whole document.
 var completeFormats = map[string]bool{"json": true, "proto-text": true, "proto": true, "open": true}
 
 // Fidelity reports what exporting d as format loses.
@@ -184,13 +179,11 @@ func Fidelity(format string, d docfile.Document) Report {
 	return r
 }
 
-// partOf names the feature a feature is part of.
 var partOf = map[Feature]Feature{
 	FeatColSpan: FeatTable, FeatRowSpan: FeatTable, FeatCellShading: FeatTable, FeatCellAlign: FeatTable, FeatCellTextStyle: FeatTable,
 	FeatImageAlt: FeatImage, FeatImageEffects: FeatImage, FeatImageLongDesc: FeatImage, FeatCodeLanguage: FeatCode,
 }
 
-// Reported says whether a report for the format lists the feature.
 func Reported(format string, f Feature) bool {
 	if parent, ok := partOf[f]; ok {
 		if pe := exportMatrix[format][parent]; pe.t == Dropped {
@@ -200,7 +193,6 @@ func Reported(format string, f Feature) bool {
 	return true
 }
 
-// Usage counts, for each feature, the places in d that use it.
 func Usage(d docfile.Document) map[Feature]int {
 	u := map[Feature]int{}
 	add := func(f Feature) { u[f]++ }

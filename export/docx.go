@@ -24,21 +24,19 @@ const (
 )
 
 type docxBuilder struct {
-	body    strings.Builder
-	rels    []string // relationship elements
-	media   map[string][]byte
-	nextRel int
-	nextNum int // numbering instances for numbered lists (each list restarts)
-	nums    []int
-	links   map[string]string
-	// linkColour is the hyperlink text colour as six hex digits.
+	body       strings.Builder
+	rels       []string // relationship elements
+	media      map[string][]byte
+	nextRel    int
+	nextNum    int // numbering instances for numbered lists (each list restarts)
+	nums       []int
+	links      map[string]string
 	linkColour string
 	imgs       int
 	docPr      int
 	revs       int // tracked changes written so far (their ids)
-	// cur is the index of the block being written.
-	cur   int
-	marks map[int]string
+	cur        int
+	marks      map[int]string
 }
 
 func (b *docxBuilder) rel(typ, target string, external bool) string {
@@ -421,7 +419,6 @@ func (b *docxBuilder) inline(segs []Segment) string {
 			sb.WriteString(OMML(f.Formula) + `<w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">` + esc(s.Text) + `</w:t></w:r>`)
 			continue
 		}
-		// Children in the order the schema lists them.
 		var rpr strings.Builder
 		if f.Bold {
 			rpr.WriteString(`<w:b/>`)

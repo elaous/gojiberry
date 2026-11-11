@@ -37,7 +37,6 @@ func FromDocumentTracked(d docfile.Document) Snapshot { return fromDocument(d, f
 // FromDocumentWithMedia is FromDocumentTracked for clip-embedding formats.
 func FromDocumentWithMedia(d docfile.Document) Snapshot { return fromDocument(d, true) }
 
-// acceptedView is the document with every suggestion accepted.
 func acceptedView(d docfile.Document) docfile.Document {
 	has := false
 	for _, it := range d.Content {

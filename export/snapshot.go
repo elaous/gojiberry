@@ -41,7 +41,6 @@ type Format struct {
 	Time   int64
 }
 
-// ChangeKind says whether a run is part of a suggested change.
 type ChangeKind int
 
 const (
@@ -50,7 +49,6 @@ const (
 	Deleted             // text proposed to be removed (still in the document)
 )
 
-// Segment is one contiguous run of a block's text with one format.
 type Segment struct {
 	Text      string
 	SoftBreak bool
@@ -139,7 +137,6 @@ type Snapshot struct {
 	MarginLeft, MarginTop, MarginRight, MarginBottom float64
 }
 
-// HeadingLevel is the level, 1 to 6, of a heading block.
 func (b Block) HeadingLevel() int {
 	switch b.Kind {
 	case Heading1:
