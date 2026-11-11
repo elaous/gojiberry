@@ -1,27 +1,16 @@
 package canvas
 
-// The optional interfaces below are what a Stage dispatches to. A
-// component implements only the ones it needs. For the pointer methods
-// the result means "state changed, redraw".
+// Optional interfaces a Stage dispatches to.
 type (
-	// Drawer is anything a Stage can draw. Components (which also have
-	// view/edit modes) are Drawers; so are modeless ones like Menu and
-	// ScrollView.
+	// Drawer is anything a Stage can draw.
 	Drawer interface{ Draw() }
-	// ViewportSetter is told, before each draw, which part of its
-	// coordinate space is visible (a ScrollView's viewport, in content
-	// coordinates) so popups can stay inside it.
+	// ViewportSetter is told the visible part before each draw.
 	ViewportSetter interface{ SetViewport(x, y, w, h float64) }
-	// Overlayer draws on top of everything else in the Stage (a menu,
-	// editing chrome), after every component's Draw.
+	// Overlayer draws on top of everything else in the Stage.
 	Overlayer interface{ DrawOverlay() }
-	// DoubleClicker handles a double click (the second mousedown of a
-	// pair), after MouseDown has seen it.
+	// DoubleClicker handles a double click.
 	DoubleClicker interface{ DoubleClick(x, y float64) bool }
-	// MouseWheeler handles a wheel turn at (x, y) with the given deltas
-	// (pixels, positive = down/right). It reports whether it handled
-	// the wheel, in which case the page itself should not scroll and
-	// the stage is redrawn.
+	// MouseWheeler handles a wheel turn at (x, y) with deltas.
 	MouseWheeler interface {
 		MouseWheel(x, y, dx, dy float64) bool
 	}
@@ -29,8 +18,7 @@ type (
 	PainterSetter interface{ SetPainter(ImagePainter) }
 	// MouseDowner handles a primary-button press (canvas-local x, y).
 	MouseDowner interface{ MouseDown(x, y float64) bool }
-	// ModMouseDowner is MouseDowner that also wants the modifier keys
-	// held (Ctrl/Cmd+click adds a cursor).
+	// ModMouseDowner is MouseDowner that also receives modifier keys.
 	ModMouseDowner interface {
 		MouseDownMods(x, y float64, m Mods) bool
 	}
@@ -40,19 +28,15 @@ type (
 	MouseUpper interface{ MouseUp(x, y float64) bool }
 	// MouseLeaver handles the pointer leaving the canvas.
 	MouseLeaver interface{ MouseLeave() bool }
-	// KeyHandler handles a key press (DOM KeyboardEvent.key names) and
-	// reports whether it was consumed.
+	// KeyHandler handles a key press; reports whether it consumed it.
 	KeyHandler interface {
 		HandleKey(key string, shift bool) bool
 	}
 	// TextInserter handles typed / pasted text.
 	TextInserter interface{ InsertText(s string) bool }
-	// Focuser says whether the component currently needs keyboard
-	// focus (an active cell, an open menu), so the page's hidden input
-	// can be focused or blurred to match.
+	// Focuser reports whether the component needs keyboard focus.
 	Focuser interface{ WantsFocus() bool }
-	// CursorProvider returns a CSS cursor for the last pointer
-	// position, or "" for no opinion.
+	// CursorProvider returns a CSS cursor for the last pointer position.
 	CursorProvider interface{ CSSCursor() string }
 	// LinkHandlerSetter receives the Stage's handler for opening a link.
 	LinkHandlerSetter interface{ SetLinkHandler(open func(url string)) }
@@ -63,9 +47,7 @@ type (
 // Mods are the modifier keys held during a pointer event.
 type Mods struct{ Ctrl, Shift, Alt, Meta bool }
 
-// Stage draws several components onto one canvas, back to front, and
-// routes pointer and keyboard events to them (topmost first). Only
-// the browser glue -- Bind -- is js/wasm-only.
+// Stage draws components onto one canvas and routes pointer and key events.
 type Stage struct {
 	composer      Composer // the component showing an input method's preedit, if any
 	Painter       ImagePainter
@@ -75,35 +57,23 @@ type Stage struct {
 	Keymap Keymap
 	// Formats is the format clipboard shared by the components.
 	Formats *FormatClipboard
-	// Features are the registered editing features (multi-cursor, line
-	// operations, Markdown clipboard...); NewStage installs
-	// DefaultFeatures. Their chords are added to the keymap wherever the
-	// Keymap itself has no binding for the chord.
+	// Features are the registered editing features.
 	Features *Registry
-	// Clipboard is the system clipboard for feature commands; Bind
-	// fills it in.
+	// Clipboard is the system clipboard for feature commands.
 	Clipboard Clipboard
-	// Redraw, if set, redraws the stage (Bind sets it); feature
-	// commands that finish later call it.
+	// Redraw, if set, redraws the stage.
 	Redraw func()
-	// Prompt asks the user for a line of text; Bind sets it to the
-	// browser's prompt. Commands that need it decline without it.
+	// Prompt asks the user for a line of text.
 	Prompt func(message, initial string) (string, bool)
-	// EditNote, when set, is how footnotes are typed: a dialog with a counter of the characters left (see
-	// CommandContext.EditNote).
+	// EditNote asks for footnote text in a dialog with a length counter.
 	EditNote func(title, initial string, max int, done func(text string, ok bool))
-	// OpenLink opens a clicked link's URL; Bind sets it to open a new
-	// browser tab.
+	// OpenLink opens a clicked link's URL.
 	OpenLink func(url string)
-	// OnDraw, if set, is called after every Draw (demos use it to
-	// publish state).
+	// OnDraw, if set, runs after every Draw.
 	OnDraw func()
-	// Role is what the user may do (the zero value is the owner); a
-	// viewer's components stay in view mode. See SetRole.
+	// Role is what the user may do; the zero value is owner.
 	Role Role
-	// OnFontUse is called, at a draw, the first time the content uses a
-	// font cut (family, weight, style): the moment to download it. See
-	// the fonts package's Library.
+	// OnFontUse is told each font cut the first time content uses it.
 	OnFontUse func(FontUse)
 	fontsSeen map[FontUse]bool
 }
@@ -157,8 +127,7 @@ func (s *Stage) SetMode(m Mode) {
 	}
 }
 
-// Paint draws every component, back to front, without clearing first
-// (ScrollView uses it to draw its content).
+// Paint draws every component without clearing first.
 func (s *Stage) Paint() {
 	for _, c := range s.Components {
 		c.Draw()
@@ -180,9 +149,7 @@ func (s *Stage) Draw() {
 	}
 }
 
-// each calls fn on every component, topmost first, and reports whether
-// any call returned true. It does not stop early: every component sees
-// every pointer event.
+// each calls fn on every component, topmost first, until one returns true.
 func (s *Stage) each(fn func(Drawer) bool) bool {
 	changed := false
 	for i := len(s.Components) - 1; i >= 0; i-- {
@@ -231,8 +198,7 @@ func (s *Stage) MouseUp(x, y float64) bool {
 	})
 }
 
-// MouseWheel offers a wheel turn to components, topmost first, until
-// one handles it.
+// MouseWheel offers a wheel turn to components, topmost first.
 func (s *Stage) MouseWheel(x, y, dx, dy float64) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(MouseWheeler); ok && h.MouseWheel(x, y, dx, dy) {
@@ -250,8 +216,7 @@ func (s *Stage) MouseLeave() bool {
 	})
 }
 
-// HandleKey offers a key to components, topmost first, until one
-// consumes it.
+// HandleKey offers a key to components, topmost first, until one consumes it.
 func (s *Stage) HandleKey(key string, shift bool) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(KeyHandler); ok && h.HandleKey(key, shift) {
@@ -261,8 +226,7 @@ func (s *Stage) HandleKey(key string, shift bool) bool {
 	return false
 }
 
-// SetFormatClipboard replaces the format clipboard and hands it to every
-// component (ScrollView passes it on to its content).
+// SetFormatClipboard replaces the format clipboard for every component.
 func (s *Stage) SetFormatClipboard(c *FormatClipboard) {
 	s.Formats = c
 	for _, d := range s.Components {
@@ -272,8 +236,7 @@ func (s *Stage) SetFormatClipboard(c *FormatClipboard) {
 	}
 }
 
-// HandleChord runs the command bound to a key chord (see Keymap and
-// Chord), offering it to components topmost first until one applies it.
+// HandleChord runs the command bound to a key chord.
 func (s *Stage) HandleChord(chord string) bool {
 	km := s.Keymap
 	if km == nil {
@@ -335,8 +298,7 @@ func (s *Stage) Cut() (string, bool) {
 	return "", false
 }
 
-// Paste offers clipboard text to components, topmost first: a Paster
-// takes it as a paste, others as typed text.
+// Paste offers clipboard text to components, topmost first.
 func (s *Stage) Paste(text string) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		switch c := s.Components[i].(type) {
@@ -353,8 +315,7 @@ func (s *Stage) Paste(text string) bool {
 	return false
 }
 
-// InsertText offers typed text to components, topmost first, until one
-// takes it.
+// InsertText offers typed text to components, topmost first.
 func (s *Stage) InsertText(text string) bool {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if h, ok := s.Components[i].(TextInserter); ok && h.InsertText(text) {
@@ -374,8 +335,7 @@ func (s *Stage) WantsFocus() bool {
 	return false
 }
 
-// Cursor returns the CSS cursor the topmost opinionated component
-// wants, or "default".
+// Cursor returns the CSS cursor the topmost component wants.
 func (s *Stage) Cursor() string {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if cp, ok := s.Components[i].(CursorProvider); ok {
@@ -395,8 +355,7 @@ func (s *Stage) SetCaretVisible(on bool) bool {
 	})
 }
 
-// EditTarget returns the EditTarget of the topmost component being
-// edited, or nil.
+// EditTarget returns the topmost edited component's EditTarget, or nil.
 func (s *Stage) EditTarget() EditTarget {
 	for i := len(s.Components) - 1; i >= 0; i-- {
 		if e, ok := s.Components[i].(Editable); ok {

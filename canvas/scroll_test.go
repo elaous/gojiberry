@@ -152,8 +152,7 @@ func TestDrawClipsAndTranslates(t *testing.T) {
 	if content(sv).drew != 1 {
 		t.Fatal("content should be drawn once, between save and restore")
 	}
-	// The content draws inside the clip: its Draw must happen after the
-	// translate and before the restore.
+	// The content draws inside the clip, after the transform.
 	var order []string
 	for _, c := range p.calls {
 		if c == "translate -5 -5" || c == "restore" {
@@ -234,17 +233,13 @@ func TestNestedScrollViewsChain(t *testing.T) {
 	}
 }
 
-// Vertical bar: x 100..110 (view x 10..110, minus 10), track y 20..100
-// (no horizontal bar? there is one: content is wider), so the track
-// ends at y=90. Horizontal bar: y 90..100.
-
 func TestScrollbarThumbDrag(t *testing.T) {
 	sv, _ := newScroll()
 	track, thumb := sv.bar(true)
 	if track[3] != 70 || thumb[3] < sv.Style.MinThumb {
 		t.Fatalf("track=%v thumb=%v", track, thumb)
 	}
-	// 70*80/400 = 14 < MinThumb 24 -> 24; room = 46 over 320px of scroll.
+	// The thumb is clamped to MinThumb (24).
 	if !sv.MouseDown(thumb[0]+5, thumb[1]+5) {
 		t.Fatal("press on the thumb")
 	}
