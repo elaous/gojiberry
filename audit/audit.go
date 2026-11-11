@@ -1,4 +1,3 @@
-// Package audit logs store events without personal data: no free-text fields.
 package audit
 
 import (
@@ -15,7 +14,6 @@ import (
 // Kind is what happened.
 type Kind string
 
-// The kinds of event; add new ones here, not at call sites.
 const (
 	KeyEnrolled     Kind = "key.enrolled"
 	KeyRevoked      Kind = "key.revoked"
@@ -58,7 +56,6 @@ const (
 	System    Actor = "system"
 )
 
-// Reason is a short code for why something was denied or failed.
 type Reason string
 
 // The reasons. The empty reason is allowed (nothing to add).
@@ -80,16 +77,13 @@ type Event struct {
 	Outcome Outcome   `json:"outcome"`
 	Actor   Actor     `json:"actor"`
 	Reason  Reason    `json:"reason,omitempty"`
-	// Count is how many things the event covers; 0 is omitted.
-	Count int `json:"count,omitempty"`
+	Count   int       `json:"count,omitempty"`
 	// Ref is a Pseudonym, identifying a subject without naming it.
 	Ref Ref `json:"ref,omitempty"`
 }
 
-// Ref is a pseudonym (see Pseudonym): 16 hex characters, nothing else.
 type Ref string
 
-// ErrNotAllowed is returned for an event with a value outside the allowlist.
 var ErrNotAllowed = errors.New("audit: the event has a value that is not on the allowlist")
 
 var (
@@ -108,7 +102,6 @@ func set[T comparable](vs ...T) map[T]bool {
 	return m
 }
 
-// Valid reports whether every value of e is on the allowlist.
 func (e Event) Valid() bool {
 	if !kinds[e.Kind] || !outcomes[e.Outcome] || !actors[e.Actor] || !reasons[e.Reason] || e.Count < 0 {
 		return false
@@ -124,7 +117,6 @@ func (e Event) Valid() bool {
 	return true
 }
 
-// Pseudonym is a keyed, stable, 8-byte HMAC-SHA256 of a subject, in hex.
 func Pseudonym(key []byte, subject string) Ref {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte(subject))
@@ -139,7 +131,6 @@ type Logger struct {
 	rejected int
 }
 
-// NewLogger writes to w; untimed events use the logger's UTC clock.
 func NewLogger(w io.Writer) *Logger { return &Logger{w: w, now: time.Now} }
 
 // Log writes e, or returns ErrNotAllowed and writes nothing.

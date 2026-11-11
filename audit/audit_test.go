@@ -11,7 +11,6 @@ import (
 )
 
 func TestEventHasNoFreeTextField(t *testing.T) {
-	// A string field must have a closed-set type; a new one fails here.
 	closed := map[reflect.Type]bool{
 		reflect.TypeOf(Kind("")): true, reflect.TypeOf(Outcome("")): true, reflect.TypeOf(Actor("")): true,
 		reflect.TypeOf(Reason("")): true, reflect.TypeOf(Ref("")): true,
