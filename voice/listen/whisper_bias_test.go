@@ -7,7 +7,6 @@ import (
 )
 
 func TestWhisperWithPassesPromptAndLanguage(t *testing.T) {
-	// the text file is named by -of (the 4th flag value); echo every argument into it
 	bin := fakeTool(t, `base=$5; printf '%s|' "$@" > "$base.txt"`)
 	got, err := WhisperWith(bin, "m.bin", []byte("x"), Options{Prompt: "Gojiberry\n  Samir\x00 Aouad", Language: "de"})
 	if err != nil {
@@ -16,7 +15,6 @@ func TestWhisperWithPassesPromptAndLanguage(t *testing.T) {
 	if !strings.Contains(got, "|--prompt|Gojiberry Samir Aouad|") || !strings.Contains(got, "|-l|de|") {
 		t.Fatalf("args %q", got)
 	}
-	// nothing usable asked, nothing passed: the same arguments as Whisper
 	got, err = WhisperWith(bin, "", []byte("x"), Options{Prompt: "  \n", Language: "de; rm -rf"})
 	if err != nil || strings.Contains(got, "--prompt") || strings.Contains(got, "|-l|") {
 		t.Fatalf("empty prompt and bad language are dropped: %q, %v", got, err)

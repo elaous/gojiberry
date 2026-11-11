@@ -1,4 +1,3 @@
-// Package listen turns speech into text with a local whisper.cpp install.
 package listen
 
 import (
@@ -16,31 +15,18 @@ import (
 // Timeout is how long one transcription may run.
 const Timeout = 5 * time.Minute
 
-// Whisper transcribes a WAV with a local whisper.cpp install: writes the given
-// WAV to a temp file and runs it through whisper.cpp's own well-
-// established CLI shape (`whisper-cli -m model.bin -f in.wav -otxt -of
-// outbase -nt` -- plain text output, no timestamps, predates and
-// underlies go-whisper's own CLI too), then reads back the .txt file
-// it writes.
 func Whisper(binary, model string, wav []byte) (string, error) {
 	return WhisperWith(binary, model, wav, Options{})
 }
 
-// MaxPrompt is the longest initial prompt passed on, in bytes (whisper.cpp keeps about 224 tokens of
-// it; more only costs time).
 const MaxPrompt = 800
 
 // Options tunes one transcription without training anything.
 type Options struct {
-	// Prompt is the initial prompt: words and phrases the speaker is likely to say (names, terms, the
-	// person's own vocabulary). Whisper is biased toward spelling them as given. Control characters are
-	// dropped and it is cut to MaxPrompt bytes at a character boundary.
-	Prompt string
-	// Language is a language code such as "de" ("" lets the model detect it). Only letters and "-".
+	Prompt   string
 	Language string
 }
 
-// CleanPrompt is a prompt as it is passed on: no control characters, spaces collapsed, at most MaxPrompt bytes.
 func CleanPrompt(s string) string {
 	var b strings.Builder
 	space := false
@@ -61,7 +47,6 @@ func CleanPrompt(s string) string {
 	return b.String()
 }
 
-// CleanLanguage is a language code if s looks like one (2 to 8 letters, with "-"), else "".
 func CleanLanguage(s string) string {
 	if len(s) < 2 || len(s) > 8 {
 		return ""
@@ -75,8 +60,6 @@ func CleanLanguage(s string) string {
 	return s
 }
 
-// WhisperWith is Whisper with a bias: the prompt and language of o are passed to whisper.cpp
-// (`--prompt` and `-l`). With the zero Options it is exactly Whisper.
 func WhisperWith(binary, model string, wav []byte, o Options) (string, error) {
 	in, err := os.CreateTemp("", "voiceserver-transcribe-*.wav")
 	if err != nil {

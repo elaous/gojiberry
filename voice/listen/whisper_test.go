@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// fakeTool writes a shell script that stands in for piper or whisper-cli.
 func fakeTool(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -22,7 +21,6 @@ func fakeTool(t *testing.T, body string) string {
 }
 
 func TestWhisperRunsTheBinary(t *testing.T) {
-	// whisper-cli -f IN -otxt -of BASE -nt [-m M]: BASE.txt holds the text
 	bin := fakeTool(t, `in=$2; base=$5; model=""; [ "$7" = "-m" ] && model=$8
 printf '  heard %s with %s \n' "$(wc -c < "$in" | tr -d ' ')" "$model" > "$base.txt"`)
 	got, err := Whisper(bin, "m.bin", []byte("12345"))
