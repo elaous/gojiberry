@@ -9,7 +9,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/showcase-app
+	cd ../.. && go tool xgc examples/showcase-app
 
 .PHONY: wasm
 wasm:

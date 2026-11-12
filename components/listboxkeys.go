@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 type listbox struct {
 	root    string // the widget's class selector

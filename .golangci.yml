@@ -1,6 +1,6 @@
 version: "2"
 
-# domrt (and examples/, which are linted like the library) carry substantial js/wasm-only code -- linting
+# canvas and examples/ (linted like the library) carry substantial js/wasm-only code -- linting
 # this repo properly means running golangci-lint twice, once natively
 # and once with GOOS=js GOARCH=wasm set, the same "two build configs,
 # two passes" split Makefile's wasm-vet target already established for

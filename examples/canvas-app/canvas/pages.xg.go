@@ -3,7 +3,7 @@
 package canvas
 
 import (
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func init() {

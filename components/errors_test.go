@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/docstore"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type shown struct{ msg string }

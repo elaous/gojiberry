@@ -5,7 +5,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type TypingAnnouncer struct {

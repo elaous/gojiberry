@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // AvatarSize selects Avatar's rendered size.
 type AvatarSize string

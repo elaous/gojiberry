@@ -20,7 +20,7 @@ watch: db-up db-migrate
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/canvas-app
+	cd ../.. && go tool xgc examples/canvas-app
 
 .PHONY: wasm
 wasm:

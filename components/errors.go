@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/docstore"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // ErrorKind says in which user-facing group an error falls.

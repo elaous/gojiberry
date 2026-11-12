@@ -5,7 +5,7 @@ package components
 import (
 	"fmt"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // OTPInputProps configures OTPInput.

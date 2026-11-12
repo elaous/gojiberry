@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // ColorPickerProps configures ColorPicker.
 type ColorPickerProps struct {

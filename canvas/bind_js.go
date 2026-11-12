@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt/html"
+	"github.com/elaous/xango/domrt/html"
 )
 
 var (

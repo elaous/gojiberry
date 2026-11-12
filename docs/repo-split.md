@@ -2,7 +2,9 @@
 
 A suggestion, not a plan that has started. Today everything is one Go module, `github.com/elaous/gojiberry`
 (about 190 000 lines outside tests and examples), and `opendocs` (the text editor app) pulls it in with a `replace`
-directive to `../gojiberry`. The names the owner gave the pieces: **Xangô** is the syntax and the engine, **Gojiberry**
+directive to `../gojiberry`. **Status:** the tier 1 xango row (`xango` + `domrt`, `cmd/xgc`, the VS Code extension) is done: it
+lives in [github.com/elaous/xango](https://github.com/elaous/xango) and gojiberry depends on it at a tagged version. The rest of this page is the original
+proposal. The names the owner gave the pieces: **Xangô** is the syntax and the engine, **Gojiberry**
 was meant to be the components, **opendocs** is the editor app. This page checks that against what the code actually
 depends on, and names other pieces that stand well on their own.
 
@@ -85,7 +87,7 @@ Either way the opendocs roadmap already names things that belong in the shared r
 1. **Decide the licence** (a root `LICENSE`), and write the one-paragraph answer to "what happens to `opendocs/editor/model`".
 2. **Make modules in place** for the tier 1 pieces: `xango` + `domrt`, `observe`, `crdt`, the language tools, the speech
    tools. Add a `go.work`. Fix whatever breaks (little should: they import nothing).
-3. **Move `xango` + `domrt` to their own repository first.** It has the clearest identity, the existing logo and README, and
+3. **Move `xango` + `domrt` to their own repository first (done: github.com/elaous/xango).** It has the clearest identity, the existing logo and README, and
    the smallest surface; the module path changes for every importer once, with a `replace` for the transition.
 4. **Move the server kit** (`docstore`, `auth`, `telemetry` and friends). Decide the `docfile` edge first. It is the piece
    most likely to be adopted by someone who does not use the editor, and the one an outside audit can be pointed at.

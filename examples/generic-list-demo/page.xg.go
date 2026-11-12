@@ -4,7 +4,7 @@ package main
 
 import (
 	"github.com/elaous/gojiberry/components"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type Person struct {

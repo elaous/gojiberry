@@ -8,7 +8,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/wasm-components-demo
+	cd ../.. && go tool xgc examples/wasm-components-demo
 
 .PHONY: wasm
 wasm:

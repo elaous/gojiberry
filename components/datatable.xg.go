@@ -5,7 +5,7 @@ package components
 import (
 	"strconv"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // DataTableColumn is one column header.

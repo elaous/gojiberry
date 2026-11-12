@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestContextProvider(t *testing.T) {

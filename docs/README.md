@@ -3,21 +3,13 @@
 Plain-text `go doc -all` output for each public package, regenerate with:
 
 ```sh
-go doc -all ./xango > docs/xango.txt
 go doc -all ./components > docs/components.txt
 go doc -all ./devreload > docs/devreload.txt
 go doc -all ./devwatch > docs/devwatch.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt > docs/domrt.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt/browser > docs/domrt-browser.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt/html > docs/domrt-html.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt/svg > docs/domrt-svg.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt/sw > docs/domrt-sw.txt
-GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 ```
 
-`domrt`, `domrt/browser`, `domrt/html`, `domrt/svg`, `domrt/sw`, and
-`domrt/worker` are `js`/`wasm`-only packages, hence `GOOS=js GOARCH=wasm`;
-`xango` and `components` are plain Go.
+The API dumps of `xango` and `domrt` live in the xango repository,
+[github.com/elaous/xango](https://github.com/elaous/xango).
 
 Hand-written notes:
 

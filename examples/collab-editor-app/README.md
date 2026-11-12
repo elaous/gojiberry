@@ -20,7 +20,7 @@ that into the root module.
   current content so a client joining later starts in sync instead of
   from a blank page.
 - `client/main.xg` is the WASM half: it opens `/ws` via
-  `domrt/browser.Connect`, reads its role from the page's own URL
+  `domrt/browser.Connect` (from `github.com/elaous/xango/domrt`), reads its role from the page's own URL
   (`?role=owner`/`editor`/`viewer`), and renders the shared document
   inside `components.Collab`. Typing sends the whole current text over
   the socket; an incoming message replaces the local content and

@@ -3,7 +3,7 @@ package components
 import (
 	"context"
 	"github.com/elaous/gojiberry/docdiff"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // TrashProps configures Trash.

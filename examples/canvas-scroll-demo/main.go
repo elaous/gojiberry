@@ -8,7 +8,7 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/xango/domrt/browser"
 )
 
 func main() {

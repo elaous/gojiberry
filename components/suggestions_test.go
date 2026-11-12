@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestSuggestStateKeys(t *testing.T) {

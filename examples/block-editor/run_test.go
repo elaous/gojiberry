@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/crdt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type failAfter struct{ n int }

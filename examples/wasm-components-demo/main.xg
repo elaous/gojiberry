@@ -8,10 +8,10 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/components"
-	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/html"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt"
+	"github.com/elaous/xango/domrt/browser"
+	"github.com/elaous/xango/domrt/html"
 )
 
 const demoImageSrc = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAIAAADRv8uKAAAANklEQVR4nOzNsQ3AIBDAQBevKPvPwoCMQAfNWe5van11/+nvSWAwGAwGg8FgMBgMPrcDAAD//57AAv++dIYpAAAAAElFTkSuQmCC"

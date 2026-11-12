@@ -2,7 +2,7 @@ package canvas
 
 import (
 	_ "github.com/elaous/gojiberry/examples/canvas-app/canvas/static/style.css"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 var DefaultTitle = "xango-canvas"

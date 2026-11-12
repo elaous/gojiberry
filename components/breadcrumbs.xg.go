@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // BreadcrumbItem is one entry in a Breadcrumbs trail.
 type BreadcrumbItem struct {

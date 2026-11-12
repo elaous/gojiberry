@@ -7,8 +7,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/html"
+	"github.com/elaous/xango/domrt/browser"
+	"github.com/elaous/xango/domrt/html"
 )
 
 func wirePlatformSection(document *html.Document) {

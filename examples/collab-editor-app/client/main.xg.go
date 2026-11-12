@@ -8,9 +8,9 @@ import (
 	"net/url"
 
 	"github.com/elaous/gojiberry/components"
-	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt"
+	"github.com/elaous/xango/domrt/browser"
 )
 
 func currentRole() components.CollabRole {

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestPageSetupSizeLabelAndLimits(t *testing.T) {

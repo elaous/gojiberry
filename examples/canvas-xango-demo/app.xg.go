@@ -5,7 +5,7 @@ package main
 import (
 	cv "github.com/elaous/gojiberry/canvas"
 	canvas "github.com/elaous/gojiberry/canvas/xango"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func Doc(state State) xango.Node {

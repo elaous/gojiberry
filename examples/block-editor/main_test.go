@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/crdt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func buildDiverged() (phone, desktop *crdt.Doc) {

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // Symbol is a character in a SymbolPicker.

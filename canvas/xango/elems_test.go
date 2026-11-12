@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type bitmap struct{ w, h float64 }

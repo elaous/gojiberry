@@ -2,7 +2,7 @@
 
 package main
 
-import "github.com/elaous/gojiberry/domrt/html"
+import "github.com/elaous/xango/domrt/html"
 
 const (
 	fontSize   = 16.0

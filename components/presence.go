@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // PresencePeer is one person at the document.

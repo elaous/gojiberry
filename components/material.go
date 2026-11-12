@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func Material(name string) xango.Node {

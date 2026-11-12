@@ -7,8 +7,8 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	cxango "github.com/elaous/gojiberry/canvas/xango"
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt/browser"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package components
 import (
 	"context"
 	"fmt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 	"strings"
 	"sync"
 	"time"

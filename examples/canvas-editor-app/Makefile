@@ -7,7 +7,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/canvas-editor-app
+	cd ../.. && go tool xgc examples/canvas-editor-app
 
 .PHONY: wasm
 wasm:

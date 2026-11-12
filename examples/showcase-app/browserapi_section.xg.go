@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/html"
-	"github.com/elaous/gojiberry/domrt/svg"
+	"github.com/elaous/xango/domrt/browser"
+	"github.com/elaous/xango/domrt/html"
+	"github.com/elaous/xango/domrt/svg"
 )
 
 type browserAPIConfig struct {

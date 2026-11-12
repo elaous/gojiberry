@@ -4,7 +4,7 @@
 
 package main
 
-import "github.com/elaous/gojiberry/domrt/browser"
+import "github.com/elaous/xango/domrt/browser"
 
 func main() {
 	document := browser.Document()
