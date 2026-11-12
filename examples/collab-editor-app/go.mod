@@ -7,7 +7,7 @@ replace github.com/elaous/gojiberry => ../..
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/elaous/gojiberry v0.0.0-00010101000000-000000000000
-	github.com/elaous/xango v0.1.0
+	github.com/elaous/xango v0.1.1
 )
 
 require (
