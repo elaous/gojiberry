@@ -132,7 +132,7 @@ None of these change behaviour; they only skip. Run each with `-v` and check tha
 | `examples/wasm-components-demo`: `TestScreenshot` | Opt-in, not a service: `OUT_FILE` and a Chromium | `make screenshot` in that directory (it sets `OUT_FILE`). |
 
 Other `t.Skip` calls in the repo depend on the platform or a rare condition (`docstore/localfs_test.go` on
-non-Linux, `internal/transpile/experimental` on Windows, `saver/pack_test.go`, `console/console_test.go`,
+non-Linux, `saver/pack_test.go`, `console/console_test.go`,
 `devreload/devreload_test.go`), not on a service.
 
 ## PDF/UA check

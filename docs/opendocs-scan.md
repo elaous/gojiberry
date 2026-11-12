@@ -12,7 +12,7 @@ opendocs does **not** use gojiberry's `canvas` package. Its editor is its own:
 `editor/model` (30k lines: a gap-buffer `Document`, `BlockMeta` per line,
 its own layout, columns and frames, tables, undo, sync) drawn on a canvas by
 `editor/*.go` (wasm-only). It imports from gojiberry only `xango`, `domrt`,
-`xango/gio`, `components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
+`components`, `crdt`, `buffer`, `fontserver` and `syncserver`.
 
 So "port to opendocs V1" is really a choice, and it should be made before
 copying features across:

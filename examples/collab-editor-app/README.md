@@ -40,7 +40,7 @@ that into the root module.
 ## Running it
 
 ```
-cd ../.. && go run ./cmd/xgc examples/collab-editor-app   # from the repo root, transpiles client/main.xg
+go tool xgc examples/collab-editor-app   # from the repo root, transpiles client/main.xg
 cd examples/collab-editor-app
 GOOS=js GOARCH=wasm go build -o static/main.wasm ./client/
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" static/

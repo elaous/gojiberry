@@ -57,7 +57,7 @@ and a function written in `.xg` can return markup:
 ```
 
 This compiled before (the transpiler hands `{...}` to Go untouched, rewriting
-the tags inside it), and now has tests (`internal/transpile`).
+the tags inside it), and now has tests (`internal/transpile` in github.com/elaous/xango).
 
 What was missing is a way to name the item type of a *generic* component, so
 `items` and the function agree on `Item`. `.xg` now accepts type arguments

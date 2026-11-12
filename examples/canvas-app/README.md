@@ -52,7 +52,7 @@ the main module.
   its stylesheet with `_ ".../canvas/static/style.css"` (a blank import,
   written like a Go package import: gojiberry's `loader_css.go` registers
   it with the program) and both pages are annotated `// @title xango-canvas`
-  (`internal/transpile/page_metadata.go`), which wraps each function's
+  (`internal/transpile/page_metadata.go` in [github.com/elaous/xango](https://github.com/elaous/xango)), which wraps each function's
   return in `xango.Document{Title, Head, Body}.Render()` (`xango/document.go` in [github.com/elaous/xango](https://github.com/elaous/xango))
   -- which puts the registered stylesheet in the head -- so neither page
   hand-rolls `<html><head>...</head><body>...</body></html>` or its own
