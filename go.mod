@@ -2,6 +2,8 @@ module github.com/elaous/gojiberry
 
 go 1.26.0
 
+retract v0.1.0 // Tagged before the Xangô extraction.
+
 require (
 	filippo.io/age v1.3.2
 	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
