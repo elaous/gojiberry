@@ -3,7 +3,7 @@ package components
 import (
 	"fmt"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // ContextMenuItem is one entry in a ContextMenu.

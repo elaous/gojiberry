@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // StatusItem is one thing the status bar says.

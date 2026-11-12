@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/html"
+	"github.com/elaous/xango/domrt/browser"
+	"github.com/elaous/xango/domrt/html"
 )
 
 func wireWorkerSection(document *html.Document) {

@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // CheckboxOption is one choice in a CheckboxGroup.
 type CheckboxOption struct {

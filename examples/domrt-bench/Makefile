@@ -12,7 +12,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/domrt-bench
+	cd ../.. && go tool xgc examples/domrt-bench
 
 .PHONY: wasm
 wasm:

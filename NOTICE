@@ -1,4 +1,4 @@
-Gojiberry / Xangô
+Gojiberry
 https://github.com/elaous/gojiberry
 
 Copyright (C) 2026 the Gojiberry authors (the contributors recorded in the
@@ -32,3 +32,6 @@ Third-party material
 Dictionaries, fonts, voices, icons and libraries that this repository carries
 or downloads have the licences their authors chose; those are not changed by
 this file. docs/licence.md lists where they are and what is known about them.
+
+Gojiberry depends on Xangô, https://github.com/elaous/xango, which has its own NOTICE, including its own
+credit, and those terms stay with that code.

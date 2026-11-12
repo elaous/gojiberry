@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestRunPrintsThePageOnOneLine(t *testing.T) {

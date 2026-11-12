@@ -1,5 +1,7 @@
 # Using xango with the canvas components
 
+xango is [github.com/elaous/xango](https://github.com/elaous/xango); `canvas/xango` stays in this repository.
+
 *Status: parts 1 and 3 are built (generic tags and render props; the
 `canvas/xango` renderer with `Canvas`, `TextFlow`, `Header`, `Footer` and
 `PageNumber`, in `canvas/canvas/xango`, demo in `examples/canvas-xango-demo`).
@@ -55,7 +57,7 @@ and a function written in `.xg` can return markup:
 ```
 
 This compiled before (the transpiler hands `{...}` to Go untouched, rewriting
-the tags inside it), and now has tests (`internal/transpile`).
+the tags inside it), and now has tests (`internal/transpile` in github.com/elaous/xango).
 
 What was missing is a way to name the item type of a *generic* component, so
 `items` and the function agree on `Item`. `.xg` now accepts type arguments
@@ -95,7 +97,8 @@ renderer that understands canvas nodes.
 ## 3. A fourth renderer: `canvas/xango`
 
 `xango.Node` is already renderer-agnostic -- `xango.Render` makes HTML,
-`domrt` patches the DOM, `xango/gio` draws with Gio. A `canvas/xango` renderer
+`domrt` patches the DOM, `xango/gio` draws with Gio (all three in
+[github.com/elaous/xango](https://github.com/elaous/xango)). A `canvas/xango` renderer
 would turn a tree of *canvas* elements into a live `Stage`:
 
 ```xango

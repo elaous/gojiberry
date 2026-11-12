@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/elaous/gojiberry/i18n"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type fakeTrash struct{ restored, purged [][]string }

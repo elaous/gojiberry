@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // CollabRole is a collaborator's role on a shared document.
 type CollabRole string

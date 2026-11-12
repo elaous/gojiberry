@@ -1,6 +1,6 @@
 # Commercial licence
 
-Gojiberry / Xangô is free software under the **GNU Affero General Public License, version 3** (see [LICENSE](LICENSE) and
+Gojiberry is free software under the **GNU Affero General Public License, version 3** (see [LICENSE](LICENSE) and
 [NOTICE](NOTICE)). Under it anyone may use, change and share the code, commercially too, as long as they follow the AGPL: in
 particular, if you give others a changed version, or let them use it over a network, you offer them the complete source of
 your version under the same licence, and you keep the notices and the credit that [NOTICE](NOTICE) asks for.

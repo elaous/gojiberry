@@ -1,9 +1,9 @@
 package main
 
 import (
-	canvas "github.com/elaous/gojiberry/canvas/xango"
 	cv "github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	canvas "github.com/elaous/gojiberry/canvas/xango"
+	"github.com/elaous/xango"
 )
 
 func Doc(state State) xango.Node {

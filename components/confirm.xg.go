@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // ConfirmProps configures Confirm.
 type ConfirmProps struct {

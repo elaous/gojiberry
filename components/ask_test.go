@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/elaous/gojiberry/user"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestAskerConfirmsBeforeADestructiveAction(t *testing.T) {

@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 func TabIndex(selected bool) xango.Attr {
 	if selected {

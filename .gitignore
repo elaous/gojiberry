@@ -14,13 +14,6 @@ examples/wasm-components-demo/screenshot.png
 examples/showcase-app/*.css
 examples/collab-editor-app/static/*.css
 
-# gio-counter-demo build output (make build-*, see its own Makefile) --
-# dist/ holds every -target's packaged output; the .syso is a stray
-# Windows icon-resource object gogio -target windows drops in the
-# package directory itself, not under -o's own output path.
-examples/gio-counter-demo/dist/
-examples/gio-counter-demo/*.syso
-
 # wasmdist output (docs/deploy.md)
 /dist/
 
@@ -36,10 +29,6 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# editors/vscode-xango's own packaged output (make vscode-package,
-# root Makefile) -- a build artifact, not source.
-*.vsix
-
 # Go workspace file
 go.work
 go.work.sum
@@ -53,8 +42,6 @@ go.work.sum
 
 # built example servers
 examples/collab-editor-app/server
-examples/echo-ssr-demo/echo-ssr-demo
-examples/gin-ssr-demo/gin-ssr-demo
 
 # built binaries (go build in the repo root)
 /collabhub

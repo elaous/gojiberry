@@ -3,7 +3,7 @@ package components
 import (
 	"sync"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type Asker struct {

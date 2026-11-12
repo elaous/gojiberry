@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/tokens"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // ThemeEditorProps configures ThemeEditor.

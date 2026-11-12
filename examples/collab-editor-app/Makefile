@@ -13,7 +13,7 @@ run: generate wasm
 
 .PHONY: generate
 generate:
-	cd ../.. && go run ./cmd/xgc examples/collab-editor-app
+	cd ../.. && go tool xgc examples/collab-editor-app
 
 .PHONY: wasm
 wasm:

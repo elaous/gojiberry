@@ -10,8 +10,8 @@ import (
 	"github.com/elaous/gojiberry/auth/passkey/client"
 	"github.com/elaous/gojiberry/components"
 	"github.com/elaous/gojiberry/docstore/encrypt"
-	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt"
 )
 
 func main() {

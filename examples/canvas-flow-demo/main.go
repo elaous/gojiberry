@@ -9,8 +9,8 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/domrt/browser"
-	"github.com/elaous/gojiberry/domrt/html"
+	"github.com/elaous/xango/domrt/browser"
+	"github.com/elaous/xango/domrt/html"
 )
 
 const lorem = "Typography is the art and technique of arranging type to make written language legible, readable and appealing when displayed. " +

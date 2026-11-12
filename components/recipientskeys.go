@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // encrypt.TypePasskey: components does not import encryption

@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 func gridKeys(root, items string) xango.Attr {
 	return xango.On("keydown", func(e xango.Event) {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt"
+	"github.com/elaous/xango/domrt"
 )
 
 var ErrUnsupported = errors.New("fonts: this browser cannot list locally installed fonts")

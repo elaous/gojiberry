@@ -9,7 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/domrt/browser"
+	"github.com/elaous/xango/domrt/browser"
 )
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">

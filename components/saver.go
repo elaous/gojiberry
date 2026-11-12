@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 type SaverChoice struct{ Name, Label, Group string }
 

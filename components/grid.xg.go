@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // GridProps configures Grid.
 type GridProps struct {

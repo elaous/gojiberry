@@ -1,11 +1,10 @@
-# gojiberry / xango dev workflow.
+# gojiberry dev workflow.
 #
-# `make check` is the full local CI: regenerate every *.xg.go,
-# gofmt/vet/test the root module for both native and GOOS=js
-# GOARCH=wasm (domrt and friends are js/wasm-only), and run the
-# vscode-xango grammar suite against every *.xg file in the repo.
+# `make check` is the full local CI: regenerate every *.xg.go with the
+# xgc tool pinned in go.mod, then gofmt/vet/test/lint the root module for
+# both native and GOOS=js GOARCH=wasm, and every nested module.
 .PHONY: check
-check: generate generate-check docs docs-check fmt-check vet test test-experimental wasm-vet lint wasm-lint modules lint-modules grammar-test-setup grammar-test
+check: generate generate-check docs docs-check fmt-check vet test test-experimental wasm-vet lint wasm-lint modules lint-modules
 
 .PHONY: piper-runtime-test
 # The reference Piper runtime (examples/piper-runtime): the parts that need no model. With PIPER_RUNTIME_MODELS and onnxruntime-web
@@ -105,14 +104,14 @@ modules:
 	@set -e; for mod in $(NESTED_MODULES); do \
 		echo "== $$mod"; \
 		(cd $$mod && go mod tidy -diff && \
-		case "$$mod" in tools) ;; *gio*) GOOS=js GOARCH=wasm go vet ./... ;; *) go vet ./... && go test ./... ;; esac); \
+		case "$$mod" in tools) ;; *) go vet ./... && go test ./... ;; esac); \
 	done
 
 # lint/wasm-lint run golangci-lint (pinned as a tool dependency of its
 # own module, tools/go.mod, so its large dependency tree stays out of
 # the library's module graph) the same "native, then GOOS=js GOARCH=wasm" way vet/wasm-vet
 # already do -- see .golangci.yml's own doc comment for why one pass
-# alone can't see both (domrt and friends are js/wasm-only, invisible
+# alone can't see both (js/wasm-only code, invisible
 # to a plain native-build type-check). The wasm pass needs a host-
 # native golangci-lint binary with GOOS/GOARCH set in its own
 # environment, not `go tool` directly -- `go tool` would try to
@@ -145,12 +144,12 @@ lint-modules:
 	(cd tools && go build -o "$$bin" $(LINT_PKG)); \
 	for mod in $(LINT_MODULES); do \
 		echo "== $$mod"; \
-		(cd $$mod && case "$$mod" in *gio*) GOOS=js GOARCH=wasm "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; *) "$$bin" run --config "$(CURDIR)/.golangci.yml" ./... ;; esac); \
+		(cd $$mod && "$$bin" run --config "$(CURDIR)/.golangci.yml" ./...); \
 	done
 
 # coverage runs the native (non-wasm) test suite with a coverage
 # profile and prints the per-function summary -- js/wasm-only packages
-# (domrt and friends) have no native test suite to profile here, so
+# (canvas and the wasm examples) have no native test suite to profile here, so
 # they're not part of this number. Scoped to packages that actually
 # have a _test.go file of their own (go list's own TestGoFiles/
 # XTestGoFiles fields), excluding every cmd/* package (each a thin
@@ -230,53 +229,13 @@ perf:
 perf-clean:
 	rm -rf $(PERF_DIR)
 
-# grammar-test-setup only needs to run once (or after upgrading
-# editors/vscode-xango/test's dependencies) -- it downloads VS Code's own
-# Go/HTML/CSS/SQL/JSON grammars, which aren't redistributed here.
-.PHONY: grammar-test-setup
-grammar-test-setup:
-	cd editors/vscode-xango/test && npm install \
-		&& npm run fetch-go-grammar \
-		&& npm run fetch-embedded-grammars
-
-.PHONY: grammar-test
-grammar-test:
-	cd editors/vscode-xango/test && npm test
-
-# vscode-package builds editors/vscode-xango's own installable .vsix
-# (Extensions view -> "..." -> Install from VSIX...) via @vscode/vsce,
-# fetched ad hoc through npx rather than tracked as a package.json
-# devDependency -- vscode-xango's own package.json is a plain extension
-# manifest, not an npm project with its own install step, the same
-# reasoning grammar-test's own separate test/package.json already
-# keeps the grammar suite's dependencies out of it.
-# --allow-missing-repository: vsce's own default warns/fails without a
-# package.json "repository" field, meant for a marketplace listing
-# this extension has never had (it ships from this monorepo, not its
-# own standalone repo) -- suppresses that warning rather than adding a
-# repository field that would point nowhere real.
-# .vscodeignore (editors/vscode-xango's own) keeps test/ -- its own
-# node_modules/fetched grammars included, ~260KB of real weight --
-# out of the packaged .vsix; without it vsce bundles the entire
-# directory, tests and all, into what a user installs.
-.PHONY: vscode-package
-vscode-package:
-	cd editors/vscode-xango && npx --yes @vscode/vsce package --allow-missing-repository
-
 # docs regenerates the plain-text `go doc -all` dump for every public
 # package under docs/ -- see docs/README.md for the exact commands.
 .PHONY: docs
 docs:
-	go doc -all ./xango > docs/xango.txt
 	go doc -all ./components > docs/components.txt
 	go doc -all ./devreload > docs/devreload.txt
 	go doc -all ./devwatch > docs/devwatch.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt > docs/domrt.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt/browser > docs/domrt-browser.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt/html > docs/domrt-html.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt/svg > docs/domrt-svg.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt/sw > docs/domrt-sw.txt
-	GOOS=js GOARCH=wasm go doc -all ./domrt/worker > docs/domrt-worker.txt
 
 # Runs the whole stack (docker-compose.yml). .env.local, when it exists, supplies values the shell does not
 # set; the shell wins over the file. See docs/configuration.md.

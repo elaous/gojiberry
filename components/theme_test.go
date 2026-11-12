@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestTheme(t *testing.T) {

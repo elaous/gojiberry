@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // FontSelectorProps configures FontSelector.

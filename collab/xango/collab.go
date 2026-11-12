@@ -14,7 +14,7 @@ import (
 	"github.com/elaous/gojiberry/collab"
 	"github.com/elaous/gojiberry/collab/client"
 	"github.com/elaous/gojiberry/collab/wire"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // TagCollab is the element's tag.

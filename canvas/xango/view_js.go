@@ -8,8 +8,8 @@ import (
 	"syscall/js"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/domrt/html"
-	xg "github.com/elaous/gojiberry/xango"
+	xg "github.com/elaous/xango"
+	"github.com/elaous/xango/domrt/html"
 )
 
 type View struct {

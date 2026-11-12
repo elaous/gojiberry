@@ -18,7 +18,7 @@ import (
 	"github.com/elaous/gojiberry/collab/wire"
 	"github.com/elaous/gojiberry/collab/ws"
 	collabxango "github.com/elaous/gojiberry/collab/xango"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type painter struct{}

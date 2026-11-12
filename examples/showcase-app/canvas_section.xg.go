@@ -7,7 +7,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/elaous/gojiberry/domrt/html"
+	"github.com/elaous/xango/domrt/html"
 )
 
 const canvasVertexShaderSrc = `

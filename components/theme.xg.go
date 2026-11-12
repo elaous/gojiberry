@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // ThemeMode selects one of Theme's own built-in --gj-* palettes.

@@ -9,8 +9,8 @@ order it should land in.
 | Item | Size | Done when |
 |---|---|---|
 | Rename finished inside gojiberry (`xango`, `xgc`, `.xg`, `vscode-xango`) | S | No `gox` outside the README origin note; empty `gox/` dirs removed. **Done in this PR.** |
-| Own module `github.com/elaous/xango` | — | Dropped: Xangô stays in this repository (import path `github.com/elaous/gojiberry/xango`). |
-| Required CI check name | S | Branch protection uses "vscode-xango grammar suite". Needs a repo admin. |
+| Own module `github.com/elaous/xango` | — | **Done:** Xangô lives in its own repository, [github.com/elaous/xango](https://github.com/elaous/xango), and gojiberry imports `github.com/elaous/xango`. The earlier decision to keep it here was reversed. |
+| Required CI check name | S | The "vscode-xango grammar suite" job moved to the xango repository with the extension; a repo admin MUST remove it from this repository's required checks. |
 
 ## B. Known limits from PR #48
 

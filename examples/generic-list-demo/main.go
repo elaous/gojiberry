@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func run(out io.Writer) error {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/elaous/gojiberry/canvas"
 	"github.com/elaous/gojiberry/fonts"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func byAttr(n xango.Node, name, value string) (xango.Node, bool) {

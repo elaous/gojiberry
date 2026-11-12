@@ -10,8 +10,8 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt"
 )
 
 const benchListSize = 100

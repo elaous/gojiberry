@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/elaous/gojiberry/crdt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func main() {

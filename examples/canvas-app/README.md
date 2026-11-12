@@ -52,8 +52,8 @@ the main module.
   its stylesheet with `_ ".../canvas/static/style.css"` (a blank import,
   written like a Go package import: gojiberry's `loader_css.go` registers
   it with the program) and both pages are annotated `// @title xango-canvas`
-  (`internal/transpile/page_metadata.go`), which wraps each function's
-  return in `xango.Document{Title, Head, Body}.Render()` (`xango/document.go`)
+  (`internal/transpile/page_metadata.go` in [github.com/elaous/xango](https://github.com/elaous/xango)), which wraps each function's
+  return in `xango.Document{Title, Head, Body}.Render()` (`xango/document.go` in [github.com/elaous/xango](https://github.com/elaous/xango))
   -- which puts the registered stylesheet in the head -- so neither page
   hand-rolls `<html><head>...</head><body>...</body></html>` or its own
   CSS binding. `CanvasPage` is also
@@ -70,7 +70,7 @@ the main module.
   Encore CLI.
 - **`cmd/wasmclient`** -- the browser-side autosave client: debounces
   `textarea#canvas` input into `PUT /api/documents/{id}` calls via
-  `domrt/browser.FetchOpts`, and drives a `#status` indicator through
+  `domrt/browser.FetchOpts` (from `github.com/elaous/xango/domrt`), and drives a `#status` indicator through
   `domrt.Mount`/`Update` (so the diff/patch runtime is exercised here
   too, not just fetch).
 - **`cmd/devwatch`** -- `make watch`'s file watcher, built on the

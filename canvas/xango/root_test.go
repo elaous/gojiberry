@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type painter struct{ texts []string }

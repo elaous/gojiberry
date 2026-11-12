@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // A11yKind is what kind of block an A11yBlock is.

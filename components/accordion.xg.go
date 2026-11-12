@@ -2,7 +2,7 @@
 
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // AccordionItem is one collapsible section in an Accordion.
 type AccordionItem struct {

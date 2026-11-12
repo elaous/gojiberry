@@ -4,7 +4,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // Paper is a paper size in points (1/72 inch), portrait.

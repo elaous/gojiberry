@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/user"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // PeopleProps configures People.

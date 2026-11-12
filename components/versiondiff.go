@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/elaous/gojiberry/docdiff"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // VersionDiffProps configures VersionDiff.

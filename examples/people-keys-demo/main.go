@@ -21,8 +21,8 @@ import (
 	"github.com/elaous/gojiberry/docstore"
 	"github.com/elaous/gojiberry/docstore/directoryclient"
 	"github.com/elaous/gojiberry/docstore/encrypt"
-	"github.com/elaous/gojiberry/domrt"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
+	"github.com/elaous/xango/domrt"
 )
 
 const docID = "00000000-0000-4000-8000-000000000001"

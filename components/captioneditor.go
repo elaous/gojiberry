@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/elaous/gojiberry/docfile"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type CaptionDraft struct {

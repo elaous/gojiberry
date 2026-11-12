@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func TestBreadcrumbs(t *testing.T) {

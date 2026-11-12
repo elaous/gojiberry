@@ -16,7 +16,7 @@ import (
 	"github.com/elaous/gojiberry/devreload"
 	"github.com/elaous/gojiberry/examples/canvas-app/canvas"
 	"github.com/elaous/gojiberry/wasmserve"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func main() {

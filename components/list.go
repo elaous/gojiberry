@@ -1,6 +1,6 @@
 package components
 
-import "github.com/elaous/gojiberry/xango"
+import "github.com/elaous/xango"
 
 // ListProps configures List.
 type ListProps[T any] struct {

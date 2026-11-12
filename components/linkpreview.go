@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // LinkPreviewProps configures LinkPreview.

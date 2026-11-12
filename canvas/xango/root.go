@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/elaous/gojiberry/canvas"
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // Root renders xango trees onto a stage.

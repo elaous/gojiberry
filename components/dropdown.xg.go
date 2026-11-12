@@ -5,7 +5,7 @@ package components
 import (
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // DropdownOption is one choice in a Dropdown.

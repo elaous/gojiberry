@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 func clickAll(n xango.Node) {

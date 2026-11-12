@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 type PasskeyRow struct {

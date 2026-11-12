@@ -8,7 +8,7 @@ import (
 
 	"encore.dev/storage/sqldb"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 var (

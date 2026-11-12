@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	encore.dev v1.57.5
 	github.com/elaous/gojiberry v0.0.0
+	github.com/elaous/xango v0.1.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 )

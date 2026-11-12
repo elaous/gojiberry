@@ -28,7 +28,6 @@ on:
           - all
           - fast-checks
           - mailpit
-          - grammar
           - postgres
           - mongodb
 
@@ -95,33 +94,6 @@ jobs:
       # proves that the generator works.
       - name: make coverage-badge
         run: make coverage-badge
-
-  grammar-test:
-    name: vscode-xango grammar suite
-    runs-on: ubuntu-latest
-    # grammar-test-setup downloads VS Code's own Go/HTML/CSS/SQL/JSON
-    # grammars on every run (not redistributed here, no cache key
-    # established yet) -- gated to the events that actually need it,
-    # the same way OnDesign's own e2e job is, to keep this off every
-    # incremental branch push and save free-tier minutes.
-    if: ${{ inputs.run == 'all' || inputs.run == 'grammar' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: make generate
-        run: make generate
-
-      - name: make grammar-test-setup
-        run: make grammar-test-setup
-
-      - name: make grammar-test
-        run: make grammar-test
 
   # The SMTP sender is tested against real Mailpit servers: the axllent/mailpit Docker image, started
   # twice by .github/scripts/mailpit-test.sh on the runner's Docker (STARTTLS with sign-in, and plain on

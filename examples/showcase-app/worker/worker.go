@@ -5,7 +5,7 @@ package main
 import (
 	"syscall/js"
 
-	"github.com/elaous/gojiberry/domrt/worker"
+	"github.com/elaous/xango/domrt/worker"
 )
 
 func countPrimes(n int) int {

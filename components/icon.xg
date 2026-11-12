@@ -3,7 +3,7 @@ package components
 import (
 	"strconv"
 
-	"github.com/elaous/gojiberry/xango"
+	"github.com/elaous/xango"
 )
 
 // IconName selects one of Icon's built-in glyphs.
