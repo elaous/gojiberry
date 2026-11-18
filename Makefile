@@ -157,9 +157,8 @@ lint-modules:
 # the library package it wraps): `go test -coverprofile` against a
 # zero-test package still has to emit an (empty) counter record for it,
 # which needs `go tool covdata` to merge -- a real, reproducible gap in
-# this project's own toolchain setup (go.mod's "go 1.26.11" directive
-# triggers a supplementary auto-fetched toolchain under GOTOOLCHAIN=auto
-# whose own internal covdata invocation doesn't resolve the same way
+# this project's own toolchain setup (on a machine without go 1.26.11,
+# GOTOOLCHAIN=auto fetches a supplementary toolchain whose own internal covdata invocation doesn't resolve the same way
 # `go tool covdata` run directly does), not something -coverprofile
 # itself should ever need for a package with nothing to cover anyway.
 .PHONY: coverage

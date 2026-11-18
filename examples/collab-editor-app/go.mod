@@ -1,6 +1,6 @@
 module github.com/elaous/gojiberry/examples/collab-editor-app
 
-go 1.26.0
+go 1.26.11
 
 replace github.com/elaous/gojiberry => ../..
 
@@ -23,9 +23,9 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/signintech/gopdf v0.37.0 // indirect
 	golang.org/x/image v0.44.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

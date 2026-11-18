@@ -147,7 +147,7 @@ func TestTokenQueryForBrowserSockets(t *testing.T) {
 }
 
 func TestOpenFromEnvWarnsOnlyWhenExposed(t *testing.T) {
-	for addr, wantWarn := range map[string]bool{"": true, ":8080": true, "0.0.0.0:8080": true, "127.0.0.1:8080": false, "[::1]:8080": false, "localhost:8080": false} {
+	for addr, wantWarn := range map[string]bool{"": true, ":8080": true, "0.0.0.0:8080": true, "127.0.0.1:8080": false, "[::1]:8080": false, "[::]:8080": true, "localhost:8080": false} {
 		t.Setenv("W_ADDR", addr)
 		var logged int
 		old := warnf
@@ -160,7 +160,8 @@ func TestOpenFromEnvWarnsOnlyWhenExposed(t *testing.T) {
 	}
 	t.Setenv("W_ADDR", ":8080")
 	t.Setenv("W_TOKEN", "s")
+	old := warnf
+	defer func() { warnf = old }()
 	warnf = func(string, ...any) { t.Error("warned for a configured guard") }
-	defer func(f func(string, ...any)) { warnf = f }(warnf)
 	FromEnv("W")
 }

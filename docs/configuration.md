@@ -89,3 +89,8 @@ service lists the variables it reads by name under `environment:` (a name alone 
 through, and defines nothing if the shell has none), and `env_file:` with `required: false` hands the rest of
 the file to the containers (needs Compose 2.24 or newer). For secrets as files, put them under `./secrets`
 (git-ignored, mounted read-only at `/run/secrets`) and set the `…_FILE` variable.
+
+The compose file publishes every port on `127.0.0.1`, so the stack is reachable only from the machine that runs
+it. To reach it from another host, set `GOJIBERRY_BIND_ADDR=0.0.0.0` (shell or `.env.local`). Before doing so
+you MUST set `<PREFIX>_TOKEN` or `<PREFIX>_ALLOW_ORIGINS` for every service: a server with neither set is open
+(any origin, no authentication) and logs a warning at startup.
