@@ -2,6 +2,8 @@ package guard
 
 import (
 	"crypto/subtle"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -218,9 +220,37 @@ func FromEnvWith(prefix string, o Options) Guard {
 	}
 	switch len(gs) {
 	case 0:
+		warnIfOpenAndExposed(prefix)
 		return Open(o)
 	case 1:
 		return gs[0]
 	}
 	return Chain(gs...)
+}
+
+var warnf = log.Printf
+
+func warnIfOpenAndExposed(prefix string) {
+	addr := os.Getenv(prefix + "_ADDR")
+	if isLoopbackAddr(addr) {
+		return
+	}
+	bind := addr
+	if bind == "" {
+		bind = "all interfaces"
+	}
+	warnf("WARNING: %s_TOKEN and %s_ALLOW_ORIGINS are unset; the server is open (any origin, no authentication) and bound to %s. Set a token or allowed origins, or bind to 127.0.0.1.", prefix, prefix, bind)
+}
+
+// isLoopbackAddr reports whether a listen address binds only to loopback.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

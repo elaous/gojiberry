@@ -1,6 +1,6 @@
 module github.com/elaous/gojiberry
 
-go 1.26.0
+go 1.26.11
 
 retract v0.1.0 // Tagged before the Xangô extraction.
 
@@ -18,11 +18,11 @@ require (
 	github.com/resend/resend-go/v4 v4.8.2
 	github.com/signintech/gopdf v0.37.0
 	github.com/speedata/hyphenation v1.0.2
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.44.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.63.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/text v0.43.0
+	golang.org/x/text v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.60.1
 )
@@ -57,10 +57,10 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/zclconf/go-cty v1.16.3 // indirect
-	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/tools v0.51.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
