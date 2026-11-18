@@ -145,3 +145,22 @@ func TestTokenQueryForBrowserSockets(t *testing.T) {
 		t.Fatal("without TokenQuery a query parameter is not a token")
 	}
 }
+
+func TestOpenFromEnvWarnsOnlyWhenExposed(t *testing.T) {
+	for addr, wantWarn := range map[string]bool{"": true, ":8080": true, "0.0.0.0:8080": true, "127.0.0.1:8080": false, "[::1]:8080": false, "localhost:8080": false} {
+		t.Setenv("W_ADDR", addr)
+		var logged int
+		old := warnf
+		warnf = func(string, ...any) { logged++ }
+		FromEnv("W")
+		warnf = old
+		if (logged > 0) != wantWarn {
+			t.Errorf("addr %q: warned=%v, want %v", addr, logged > 0, wantWarn)
+		}
+	}
+	t.Setenv("W_ADDR", ":8080")
+	t.Setenv("W_TOKEN", "s")
+	warnf = func(string, ...any) { t.Error("warned for a configured guard") }
+	defer func(f func(string, ...any)) { warnf = f }(warnf)
+	FromEnv("W")
+}

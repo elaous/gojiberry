@@ -14,6 +14,8 @@
 # is one), and the whole of .env.local is also handed to the containers through `env_file:` (optional,
 # so the stack starts without it).
 #
+# Published ports bind to 127.0.0.1; set GOJIBERRY_BIND_ADDR=0.0.0.0 to expose them on every interface.
+#
 # Secrets can also be files: set GOJIBERRY_MAIL_SMTP_PASSWORD_FILE and friends to a path under
 # ./secrets (mounted read-only at /run/secrets). See docs/configuration.md.
 
@@ -74,7 +76,7 @@ services:
       - GOJIBERRY_MAIL_RESEND_API_KEY_FILE
     volumes:
       - ./secrets:/run/secrets:ro
-    ports: ["8090:8090"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8090:8090"]
 
   collabhub:
     build: { context: ., dockerfile: cmd/collabhub/Dockerfile }
@@ -86,7 +88,7 @@ services:
       - GOJIBERRY_COLLAB_ALLOW_ORIGINS=${GOJIBERRY_COLLAB_ALLOW_ORIGINS:-http://localhost:8000}
       - GOJIBERRY_COLLAB_TOKEN
       - GOJIBERRY_COLLAB_RENEW_TOKEN
-    ports: ["8081:8081"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8081:8081"]
 
   syncserver:
     build: { context: ., dockerfile: cmd/syncserver/Dockerfile }
@@ -94,7 +96,7 @@ services:
     env_file: *local-env
     environment:
       - GOJIBERRY_SYNC_ADDR=:8080
-    ports: ["8080:8080"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8080:8080"]
 
   fontserver:
     build: { context: ., dockerfile: cmd/fontserver/Dockerfile }
@@ -102,7 +104,7 @@ services:
     env_file: *local-env
     environment:
       - GOJIBERRY_FONTSERVER_GOOGLE_KEY
-    ports: ["8082:8082"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8082:8082"]
 
   translateserver:
     build: { context: ., dockerfile: cmd/translateserver/Dockerfile }
@@ -110,7 +112,7 @@ services:
     env_file: *local-env
     environment:
       - GOJIBERRY_TRANSLATESERVER_DEEPL_KEY
-    ports: ["8083:8083"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8083:8083"]
 
   # Catches every e-mail the stack sends: web UI on http://localhost:8025, SMTP on 1025. Point the
   # mail variables at it to try address verification:
@@ -119,7 +121,7 @@ services:
   mailpit:
     image: axllent/mailpit:v1.31.5
     restart: unless-stopped
-    ports: ["8025:8025", "1025:1025"]
+    ports: ["${GOJIBERRY_BIND_ADDR:-127.0.0.1}:8025:8025", "${GOJIBERRY_BIND_ADDR:-127.0.0.1}:1025:1025"]
 
 volumes:
   db-data:
